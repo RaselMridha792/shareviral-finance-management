@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { settingsApi } from "@/lib/masters";
+import { PeriodLock } from "./period-lock";
 
 export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
   const router = useRouter();
@@ -201,6 +202,8 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
           Only a Super Admin can change these.
         </p>
       )}
+      <PeriodLock lockedThrough={settings.booksLockedThrough} />
+
     </form>
   );
 }
