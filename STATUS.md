@@ -93,33 +93,64 @@ repealed half-yearly rule). Company income tax: four advance instalments plus th
 annual return, with every due date editable because NBR extends Tax Day most
 years. The dashboard's pending card carries figures, not just dates.
 
+**Phase 7 — money in dollars, and reports.** A rate per day, so a July report
+stays translatable at July's rate long after July. Period reports at month,
+quarter, half or full year with the one before it beside them; month-by-month
+bank statistics; and the funding report — the one place USD is a fact rather
+than a translation, showing what the CEO sent against what the bank landed and
+the rate that transfer really achieved. Every translated figure carries the rate
+and date that produced it. When no rate exists the figures come back as taka,
+labelled taka.
+
+**Phase 8 — closing, watching, and running it yourself.** Closing the books
+through a date, after which nothing on or before it can be changed by anyone.
+The audit viewer: every change with who made it and what it was before, filtered
+by date, action, area or person — with pay figures hidden from a reader who may
+not see them, though never the fact that the change happened. A Docker stack,
+nginx config and backup/restore scripts for the VPS.
+
+**Phase 9 — the assistant.** Describe an entry in Bangla or English; it asks for
+whatever is missing, one question at a time, then fills in an ordinary editable
+form. It holds no tools and cannot write. Saving posts to the same endpoint the
+manual form posts to, so permissions, validation and the audit trail apply
+identically. Needs an ANTHROPIC_API_KEY; without one the screen says so and
+every form still works.
+
 ## Verified
 
 ```
 typecheck / lint / build     clean across all three workspaces
-unit tests                   85 pass
+unit tests                   80 pass
 Phase 1 acceptance           15/15  roles, HR 403 from curl, token reuse
 Phase 2 acceptance           21/21  category depth, permissions, book lock
 Phase 3 acceptance           balance matches to the paisa, voids excluded
 Phase 4 acceptance           21 parser tests, re-import flags, revert exact
 Phase 5 acceptance           HR payload has zero pay fields, net-only payout
 Phase 6 acceptance           44/44  June cliff, challan→ledger, quarterly dates
+Phase 7 acceptance           period/bank/funding figures, USD never mislabelled
+Phase 8 acceptance           audit redaction, book lock, restore refuses live db
+User management              17/17  HR cannot self-promote, reset kills sessions
+Live site                    24/24  cookies, roles, CSRF, token renewal
 Page render sweep            every route, as Super Admin, CEO and HR
 ```
 
 The scripts live in the session scratchpad, not the repo — they are throwaway
 checks, not a test suite.
 
-## Next: your data, and the VPS
+## Next: your data
 
-Exchange rates with a fixed/live switch and a failure policy, the CEO's
-USD-denominated view (a translation, always captioned with the rate and date),
-the monthly finance report, bank statistics with month-on-month comparison, and
-the funding report showing USD sent against BDT landed with the realised rate.
+Every phase is built and deployed. What is left is not code:
 
-Then Phase 8 (period lock, audit viewer, nginx with self-signed TLS, a tested
-backup restore) and Phase 9 (the AI intake, which saves nothing without an
-explicit confirmation).
+1. Replace the seeded accounts with real people (**Settings → People who can
+   sign in**), then disable the seeded ones.
+2. Wipe the demo data: `npm run db:demo -- wipe`.
+3. Enter the real bank account and its opening balance on the day the records
+   start.
+4. Fix the category list to match how ShareViral actually spends.
+5. Import or type the first month, and check the register's closing balance
+   against the bank statement to the paisa.
+
+Then, when you want off Vercel and Render, `DEPLOYMENT.md` has the VPS move.
 
 ## Still waiting on answers
 
