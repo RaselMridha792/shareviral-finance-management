@@ -17,7 +17,12 @@ services:
     # @finance/shared, which is a workspace sibling and has to be compiled
     # first. npm workspaces links it into node_modules on install.
     rootDir: .
-    buildCommand: npm ci && npm run build:shared && npm run build:api
+    # `--include=dev` is not optional here. NODE_ENV is production below, and
+    # npm reads that during install too — so a plain `npm ci` drops every
+    # devDependency, including the pinned TypeScript. The build then falls
+    # through to whatever compiler happens to be on the image and fails on a
+    # option that version no longer supports.
+    buildCommand: npm ci --include=dev && npm run build:shared && npm run build:api
     startCommand: node apps/api/dist/main.js
 
     healthCheckPath: /api/health

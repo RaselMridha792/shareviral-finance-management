@@ -2,8 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    // "nodenext", matching apps/api. The old "Node" (node10) resolution was
+    // removed in TypeScript 6, so a build machine with a newer compiler than
+    // the one pinned here fails outright rather than warning.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
