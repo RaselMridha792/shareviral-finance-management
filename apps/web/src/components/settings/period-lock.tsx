@@ -84,6 +84,7 @@ export function PeriodLock({ lockedThrough }: { lockedThrough: string | null }) 
                 />
               </Field>
               <Button
+                type="button"
                 variant="primary"
                 disabled={pending || !value || value === lockedThrough}
                 onClick={() => void save(value)}
@@ -97,6 +98,7 @@ export function PeriodLock({ lockedThrough }: { lockedThrough: string | null }) 
               </Button>
               {lockedThrough ? (
                 <Button
+                  type="button"
                   variant="secondary"
                   disabled={pending}
                   onClick={() => {
