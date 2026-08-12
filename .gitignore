@@ -36,3 +36,8 @@ Thumbs.db
 # misc
 *.pem
 .vercel
+
+# Deployment secrets
+deploy/.env
+deploy/nginx/certs/
+deploy/backups/
