@@ -131,6 +131,9 @@ Phase 7 acceptance           period/bank/funding figures, USD never mislabelled
 Phase 8 acceptance           audit redaction, book lock, restore refuses live db
 User management              17/17  HR cannot self-promote, reset kills sessions
 Live site                    24/24  cookies, roles, CSRF, token renewal
+Responsive                   measured at 360/390/768/1440 — no page scrolls
+                             sideways, no short cell wraps
+Production audit             71 claims across 5 lenses, 25 confirmed, all fixed
 Page render sweep            every route, as Super Admin, CEO and HR
 ```
 
