@@ -134,3 +134,93 @@ point of having kept the standard `pg` driver instead of a serverless one.
 
 Before that switchover: take a `pg_dump`, restore it somewhere else, and sign
 in against the restore. A backup nobody has restored is not a backup.
+
+---
+
+# Moving to the VPS
+
+Everything needed is in `deploy/`. Nothing in the application changes.
+
+```
+deploy/
+  docker-compose.yml   nginx · web · api · postgres
+  api.Dockerfile       built from the repo root, because of @finance/shared
+  web.Dockerfile       API_URL is a build arg — the rewrite is baked in
+  nginx/sfm.conf       one origin: / to the app, /api to the API
+  backup.sh            a dump a day, verified, kept a month
+  restore.sh           refuses to overwrite a live database by accident
+  .env.example         copy to .env and fill in
+```
+
+## Once
+
+```bash
+ssh you@your-server
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin git
+sudo usermod -aG docker "$USER" && exit     # then ssh back in
+
+git clone https://github.com/RaselMridha792/shareviral-finance-management.git /opt/sfm
+cd /opt/sfm/deploy
+cp .env.example .env && nano .env           # fill in the four secrets
+```
+
+A certificate, since there is no domain to certify:
+
+```bash
+mkdir -p nginx/certs
+openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+  -keyout nginx/certs/sfm.key \
+  -out    nginx/certs/sfm.crt \
+  -subj "/CN=$(curl -s ifconfig.me)"
+```
+
+Then:
+
+```bash
+docker compose up -d --build
+docker compose ps                            # all healthy?
+```
+
+## The database
+
+```bash
+cd /opt/sfm
+DATABASE_URL="postgres://sfm:YOUR_PASSWORD@localhost:5432/sfm" npm run db:push
+```
+
+Either bring Neon's data across:
+
+```bash
+pg_dump "NEON_CONNECTION_STRING" --clean --if-exists --no-owner \
+  | docker compose -f deploy/docker-compose.yml exec -T db psql -U sfm -d sfm
+```
+
+or start fresh with `npm run db:seed && npm run db:seed-categories`.
+
+## Backups — before you need them
+
+```bash
+crontab -e
+0 2 * * * /opt/sfm/deploy/backup.sh >> /var/log/sfm-backup.log 2>&1
+```
+
+Then **do a restore now, while nothing is wrong**:
+
+```bash
+./deploy/backup.sh
+./deploy/restore.sh backups/sfm_*.sql.gz     # into a scratch database first
+```
+
+Sign in against the restored copy. Until you have done that once, you have
+backups but you do not have a recovery plan — and the difference only shows up
+on the day it matters.
+
+## Browser warning
+
+With a self-signed certificate every browser shows a warning the first time.
+Traffic **is** encrypted; what is missing is anyone vouching for the
+certificate. That is defensible for an internal portal, but it does teach
+people to click through security warnings, which costs more elsewhere. A domain
+and Let's Encrypt removes both the warning and the habit, and the nginx config
+above is already written for it — replace the two `ssl_certificate` lines and
+reload.
