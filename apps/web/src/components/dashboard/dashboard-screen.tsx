@@ -56,7 +56,12 @@ export function DashboardScreen({
   expenses: ExpenseSummary | null;
   pending: PendingItem[];
 }) {
-  const totalBalance = balances
+  // Base currency only. A USD account added to a BDT one at 1:1 produces a
+  // figure that is wrong by the exchange rate and looks entirely normal.
+  const base = balances[0]?.currency ?? "BDT";
+  const inBase = balances.filter((account) => account.currency === base);
+  const otherCurrencies = balances.length - inBase.length;
+  const totalBalance = inBase
     .reduce((sum, account) => sum + Number(account.balance), 0)
     .toFixed(2);
 
@@ -99,11 +104,15 @@ export function DashboardScreen({
 
       {pending.length > 0 ? <PendingCard items={pending} /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile
           label="Money on hand"
           value={totalBalance}
-          hint={`${balances.length} account${balances.length === 1 ? "" : "s"}`}
+          hint={
+            otherCurrencies > 0
+              ? `${inBase.length} in ${base}, ${otherCurrencies} in another currency`
+              : `${balances.length} account${balances.length === 1 ? "" : "s"}`
+          }
           icon={Wallet}
         />
         <Tile
@@ -128,7 +137,7 @@ export function DashboardScreen({
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Where the money spent went"
@@ -160,7 +169,7 @@ export function DashboardScreen({
                         className="block rounded-lg px-1 py-1 transition hover:bg-surface-muted"
                       >
                         <div className="flex items-baseline justify-between gap-3">
-                          <span className="flex items-center gap-2 text-sm">
+                          <span className="flex min-w-0 items-center gap-2 text-sm">
                             <span
                               className="size-2.5 shrink-0 rounded-full"
                               style={{ background: group.color }}

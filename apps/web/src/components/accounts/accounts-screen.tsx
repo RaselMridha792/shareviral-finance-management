@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ComponentType } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { useSettings } from "@/components/settings-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,10 +46,16 @@ export function AccountsScreen({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const settings = useSettings();
   const active = accounts.filter((a) => a.isActive);
   const archived = accounts.filter((a) => !a.isActive);
 
-  const total = active
+  // Only the base currency. Adding a USD balance to a BDT one gives a figure
+  // that is not money in either — and it would look completely ordinary.
+  const base = settings.baseCurrency;
+  const inBase = active.filter((a) => a.currency === base);
+  const otherCurrencies = active.filter((a) => a.currency !== base).length;
+  const total = inBase
     .reduce((sum, a) => sum + Number(a.openingBalance), 0)
     .toFixed(2);
 
@@ -128,14 +135,26 @@ export function AccountsScreen({
                 Opening total
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {active.length} active account{active.length === 1 ? "" : "s"} ·
-                balances start moving once the ledger arrives
+                {otherCurrencies > 0 ? (
+                  <>
+                    {inBase.length} account{inBase.length === 1 ? "" : "s"} in{" "}
+                    {base}. {otherCurrencies} in another currency, counted
+                    separately — mixing them would give a figure that is money
+                    in neither.
+                  </>
+                ) : (
+                  <>
+                    {active.length} active account
+                    {active.length === 1 ? "" : "s"} · balances start moving once
+                    the ledger arrives
+                  </>
+                )}
               </p>
             </div>
-            <Amount value={total} className="text-2xl font-semibold" />
+            <Amount value={total} currency={base} className="text-2xl font-semibold" />
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {active.map((account) => (
               <AccountCard
                 key={account.id}
@@ -154,7 +173,7 @@ export function AccountsScreen({
           <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Archived
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {archived.map((account) => (
               <AccountCard
                 key={account.id}

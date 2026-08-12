@@ -135,21 +135,33 @@ export function RegisterScreen({
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Figure
           label="Opening"
           value={register.openingBalance}
+          currency={account.currency}
           hint={
             range.from
               ? `Everything up to ${range.from}`
               : `Since ${account.openingBalanceOn}`
           }
         />
-        <Figure label="Money in" value={register.totalIn} tone="in" />
-        <Figure label="Money out" value={register.totalOut} tone="out" />
+        <Figure
+          label="Money in"
+          value={register.totalIn}
+          currency={account.currency}
+          tone="in"
+        />
+        <Figure
+          label="Money out"
+          value={register.totalOut}
+          currency={account.currency}
+          tone="out"
+        />
         <Figure
           label="Closing"
           value={register.closingBalance}
+          currency={account.currency}
           hint="Should equal the bank statement"
           emphasis
         />
@@ -195,12 +207,15 @@ export function RegisterScreen({
 function Figure({
   label,
   value,
+  currency,
   hint,
   tone = "neutral",
   emphasis = false,
 }: {
   label: string;
   value: string;
+  /** The account's own currency — a USD account must not print ৳. */
+  currency: string;
   hint?: string;
   tone?: "in" | "out" | "neutral";
   emphasis?: boolean;
@@ -212,6 +227,7 @@ function Figure({
       </p>
       <Amount
         value={value}
+        currency={currency}
         tone={tone === "neutral" ? "auto" : tone}
         className="mt-3 block text-xl font-semibold tracking-tight"
       />

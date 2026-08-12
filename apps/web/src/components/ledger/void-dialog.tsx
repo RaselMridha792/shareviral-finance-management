@@ -59,8 +59,9 @@ export function VoidDialog({
           {transaction.txnDate} · {transaction.accountName}
         </p>
         <Amount
-          value={transaction.amount}
+          value={transaction.signedAmount}
           showSign
+          currency={transaction.currency}
           tone={transaction.direction === "in" ? "in" : "out"}
           className="mt-2 block text-lg font-semibold"
         />

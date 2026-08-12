@@ -4,7 +4,6 @@ import {
   PAYMENT_MODES,
   PAYMENT_MODE_LABELS,
   PAYROLL_STATUS_LABELS,
-  formatMoney,
   todayInDhaka,
 } from "@finance/shared";
 import {
@@ -147,7 +146,7 @@ export function SalarySheetScreen({
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Figure label="Gross" value={run.totalGross} />
         <Figure label="Additions" value={run.totalAdditions} />
         <Figure
@@ -179,7 +178,7 @@ export function SalarySheetScreen({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="table-data min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
                   <Th className="w-20">Code</Th>
@@ -446,11 +445,11 @@ function PayForm({
         <Amount
           value={run.totalNet}
           tone="out"
-          showSign
           className="mt-2 block text-2xl font-semibold"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          The {formatMoney(run.totalTds)} of tax withheld is not part of this —
+          The <Amount value={run.totalTds} tone="neutral" /> of tax withheld is
+          not part of this —
           it stays with you until you deposit the challan.
         </p>
       </div>
