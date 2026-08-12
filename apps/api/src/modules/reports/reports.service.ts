@@ -61,16 +61,19 @@ export class ReportsService {
     const fx =
       query.currency === "USD" ? await this.fx.contextFor(range) : null;
 
+    // If the translation could not happen, the answer is taka and says so.
+    // Returning unconverted figures still labelled USD is how a screen ends up
+    // rendering a taka amount behind a dollar sign — a number 118 times wrong,
+    // with nothing on the page to suggest it.
+    const currency = fx?.unavailable ? "BDT" : query.currency;
     const convert = (value: string) =>
-      query.currency === "USD"
-        ? (FxService.convert(value, fx) ?? value)
-        : value;
+      currency === "USD" ? (FxService.convert(value, fx) ?? value) : value;
 
     return {
       label: range.label,
       start: range.start,
       end: range.end,
-      currency: query.currency,
+      currency,
       fx,
       moneyIn: convert(totals.moneyIn),
       moneyOut: convert(totals.moneyOut),
@@ -279,8 +282,10 @@ export class ReportsService {
             end: `${query.year}-12-31`,
           })
         : null;
+    // As in period(): no rate means the answer is taka, labelled taka.
+    const currency = fx?.unavailable ? "BDT" : query.currency;
     const convert = (v: string) =>
-      query.currency === "USD" ? (FxService.convert(v, fx) ?? v) : v;
+      currency === "USD" ? (FxService.convert(v, fx) ?? v) : v;
 
     // Opening balance at the start of the year, then rolled forward month by
     // month — one query rather than twelve.
@@ -321,7 +326,7 @@ export class ReportsService {
 
     return {
       year: query.year,
-      currency: query.currency,
+      currency,
       fx,
       accountName: account?.name ?? "All accounts",
       months,
