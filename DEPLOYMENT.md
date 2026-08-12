@@ -8,7 +8,7 @@ browser  ──►  sfm.vercel.app          Next.js on Vercel
                   ├─ /            the app
                   └─ /api/*       rewritten, invisibly, to ↓
 
-              sfm-api.onrender.com    NestJS on Render
+              YOUR-API-NAME.onrender.com    NestJS on Render
                   │
                   └──►  Neon PostgreSQL (Singapore)
 ```
@@ -55,7 +55,7 @@ reuse the development ones.
 > seconds to wake. The first request of the morning will be slow; nothing
 > breaks. A paid plan removes it, as does the VPS.
 
-Once it is live, `https://sfm-api.onrender.com/api/health` should answer
+Once it is live, `https://YOUR-API-NAME.onrender.com/api/health` should answer
 `{"status":"ok"}`.
 
 ## 2. The web app, on Vercel
@@ -73,7 +73,7 @@ Environment variables:
 
 | Variable | Value | Why |
 | --- | --- | --- |
-| `API_URL` | `https://sfm-api.onrender.com/api` | Server-side calls and the rewrite target. Absolute, because a Server Component has no origin to be relative to. |
+| `API_URL` | `https://YOUR-API-NAME.onrender.com/api` | Server-side calls and the rewrite target. Absolute, because a Server Component has no origin to be relative to. |
 | `NEXT_PUBLIC_API_URL` | `/api` | What the browser uses. Relative on purpose — it goes through the rewrite and stays same-origin. |
 
 Getting these backwards is the one mistake that breaks everything quietly:
@@ -100,7 +100,7 @@ Not "the page loads" — the things that break silently:
 
 ```bash
 # The API is up and can reach the database
-curl https://sfm-api.onrender.com/api/health
+curl https://YOUR-API-NAME.onrender.com/api/health
 
 # The rewrite works and is same-origin: this must return 401, not 404 and not CORS
 curl -i https://sfm.vercel.app/api/auth/me
