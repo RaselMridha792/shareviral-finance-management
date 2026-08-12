@@ -1,6 +1,6 @@
 # SFM — where things stand
 
-ShareViral Finance Management. Last updated at the end of **Phase 6** (2026-08-13).
+ShareViral Finance Management. Last updated at the end of **Phase 9** (2026-08-13). All phases built.
 
 ## Running it
 
@@ -110,7 +110,7 @@ Page render sweep            every route, as Super Admin, CEO and HR
 The scripts live in the session scratchpad, not the repo — they are throwaway
 checks, not a test suite.
 
-## Next: Phase 7 — FX, USD view and reports
+## Next: your data, and the VPS
 
 Exchange rates with a fixed/live switch and a failure policy, the CEO's
 USD-denominated view (a translation, always captioned with the rate and date),
