@@ -117,7 +117,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Assistant",
         icon: Sparkles,
         permission: "ai.use",
-        comingSoon: true,
       },
     ],
   },
