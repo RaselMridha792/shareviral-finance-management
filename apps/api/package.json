@@ -27,6 +27,7 @@
     "db:demo": "tsx src/db/seed-demo.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "@finance/shared": "*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
