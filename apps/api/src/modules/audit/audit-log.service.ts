@@ -28,7 +28,8 @@ export class AuditLogService {
     actor: AuthenticatedUser,
   ): Promise<Paginated<AuditEntryDto>> {
     const where: SQL[] = [];
-    if (query.from) where.push(gte(auditLogs.occurredAt, startOfDay(query.from)));
+    if (query.from)
+      where.push(gte(auditLogs.occurredAt, startOfDay(query.from)));
     if (query.to) where.push(lte(auditLogs.occurredAt, endOfDay(query.to)));
     if (query.action) where.push(eq(auditLogs.action, query.action));
     if (query.module) where.push(eq(auditLogs.module, query.module));
@@ -131,7 +132,7 @@ export class AuditLogService {
         entityId,
         page: 1,
         pageSize: 200,
-      } as ListAuditQuery,
+      },
       actor,
     );
     return page.items.reverse();

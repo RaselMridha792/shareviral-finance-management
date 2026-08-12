@@ -235,7 +235,8 @@ null, and write a one-sentence summary for them to check.`;
   async resolve(draft: Record<string, unknown>) {
     const out: Record<string, unknown> = { ...draft };
 
-    const categoryName = takeString(out, "categoryId") ?? takeString(out, "categoryName");
+    const categoryName =
+      takeString(out, "categoryId") ?? takeString(out, "categoryName");
     if (categoryName) {
       const [row] = await this.db.client
         .select({ id: categories.id })
