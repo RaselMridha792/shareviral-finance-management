@@ -162,7 +162,17 @@ function replaceCookie(
 
 export const config = {
   matcher: [
-    // Everything except Next internals and static files.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    /**
+     * Page routes only.
+     *
+     * `/api` is excluded and that exclusion is load-bearing: those paths are
+     * rewritten straight to the API, which does its own authentication and
+     * answers 401 in JSON. Letting this proxy see them means an unauthenticated
+     * API call gets a 307 to the login page instead — so every request fails,
+     * including the login request itself, which is the one that would have
+     * fixed the missing cookie. In development the API sits on another port and
+     * never reaches this file, so the whole thing only breaks once deployed.
+     */
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
