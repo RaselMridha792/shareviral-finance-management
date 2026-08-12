@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserDto } from "@finance/shared";
 import { useState } from "react";
 
 import { PageHeader } from "@/components/ui/page-header";
@@ -9,11 +10,16 @@ import { cn } from "@/lib/utils";
 import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
 import { FxPanel } from "./fx-panel";
+import { UsersPanel } from "./users-panel";
+import { useCan } from "@/components/auth/session-provider";
 
 const TABS = [
   { id: "company", label: "Company & formatting" },
   { id: "categories", label: "Categories" },
   { id: "fx", label: "Exchange rate" },
+  // Creating an account is the ability to grant any permission in the app, so
+  // this tab is Super Admin only — and the API refuses everyone else anyway.
+  { id: "users", label: "People who can sign in", permission: "users.manage" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -21,11 +27,17 @@ type TabId = (typeof TABS)[number]["id"];
 export function SettingsScreen({
   initialSettings,
   initialTree,
+  initialUsers,
 }: {
   initialSettings: AppSettingsDto;
   initialTree: CategoryNode[];
+  initialUsers: UserDto[];
 }) {
   const [tab, setTab] = useState<TabId>("company");
+  const canManageUsers = useCan("users.manage");
+  const tabs = TABS.filter(
+    (entry) => !("permission" in entry) || canManageUsers,
+  );
 
   return (
     <>
@@ -39,7 +51,7 @@ export function SettingsScreen({
         aria-label="Settings sections"
         className="flex gap-1 border-b border-border"
       >
-        {TABS.map((entry) => (
+        {tabs.map((entry) => (
           <button
             key={entry.id}
             role="tab"
@@ -63,6 +75,9 @@ export function SettingsScreen({
         <CategoriesPanel initialTree={initialTree} />
       ) : null}
       {tab === "fx" ? <FxPanel settings={initialSettings} /> : null}
+      {tab === "users" && canManageUsers ? (
+        <UsersPanel initialUsers={initialUsers} />
+      ) : null}
     </>
   );
 }

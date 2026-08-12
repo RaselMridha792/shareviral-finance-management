@@ -1,0 +1,526 @@
+"use client";
+
+import {
+  ROLES,
+  ROLE_LABELS,
+  USER_STATUS_LABELS,
+  suggestPassword,
+  type Role,
+  type UserDto,
+  type UserStatus,
+} from "@finance/shared";
+import {
+  Check,
+  Copy,
+  KeyRound,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  ShieldAlert,
+} from "lucide-react";
+import { useState, type FormEvent } from "react";
+
+import { useSession } from "@/components/auth/session-provider";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Drawer } from "@/components/ui/drawer";
+import { Field, Input, Select } from "@/components/ui/field";
+import { ApiError } from "@/lib/api-client";
+import { usersApi } from "@/lib/users";
+
+const th =
+  "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
+
+/** What each role can actually do, in one line, at the moment you assign it. */
+const ROLE_SUMMARY: Record<Role, string> = {
+  super_admin: "Everything, including these accounts and Settings",
+  ceo: "Sees everything. Changes nothing.",
+  admin: "All the day-to-day work, but not Settings or accounts",
+  finance: "Money, payroll and tax",
+  hr: "The team directory. Never salary.",
+};
+
+export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
+  const me = useSession();
+  const [users, setUsers] = useState(initialUsers);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<UserDto | null>(null);
+  const [resetting, setResetting] = useState<UserDto | null>(null);
+
+  async function refresh() {
+    const page = await usersApi.list();
+    setUsers(page.items);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Who can sign in, and as what. A role decides what somebody sees and
+          can change — the API enforces it, so a hidden menu is never the only
+          thing standing between HR and a salary figure.
+        </p>
+        <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+          <Plus className="size-4" />
+          Add someone
+        </Button>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-surface-muted/50 text-left">
+                <th className={th}>Name</th>
+                <th className={th}>Email</th>
+                <th className={th}>Role</th>
+                <th className={th}>Status</th>
+                <th className={th}>Last signed in</th>
+                <th className={th} />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {users.map((user) => (
+                <tr
+                  key={user.id}
+                  className="row-finance hover:bg-surface-muted/50"
+                >
+                  <td className="px-4 py-2.5">
+                    <span className="font-medium">{user.fullName}</span>
+                    {user.id === me?.id ? (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        you
+                      </span>
+                    ) : null}
+                    {user.mustChangePassword ? (
+                      <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
+                        <ShieldAlert className="size-3" />
+                        must change password
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted-foreground">
+                    {user.email}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge
+                      tone={user.role === "super_admin" ? "primary" : "neutral"}
+                    >
+                      {ROLE_LABELS[user.role]}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge
+                      tone={
+                        user.status === "active"
+                          ? "positive"
+                          : user.status === "disabled"
+                            ? "negative"
+                            : "warning"
+                      }
+                    >
+                      {USER_STATUS_LABELS[user.status]}
+                    </Badge>
+                  </td>
+                  <td className="num px-4 py-2.5 text-muted-foreground">
+                    {user.lastLoginAt ? user.lastLoginAt.slice(0, 10) : "never"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditing(user)}
+                        aria-label={`Edit ${user.fullName}`}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setResetting(user)}
+                      >
+                        <KeyRound className="size-3.5" />
+                        Password
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <CreateUserForm
+        open={creating}
+        onClose={() => setCreating(false)}
+        onSaved={async () => {
+          setCreating(false);
+          await refresh();
+        }}
+      />
+      <EditUserForm
+        user={editing}
+        isSelf={editing?.id === me?.id}
+        onClose={() => setEditing(null)}
+        onSaved={async () => {
+          setEditing(null);
+          await refresh();
+        }}
+      />
+      <ResetPasswordForm
+        user={resetting}
+        onClose={() => setResetting(null)}
+        onSaved={async () => {
+          setResetting(null);
+          await refresh();
+        }}
+      />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A password field that suggests one and lets you copy it.
+ *
+ * Shown as plain text on purpose: the person setting it has to be able to read
+ * it back to whoever it belongs to. Hiding it behind dots here would just mean
+ * they type something they already use somewhere else.
+ */
+function PasswordField({
+  name,
+  label = "Password",
+  error,
+}: {
+  name: string;
+  label?: string;
+  error?: string[];
+}) {
+  const [value, setValue] = useState(() => suggestPassword());
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked; the value is on screen and can be selected.
+    }
+  }
+
+  return (
+    <Field
+      label={label}
+      required
+      error={error}
+      hint="At least 12 characters. Hand this over once — they must change it when they first sign in."
+    >
+      <div className="flex gap-2">
+        <Input
+          name={name}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="num"
+          autoComplete="new-password"
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setValue(suggestPassword())}
+        >
+          New
+        </Button>
+        <Button type="button" variant="secondary" onClick={copy}>
+          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+        </Button>
+      </div>
+    </Field>
+  );
+}
+
+function RoleSelect({ name, defaultValue }: { name: string; defaultValue?: Role }) {
+  const [role, setRole] = useState<Role>(defaultValue ?? "finance");
+
+  return (
+    <Field label="Role" required hint={ROLE_SUMMARY[role]}>
+      <Select
+        name={name}
+        value={role}
+        onChange={(event) => setRole(event.target.value as Role)}
+      >
+        {ROLES.map((option) => (
+          <option key={option} value={option}>
+            {ROLE_LABELS[option]}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
+function ErrorNote({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p
+      role="alert"
+      className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+    >
+      {message}
+    </p>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function CreateUserForm({
+  open,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setFieldErrors({});
+
+    const data = new FormData(event.currentTarget);
+    try {
+      await usersApi.create({
+        email: String(data.get("email") ?? "").trim(),
+        fullName: String(data.get("fullName") ?? "").trim(),
+        role: String(data.get("role")) as Role,
+        password: String(data.get("password") ?? ""),
+        mustChangePassword: true,
+      });
+      await onSaved();
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setError(caught.message);
+        setFieldErrors(caught.fieldErrors ?? {});
+      } else {
+        setError("Could not create that account.");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Drawer open={open} onClose={onClose} title="Add someone">
+      <form id="user-create" onSubmit={onSubmit} className="flex flex-col gap-4">
+        <Field label="Full name" required error={fieldErrors.fullName}>
+          <Input name="fullName" autoFocus />
+        </Field>
+        <Field label="Email" required error={fieldErrors.email}>
+          <Input name="email" type="email" autoComplete="off" />
+        </Field>
+        <RoleSelect name="role" />
+        <PasswordField name="password" error={fieldErrors.password} />
+        <ErrorNote message={error} />
+      </form>
+
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          form="user-create"
+          variant="primary"
+          disabled={pending}
+        >
+          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          Create
+        </Button>
+      </div>
+    </Drawer>
+  );
+}
+
+function EditUserForm({
+  user,
+  isSelf,
+  onClose,
+  onSaved,
+}: {
+  user: UserDto | null;
+  isSelf: boolean;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!user) return;
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+
+    const data = new FormData(event.currentTarget);
+    try {
+      await usersApi.update(user.id, {
+        fullName: String(data.get("fullName") ?? "").trim(),
+        role: String(data.get("role")) as Role,
+        status: String(data.get("status")) as UserStatus,
+      });
+      await onSaved();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not save that.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={user !== null}
+      onClose={onClose}
+      title={user ? user.fullName : ""}
+    >
+      {user ? (
+        <form id="user-edit" onSubmit={onSubmit} className="flex flex-col gap-4">
+          <Field label="Full name" required>
+            <Input name="fullName" defaultValue={user.fullName} />
+          </Field>
+
+          <Field label="Email" hint="Fixed — create a new account to change it">
+            <Input value={user.email} readOnly disabled />
+          </Field>
+
+          <RoleSelect name="role" defaultValue={user.role} />
+
+          <Field
+            label="Status"
+            hint={
+              isSelf
+                ? "Careful: this is your own account."
+                : "Disabling signs them out everywhere immediately."
+            }
+          >
+            <Select name="status" defaultValue={user.status}>
+              {Object.entries(USER_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {isSelf ? (
+            <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
+              Changing your own role or status takes effect at once. Lower your
+              own role and you may not be able to undo it.
+            </p>
+          ) : null}
+
+          <ErrorNote message={error} />
+        </form>
+      ) : null}
+
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          form="user-edit"
+          variant="primary"
+          disabled={pending}
+        >
+          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          Save
+        </Button>
+      </div>
+    </Drawer>
+  );
+}
+
+function ResetPasswordForm({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: UserDto | null;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!user) return;
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setFieldErrors({});
+
+    const data = new FormData(event.currentTarget);
+    try {
+      await usersApi.resetPassword(user.id, {
+        newPassword: String(data.get("newPassword") ?? ""),
+        mustChangePassword: true,
+      });
+      await onSaved();
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setError(caught.message);
+        setFieldErrors(caught.fieldErrors ?? {});
+      } else {
+        setError("Could not set that password.");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={user !== null}
+      onClose={onClose}
+      title={user ? `New password for ${user.fullName}` : ""}
+    >
+      {user ? (
+        <form id="user-pw" onSubmit={onSubmit} className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Every session for {user.email} ends the moment this is saved, and
+            they will be asked to choose their own password when they next sign
+            in.
+          </p>
+          <PasswordField
+            name="newPassword"
+            label="New password"
+            error={fieldErrors.newPassword}
+          />
+          <ErrorNote message={error} />
+        </form>
+      ) : null}
+
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" form="user-pw" variant="primary" disabled={pending}>
+          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          Set password
+        </Button>
+      </div>
+    </Drawer>
+  );
+}

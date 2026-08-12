@@ -1,37 +1,16 @@
 import { z } from "zod";
 
-import { isoDateSchema } from "./masters.ts";
+import { isoDateSchema, type FxReportBasis } from "./masters.ts";
 import { granularitySchema } from "./periods.ts";
 
 /* -------------------------------------------------------------------------- */
 /*  Exchange rates                                                             */
 /* -------------------------------------------------------------------------- */
 
-export const FX_MODES = ["fixed", "live"] as const;
-export const fxModeSchema = z.enum(FX_MODES);
-export type FxMode = z.infer<typeof fxModeSchema>;
-
-export const FX_MODE_LABELS: Record<FxMode, string> = {
+export const FX_MODE_LABELS = {
   fixed: "One rate I set myself",
   live: "Fetched daily from a provider",
-};
-
-/**
- * Which rate a translated report uses.
- *
- * `period_end` is the honest default for a balance — what a taka was worth on
- * the day the figure was true. `current` answers "what is this worth to me
- * today", which is a different question and should be asked deliberately.
- */
-export const FX_REPORT_BASES = ["period_end", "period_average", "current"] as const;
-export const fxReportBasisSchema = z.enum(FX_REPORT_BASES);
-export type FxReportBasis = z.infer<typeof fxReportBasisSchema>;
-
-export const FX_REPORT_BASIS_LABELS: Record<FxReportBasis, string> = {
-  period_end: "The rate on the last day of the period",
-  period_average: "The average rate across the period",
-  current: "Today's rate",
-};
+} as const;
 
 export const rateSchema = z
   .string()
