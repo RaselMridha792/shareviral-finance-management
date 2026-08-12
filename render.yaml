@@ -1,0 +1,51 @@
+# The NestJS API as a long-running Node process — the same shape it will have
+# in a container on the VPS, so moving there is a change of host and nothing
+# else. Render reads this file when you create a Blueprint from the repo.
+#
+# Secrets are marked `sync: false`: Render prompts for them once and stores
+# them itself. They must never be written here.
+
+services:
+  - type: web
+    name: sfm-api
+    runtime: node
+    plan: free
+    region: singapore # nearest to both Dhaka and the Neon database
+    branch: main
+
+    # Built from the repository root, not apps/api: the API imports
+    # @finance/shared, which is a workspace sibling and has to be compiled
+    # first. npm workspaces links it into node_modules on install.
+    rootDir: .
+    buildCommand: npm ci && npm run build:shared && npm run build:api
+    startCommand: node apps/api/dist/main.js
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4001
+
+      # The pooled Neon host for the app.
+      - key: DATABASE_URL
+        sync: false
+      # The direct host, for drizzle-kit. Falls back to DATABASE_URL.
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 7d
+
+      # The web app's own origin. Requests normally arrive through Next's
+      # rewrite and are same-origin, so CORS never fires — this is the fallback
+      # for anything that reaches the API directly.
+      - key: CORS_ORIGINS
+        sync: false

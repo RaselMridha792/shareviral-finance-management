@@ -26,7 +26,8 @@
     "db:seed": "npm run db:seed --workspace @finance/api",
     "db:check": "npm run db:check --workspace @finance/api",
     "db:seed-categories": "npm run db:seed-categories --workspace @finance/api",
-    "db:demo": "npm run db:demo --workspace @finance/api --"
+    "db:demo": "npm run db:demo --workspace @finance/api --",
+    "start:api": "node apps/api/dist/main.js"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
