@@ -13,10 +13,12 @@ import { AccountsModule } from "./modules/accounts/accounts.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
 import { ExportsModule } from "./modules/exports/exports.module";
+import { FxModule } from "./modules/fx/fx.module";
 import { HealthModule } from "./modules/health/health.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { IncomeTaxModule } from "./modules/income-tax/income-tax.module";
 import { PayrollModule } from "./modules/payroll/payroll.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { TdsModule } from "./modules/tds/tds.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { TeamMembersModule } from "./modules/team-members/team-members.module";
@@ -47,8 +49,9 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     PayrollModule,
     TdsModule,
     IncomeTaxModule,
-    // Arriving in later phases: FxModule, ReportsModule (7) ·
-    // DashboardModule, AuditModule (8) · AiIntakeModule (9)
+    FxModule,
+    ReportsModule,
+    // Arriving in later phases: AuditModule (8) · AiIntakeModule (9)
   ],
   providers: [
     // Order matters: reject cross-site writes, then authenticate, then check
