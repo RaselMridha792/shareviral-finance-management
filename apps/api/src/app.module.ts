@@ -10,6 +10,7 @@ import { AuditSafetyNetInterceptor } from "./common/interceptors/audit-safety-ne
 import { validateEnv } from "./config/env";
 import { DbModule } from "./db/db.module";
 import { AccountsModule } from "./modules/accounts/accounts.module";
+import { AuditLogModule } from "./modules/audit/audit-log.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
 import { ExportsModule } from "./modules/exports/exports.module";
@@ -51,7 +52,8 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     IncomeTaxModule,
     FxModule,
     ReportsModule,
-    // Arriving in later phases: AuditModule (8) · AiIntakeModule (9)
+    AuditLogModule,
+    // Arriving in a later phase: AiIntakeModule (9)
   ],
   providers: [
     // Order matters: reject cross-site writes, then authenticate, then check
