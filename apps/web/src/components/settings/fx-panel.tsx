@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { settingsApi } from "@/lib/masters";
+import { RateHistory } from "./rate-history";
 
 export function FxPanel({ settings }: { settings: AppSettingsDto }) {
   const router = useRouter();
@@ -164,6 +165,8 @@ export function FxPanel({ settings }: { settings: AppSettingsDto }) {
           Only a Super Admin can change these.
         </p>
       )}
+
+      <RateHistory />
     </form>
   );
 }
