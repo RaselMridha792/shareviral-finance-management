@@ -103,7 +103,7 @@ export function PayslipView({
             <h2 className="mb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
               Earnings
             </h2>
-            <table className="w-full text-sm">
+            <table className="table-data text-sm">
               <tbody>
                 {additions.map(([label, value]) => (
                   <tr key={label}>
@@ -122,7 +122,7 @@ export function PayslipView({
             {deductions.length === 0 ? (
               <p className="py-1 text-sm text-muted-foreground">None</p>
             ) : (
-              <table className="w-full text-sm">
+              <table className="table-data text-sm">
                 <tbody>
                   {deductions.map(([label, value]) => (
                     <tr key={label}>

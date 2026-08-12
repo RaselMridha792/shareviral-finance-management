@@ -145,7 +145,7 @@ function Section({
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="table-data min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <Th className="w-24">Code</Th>

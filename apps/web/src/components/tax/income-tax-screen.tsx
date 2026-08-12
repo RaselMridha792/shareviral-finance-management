@@ -81,7 +81,7 @@ export function IncomeTaxScreen({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard label="Assessed" value={data.totals.payable} />
         <SummaryCard label="Paid" value={data.totals.paid} />
         <SummaryCard
@@ -97,7 +97,7 @@ export function IncomeTaxScreen({
           description="Advance instalments fall on 15 Sep, 15 Dec, 15 Mar and 15 Jun. NBR usually extends Tax Day by order, so every due date here can be edited."
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="table-data min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Assessment year</th>
@@ -323,7 +323,7 @@ function EditForm({
           </Field>
 
           {record.recordType === "final_return" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Return submitted on">
                 <DateInput
                   name="returnSubmittedOn"
@@ -423,7 +423,7 @@ function PayForm({
             matches the bank statement.
           </p>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Amount" required>
               <MoneyInput
                 name="amount"

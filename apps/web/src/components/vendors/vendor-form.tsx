@@ -101,7 +101,7 @@ export function VendorForm({
           </Select>
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="e-TIN" error={fieldErrors.etin} hint="12 digits">
             <Input
               name="etin"
@@ -138,7 +138,7 @@ export function VendorForm({
           </Select>
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Assessment year"
             error={fieldErrors.psrAssessmentYear}
@@ -160,7 +160,7 @@ export function VendorForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Contact name" error={fieldErrors.contactName}>
             <Input
               name="contactName"

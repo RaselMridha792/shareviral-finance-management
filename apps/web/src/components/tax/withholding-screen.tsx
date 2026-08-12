@@ -94,7 +94,7 @@ export function WithholdingScreen({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard label="Deducted" value={liability.totals.deducted} />
         <SummaryCard label="Deposited" value={liability.totals.deposited} />
         <SummaryCard
@@ -115,7 +115,7 @@ export function WithholdingScreen({
           description="Salary tax comes from the payroll sheet; vendor tax from the withheld column on payments."
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Month</th>
@@ -212,7 +212,7 @@ export function WithholdingScreen({
           description="Each A-Challan and the month of deductions it covers."
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Challan</th>
@@ -266,7 +266,7 @@ export function WithholdingScreen({
           description="Due on the 25th of the month after each quarter — 25 Oct, 25 Jan, 25 Apr, 25 Jul."
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="table-data min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Quarter</th>
@@ -469,7 +469,7 @@ function ChallanForm({
     >
       {target ? (
         <form id="challan-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Challan number" required>
               <Input name="challanNumber" autoFocus className="num" />
             </Field>
@@ -488,7 +488,7 @@ function ChallanForm({
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Deductions from" required>
               <Select name="periodMonth" defaultValue={target.month}>
                 {MONTHS.map((month, index) => (
@@ -533,7 +533,7 @@ function ChallanForm({
             </Select>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Bank">
               <Input name="bankName" />
             </Field>

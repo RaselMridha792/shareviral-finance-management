@@ -70,7 +70,12 @@ export function RateHistory() {
         description="One rate per day. A report is translated at the rate that applied to its period, not today's."
         action={
           canWrite ? (
-            <Button size="sm" variant="secondary" onClick={() => setAdding(!adding)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setAdding(!adding)}
+            >
               <Plus className="size-3.5" />
               Record a rate
             </Button>
@@ -83,7 +88,7 @@ export function RateHistory() {
           onSubmit={onSubmit}
           className="flex flex-col gap-4 border-b border-border bg-surface-muted/30 px-4 py-4"
         >
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Date" required>
               <DateInput
                 name="rateDate"
@@ -123,7 +128,7 @@ export function RateHistory() {
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-sm">
+        <table className="table-data min-w-[420px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted/50 text-left">
               <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -158,7 +163,7 @@ export function RateHistory() {
                   <td className="num px-4 py-2.5 text-right font-medium">
                     {Number(rate.rate).toFixed(2)}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="cell-prose px-4 py-2.5 text-muted-foreground">
                     {rate.notes ?? "—"}
                   </td>
                 </tr>

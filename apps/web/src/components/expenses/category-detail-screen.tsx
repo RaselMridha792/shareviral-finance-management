@@ -119,7 +119,7 @@ export function CategoryDetailScreen({
           />
           <CardBody className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[420px] text-sm">
+              <table className="table-data min-w-[420px] text-sm">
                 <tbody className="divide-y divide-border">
                   {breakdown.groups.map((group) => {
                     const share =

@@ -66,7 +66,7 @@ export function PayrollListScreen({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="table-data min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
                   <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -186,7 +186,7 @@ function NewRunForm({
   return (
     <Drawer open={open} onClose={onClose} title="Start a payroll month">
       <form id="run-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Month" required>
             <Select name="periodMonth" defaultValue={currentMonth}>
               {MONTHS.map((month, index) => (

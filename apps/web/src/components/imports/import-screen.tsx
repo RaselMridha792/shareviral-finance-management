@@ -248,7 +248,7 @@ export function ImportScreen({
             />
             <CardBody className="flex flex-col gap-4">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
+                <table className="table-data min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-left">
                       <th className="px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -273,7 +273,7 @@ export function ImportScreen({
                             .slice(0, 3)
                             .join(" · ") || "—"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="cell-prose px-3 py-2">
                           <select
                             value={columnMap[header] ?? ""}
                             onChange={(event) =>
@@ -304,7 +304,7 @@ export function ImportScreen({
               title="Applies to every row"
               description="What the spreadsheet does not say"
             />
-            <CardBody className="grid gap-4 sm:grid-cols-2">
+            <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Which account" required>
                 <Select name="accountId" required defaultValue={accounts[0]?.id}>
                   {accounts.map((account) => (
@@ -373,7 +373,7 @@ export function ImportScreen({
 
       {step === 2 && batch ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Stat
               label="Ready to import"
               value={batch.validRows}
@@ -394,7 +394,7 @@ export function ImportScreen({
               description="Untick anything you do not want brought in"
             />
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="table-data min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-surface-muted/50 text-left">
                     <th className="w-10 px-3 py-2" />
@@ -426,7 +426,7 @@ export function ImportScreen({
                         key={row.id}
                         className={cn("row-finance", bad && "opacity-70")}
                       >
-                        <td className="px-3 py-2">
+                        <td className="cell-prose px-3 py-2">
                           <input
                             type="checkbox"
                             disabled={bad}
@@ -446,12 +446,12 @@ export function ImportScreen({
                           {row.rowNumber}
                         </td>
                         <td className="num px-3 py-2">{mapped?.txnDate ?? "—"}</td>
-                        <td className="px-3 py-2">
+                        <td className="cell-prose px-3 py-2">
                           {mapped?.description ??
                             Object.values(row.raw).filter(Boolean)[0] ??
                             "—"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="cell-prose px-3 py-2">
                           {mapped?.amount ? (
                             <Amount
                               value={mapped.amount}
@@ -465,7 +465,7 @@ export function ImportScreen({
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="cell-prose px-3 py-2">
                           {row.status === "error" ? (
                             <span className="text-xs text-negative">
                               {row.errors?.join("; ")}
@@ -539,7 +539,7 @@ export function ImportScreen({
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-sm">
+              <table className="table-data min-w-[620px] text-sm">
                 <tbody className="divide-y divide-border">
                   {initialBatches.map((entry) => (
                     <tr key={entry.id} className="row-finance">

@@ -44,7 +44,7 @@ export function TransactionTable({
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="table-data min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-muted/50 text-left">
               <Th className="w-24">Date</Th>
@@ -75,7 +75,7 @@ export function TransactionTable({
                   <td className="num px-4 py-2.5 text-xs text-muted-foreground">
                     {row.refNo}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="cell-prose px-4 py-2.5">
                     <span className={cn("font-medium", voided && "line-through")}>
                       {row.description}
                     </span>
@@ -129,8 +129,9 @@ export function TransactionTable({
                   ) : null}
                   <td className="px-4 py-2.5">
                     <Amount
-                      value={row.amount}
+                      value={row.signedAmount}
                       showSign
+                      currency={row.currency}
                       tone={row.direction === "in" ? "in" : "out"}
                       className={cn("block font-semibold", voided && "line-through")}
                     />
