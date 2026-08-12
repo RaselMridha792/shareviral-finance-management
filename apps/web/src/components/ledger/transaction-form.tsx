@@ -161,7 +161,7 @@ export function TransactionForm({
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date" required error={fieldErrors.txnDate}>
             <DateInput
               name="txnDate"
@@ -240,7 +240,7 @@ export function TransactionForm({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Paid by" error={fieldErrors.paymentMethod}>
             <Select
               name="paymentMethod"

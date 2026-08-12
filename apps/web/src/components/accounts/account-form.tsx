@@ -110,7 +110,7 @@ export function AccountForm({
           </Select>
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Bank" error={fieldErrors.bankName}>
             <Input name="bankName" defaultValue={account?.bankName ?? ""} />
           </Field>
@@ -119,7 +119,7 @@ export function AccountForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Account number" error={fieldErrors.accountNumber}>
             <Input
               name="accountNumber"
@@ -136,7 +136,7 @@ export function AccountForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Opening balance"
             required
@@ -163,7 +163,7 @@ export function AccountForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Currency" error={fieldErrors.currency}>
             <Select name="currency" defaultValue={account?.currency ?? "BDT"}>
               <option value="BDT">BDT — Taka</option>

@@ -98,7 +98,7 @@ export function TeamMemberScreen({
       </div>
 
       {tab === "details" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="Employment" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
@@ -238,7 +238,7 @@ export function TeamMemberScreen({
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[520px] text-sm">
+                    <table className="table-data min-w-[520px] text-sm">
                       <thead>
                         <tr className="border-b border-border bg-surface-muted/50 text-left">
                           <th className="px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

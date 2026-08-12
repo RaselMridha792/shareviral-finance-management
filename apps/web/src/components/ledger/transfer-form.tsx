@@ -128,7 +128,7 @@ export function TransferForm({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Method">
             <Select name="paymentMethod" defaultValue="bank_transfer">
               {PAYMENT_METHODS.map((method) => (

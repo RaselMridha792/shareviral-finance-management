@@ -100,7 +100,7 @@ export function TeamMemberForm({
       description="Pay is recorded separately, on the Compensation tab."
     >
       <form id="member-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Code" required error={fieldErrors.employeeCode}>
             <Input
               name="employeeCode"
@@ -128,7 +128,7 @@ export function TeamMemberForm({
           <Input name="fullName" required defaultValue={member?.fullName} />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Designation" error={fieldErrors.designation}>
             <Input name="designation" defaultValue={member?.designation ?? ""} />
           </Field>
@@ -137,7 +137,7 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Joined on" required error={fieldErrors.joinedOn}>
             <DateInput
               name="joinedOn"
@@ -168,7 +168,7 @@ export function TeamMemberForm({
           </Field>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone" error={fieldErrors.phone}>
             <Input name="phone" className="num" defaultValue={member?.phone ?? ""} />
           </Field>
@@ -185,7 +185,7 @@ export function TeamMemberForm({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="NID" error={fieldErrors.nid}>
             <Input name="nid" className="num" defaultValue={member?.nid ?? ""} />
           </Field>
@@ -199,7 +199,7 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
             label="Return filed (PSR)"
             hint="Required above ৳16,000 basic a month"
@@ -222,7 +222,7 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Bank" error={fieldErrors.bankName}>
             <Input name="bankName" defaultValue={member?.bankName ?? ""} />
           </Field>
@@ -235,7 +235,7 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Routing" error={fieldErrors.bankRouting}>
             <Input
               name="bankRouting"

@@ -56,7 +56,7 @@ export function SettingsScreen({
       <div
         role="tablist"
         aria-label="Settings sections"
-        className="flex gap-1 border-b border-border"
+        className="tabs-scroll flex gap-1 border-b border-border"
       >
         {tabs.map((entry) => (
           <button
