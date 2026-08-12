@@ -111,7 +111,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Reports",
         icon: ChartPie,
         permission: "reports.view",
-        comingSoon: true,
       },
       {
         href: "/assistant",
