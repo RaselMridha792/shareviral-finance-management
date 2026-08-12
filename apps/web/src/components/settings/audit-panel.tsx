@@ -34,6 +34,19 @@ export function AuditPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+
+  // A bare setTimeout per keystroke fires a request per letter and lets a
+  // slower earlier response land after a faster later one. This clears the
+  // pending timer, so only the pause at the end of typing queries.
+  useEffect(() => {
+    const id = setTimeout(
+      () => change({ q: search.trim() || undefined }),
+      300,
+    );
+    return () => clearTimeout(id);
+     
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,12 +96,8 @@ export function AuditPanel() {
           <Input
             placeholder="Search what happened…"
             className="h-9"
-            defaultValue={filters.q ?? ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              // Cheap debounce: the list is small and the query is indexed.
-              setTimeout(() => change({ q: value || undefined }), 300);
-            }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </label>
 
@@ -304,7 +313,7 @@ function Detail({ row }: { row: AuditEntryDto }) {
 
   return (
     <div className="overflow-x-auto bg-surface-muted/30 px-4 py-3">
-      <table className="w-full min-w-[520px] text-xs">
+      <table className="table-data min-w-[520px] text-xs">
         <thead>
           <tr className="text-left text-muted-foreground">
             <th className="py-1.5 pr-4 font-medium">Field</th>

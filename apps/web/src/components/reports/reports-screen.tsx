@@ -132,7 +132,7 @@ export function ReportsScreen({
         <div
           role="tablist"
           aria-label="Report"
-          className="flex gap-1 border-b border-border"
+          className="tabs-scroll flex gap-1 border-b border-border"
         >
           {TABS.map((entry) => (
             <button
@@ -305,7 +305,7 @@ function PeriodView({ report }: { report: PeriodReport }) {
     <div className="flex flex-col gap-4">
       <FxCaption report={report} />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile label="Opening balance" value={report.openingBalance} currency={ccy} />
         <Tile
           label="In"
@@ -332,7 +332,7 @@ function PeriodView({ report }: { report: PeriodReport }) {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryCard
           title="Where it went"
           description={report.label}
@@ -374,7 +374,7 @@ function CategoryCard({
             {lines.map((line) => (
               <li key={line.id ?? line.name}>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 text-sm">
                     <span
                       className="size-2.5 shrink-0 rounded-full"
                       style={{ background: line.color ?? "var(--color-border)" }}
@@ -428,7 +428,7 @@ function BankView({ stats }: { stats: BankStats }) {
           }
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Month</th>
@@ -550,7 +550,7 @@ function FundingView({ report }: { report: FundingReport }) {
         </span>
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Tile label="Sent" value={report.totals.usdSent} currency="USD" />
         <Tile label="Landed" value={report.totals.bdtReceived} currency="BDT" />
         <Card className="flex flex-col gap-1 px-4 py-3.5">
@@ -572,7 +572,7 @@ function FundingView({ report }: { report: FundingReport }) {
           description="What was sent, what arrived, and the rate it really got"
         />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <th className={th}>Date</th>

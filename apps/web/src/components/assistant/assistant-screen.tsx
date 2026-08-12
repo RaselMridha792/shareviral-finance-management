@@ -46,6 +46,24 @@ const FIELD_LABELS: Record<string, string> = {
   type: "Type",
 };
 
+/**
+ * The amount, read back — or the raw text if it cannot be parsed.
+ *
+ * The model writes what it heard, which may carry a separator or a stray
+ * character. formatMoney is strict on purpose, so this is where that meets
+ * reality: showing the raw string is a fine outcome, throwing inside a render
+ * and blanking the screen is not.
+ */
+function safeMoney(raw: string): string {
+  const cleaned = raw.replace(/[,s৳$]/g, "");
+  if (!/^-?d+(.d{1,2})?$/.test(cleaned)) return raw;
+  try {
+    return formatMoney(cleaned);
+  } catch {
+    return raw;
+  }
+}
+
 export function AssistantScreen({
   availability,
 }: {
@@ -152,7 +170,7 @@ export function AssistantScreen({
         description="Describe an entry in Bangla or English. It asks for whatever is missing, then fills in the form for you to check."
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="flex min-h-[26rem] flex-col">
           <CardHeader
             title="What are you recording?"
@@ -336,7 +354,7 @@ function DraftForm({
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 Read the amount back before saving:{" "}
-                <strong>{formatMoney(String(reply.draft.amount))}</strong>. A
+                <strong>{safeMoney(String(reply.draft.amount))}</strong>. A
                 misheard figure looks exactly like a correct one.
               </span>
             </p>

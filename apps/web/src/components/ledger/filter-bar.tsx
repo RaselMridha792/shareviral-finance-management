@@ -7,6 +7,7 @@ import {
   type TxnDirection,
 } from "@finance/shared";
 import { Search, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/ui/field";
@@ -42,6 +43,20 @@ export function FilterBar({
   const set = (patch: Partial<LedgerFilters>) =>
     onChange({ ...filters, ...patch });
 
+  const [search, setSearch] = useState(filters.q ?? "");
+
+  // Typing should not fire a request per letter. The filters change only once
+  // the person stops; clearing the pending timer is what makes that true.
+  useEffect(() => {
+    if ((filters.q ?? "") === search.trim()) return;
+    const id = setTimeout(
+      () => onChange({ ...filters, q: search.trim() || undefined }),
+      300,
+    );
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   const active =
     Object.entries(filters).filter(
       ([key, value]) =>
@@ -55,8 +70,8 @@ export function FilterBar({
           <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
           <span className="sr-only">Search</span>
           <input
-            value={filters.q ?? ""}
-            onChange={(event) => set({ q: event.target.value || undefined })}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Search description, reference, or ref no."
             className={cn(controlClass, "pl-9")}
           />

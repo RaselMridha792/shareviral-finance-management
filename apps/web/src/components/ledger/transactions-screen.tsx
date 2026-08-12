@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, Download, LoaderCircle, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -48,7 +48,10 @@ export function TransactionsScreen({
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
+  const requestRef = useRef(0);
+
   const load = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -57,16 +60,19 @@ export function TransactionsScreen({
         ledgerApi.list(query),
         ledgerApi.summary(filters as Record<string, string | undefined>),
       ]);
+      // A slower earlier request must not overwrite a faster later one.
+      if (request !== requestRef.current) return;
       setRows(list.items);
       setTotalPages(list.totalPages);
       setTotal(list.total);
       setSummary(totals);
     } catch (caught) {
+      if (request !== requestRef.current) return;
       setError(
         caught instanceof ApiError ? caught.message : "Could not load entries.",
       );
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, [filters, page]);
 
@@ -131,7 +137,7 @@ export function TransactionsScreen({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryTile label="Money in" value={summary?.moneyIn} tone="in" />
         <SummaryTile label="Money out" value={summary?.moneyOut} tone="out" />
         <SummaryTile
@@ -159,7 +165,7 @@ export function TransactionsScreen({
         </p>
       ) : null}
 
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <Card className="flex items-center justify-center gap-2 px-6 py-12 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           Loading…

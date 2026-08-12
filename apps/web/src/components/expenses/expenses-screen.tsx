@@ -12,6 +12,7 @@ import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { ApiError } from "@/lib/api-client";
 import {
   exportUrl,
   ledgerApi,
@@ -20,6 +21,9 @@ import {
 } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { MonthPicker, type Range } from "./month-picker";
+
+/** One screenful. Anything past this is said out loud rather than dropped. */
+const PAGE_SIZE = 100;
 
 export function ExpensesScreen({
   initialSummary,
@@ -39,25 +43,39 @@ export function ExpensesScreen({
   const [summary, setSummary] = useState(initialSummary);
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [next, list] = await Promise.all([
-      ledgerApi.expenseSummary({ from: range.from, to: range.to }),
-      ledgerApi.list({
-        from: range.from,
-        to: range.to,
-        direction: "out",
-        page: 1,
-        pageSize: 100,
-      }),
-    ]);
-    setSummary(next);
-    setRows(list.items);
-    setLoading(false);
+    setError(null);
+    try {
+      const [next, list] = await Promise.all([
+        ledgerApi.expenseSummary({ from: range.from, to: range.to }),
+        ledgerApi.list({
+          from: range.from,
+          to: range.to,
+          direction: "out",
+          page: 1,
+          pageSize: PAGE_SIZE,
+        }),
+      ]);
+      setSummary(next);
+      setRows(list.items);
+      setTotal(list.total);
+    } catch (caught) {
+      // Without this the screen sat on "Loading…" for ever and never said why.
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not load this month.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [range]);
 
   useEffect(() => {
@@ -70,8 +88,19 @@ export function ExpensesScreen({
 
   const filters = { from: range.from, to: range.to, direction: "out" as const };
 
+  const errorBanner = error ? (
+    <p
+      role="alert"
+      className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+    >
+      {error}
+    </p>
+  ) : null;
+
   return (
     <>
+      {errorBanner}
+
       <PageHeader
         title="Expenses"
         description="What the company spent, grouped by heading."
@@ -136,7 +165,7 @@ export function ExpensesScreen({
           </div>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {summary.groups.map((group) => {
             const share = (Number(group.total) / Number(summary.total)) * 100;
             return (
@@ -181,7 +210,11 @@ export function ExpensesScreen({
       <Card>
         <CardHeader
           title="Every expense this month"
-          description={`${rows.length} entr${rows.length === 1 ? "y" : "ies"}`}
+          description={
+            total > rows.length
+              ? `Showing the most recent ${rows.length} of ${total} — narrow the month or use All transactions to see the rest`
+              : `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`
+          }
         />
         <CardBody className="p-0">
           {loading ? (
