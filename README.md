@@ -85,7 +85,12 @@ both land or neither does.
 **Every "today" goes through `todayInDhaka()`.** A UTC server is six hours behind
 Dhaka, which is enough to file a 3 a.m. entry on the 1st into the previous month.
 
-See [STATUS.md](STATUS.md) for what is built, what is verified, and what is next.
+## Documents
+
+- **[Working the books](https://claude.ai/code/artifact/830bfbf9-64a5-48d7-a542-645a021ee7b8)** — the handbook, for everyone who signs in.
+- **[How it is built, and why](https://claude.ai/code/artifact/452c4571-0fe2-48e1-a485-568830d6b6e4)** — the architecture notes, for whoever maintains this next.
+- [STATUS.md](STATUS.md) — what is built, what is verified, what is next.
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Vercel and Render today, the VPS when you want it.
 
 ## Security
 
