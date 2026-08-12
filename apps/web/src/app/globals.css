@@ -165,6 +165,77 @@ tr.row-finance > th {
   }
 }
 
+
+/* --------------------------------------------------------------------------
+   Table columns
+   --------------------------------------------------------------------------
+   A column wraps only when what it holds is genuinely a sentence. Everything
+   else — dates, reference numbers, codes, amounts, statuses, names — stays on
+   one line, and the table scrolls sideways inside its own container instead.
+
+   Wrapping a date across two lines to avoid a scrollbar makes the row taller,
+   the column narrower, and the figure harder to compare against the one below
+   it. The scrollbar is the smaller cost.
+
+   Every table must sit inside a container with overflow-x: auto, so the page
+   body itself never scrolls sideways.
+   -------------------------------------------------------------------------- */
+
+/* The default for a data cell. */
+.cell {
+  white-space: nowrap;
+}
+
+/* The exception: a description, a note, an address — real prose. Capped so one
+   long line cannot squeeze every other column to nothing. */
+.cell-prose {
+  white-space: normal;
+  min-width: 14rem;
+  max-width: 26rem;
+}
+
+/* Longer than a cell should show, and not worth wrapping: a receipt URL, a
+   user agent. One line, cut with an ellipsis, full value on hover. */
+.cell-clip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18rem;
+}
+
+/* A table that must not be squeezed below the width its columns need. */
+.table-data {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-data th,
+.table-data td {
+  white-space: nowrap;
+}
+
+.table-data .cell-prose {
+  white-space: normal;
+}
+
+/* A tab strip scrolls sideways rather than wrapping. A tab on a second row
+   stops reading as a tab. The scrollbar is hidden because the tabs themselves
+   are the affordance — a partly-visible tab at the edge says "there is more".
+   -------------------------------------------------------------------------- */
+.tabs-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs-scroll > * {
+  flex-shrink: 0;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--primary) 25%, transparent);
 }
