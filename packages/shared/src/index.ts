@@ -13,6 +13,7 @@
 export * from "./roles.ts";
 export * from "./users.ts";
 export * from "./audit.ts";
+export * from "./ai.ts";
 export * from "./permissions.ts";
 export * from "./pagination.ts";
 export * from "./datetime.ts";
