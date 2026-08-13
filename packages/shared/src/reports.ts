@@ -107,6 +107,37 @@ export const overviewQuerySchema = z.strictObject({
 });
 export type OverviewQuery = z.infer<typeof overviewQuerySchema>;
 
+/**
+ * One block of four figures on the dashboard: where an account started, what
+ * moved through it, where it stands.
+ *
+ * Grouped by what the money *is* rather than by account row. The taka accounts
+ * are one position — the bank and the petty cash tin are both company cash in
+ * taka — while the prepaid card is a different thing entirely, held in dollars
+ * and spent on tooling. Summing the two together would produce a number that
+ * is wrong by the exchange rate and reads as perfectly normal.
+ */
+export type AccountGroup = {
+  key: "bank" | "card";
+  label: string;
+  /** The accounts folded into this block, so the reader knows what is in it. */
+  accounts: string[];
+  currency: string;
+  opening: string;
+  moneyIn: string;
+  moneyOut: string;
+  closing: string;
+};
+
+/** The three or four figures under "Expense overview". */
+export type ExpenseOverview = {
+  salaryPaid: string;
+  /** Subscriptions, AI tools, hosting — and anything settled on the card. */
+  toolsAndSubscriptions: string;
+  taxWithheld: string;
+  taxOutstanding: string;
+};
+
 export type OverviewTotals = {
   moneyIn: string;
   moneyOut: string;
@@ -154,6 +185,9 @@ export type OverviewReport = {
   currency: CurrencyView;
   fx: FxContext | null;
   totals: OverviewTotals;
+  /** Bank and card, each with its own opening, movement and closing. */
+  groups: AccountGroup[];
+  expense: ExpenseOverview;
   /** The comparable period before, for the change figures. */
   previous: {
     label: string;

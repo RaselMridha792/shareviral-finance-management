@@ -4,6 +4,7 @@ import {
   monthRange,
   periodsInFiscalYear,
   todayInDhaka,
+  type AccountGroup,
   type CategoryLine,
   type MonthStat,
   type OverviewEntry,
@@ -12,7 +13,7 @@ import {
   type OverviewVendor,
   type PeriodRange,
 } from "@finance/shared";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import {
@@ -86,6 +87,8 @@ export class OverviewService {
       recent,
       headcount,
       months,
+      groups,
+      toolsSpend,
     ] = await Promise.all([
       this.totalsFor(range),
       before ? this.totalsFor(before) : Promise.resolve(null),
@@ -103,6 +106,8 @@ export class OverviewService {
       this.recent(),
       this.headcount(),
       this.trend(range.end),
+      this.accountGroups(range),
+      this.toolsAndSubscriptions(range),
     ]);
 
     // USD is a translation of these figures, never a second set of books.
@@ -166,6 +171,19 @@ export class OverviewService {
         ...entry,
         amount: convert(entry.amount),
       })),
+      groups: groups.map((group) => ({
+        ...group,
+        opening: convert(group.opening),
+        moneyIn: convert(group.moneyIn),
+        moneyOut: convert(group.moneyOut),
+        closing: convert(group.closing),
+      })),
+      expense: {
+        salaryPaid: convert(salaryPaid),
+        toolsAndSubscriptions: convert(toolsSpend),
+        taxWithheld: convert(tax.withheld),
+        taxOutstanding: convert(outstanding),
+      },
       headcount,
     };
   }
@@ -307,6 +325,140 @@ export class OverviewService {
 
     const owed = Number(withheld.total) - Number(deposited.total);
     return (owed > 0 ? owed : 0).toFixed(2);
+  }
+
+  /**
+   * Bank and card, each with where it started, what moved, and where it stands.
+   *
+   * Grouped by currency rather than by account type: the bank and the petty
+   * cash tin are one position in taka, while the prepaid card is dollars spent
+   * on tooling. Adding the two would produce a figure wrong by the exchange
+   * rate that reads as entirely normal — the mistake this app has made once
+   * already, elsewhere.
+   *
+   * Opening is every account's own opening balance plus everything that moved
+   * before the period, so `opening + in − out` lands exactly on `closing`. The
+   * dashboard's four tiles have to tie together or they are four unrelated
+   * numbers in a box.
+   */
+  private async accountGroups(range: PeriodRange): Promise<AccountGroup[]> {
+    const rows = await this.db.client
+      .select({
+        id: accounts.id,
+        name: accounts.name,
+        currency: accounts.currency,
+        opening: accounts.openingBalance,
+      })
+      .from(accounts)
+      .where(isNull(accounts.deletedAt))
+      .orderBy(accounts.sortOrder, accounts.name);
+
+    if (!rows.length) return [];
+
+    const base = "BDT";
+
+    const [movedBefore, inPeriodRows] = await Promise.all([
+      this.db.client
+        .select({
+          accountId: transactions.accountId,
+          net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
+        })
+        .from(transactions)
+        .where(and(sql`${transactions.txnDate} < ${range.start}`, LIVE))
+        .groupBy(transactions.accountId),
+
+      this.db.client
+        .select({
+          accountId: transactions.accountId,
+          moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
+          moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+        })
+        .from(transactions)
+        .where(inPeriod(range))
+        .groupBy(transactions.accountId),
+    ]);
+
+    const before = new Map(
+      movedBefore.map((r) => [r.accountId, Number(r.net)]),
+    );
+    const during = new Map(
+      inPeriodRows.map((r) => [
+        r.accountId,
+        { in: Number(r.moneyIn), out: Number(r.moneyOut) },
+      ]),
+    );
+
+    const build = (
+      key: AccountGroup["key"],
+      label: string,
+      of: typeof rows,
+    ): AccountGroup | null => {
+      if (!of.length) return null;
+
+      let opening = 0;
+      let moneyIn = 0;
+      let moneyOut = 0;
+
+      for (const account of of) {
+        opening += Number(account.opening) + (before.get(account.id) ?? 0);
+        const movement = during.get(account.id);
+        moneyIn += movement?.in ?? 0;
+        moneyOut += movement?.out ?? 0;
+      }
+
+      return {
+        key,
+        label,
+        accounts: of.map((a) => a.name),
+        currency: of[0].currency,
+        opening: opening.toFixed(2),
+        moneyIn: moneyIn.toFixed(2),
+        moneyOut: moneyOut.toFixed(2),
+        closing: (opening + moneyIn - moneyOut).toFixed(2),
+      };
+    };
+
+    return [
+      build(
+        "bank",
+        "BD Bank overview",
+        rows.filter((r) => r.currency === base),
+      ),
+      build(
+        "card",
+        "Card overview",
+        rows.filter((r) => r.currency !== base),
+      ),
+    ].filter((group): group is AccountGroup => group !== null);
+  }
+
+  /**
+   * What went on tooling: anything paid to a vendor that recurs, plus anything
+   * settled on the card.
+   *
+   * One query with an OR rather than two summed together — a Vercel bill on
+   * the card is both, and adding two counts would double it.
+   */
+  private async toolsAndSubscriptions(range: PeriodRange): Promise<string> {
+    const [row] = await this.db.client
+      .select({
+        total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
+      })
+      .from(transactions)
+      .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .where(
+        and(
+          inPeriod(range),
+          eq(transactions.direction, "out"),
+          or(
+            sql`${vendors.type} in ('ai_tool', 'subscription', 'hosting')`,
+            sql`${accounts.currency} <> 'BDT'`,
+          ),
+        ),
+      );
+
+    return Number(row.total).toFixed(2);
   }
 
   /** Grouped by the top-level category — thirty rows answer nothing. */

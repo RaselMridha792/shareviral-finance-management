@@ -3,6 +3,7 @@
 import {
   GRANULARITIES,
   formatMoney,
+  type AccountGroup,
   type Granularity,
   type OverviewReport,
   type PendingItem,
@@ -13,11 +14,12 @@ import {
   ArrowUpRight,
   Banknote,
   CalendarClock,
+  CreditCard,
   FileDown,
-  Landmark,
+  History,
   LoaderCircle,
   Receipt,
-  Scale,
+  Sparkles,
   Users,
   Wallet,
 } from "lucide-react";
@@ -77,6 +79,12 @@ export function OverviewScreen({
   const [exporting, setExporting] = useState(false);
 
   const { totals, previous } = report;
+  const money = (value: string, options?: { hideDecimals?: boolean }) =>
+    formatMoney(value, {
+      currency: report.currency,
+      format: settings.numberFormat,
+      ...options,
+    });
   const usd = report.currency === "USD";
 
   function move(next: Partial<{ granularity: string; currency: string }>) {
@@ -187,79 +195,56 @@ export function OverviewScreen({
         </p>
       ) : null}
 
-      {/* --- the figures ---------------------------------------------- */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Cash in hand"
-          value={totals.cashInHand}
-          hint="every account, today"
-          icon={Wallet}
-          accent="primary"
-        />
-        <StatTile
-          label="Money in"
-          value={totals.moneyIn}
-          tone="in"
-          icon={ArrowDownLeft}
-          accent="positive"
-          change={percentChange(totals.moneyIn, previous?.moneyIn)}
-          hint={previous ? `vs ${previous.label}` : undefined}
-        />
-        <StatTile
-          label="Money out"
-          value={totals.moneyOut}
-          tone="out"
-          icon={ArrowUpRight}
-          accent="negative"
-          change={percentChange(totals.moneyOut, previous?.moneyOut)}
-          risingIsGood={false}
-          hint={previous ? `vs ${previous.label}` : undefined}
-        />
-        <StatTile
-          label="Net for the period"
-          value={totals.net}
-          icon={Scale}
-          accent={Number(totals.net) >= 0 ? "positive" : "negative"}
-          hint={`${totals.entries} entries`}
-        />
+      {/* --- the figures, grouped by what the money is ------------------ */}
+      {report.groups.map((group) => (
+        <AccountBlock key={group.key} group={group} />
+      ))}
 
-        <StatTile
-          label="Salary paid"
-          value={totals.salaryPaid}
-          icon={Users}
-          change={percentChange(totals.salaryPaid, previous?.salaryPaid)}
-          risingIsGood={false}
-          hint={`${report.headcount.employees} on payroll`}
-        />
-        <StatTile
-          label="Funding received"
-          value={totals.fundingReceived}
-          tone="in"
-          icon={Landmark}
-          change={percentChange(
-            totals.fundingReceived,
-            previous?.fundingReceived,
-          )}
-          hint="from abroad"
-        />
-        <StatTile
-          label="Tax withheld"
-          value={totals.taxWithheld}
-          icon={Receipt}
-          hint={`${formatMoney(totals.taxDeposited, {
-            currency: report.currency,
-            format: settings.numberFormat,
-            hideDecimals: true,
-          })} deposited`}
-        />
-        <StatTile
-          label="Tax not yet deposited"
-          value={totals.taxOutstanding}
-          icon={CalendarClock}
-          accent={Number(totals.taxOutstanding) > 0 ? "warning" : "muted"}
-          hint="all time, not this period"
-        />
-      </div>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-tight">
+            Expense overview
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {report.period.label}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile
+            label="Salary paid"
+            value={report.expense.salaryPaid}
+            icon={Users}
+            change={percentChange(
+              report.expense.salaryPaid,
+              previous?.salaryPaid,
+            )}
+            risingIsGood={false}
+            hint={`${report.headcount.employees} on payroll`}
+          />
+          <StatTile
+            label="AI & other tools"
+            value={report.expense.toolsAndSubscriptions}
+            icon={Sparkles}
+            hint="subscriptions and the card"
+          />
+          <StatTile
+            label="Tax withheld"
+            value={report.expense.taxWithheld}
+            icon={Receipt}
+            hint={`${money(totals.taxDeposited, { hideDecimals: true })} deposited`}
+          />
+          <StatTile
+            label="Tax not yet deposited"
+            value={report.expense.taxOutstanding}
+            icon={CalendarClock}
+            accent={
+              Number(report.expense.taxOutstanding) > 0 ? "warning" : "muted"
+            }
+            hint="all time, not this period"
+          />
+        </div>
+      </section>
 
       {/* --- the shape of it ------------------------------------------ */}
       <Card>
@@ -430,6 +415,65 @@ export function OverviewScreen({
         </Card>
       </div>
     </>
+  );
+}
+
+/**
+ * One account group: where it started, what moved, where it stands.
+ *
+ * The four read left to right as a sentence, and they tie —
+ * opening + in − out is exactly current. Four figures in a box that do not
+ * add up are four unrelated numbers, and a reader who checks once and finds
+ * they disagree stops trusting the whole screen.
+ */
+function AccountBlock({ group }: { group: AccountGroup }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="text-sm font-semibold tracking-tight">{group.label}</h2>
+        <span className="truncate text-xs text-muted-foreground">
+          {group.accounts.join(" · ")}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label={
+            group.key === "card"
+              ? "Opening card balance"
+              : "Opening bank balance"
+          }
+          value={group.opening}
+          icon={History}
+          hint="carried forward"
+        />
+        <StatTile
+          label="Cash inflow"
+          value={group.moneyIn}
+          tone="in"
+          icon={ArrowDownLeft}
+          accent="positive"
+        />
+        <StatTile
+          label="Cash outflow"
+          value={group.moneyOut}
+          tone="out"
+          icon={ArrowUpRight}
+          accent="negative"
+        />
+        <StatTile
+          label={
+            group.key === "card"
+              ? "Current card balance"
+              : "Current bank balance"
+          }
+          value={group.closing}
+          icon={group.key === "card" ? CreditCard : Wallet}
+          accent="primary"
+          hint="opening + in − out"
+        />
+      </div>
+    </section>
   );
 }
 
