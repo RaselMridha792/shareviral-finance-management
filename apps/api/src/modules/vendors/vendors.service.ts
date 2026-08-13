@@ -115,6 +115,16 @@ export class VendorsService {
     const name = input.vendorName?.trim();
     if (!name) return null;
 
+    // A name that is only digits is a figure that landed in the wrong box —
+    // an amount tabbed into "Paid to", most often. Creating a vendor called
+    // "150000.00" is silent and permanent, and the master list is the one
+    // place in this app where a typo propagates to every future entry.
+    if (/^[\d\s.,\-৳$]+$/.test(name)) {
+      throw new BadRequestException(
+        `"${name}" looks like an amount, not a name. Put the figure in the amount box and leave this one for who was paid.`,
+      );
+    }
+
     const [existing] = await tx
       .select({ id: vendors.id })
       .from(vendors)
