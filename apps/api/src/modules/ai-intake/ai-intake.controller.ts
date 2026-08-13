@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,8 +9,12 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
+  AI_ATTACHMENT_MAX_BYTES,
   aiIntakeRequestSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
@@ -24,6 +29,8 @@ import {
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
 import { ZodBody } from "../../common/pipes/zod-validation.pipe";
+import { ImportsService } from "../imports/imports.service";
+import { AiAttachmentsService } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiIntakeService } from "./ai-intake.service";
 
@@ -43,6 +50,8 @@ export class AiIntakeController {
   constructor(
     private readonly ai: AiIntakeService,
     private readonly chats: AiChatsService,
+    private readonly attachments: AiAttachmentsService,
+    private readonly imports: ImportsService,
   ) {}
 
   @Get("availability")
@@ -101,6 +110,70 @@ export class AiIntakeController {
   @RequirePermission("ai.use")
   clearChats(@CurrentUser() actor: AuthenticatedUser) {
     return this.chats.clear(actor);
+  }
+
+  /* --- attached files ---------------------------------------------------- */
+
+  /**
+   * A spreadsheet for the assistant to read.
+   *
+   * Parsed here and kept as rows, never as bytes. It belongs to whoever
+   * attached it, like the conversation it sits in.
+   */
+  @Post("attachments")
+  @HttpCode(200)
+  @RequirePermission("ai.use")
+  @UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: AI_ATTACHMENT_MAX_BYTES } }),
+  )
+  uploadAttachment(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to attach");
+    return this.attachments.upload(file, actor);
+  }
+
+  @Delete("attachments/:id")
+  @HttpCode(204)
+  @RequirePermission("ai.use")
+  removeAttachment(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.attachments.remove(id, actor);
+  }
+
+  /**
+   * Hands the file's rows to the import screen.
+   *
+   * Separately permissioned, because this is where a file stops being
+   * something to read and becomes something about to enter the books. HR can
+   * attach a spreadsheet and ask about it; staging it for import is a
+   * different act and needs `imports.run`.
+   */
+  @Post("attachments/:id/to-import")
+  @HttpCode(200)
+  @RequirePermission("ai.use", "imports.run")
+  async sendToImport(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    const attachment = await this.attachments.get(id, actor);
+
+    if (attachment.importBatchId) {
+      return { batchId: attachment.importBatchId, alreadyStaged: true };
+    }
+
+    const { batch } = await this.imports.stage(
+      attachment.filename,
+      attachment.headers,
+      attachment.rows,
+      actor,
+    );
+
+    await this.attachments.markImported(id, batch.id, actor);
+    return { batchId: batch.id, alreadyStaged: false };
   }
 
   /** Category and account names to ids, checked against what exists. */

@@ -23,6 +23,11 @@ import {
 import { and, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
+import {
+  AI_ATTACHMENT_TOOLS,
+  AI_ATTACHMENT_TOOL_NAMES,
+  AiAttachmentsService,
+} from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
 import { hint, open, seal } from "../../common/crypto/secret-box";
@@ -57,6 +62,7 @@ export class AiIntakeService {
     private readonly audit: AuditService,
     private readonly tools: AiToolsService,
     private readonly chats: AiChatsService,
+    private readonly attachments: AiAttachmentsService,
   ) {}
 
   /**
@@ -312,6 +318,14 @@ export class AiIntakeService {
         return input.chatId;
       });
 
+    // The file was attached before the conversation existed, so this is the
+    // first moment the two can be tied together.
+    if (chatId && input.attachmentId) {
+      await this.attachments
+        .attachToChat(input.attachmentId, chatId, actor)
+        .catch(() => undefined);
+    }
+
     return { ...reply, chatId };
   }
 
@@ -326,6 +340,16 @@ export class AiIntakeService {
     const lookupTools =
       dataAccess === "full" ? this.tools.definitionsFor(actor) : [];
 
+    /**
+     * A file the person attached is theirs and they chose to send it, so
+     * reading it does not wait on the data-access setting — that setting is
+     * about the company's books, which this is not. It still has to belong to
+     * them: fetching it fails otherwise, and the tool says so.
+     */
+    const attachment = input.attachmentId
+      ? await this.attachments.dto(input.attachmentId, actor).catch(() => null)
+      : null;
+
     const messages: Anthropic.MessageParam[] = input.messages.map((m) => ({
       role: m.role,
       content: m.content,
@@ -333,6 +357,7 @@ export class AiIntakeService {
 
     const tools: Anthropic.Tool[] = [
       ...lookupTools,
+      ...(attachment ? AI_ATTACHMENT_TOOLS : []),
       {
         name: "answer",
         description:
@@ -351,6 +376,7 @@ export class AiIntakeService {
           actor,
           input.target,
           input.draft,
+          attachment ? this.attachments.describe(attachment) : null,
         ),
         messages,
         tools,
@@ -378,11 +404,20 @@ export class AiIntakeService {
 
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const call of calls) {
-        const result = await this.tools.run(
-          call.name,
-          (call.input ?? {}) as Record<string, unknown>,
-          actor,
-        );
+        const args = (call.input ?? {}) as Record<string, unknown>;
+
+        // The two lists are dispatched separately on purpose — see
+        // AI_ATTACHMENT_TOOLS. One reads the books under this person's
+        // permissions; the other reads a file under their ownership.
+        const result =
+          AI_ATTACHMENT_TOOL_NAMES.includes(call.name) && input.attachmentId
+            ? await this.attachments.runTool(
+                call.name,
+                args,
+                input.attachmentId,
+                actor,
+              )
+            : await this.tools.run(call.name, args, actor);
         results.push({
           type: "tool_result",
           tool_use_id: call.id,
@@ -463,6 +498,7 @@ export class AiIntakeService {
     actor: AuthenticatedUser,
     target?: AiTarget,
     draft?: Record<string, unknown>,
+    attachment?: string | null,
   ): string {
     return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: record what somebody describes, and answer questions about what is already recorded. You save nothing yourself.
 
@@ -521,6 +557,23 @@ null and missingFields empty.`
 in one line that lookups are switched off in Settings, and answer nothing else.`
 }
 
+${
+  attachment
+    ? `${attachment}
+
+WORKING FROM A FILE
+Answer from the summary and the two file tools. The totals were computed from
+the file in code — quote them, never re-add them, and never estimate a figure
+you could group_attachment for.
+If they want the rows entered in the books, do NOT draft them one at a time.
+Say how many rows it is and what they look like, and tell them to press "Send
+to Import" on the file, where they can map the columns, see every row before
+it is written, and undo the whole batch afterwards. Drafting a hundred entries
+through this conversation would put a hundred figures past review.
+One row, or a handful they read out to you, is different — draft that as usual.
+`
+    : ""
+}
 They write in Bangla, in English, or in both in one sentence. Answer in whichever they used. Bangla numerals and words for amounts are common: "pnach hajar" and "৫০০০" both mean 5000; "lakh" is 100,000; "crore" is 10,000,000.
 
 WHAT YOU CAN RECORD

@@ -11,6 +11,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
 import { aiChats } from "../../db/schema";
+import { AiAttachmentsService } from "./ai-attachments.service";
 
 /**
  * The history list down the side of the assistant.
@@ -23,7 +24,10 @@ import { aiChats } from "../../db/schema";
  */
 @Injectable()
 export class AiChatsService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly attachments: AiAttachmentsService,
+  ) {}
 
   /** Newest first, without the transcripts — a list does not need them. */
   async list(actor: AuthenticatedUser): Promise<AiChatSummary[]> {
@@ -62,6 +66,7 @@ export class AiChatsService {
       updatedAt: row.updatedAt.toISOString(),
       messages: row.messages,
       reply: (row.reply as AiIntakeReply | null) ?? null,
+      attachments: await this.attachments.forChat(row.id, actor),
     };
   }
 
