@@ -113,8 +113,13 @@ nginx config and backup/restore scripts for the VPS.
 whatever is missing, one question at a time, then fills in an ordinary editable
 form. It holds no tools and cannot write. Saving posts to the same endpoint the
 manual form posts to, so permissions, validation and the audit trail apply
-identically. Needs an ANTHROPIC_API_KEY; without one the screen says so and
-every form still works.
+identically.
+
+Switched on from **Settings → Assistant**: a Super Admin pastes an Anthropic
+key and the screen becomes available, with no redeploy. The key is checked
+against Anthropic before it is saved, sealed with AES-256-GCM before it is
+stored, kept out of the audit trail, and never returned to a browser — the
+panel shows only its last four characters.
 
 ## Verified
 
@@ -131,6 +136,7 @@ Phase 7 acceptance           period/bank/funding figures, USD never mislabelled
 Phase 8 acceptance           audit redaction, book lock, restore refuses live db
 User management              17/17  HR cannot self-promote, reset kills sessions
 Live site                    24/24  cookies, roles, CSRF, token renewal
+Assistant key                15/15  Super-Admin-only, sealed, never returned
 Responsive                   measured at 360/390/768/1440 — no page scrolls
                              sideways, no short cell wraps
 Production audit             71 claims across 5 lenses, 25 confirmed, all fixed
@@ -167,7 +173,8 @@ Then, when you want off Vercel and Render, `DEPLOYMENT.md` has the VPS move.
    built. Is provident fund or a salary advance also needed?
 5. **A sample of the current Excel** — so the import column mapping matches it
    rather than being guessed at.
-6. **An Anthropic API key** — needed before the Phase 9 assistant can run.
+6. **An Anthropic API key** — paste it into Settings → Assistant to switch the
+   assistant on. Everything else works without it.
 
 Items 2 and 3 are needed before real data can be entered; 1 is worth fixing
 before transactions are filed under the wrong headings.
