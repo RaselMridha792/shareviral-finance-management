@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import ExcelJS from "exceljs";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
@@ -26,6 +25,7 @@ import type {
   TransactionField,
 } from "./imports.schemas";
 import { parseRow, type RawRow } from "./row-parser";
+import { readSpreadsheet } from "./spreadsheet";
 import { nextRefNos } from "../transactions/ref-no";
 
 const MAX_ROWS = 10_000;
@@ -44,7 +44,23 @@ export class ImportsService {
     actor: AuthenticatedUser,
   ) {
     const { headers, rows } = await readSpreadsheet(file.buffer);
+    return this.stage(file.originalname, headers, rows, actor);
+  }
 
+  /**
+   * The same thing, from rows already parsed.
+   *
+   * A file attached in the assistant has been read once already. Writing it
+   * back out to CSV so this could parse it again would be a round trip through
+   * a format that loses things — a quoted comma, a leading zero, a date that
+   * was a date — for no gain.
+   */
+  async stage(
+    filename: string,
+    headers: string[],
+    rows: RawRow[],
+    actor: AuthenticatedUser,
+  ) {
     if (!headers.length) {
       throw new BadRequestException(
         "The first row must be column headings — none were found.",
@@ -63,7 +79,7 @@ export class ImportsService {
       .insert(importBatches)
       .values({
         target: "transactions",
-        filename: file.originalname,
+        filename,
         status: "uploaded",
         totalRows: rows.length,
         uploadedBy: actor.id,
@@ -485,129 +501,6 @@ export class ImportsService {
     if (!batch) throw new NotFoundException("No such import");
     return batch;
   }
-}
-
-/* -------------------------------------------------------------------------- */
-
-async function readSpreadsheet(buffer: Buffer): Promise<{
-  headers: string[];
-  rows: RawRow[];
-}> {
-  const workbook = new ExcelJS.Workbook();
-
-  try {
-    // exceljs types this against its own Buffer declaration, which no longer
-    // lines up with Node's generic Buffer<ArrayBufferLike>.
-    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  } catch {
-    // Not xlsx — try CSV, which many banks still hand out.
-    const text = buffer.toString("utf8");
-    return readCsv(text);
-  }
-
-  const sheet = workbook.worksheets[0];
-  if (!sheet) return { headers: [], rows: [] };
-
-  const headers: string[] = [];
-  sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, column) => {
-    headers[column - 1] = (cellText(cell.value) ?? "").trim();
-  });
-
-  const rows: RawRow[] = [];
-  sheet.eachRow({ includeEmpty: false }, (row, index) => {
-    if (index === 1) return;
-    const record: RawRow = {};
-    let hasValue = false;
-
-    headers.forEach((header, offset) => {
-      if (!header) return;
-      const text = cellText(row.getCell(offset + 1).value);
-      if (text && text.trim() !== "") hasValue = true;
-      record[header] = text;
-    });
-
-    if (hasValue) rows.push(record);
-  });
-
-  return { headers: headers.filter(Boolean), rows };
-}
-
-/**
- * One cell as plain text.
- *
- * exceljs hands back an object for anything but a plain value — a formula
- * carries its `result`, rich text its `text`, a hyperlink both. Letting any of
- * those reach `String()` produces "[object Object]" in a bank statement column,
- * which then fails to parse for a reason nobody can see.
- */
-function cellText(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-
-  if (typeof value === "object") {
-    const cell = value as Record<string, unknown>;
-    if ("result" in cell) return cellText(cell.result);
-    if ("richText" in cell && Array.isArray(cell.richText)) {
-      return cell.richText
-        .map((part) => cellText((part as { text?: unknown }).text) ?? "")
-        .join("");
-    }
-    if ("text" in cell) return cellText(cell.text);
-    return null;
-  }
-
-  if (typeof value === "string") return value;
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "bigint"
-  ) {
-    return String(value);
-  }
-  return null;
-}
-
-function readCsv(text: string): { headers: string[]; rows: RawRow[] } {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
-  if (!lines.length) return { headers: [], rows: [] };
-
-  const headers = splitCsvLine(lines[0]).map((h) => h.trim());
-  const rows = lines.slice(1).map((line) => {
-    const cells = splitCsvLine(line);
-    const record: RawRow = {};
-    headers.forEach((header, index) => {
-      if (header) record[header] = cells[index]?.trim() ?? null;
-    });
-    return record;
-  });
-
-  return { headers: headers.filter(Boolean), rows };
-}
-
-/** Handles quoted fields containing commas — common in descriptions. */
-function splitCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === "," && !inQuotes) {
-      cells.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  cells.push(current);
-  return cells;
 }
 
 /** First guess at the column mapping, from the header names. */
