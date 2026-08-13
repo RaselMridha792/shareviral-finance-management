@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ShareViral Finance Management
 
-## Getting Started
+An internal finance portal for a Bangladesh company, replacing the spreadsheets
+that currently hold the books. Money in and out, payroll, vendors, withholding
+tax, company income tax, reports, and Excel export — in one place, with a role
+boundary that HR cannot cross to reach a salary figure.
 
-First, run the development server:
+Bangladesh only. The USA enters in exactly one place: the CEO funds the company
+in dollars and wants the reports translated into dollars. There is no second set
+of books.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Layout
+
+```
+apps/web        Next.js 16 · React 19 · Tailwind v4        :3000
+apps/api        NestJS 11 · Drizzle · PostgreSQL           :4001
+packages/shared Zod schemas, permissions, money, periods, deadlines
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`packages/shared` is the point. A schema written there validates the API
+request, the web form, and — later — what the assistant is allowed to ask for.
+One definition, so the three cannot drift.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Running it
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+cp apps/api/.env.example apps/api/.env       # fill in DATABASE_URL and the JWT secrets
+cp apps/web/.env.example apps/web/.env.local
 
-## Learn More
+npm run db:push          # create the tables
+npm run db:seed          # create the accounts — prints the passwords once
+npm run db:seed-categories
 
-To learn more about Next.js, take a look at the following resources:
+npm run dev              # shared watch + api + web
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Then open <http://localhost:3000>.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Want something on the screen before the real numbers arrive:
 
-## Deploy on Vercel
+```bash
+npm run db:demo          # a made-up July–August 2026
+npm run db:demo -- wipe  # and remove it again
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Everything the demo creates is tagged, and `wipe` removes exactly that tag —
+entries you made yourself are never touched.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Commands
+
+| | |
+| --- | --- |
+| `npm run dev` | all three workspaces, watching |
+| `npm run typecheck` · `npm run lint` · `npm test` | must all be clean |
+| `npm run build` | production build of all three |
+| `npm run db:push` | apply the schema |
+| `npm run db:check` | is the database reachable, and how fast |
+| `npm run db:seed -- --reset-passwords` | new passwords for the seeded accounts |
+
+## How it is built
+
+**One ledger, not two.** Expenses, the bank register, the monthly report and the
+dashboard are four views of a single `transactions` table. Separate tables would
+need every expense to have a matching bank row, and the two drift the first time
+someone edits one.
+
+**Salary lives in its own table.** `team_members` has no salary column at all;
+compensation is a separate table that HR-reachable endpoints never join. A
+field-stripping serializer can be forgotten. A missing join cannot.
+
+**Money is `numeric(14,2)` and moves as a string.** Never a float. Sums, running
+balances and differences are computed in SQL.
+
+**Records are voided, not deleted.** A voided row stays visible, struck through,
+and out of every total.
+
+**The app records tax, it does not calculate it.** The accountant supplies the
+figures; the app holds them to the statutory calendar — including the June TDS
+deposit cliff and the quarterly (not half-yearly) withholding return.
+
+**Audit rows are written inside the same transaction as the change.** Either
+both land or neither does.
+
+**Every "today" goes through `todayInDhaka()`.** A UTC server is six hours behind
+Dhaka, which is enough to file a 3 a.m. entry on the 1st into the previous month.
+
+See [STATUS.md](STATUS.md) for what is built, what is verified, and what is next.
+
+## Security
+
+`.env` is git-ignored and must stay that way. Passwords are printed once by the
+seed script and stored nowhere else — not in this repository, not in STATUS.md.
+Both auth tokens are httpOnly cookies; the refresh token rotates on every use
+and replaying a spent one revokes the whole session family.
