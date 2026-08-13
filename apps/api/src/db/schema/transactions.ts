@@ -113,6 +113,16 @@ export const transactions = pgTable(
       .default("0"),
 
     /** How the row got here — manual, import, AI, payroll, tax payment. */
+    /**
+     * What a dollar was worth on the day, captured when the entry was made.
+     *
+     * Separate from `fx_rate`, which is the rate a conversion *actually*
+     * happened at. This one is a reference: it is what turns a taka figure
+     * into a readable dollar figure on the statement, and it has to be the
+     * rate of that day rather than of the day somebody runs the report.
+     */
+    usdRate: numeric("usd_rate", { precision: 18, scale: 6 }),
+
     createdVia: txnOriginEnum("created_via").notNull().default("manual"),
 
     /** Explicit provenance rather than a polymorphic pointer. */

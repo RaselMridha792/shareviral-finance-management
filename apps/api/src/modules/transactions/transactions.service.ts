@@ -83,6 +83,8 @@ export type TransactionDto = {
   originalAmount: string | null;
   originalCurrency: string | null;
   fxRate: string | null;
+  /** What a dollar was worth on the day, for reading the figure in USD. */
+  usdRate: string | null;
   createdVia: string;
   transferGroupId: string | null;
   voidedAt: Date | null;
@@ -529,6 +531,7 @@ export class TransactionsService {
               originalCurrency: input.originalCurrency,
               fxRate: input.fxRate,
               fxRateSource: input.fxRate ? "manual" : null,
+              usdRate: input.usdRate,
               // Typed by hand unless the caller said otherwise, and the schema
               // only lets it say "ai_intake" — a row cannot claim to have come
               // from payroll or a tax payment.
@@ -630,6 +633,10 @@ export class TransactionsService {
             ...(input.withheldTaxAmount !== undefined
               ? { withheldTaxAmount: input.withheldTaxAmount }
               : {}),
+            // Listed explicitly like every other field here. Left out, an edit
+            // silently keeps the old rate while the amount and date change
+            // around it — which is a wrong dollar figure that nothing flags.
+            ...(input.usdRate !== undefined ? { usdRate: input.usdRate } : {}),
             dedupeHash: dedupeKey({
               accountId: existing.accountId,
               txnDate: nextDate,
@@ -816,6 +823,7 @@ const projection = {
   originalAmount: transactions.originalAmount,
   originalCurrency: transactions.originalCurrency,
   fxRate: transactions.fxRate,
+  usdRate: transactions.usdRate,
   createdVia: transactions.createdVia,
   transferGroupId: transactions.transferGroupId,
   voidedAt: transactions.voidedAt,

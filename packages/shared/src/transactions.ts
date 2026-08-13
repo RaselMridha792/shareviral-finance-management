@@ -121,6 +121,25 @@ export const createTransactionSchema = z
      */
     createdVia: z.enum(["manual", "ai_intake"]).optional(),
 
+    /**
+     * What a dollar was worth on the day this happened.
+     *
+     * Asked at entry, not applied afterwards, because this is the only moment
+     * anybody knows it. A rate looked up later is the rate on the day of the
+     * lookup, and a statement built from those puts a wrong dollar figure
+     * beside every line with nothing on the page to say so.
+     *
+     * Distinct from `fxRate` below: that one is *realised* — the bank actually
+     * converted at it — while this is the reference rate that lets a taka
+     * figure be read in dollars. Conflating them would let a translation be
+     * mistaken for a fact.
+     */
+    usdRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+      .optional(),
+
     /** For a USD remittance: what was sent, and the rate the bank gave. */
     originalAmount: amountSchema.optional(),
     originalCurrency: z.string().trim().length(3).optional(),
@@ -188,6 +207,11 @@ export const updateTransactionSchema = z
     receiptUrl: receiptUrlSchema,
     billAmount: amountSchema.optional(),
     withheldTaxAmount: amountSchema.optional(),
+    usdRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;

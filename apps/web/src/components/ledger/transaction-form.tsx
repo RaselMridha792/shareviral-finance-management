@@ -7,7 +7,7 @@ import {
   type TxnDirection,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
+import { fxApi } from "@/lib/reports";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,36 @@ export function TransactionForm({
     Boolean(transaction && Number(transaction.withheldTaxAmount) > 0),
   );
   const [showFx, setShowFx] = useState(Boolean(transaction?.originalAmount));
+
+  /**
+   * The rate is captured per entry, so it needs a sensible starting point.
+   * The last one recorded is almost always today's, and being wrong by a
+   * paisa is far better than the field being left empty — an empty rate
+   * means no dollar figure on the statement for that line at all.
+   */
+  const [usdRate, setUsdRate] = useState(transaction?.usdRate ?? "");
+  const [latestRate, setLatestRate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    void fxApi
+      .rates(1)
+      .then((rates) => {
+        if (cancelled) return;
+        const last = rates[0]?.rate ?? null;
+        setLatestRate(last);
+        // Never overwrite what is already on the row being edited, or what
+        // the person has started typing.
+        setUsdRate((current) => current || (last ?? ""));
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -102,6 +133,7 @@ export function TransactionForm({
           receiptUrl: text("receiptUrl"),
           billAmount: showTax ? text("billAmount") : undefined,
           withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
+          usdRate: text("usdRate"),
           originalAmount: showFx ? text("originalAmount") : undefined,
           originalCurrency: showFx ? "USD" : undefined,
           fxRate: showFx ? text("fxRate") : undefined,
@@ -297,6 +329,32 @@ export function TransactionForm({
             Tax was withheld from this payment
           </label>
         ) : null}
+
+        {/* Asked on the way past, not applied afterwards.
+
+            A statement shows every taka figure in dollars too, and the only
+            moment the right rate is known is the moment the entry is made — a
+            rate looked up at report time is the rate on the day of the lookup.
+            Prefilled with the last one recorded so it is a glance, not a
+            research task, and editable because the day's rate is the point. */}
+        <Field
+          label="Dollar rate today"
+          error={fieldErrors.usdRate}
+          hint={
+            latestRate
+              ? `Last recorded: ৳${latestRate} per USD. Change it if today is different.`
+              : "What one US dollar is worth today, in taka."
+          }
+        >
+          <Input
+            name="usdRate"
+            inputMode="decimal"
+            className="num"
+            placeholder="122.77"
+            value={usdRate}
+            onChange={(event) => setUsdRate(event.target.value)}
+          />
+        </Field>
 
         {showTax && direction === "out" ? (
           <div className="grid gap-4 rounded-lg bg-surface-muted p-4 sm:grid-cols-2">

@@ -30,6 +30,8 @@ export type TransactionDto = {
   originalAmount: string | null;
   originalCurrency: string | null;
   fxRate: string | null;
+  /** What a dollar was worth on the day, for reading this line in USD. */
+  usdRate: string | null;
   createdVia: TxnOrigin;
   transferGroupId: string | null;
   voidedAt: string | null;
