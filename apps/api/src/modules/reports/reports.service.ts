@@ -1,8 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   currentFiscalYear,
   monthRange,
   periodsInFiscalYear,
+  todayInDhaka,
   type BankStats,
   type BankStatsQuery,
   type CategoryLine,
@@ -17,7 +18,7 @@ import {
 import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
-import { accounts, categories, transactions } from "../../db/schema";
+import { accounts, categories, fxRates, transactions } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
 
@@ -26,6 +27,8 @@ const LIVE = isNull(transactions.voidedAt);
 
 @Injectable()
 export class ReportsService {
+  private readonly log = new Logger(ReportsService.name);
+
   constructor(
     private readonly db: DbService,
     private readonly settings: SettingsService,
@@ -378,17 +381,19 @@ export class ReportsService {
       .where(and(...where))
       .orderBy(asc(transactions.txnDate));
 
-    const remittances: Remittance[] = [];
-    for (const row of rows) {
+    // The market rate on each of those days, if one was ever recorded — the gap
+    // between that and what landed is what the transfer cost. Resolved for the
+    // whole set at once: a rate per remittance is a query per remittance, and a
+    // year of funding is not a reason to open sixty round trips.
+    const market = await this.marketRatesOn(rows.map((row) => row.txnDate));
+
+    const remittances: Remittance[] = rows.map((row) => {
       const usd = Number(row.usdSent);
       const bdt = Number(row.bdtReceived);
       const realised = usd > 0 ? bdt / usd : 0;
+      const rate = market.get(row.txnDate) ?? null;
 
-      // The market rate that day, if one was ever recorded — the gap between
-      // that and what landed is what the transfer cost.
-      const market = await this.marketRateOn(row.txnDate);
-
-      remittances.push({
+      return {
         id: row.id,
         refNo: row.refNo,
         txnDate: row.txnDate,
@@ -397,10 +402,10 @@ export class ReportsService {
         usdSent: usd.toFixed(2),
         bdtReceived: bdt.toFixed(2),
         realisedRate: realised.toFixed(4),
-        marketRate: market,
-        spread: market ? (usd * Number(market) - bdt).toFixed(2) : null,
-      });
-    }
+        marketRate: rate,
+        spread: rate ? (usd * Number(rate) - bdt).toFixed(2) : null,
+      };
+    });
 
     const totalUsd = remittances.reduce((s, r) => s + Number(r.usdSent), 0);
     const totalBdt = remittances.reduce((s, r) => s + Number(r.bdtReceived), 0);
@@ -419,11 +424,109 @@ export class ReportsService {
     };
   }
 
-  private async marketRateOn(date: string): Promise<string | null> {
-    const context = await this.fx.contextFor({ start: date, end: date });
-    return context.unavailable ? null : context.rate;
+  /**
+   * The market rate for each of a set of days, in one query.
+   *
+   * This is `fx.contextFor({ start: day, end: day })` per day — the same answer,
+   * asked once instead of once per remittance. The rules it reproduces, from
+   * FxService:
+   *
+   * - a fixed rate in Settings governs every day, whatever the calendar holds;
+   * - `period_average` across a single day is that day's own average, and falls
+   *   through to the rule below when the day has no rate of its own, because an
+   *   average of nothing is not an average;
+   * - otherwise it is the last rate recorded **on or before** the day — nearest
+   *   earlier, not exact match. `current` measures that from today, the other
+   *   bases from the day itself;
+   * - a day with nothing on or before it has no market rate. Nor does a lookup
+   *   that failed: reporting in taka is always possible, and losing the whole
+   *   report because the rate table would not answer is not a trade worth
+   *   making. The column simply stays blank, exactly as it does today.
+   */
+  private async marketRatesOn(
+    days: string[],
+  ): Promise<Map<string, string | null>> {
+    const wanted = [...new Set(days)];
+    const rates = new Map<string, string | null>();
+    if (!wanted.length) return rates;
+
+    try {
+      // Inside the try, like the settings read in `FxService.contextFor`. It
+      // is a database call too, and if it is the thing that fails, the funding
+      // report should still come back in taka with the rate column blank —
+      // which is the whole point of the catch below.
+      const settings = await this.settings.get();
+
+      if (settings.fxMode === "fixed") {
+        const fixed = settings.fxFixedUsdBdt;
+        const rate = fixed && Number(fixed) > 0 ? fixed : null;
+        for (const day of wanted) rates.set(day, rate);
+        return rates;
+      }
+
+      const basis = settings.fxReportBasis;
+      const averaged = basis === "period_average";
+      // `current` asks what a dollar is worth now, so every day resolves
+      // against today rather than against itself.
+      const today = todayInDhaka();
+      const asOf = (day: string) => (basis === "current" ? today : day);
+
+      const result = await this.db.client.execute(sql`
+        select
+          to_char(wanted.day, 'YYYY-MM-DD') as day,
+          ${averaged ? sql`same_day.rate` : sql`null::text`} as same_day_rate,
+          ${averaged ? sql`same_day.days` : sql`0`} as same_day_days,
+          latest.rate as latest_rate
+        from (values ${sql.join(
+          wanted.map((day) => sql`(${day}::date, ${asOf(day)}::date)`),
+          sql`, `,
+        )}) as wanted(day, as_of)
+        ${
+          averaged
+            ? sql`left join lateral (
+                select round(avg(${fxRates.rate}), 6)::text as rate,
+                       count(*)::int as days
+                  from ${fxRates}
+                 where ${fxRates.rateDate} >= wanted.day
+                   and ${fxRates.rateDate} <= wanted.day
+              ) same_day on true`
+            : sql``
+        }
+        left join lateral (
+          select ${fxRates.rate} as rate
+            from ${fxRates}
+           where ${fxRates.rateDate} <= wanted.as_of
+           order by ${fxRates.rateDate} desc
+           limit 1
+        ) latest on true
+      `);
+
+      for (const row of result.rows as unknown as MarketRateRow[]) {
+        const average =
+          row.same_day_rate && Number(row.same_day_days) > 0
+            ? row.same_day_rate
+            : null;
+        rates.set(row.day, average ?? row.latest_rate ?? null);
+      }
+    } catch (error) {
+      this.log.warn(
+        `Could not resolve market rates for ${wanted.length} funding day(s): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      for (const day of wanted) rates.set(day, null);
+    }
+
+    return rates;
   }
 }
+
+type MarketRateRow = {
+  day: string;
+  same_day_rate: string | null;
+  same_day_days: number | null;
+  latest_rate: string | null;
+};
 
 /* -------------------------------------------------------------------------- */
 

@@ -278,6 +278,24 @@ export const PAYROLL_STATUS_LABELS: Record<PayrollStatus, string> = {
   paid: "Paid",
 };
 
+/**
+ * The run statuses a payslip exists for.
+ *
+ * A draft is a working sheet — the tax figure is still being typed in and the
+ * net changes with it, so a slip issued from one would be a document that
+ * contradicts itself tomorrow. Finalising is what freezes the figures, and
+ * everything from that point on is a real payslip whether the money has left
+ * the account yet or not.
+ *
+ * Listed rather than written as "not draft" so a status added later has to be
+ * placed on one side of the line deliberately.
+ */
+export const PAYSLIP_RUN_STATUSES = [
+  "finalized",
+  "partially_paid",
+  "paid",
+] as const satisfies readonly PayrollStatus[];
+
 export const PAYMENT_MODES = ["consolidated", "individual"] as const;
 export const paymentModeSchema = z.enum(PAYMENT_MODES);
 export type PaymentMode = z.infer<typeof paymentModeSchema>;

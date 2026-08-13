@@ -66,10 +66,108 @@ export class TdsService {
       ? [query.month]
       : Array.from({ length: 12 }, (_, i) => i + 1);
 
-    const rows = await Promise.all(
-      months.map((month) => this.monthLiability(query.year, month)),
-    );
+    const start = firstDayOf(query.year, months[0]);
+    const end = lastDayOf(query.year, months[months.length - 1]);
 
+    // Three grouped queries for the whole span, not three per month. A year
+    // view was thirty-six round trips to render one screen.
+    const [salary, vendor, deposited] = await Promise.all([
+      this.db.client
+        .select({
+          month: payrollRuns.periodMonth,
+          total: sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::text`,
+        })
+        .from(payrollLines)
+        .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+        .where(
+          and(
+            eq(payrollRuns.periodYear, query.year),
+            inArray(payrollRuns.periodMonth, months),
+            // A draft is a working sheet: generate-lines deletes and rebuilds
+            // it, and the tax figures are still being typed in. Nothing is
+            // deducted until the run is finalised, so counting a draft would
+            // show a liability that Regenerate can make vanish.
+            FINALISED_OR_LATER,
+          ),
+        )
+        .groupBy(payrollRuns.periodMonth),
+
+      this.db.client
+        .select({
+          month: sql<number>`extract(month from ${transactions.txnDate})::int`,
+          total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            // Only money going out. Tax a client deducts when settling our own
+            // invoice is an advance-tax credit we can claim — not money we are
+            // holding on the treasury's behalf. Counting it here would invent a
+            // deposit obligation and have the company pay it twice over.
+            eq(transactions.direction, "out"),
+            gte(transactions.txnDate, start),
+            lte(transactions.txnDate, end),
+            sql`${transactions.voidedAt} is null`,
+          ),
+        )
+        .groupBy(sql`1`),
+
+      this.db.client
+        .select({
+          month: tdsDeposits.periodMonth,
+          total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
+        })
+        .from(tdsDeposits)
+        .where(
+          and(
+            eq(tdsDeposits.periodYear, query.year),
+            inArray(tdsDeposits.periodMonth, months),
+            // A challan whose ledger row was voided did not happen: voiding the
+            // payment is how a mis-entered deposit is undone, and leaving it in
+            // the total would show the tax as settled when the money came back.
+            sql`not exists (
+            select 1 from ${transactions}
+            where ${transactions.id} = ${tdsDeposits.transactionId}
+              and ${transactions.voidedAt} is not null
+          )`,
+          ),
+        )
+        .groupBy(tdsDeposits.periodMonth),
+    ]);
+
+    // A month the group-by never returned is a month with nothing in it, which
+    // is what `coalesce(..., 0)` used to answer one month at a time.
+    const byMonth = (rows: Array<{ month: number; total: string }>) =>
+      new Map(rows.map((row) => [Number(row.month), row.total]));
+
+    const salaryByMonth = byMonth(salary);
+    const vendorByMonth = byMonth(vendor);
+    const depositedByMonth = byMonth(deposited);
+
+    const rows = months.map((month) => {
+      const salaryTds = salaryByMonth.get(month) ?? "0";
+      const vendorTds = vendorByMonth.get(month) ?? "0";
+
+      const deducted = Number(salaryTds) + Number(vendorTds);
+      const paid = Number(depositedByMonth.get(month) ?? "0");
+      const deadline = tdsDepositDeadlineForMonth(query.year, month);
+
+      return {
+        year: query.year,
+        month,
+        label: deadline.periodLabel,
+        salaryTds: Number(salaryTds).toFixed(2),
+        vendorTds: Number(vendorTds).toFixed(2),
+        totalDeducted: deducted.toFixed(2),
+        deposited: paid.toFixed(2),
+        outstanding: Math.max(0, deducted - paid).toFixed(2),
+        dueOn: deadline.dueOn,
+        deadlineLabel: deadline.label,
+      };
+    });
+
+    // A month with a deposit but no deduction is still a month that happened,
+    // and so is the reverse; only a month with neither drops out.
     const active = rows.filter(
       (row) => Number(row.totalDeducted) > 0 || Number(row.deposited) > 0,
     );
@@ -82,84 +180,6 @@ export class TdsService {
         deposited: sumOf(active.map((r) => r.deposited)),
         outstanding: sumOf(active.map((r) => r.outstanding)),
       },
-    };
-  }
-
-  private async monthLiability(year: number, month: number) {
-    const start = firstDayOf(year, month);
-    const end = lastDayOf(year, month);
-
-    const [salary] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::text`,
-      })
-      .from(payrollLines)
-      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
-      .where(
-        and(
-          eq(payrollRuns.periodYear, year),
-          eq(payrollRuns.periodMonth, month),
-          // A draft is a working sheet: generate-lines deletes and rebuilds it,
-          // and the tax figures are still being typed in. Nothing is deducted
-          // until the run is finalised, so counting a draft would show a
-          // liability that Regenerate can make vanish.
-          FINALISED_OR_LATER,
-        ),
-      );
-
-    const [vendor] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
-      })
-      .from(transactions)
-      .where(
-        and(
-          // Only money going out. Tax a client deducts when settling our own
-          // invoice is an advance-tax credit we can claim — not money we are
-          // holding on the treasury's behalf. Counting it here would invent a
-          // deposit obligation and have the company pay it twice over.
-          eq(transactions.direction, "out"),
-          gte(transactions.txnDate, start),
-          lte(transactions.txnDate, end),
-          sql`${transactions.voidedAt} is null`,
-        ),
-      );
-
-    const [deposited] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
-      })
-      .from(tdsDeposits)
-      .where(
-        and(
-          eq(tdsDeposits.periodYear, year),
-          eq(tdsDeposits.periodMonth, month),
-          // A challan whose ledger row was voided did not happen: voiding the
-          // payment is how a mis-entered deposit is undone, and leaving it in
-          // the total would show the tax as settled when the money came back.
-          sql`not exists (
-            select 1 from ${transactions}
-            where ${transactions.id} = ${tdsDeposits.transactionId}
-              and ${transactions.voidedAt} is not null
-          )`,
-        ),
-      );
-
-    const deducted = Number(salary.total) + Number(vendor.total);
-    const paid = Number(deposited.total);
-    const deadline = tdsDepositDeadlineForMonth(year, month);
-
-    return {
-      year,
-      month,
-      label: deadline.periodLabel,
-      salaryTds: Number(salary.total).toFixed(2),
-      vendorTds: Number(vendor.total).toFixed(2),
-      totalDeducted: deducted.toFixed(2),
-      deposited: paid.toFixed(2),
-      outstanding: Math.max(0, deducted - paid).toFixed(2),
-      dueOn: deadline.dueOn,
-      deadlineLabel: deadline.label,
     };
   }
 

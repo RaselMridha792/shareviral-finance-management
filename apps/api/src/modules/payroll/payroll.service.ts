@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   formatMoney,
+  PAYSLIP_RUN_STATUSES,
   TDS_WARNING_RATIO,
   type CreatePayrollRunInput,
   type ListPayrollRunsQuery,
@@ -13,7 +14,17 @@ import {
   type PayPayrollInput,
   type UpdatePayrollLineInput,
 } from "@finance/shared";
-import { and, asc, count, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -629,6 +640,49 @@ export class PayrollService {
 
     if (!line) throw new NotFoundException("No such payslip");
     return line;
+  }
+
+  /**
+   * One person's payslips — the same rows, asked from the other end.
+   *
+   * Until now a payslip could only be reached by remembering which month it
+   * was in, opening that run and finding the line. "Show me this person's
+   * payslips" is the question a profile page exists to answer, and it is the
+   * question somebody asks when an employee needs three months of slips for a
+   * visa or a loan.
+   *
+   * Deliberately narrow: the month, the three figures a payslip is judged on,
+   * and the line id the existing payslip route takes. Everything else — the
+   * bank account, the e-TIN, the snapshots — is on the payslip itself, and a
+   * list is not the place to repeat it.
+   */
+  async memberPayslips(teamMemberId: string) {
+    return this.db.client
+      .select({
+        id: payrollLines.id,
+        runId: payrollRuns.id,
+        runLabel: payrollRuns.label,
+        runStatus: payrollRuns.status,
+        periodYear: payrollRuns.periodYear,
+        periodMonth: payrollRuns.periodMonth,
+        grossAmount: payrollLines.grossAmount,
+        tdsAmount: payrollLines.tdsAmount,
+        netAmount: payrollLines.netAmount,
+        isPaid: payrollLines.isPaid,
+        paidOn: payrollLines.paidOn,
+      })
+      .from(payrollLines)
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .where(
+        and(
+          eq(payrollLines.teamMemberId, teamMemberId),
+          // Drafts are excluded rather than shown greyed out: the figures on
+          // one are still being typed, and a payslip nobody may rely on is
+          // worse than no payslip at all.
+          inArray(payrollRuns.status, [...PAYSLIP_RUN_STATUSES]),
+        ),
+      )
+      .orderBy(desc(payrollRuns.periodYear), desc(payrollRuns.periodMonth));
   }
 
   /** Recomputes a run's totals from its lines. */

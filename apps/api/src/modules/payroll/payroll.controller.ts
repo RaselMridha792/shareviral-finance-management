@@ -94,4 +94,19 @@ export class PayrollController {
   payslip(@Param("id") id: string) {
     return this.payroll.payslip(uuidSchema.parse(id));
   }
+
+  /**
+   * Every payslip one person has, newest first — what the Pay tab of their
+   * profile lists.
+   *
+   * `payroll.read`, the same permission that guards the payslip it links to.
+   * Reaching the figures by team member rather than by run must not be a way
+   * around the gate: HR holds `team.read` and `team.write`, holds neither
+   * `payroll.read` nor `team.compensation.read`, and gets a 403 here.
+   */
+  @Get("members/:id/payslips")
+  @RequirePermission("payroll.read")
+  memberPayslips(@Param("id") id: string) {
+    return this.payroll.memberPayslips(uuidSchema.parse(id));
+  }
 }

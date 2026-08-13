@@ -16,19 +16,21 @@ import type { PdfBlock, PdfDocumentSpec } from "./pdf.service";
  */
 
 /**
- * Amounts carry no ৳ sign.
+ * Amounts carry their ৳ sign.
  *
- * PDFKit's built-in fonts are Latin-1, and the taka sign is not in them — it
- * would render as a blank box beside every figure. Rather than ship a Bengali
- * font to print a currency symbol, the currency is stated once at the top,
- * which is how a printed financial statement does it anyway.
+ * They did not for a while: PDFKit's built-in fonts are Latin-1 and the taka
+ * sign is not in them, so it was stripped and the currency stated once at the
+ * top instead. A company's accounts printed with no currency symbol on any
+ * figure is not what the report they replace looks like — the layer that draws
+ * these pages now embeds a face that has the glyph, so the sign goes back where
+ * it belongs.
  */
 function money(value: string, format: NumberFormat): string {
-  return formatMoney(value, { format, hideSymbol: true, hideDecimals: false });
+  return formatMoney(value, { format, hideDecimals: false });
 }
 
 function shortMoney(value: string, format: NumberFormat): string {
-  return formatMoney(value, { format, hideSymbol: true, hideDecimals: true });
+  return formatMoney(value, { format, hideDecimals: true });
 }
 
 function percent(current: string, previous: string | undefined): string {
@@ -210,9 +212,12 @@ export function buildOverviewReport(
       columns: [
         { header: "Date", width: 15 },
         { header: "Ref", width: 18 },
-        { header: "Description", width: 37 },
+        { header: "Description", width: 35 },
         { header: "Category", width: 16 },
-        { header: "Amount", width: 14, align: "right" },
+        // Wide enough for a crore with the ৳ on it. The symbol costs the
+        // column about half a digit, and an amount is the one cell here that
+        // may not be cut.
+        { header: "Amount", width: 16, align: "right" },
       ],
       rows: report.recent.map((entry) => [
         entry.txnDate,

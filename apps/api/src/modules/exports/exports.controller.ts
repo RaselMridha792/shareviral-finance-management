@@ -8,9 +8,11 @@ import {
 } from "@nestjs/common";
 import {
   ACCOUNT_TYPE_LABELS,
+  EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
   FILING_STATUS_LABELS,
+  GENDER_LABELS,
   INCOME_TAX_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYROLL_STATUS_LABELS,
@@ -593,10 +595,23 @@ export class ExportsController {
    * the sheet that same DTO is what keeps "HR's download cannot contain what
    * anybody is paid now" structural rather than a promise.
    *
-   * The columns below are listed by hand, so joining salary is not in the
-   * sheet today even though the DTO holds it. Adding it is a column
-   * definition; leaving it out is also a defensible answer. It is a choice
-   * either way, not an accident.
+   * The columns are the company's own employee sheet — the spreadsheet this
+   * app replaces — plus what the app itself keeps: the code, the engagement
+   * type, the status, and the bank and withholding details payroll runs on.
+   * Downloading the team should hand back the sheet somebody used to maintain
+   * by hand, not a subset of it that has to be re-joined against the old file.
+   *
+   * Joining salary is therefore in it. It is on the sheet, HR already sees it
+   * on the profile, and an export that silently drops a column visible on
+   * screen is the kind of surprise that sends people back to Excel. It is the
+   * *only* pay figure here, and it is safe to be: it is a frozen fact about
+   * the offer, while what anybody earns now lives in `compensation_history`
+   * behind `team.compensation.read`, which HR does not hold and which this
+   * DTO cannot reach.
+   *
+   * Age is worked out here rather than read. The sheet has an Age column and
+   * the app deliberately does not store one, because a stored age is wrong by
+   * the next birthday.
    */
   @Get("team-members")
   @RequirePermission("exports.run", "team.read")
@@ -612,11 +627,15 @@ export class ExportsController {
 
     type Row = (typeof page.items)[number];
 
+    // One "today" for the whole sheet. Reading the clock per row could age two
+    // people differently in the same download if it were taken across midnight.
+    const today = todayInDhaka();
+
     const buffer = await this.excel.build<Row>({
       title: "Team",
       subtitle: [
         describeTeamFilter(query),
-        `${page.total} people · exported ${todayInDhaka()}`,
+        `${page.total} people · exported ${today}`,
       ],
       columns: [
         {
@@ -670,6 +689,12 @@ export class ExportsController {
           kind: "text",
           width: 14,
           value: (r) => EMPLOYMENT_STATUS_LABELS[r.status],
+        },
+        {
+          header: "Joining salary",
+          key: "joiningSalary",
+          kind: "money",
+          value: (r) => r.joiningSalary,
         },
         {
           header: "Work email",
@@ -737,6 +762,91 @@ export class ExportsController {
           kind: "text",
           width: 34,
           value: (r) => r.address,
+        },
+        {
+          header: "Permanent address",
+          key: "permanentAddress",
+          kind: "text",
+          width: 34,
+          value: (r) => r.permanentAddress,
+        },
+        {
+          header: "Date of birth",
+          key: "dateOfBirth",
+          kind: "date",
+          value: (r) => r.dateOfBirth,
+        },
+        {
+          header: "Age",
+          key: "age",
+          kind: "number",
+          width: 8,
+          value: (r) => ageInYears(r.dateOfBirth, today),
+        },
+        {
+          header: "Gender",
+          key: "gender",
+          kind: "text",
+          width: 14,
+          // The column is free text on the row, so a value that predates the
+          // fixed list still exports as itself rather than as a blank.
+          value: (r) =>
+            r.gender
+              ? (GENDER_LABELS[r.gender as keyof typeof GENDER_LABELS] ??
+                r.gender)
+              : null,
+        },
+        {
+          header: "Blood group",
+          key: "bloodGroup",
+          kind: "text",
+          width: 12,
+          value: (r) => r.bloodGroup,
+        },
+        {
+          header: "Education level",
+          key: "educationLevel",
+          kind: "text",
+          value: (r) =>
+            r.educationLevel
+              ? (EDUCATION_LEVEL_LABELS[
+                  r.educationLevel as keyof typeof EDUCATION_LEVEL_LABELS
+                ] ?? r.educationLevel)
+              : null,
+        },
+        {
+          header: "Education major",
+          key: "educationMajor",
+          kind: "text",
+          value: (r) => r.educationMajor,
+        },
+        {
+          header: "CV",
+          key: "cvUrl",
+          kind: "text",
+          width: 34,
+          value: (r) => r.cvUrl,
+        },
+        {
+          header: "Appointment letter",
+          key: "appointmentLetterUrl",
+          kind: "text",
+          width: 34,
+          value: (r) => r.appointmentLetterUrl,
+        },
+        {
+          header: "Photo",
+          key: "photoUrl",
+          kind: "text",
+          width: 34,
+          value: (r) => r.photoUrl,
+        },
+        {
+          header: "Notes",
+          key: "notes",
+          kind: "text",
+          width: 40,
+          value: (r) => r.notes,
         },
       ],
       rows: page.items,
@@ -1565,6 +1675,32 @@ function assertMaySeeUsd(currency: CurrencyView, actor: AuthenticatedUser) {
 }
 
 /** The filter, in words, at the top of the sheet — so a saved file explains itself. */
+/**
+ * Whole years between two ISO dates, or null.
+ *
+ * Compared as `YYYY-MM-DD` strings rather than parsed into `Date`. A date-only
+ * string parsed as local time and serialised as UTC lands a day early in
+ * Dhaka, which is exactly the bug the date cells above take care to avoid, and
+ * on the wrong day of the year it would put somebody's age out by one.
+ *
+ * Null for an unusable pair, so a typo of `1097` for `1997` exports an empty
+ * cell rather than a 929-year-old employee.
+ */
+function ageInYears(dateOfBirth: string | null, today: string): number | null {
+  if (!dateOfBirth) return null;
+
+  const [birthYear, birthMonth, birthDay] = dateOfBirth.split("-").map(Number);
+  const [nowYear, nowMonth, nowDay] = today.split("-").map(Number);
+  if (!birthYear || !birthMonth || !birthDay) return null;
+
+  let age = nowYear - birthYear;
+  // Their birthday has not come round yet this year.
+  if (nowMonth < birthMonth || (nowMonth === birthMonth && nowDay < birthDay)) {
+    age -= 1;
+  }
+  return age >= 0 && age < 130 ? age : null;
+}
+
 function describeTeamFilter(query: ListTeamQuery): string {
   const parts: string[] = [];
   if (query.engagementType) {

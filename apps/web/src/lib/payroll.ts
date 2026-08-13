@@ -142,6 +142,28 @@ export type PayslipDto = PayrollLineDto & {
   paymentMethod: string;
 };
 
+/**
+ * A payslip as it appears in a list on somebody's profile — the month, the
+ * three figures worth scanning, and the line id that opens the slip itself.
+ *
+ * Not `PayrollLineDto`: that shape carries the bank account, the e-TIN and the
+ * frozen snapshots, none of which a list needs and all of which would then be
+ * on a page that only had to show twelve rows of gross, tax and net.
+ */
+export type MemberPayslipDto = {
+  id: string;
+  runId: string;
+  runLabel: string;
+  runStatus: PayrollStatus;
+  periodYear: number;
+  periodMonth: number;
+  grossAmount: string;
+  tdsAmount: string;
+  netAmount: string;
+  isPaid: boolean;
+  paidOn: string | null;
+};
+
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
 export const teamApi = {
@@ -222,4 +244,16 @@ export const payrollApi = {
     apiFetch<PayslipDto>(`/payroll/lines/${lineId}/payslip`, {
       cache: "no-store",
     }),
+
+  /**
+   * One person's payslips, finalised runs only, newest first.
+   *
+   * Gated on `payroll.read` like the payslip itself — HR gets a 403, not an
+   * empty list, so the profile page must not call this without checking.
+   */
+  memberPayslips: (teamMemberId: string) =>
+    apiFetch<MemberPayslipDto[]>(
+      `/payroll/members/${teamMemberId}/payslips`,
+      { cache: "no-store" },
+    ),
 };

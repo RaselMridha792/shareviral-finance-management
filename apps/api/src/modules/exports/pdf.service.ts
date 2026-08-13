@@ -1,4 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { Injectable, Logger } from "@nestjs/common";
 import PDFDocument from "pdfkit";
 
 /**
@@ -20,8 +23,8 @@ import PDFDocument from "pdfkit";
  * down as many pages as they need. `buildPages` produces the *statement*, which
  * is a designed document: each page is composed rather than flowed, the cover
  * and the closing page are full-bleed, and only the ledgers are allowed to run
- * on. The two share `latin`, `fit`, the palettes and the footer pass; they do
- * not share a block vocabulary, because a section heading in one is an 11pt
+ * on. The two share `drawable`, `fit`, the palettes and the footer pass; they
+ * do not share a block vocabulary, because a section heading in one is an 11pt
  * bold line and in the other is a 28pt numeral beside tracked small caps.
  */
 
@@ -60,38 +63,165 @@ export type PdfDocumentSpec = {
 
 const PAGE = { size: "A4" as const, margin: 42 };
 
+/* ========================================================================== */
+/*  The face                                                                   */
+/* ========================================================================== */
+
 /**
- * PDFKit's built-in fonts are Latin-1. Anything outside it — the taka sign,
- * the typographic minus this app uses everywhere, a Bengali word that came
- * through in a description — renders as mojibake rather than failing, which is
- * worse: "৳18,700 not yet deposited" came out as "Y3bÃ3 à v—F††VÆB".
+ * The document's typeface, bundled with the API.
  *
- * Every string drawn goes through here, in the drawing code rather than at the
- * call sites, so a new block type cannot reintroduce it.
+ * PDFKit's fourteen built-in fonts are Latin-1, and the one character a
+ * Bangladeshi financial report cannot do without — ৳ — is not in it. Neither is
+ * the typographic minus (U+2212) that `formatMoney` writes. Drawn in Helvetica
+ * they came out as mojibake: "৳18,700 not yet deposited" printed as
+ * "Y3bÃ3 à v—F††VÆB". Stripping them instead, which is what this file used to
+ * do, printed a company's accounts with no currency symbol at all.
+ *
+ * So the face is embedded. **Noto Sans Bengali**, SIL Open Font License 1.1 —
+ * redistributable, and `OFL.txt` sits beside the files. A Windows system font
+ * (Nirmala UI, Vrinda) would be neither: the API deploys to Linux, where they
+ * do not exist, and their licence does not permit shipping them.
+ *
+ * Two weights, subset to what the reports draw — Latin, Latin-1, Latin
+ * Extended-A, the typographic punctuation, ৳ and −. 36 KB each, against 180 KB
+ * for the full upstream files. Rebuild them with:
+ *
+ *     pyftsubset NotoSansBengali-Regular.ttf \
+ *       --output-file=NotoSansBengali-Regular.ttf \
+ *       --unicodes="U+0020-007E,U+00A0-00FF,U+0100-017F,U+2013,U+2014,\
+ *         U+2018-201A,U+201C-201E,U+2022,U+2026,U+2030,U+2039,U+203A,U+2044,\
+ *         U+2212,U+20AC,U+09F3" \
+ *       --layout-features='*' --name-IDs='*' --name-legacy --notdef-outline
+ *
+ * and then reset `hhea`/`OS/2` to Helvetica's vertical metrics — ascender 718,
+ * descender −207, line gap 231. That last step is not cosmetic. PDFKit places
+ * a baseline at `y + ascender × size`, so a face whose ascender is 917 (Noto's,
+ * sized for Bengali headroom this subset no longer carries) drops every figure
+ * on every composed page by a fifth of its point size and opens the leading of
+ * every paragraph by 15%. Matching the metrics the layout was drawn against
+ * keeps the geometry and changes only the glyphs.
  */
-function latin(text: string): string {
-  const swaps: Record<string, string> = {
-    "−": "-", // minus sign
-    "–": "-", // en dash
-    "—": "-", // em dash
-    "‘": "'",
-    "’": "'",
-    "“": '"',
-    "”": '"',
-    "৳": "", // taka sign; the currency is stated in the heading
-  };
+const FONT_DIR = "fonts";
+const FONT_FILES = {
+  regular: "NotoSansBengali-Regular.ttf",
+  bold: "NotoSansBengali-Bold.ttf",
+} as const;
+
+/** What the drawing code asks for; what they resolve to is decided below. */
+const BODY = "sfm-body";
+const BOLD = "sfm-bold";
+
+/**
+ * Where the files are, in dev and in production.
+ *
+ * `__dirname` is `src/modules/exports` under ts-node and `dist/modules/exports`
+ * after `nest build`, so the same relative path answers both — *provided* the
+ * build copies them, which is what the `assets` entry in `nest-cli.json` is
+ * for. The second candidate is the belt to that braces: if the assets step is
+ * ever dropped, the built server still finds the face in the source tree rather
+ * than silently printing a report with no currency on it.
+ */
+const FONT_CANDIDATES = [
+  join(__dirname, FONT_DIR),
+  join(__dirname, "..", "..", "..", "src", "modules", "exports", FONT_DIR),
+];
+
+type Faces = { regular: Buffer; bold: Buffer };
+
+function loadFaces(): Faces | null {
+  for (const directory of FONT_CANDIDATES) {
+    try {
+      return {
+        regular: readFileSync(join(directory, FONT_FILES.regular)),
+        bold: readFileSync(join(directory, FONT_FILES.bold)),
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  new Logger("PdfService").error(
+    `No report face found in ${FONT_CANDIDATES.join(" or ")} — reports will ` +
+      `fall back to Helvetica and print amounts without the taka sign. Check ` +
+      `the assets entry in nest-cli.json copied the fonts into dist.`,
+  );
+  return null;
+}
+
+const FACES = loadFaces();
+
+/**
+ * Turns false, for the rest of the process, if the bundled face cannot be used.
+ *
+ * A missing or unreadable font must not take the export down with it: the
+ * document falls back to Helvetica and to stripping what Helvetica cannot draw,
+ * which is a worse report but still a true one.
+ */
+let embedded = FACES !== null;
+
+/** "0020-007E A0-A3 09F3" — hex code points, singly or in ranges. */
+function ranges(spec: string): ReadonlyArray<readonly [number, number]> {
+  return spec.split(" ").map((part) => {
+    const [from, to] = part.split("-");
+    return [parseInt(from, 16), parseInt(to ?? from, 16)] as const;
+  });
+}
+
+/**
+ * What the bundled subset can actually draw, read off its own cmap.
+ *
+ * Not the list asked for above: `pyftsubset` keeps what it is asked for *and
+ * finds*, and Noto Sans Bengali's Latin is not a complete Latin Extended-A.
+ * Stating the real coverage rather than the request is what makes an uncovered
+ * code point come out as a space instead of an empty box — so if the subset is
+ * ever rebuilt, regenerate this from the built files, not from the argument.
+ */
+const COVERED = ranges(
+  "0020-007E A0-A3 A5 A7-AB AE-B0 B4 B6-B8 BA-BB BF-0107 010A-0113 " +
+    "0116-011B 011E-0123 0126-0127 012A-012B 012E-0131 0136-0137 0139-013E " +
+    "0141-0148 0150-0155 0158-015B 015E-0161 0164-0165 016A-016B 016E-017E " +
+    "09F3 2013-2014 2018-201A 201C-201E 2022 2026 2039-203A 20AC 2212",
+);
+
+/** Printable Latin-1 — all a built-in font can draw, when it comes to that. */
+const LATIN1 = ranges("0020-00FF");
+
+/**
+ * The last resort for a code point the face in use genuinely lacks.
+ *
+ * With the subset embedded none of these are reached — it has ৳, −, the dashes
+ * and the curly quotes. They are what the Helvetica fallback uses, and they are
+ * kept for it: a hyphen for a minus reads as a minus, where `−` in Helvetica
+ * reads as garbage.
+ */
+const SUBSTITUTES: Record<string, string> = {
+  "−": "-", // minus sign
+  "–": "-", // en dash
+  "—": "-", // em dash
+  "‘": "'",
+  "’": "'",
+  "“": '"',
+  "”": '"',
+  "৳": "", // taka sign; the currency is stated in the heading instead
+};
+
+/**
+ * Every string drawn goes through here, in the drawing code rather than at the
+ * call sites, so a new block type cannot reintroduce mojibake.
+ */
+function drawable(text: string): string {
+  const covered = embedded ? COVERED : LATIN1;
 
   let out = "";
   for (const character of text) {
-    const swapped = swaps[character];
-    if (swapped !== undefined) {
-      out += swapped;
+    const code = character.codePointAt(0) ?? 0;
+    if (covered.some(([from, to]) => code >= from && code <= to)) {
+      out += character;
       continue;
     }
-    const code = character.codePointAt(0) ?? 0;
-    // Printable Latin-1 is all Helvetica can draw. Anything else becomes a
-    // space rather than a wrong glyph.
-    out += code >= 0x20 && code <= 0xff ? character : " ";
+    // Anything the face cannot draw becomes its substitute, or a space —
+    // never a wrong glyph and never an empty box.
+    out += SUBSTITUTES[character] ?? " ";
   }
 
   return out.replace(/\s+/g, " ").trim();
@@ -104,8 +234,8 @@ function latin(text: string): string {
  * PDFKit's own `ellipsis` option only applies when it decides the text
  * overflows, which it does not always do with `lineBreak: false` — the result
  * was "Hardware & equipment" spilling onto a second line and overlapping the
- * row beneath it. Counting characters is not enough either: at 8.5pt Helvetica
- * a run of capitals is half again as wide as the same number of lowercase.
+ * row beneath it. Counting characters is not enough either: at 8.5pt a run of
+ * capitals is half again as wide as the same number of lowercase.
  */
 function fit(
   doc: PDFKit.PDFDocument,
@@ -120,6 +250,59 @@ function fit(
     cut = cut.slice(0, -1);
   }
   return cut.trimEnd() + "..";
+}
+
+/**
+ * The largest size at which the text still fits, down to a floor.
+ *
+ * A label may be cut; an amount may not. "৳3,162,2.." on a closing balance is
+ * not a shortened figure, it is a wrong one, and a reader has no way to tell
+ * which digits went missing. Money is set smaller instead — which is what the
+ * ৳ sign cost the widest figures when it went back on them.
+ *
+ * Advance widths scale linearly with point size, so the fitting size is one
+ * division rather than a search. Sets the size on the document and returns it;
+ * the font must already be selected, or the measurement is of the wrong face.
+ */
+function sized(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  maxWidth: number,
+  size: number,
+  /**
+   * Two thirds, because a complete figure at 11pt beats a cut one at 16.5pt.
+   * Only the closing position — bank and card in one cell — ever goes near it.
+   */
+  floor = size * 0.66,
+): number {
+  doc.fontSize(size);
+  const width = doc.widthOfString(text);
+  if (width <= maxWidth || width <= 0) return size;
+
+  const fitted = Math.max(floor, (size * maxWidth) / width);
+  doc.fontSize(fitted);
+  return fitted;
+}
+
+/**
+ * One size for a row of figures, so they share a baseline.
+ *
+ * Shrinking each cell to its own width would step the figures against each
+ * other, and a ruled row of numbers at three different sizes reads as three
+ * different kinds of number.
+ */
+function sharedScale(
+  doc: PDFKit.PDFDocument,
+  items: Array<{ text: string; size: number; width: number }>,
+  floor = 0.72,
+): number {
+  let scale = 1;
+  for (const item of items) {
+    doc.fontSize(item.size);
+    const width = doc.widthOfString(item.text);
+    if (width > item.width) scale = Math.min(scale, item.width / width);
+  }
+  return Math.max(floor, scale);
 }
 
 const INK = "#111827";
@@ -307,7 +490,7 @@ export type PdfPagedBlock =
   | { kind: "rule"; weight?: number }
   | { kind: "capsRow"; left: string; right?: string }
   | {
-      /** The very large headline. Helvetica-Bold standing in for the serif. */
+      /** The very large headline. The bold weight stands in for the serif. */
       kind: "display";
       eyebrow?: string;
       lines: string[];
@@ -375,6 +558,40 @@ type Flow = {
 
 @Injectable()
 export class PdfService {
+  private static readonly logger = new Logger(PdfService.name);
+
+  /**
+   * Points `BODY` and `BOLD` at the bundled face, or at Helvetica if it cannot
+   * be had.
+   *
+   * `registerFont` only records the source, so the face is asked for straight
+   * away: a truncated or corrupt file has to fail here, before a single string
+   * is drawn, or the fallback would come too late for `drawable` to know it is
+   * back to Latin-1. It is called once per document, before anything is drawn.
+   * A face that failed once is not tried again — the file will not have fixed
+   * itself, and every export after it would log the same error.
+   */
+  private useFaces(doc: PDFKit.PDFDocument): void {
+    if (FACES && embedded) {
+      try {
+        doc.registerFont(BODY, FACES.regular);
+        doc.registerFont(BOLD, FACES.bold);
+        doc.font(BODY);
+        doc.font(BOLD);
+        return;
+      } catch (error) {
+        embedded = false;
+        PdfService.logger.error(
+          `Bundled report face unusable, falling back to Helvetica — amounts ` +
+            `will print without the taka sign: ${String(error)}`,
+        );
+      }
+    }
+
+    doc.registerFont(BODY, "Helvetica");
+    doc.registerFont(BOLD, "Helvetica-Bold");
+  }
+
   /** Resolves to the finished file. */
   build(spec: PdfDocumentSpec): Promise<Buffer> {
     return new Promise((resolve, reject) => {
@@ -383,6 +600,7 @@ export class PdfService {
         bufferPages: true,
         info: { Title: spec.title, Creator: "ShareViral Finance Management" },
       });
+      this.useFaces(doc);
 
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -393,17 +611,17 @@ export class PdfService {
 
       /* --- masthead ---------------------------------------------------- */
       doc
-        .font("Helvetica-Bold")
+        .font(BOLD)
         .fontSize(18)
         .fillColor(INK)
-        .text(latin(spec.title), { width });
+        .text(drawable(spec.title), { width });
 
       for (const line of spec.subtitle) {
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(9.5)
           .fillColor(MUTED)
-          .text(latin(line), { width });
+          .text(drawable(line), { width });
       }
 
       doc
@@ -430,10 +648,10 @@ export class PdfService {
         doc.page.margins.bottom = 0;
         const y = doc.page.height - PAGE.margin + 8;
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(7.5)
           .fillColor(MUTED)
-          .text(latin(spec.footer), PAGE.margin, y, {
+          .text(drawable(spec.footer), PAGE.margin, y, {
             width: width * 0.75,
             lineBreak: false,
           })
@@ -467,6 +685,7 @@ export class PdfService {
         bufferPages: true,
         info: { Title: spec.title, Creator: "ShareViral Finance Management" },
       });
+      this.useFaces(doc);
 
       const chunks: Buffer[] = [];
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -570,11 +789,11 @@ export class PdfService {
       // The two halves are measured against each other rather than given a
       // fixed split, so a long company name shortens itself instead of running
       // into the page number.
-      doc.font("Helvetica-Bold").fontSize(SIZE.caps);
+      doc.font(BOLD).fontSize(SIZE.caps);
       const tailWidth = tail
         ? Math.min(
             CONTENT * 0.62,
-            doc.widthOfString(latin(tail).toUpperCase(), {
+            doc.widthOfString(drawable(tail).toUpperCase(), {
               characterSpacing: TRACK,
             }) + 3,
           )
@@ -628,8 +847,8 @@ export class PdfService {
     const size = options.size ?? SIZE.caps;
     const spacing = options.spacing ?? TRACK;
 
-    doc.font("Helvetica-Bold").fontSize(size).fillColor(options.color);
-    const upper = latin(text).toUpperCase();
+    doc.font(BOLD).fontSize(size).fillColor(options.color);
+    const upper = drawable(text).toUpperCase();
     const value = options.wrap
       ? upper
       : fit(doc, upper, options.width - 2, { characterSpacing: spacing });
@@ -684,11 +903,11 @@ export class PdfService {
     // Alternating runs: even is body, odd is bold. An empty run keeps its
     // place in the alternation rather than being dropped, or a note that opens
     // with **bold** would come out the wrong way round the whole way down.
-    const parts = latin(text).split("**");
+    const parts = drawable(text).split("**");
     doc.fontSize(options.size).fillColor(options.color);
 
     parts.forEach((part, index) => {
-      doc.font(index % 2 === 1 ? "Helvetica-Bold" : "Helvetica");
+      doc.font(index % 2 === 1 ? BOLD : BODY);
       const last = index === parts.length - 1;
 
       // Only the opening run may carry a position. PDFKit reads a *missing*
@@ -759,10 +978,10 @@ export class PdfService {
       case "lede": {
         const size = block.size ?? SIZE.lede;
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(size)
           .fillColor(p.body)
-          .text(latin(block.text), MARGIN, doc.y, {
+          .text(drawable(block.text), MARGIN, doc.y, {
             width: block.width ?? CONTENT,
             lineGap: size * 0.42,
             align: "left",
@@ -812,10 +1031,9 @@ export class PdfService {
   /**
    * The headline.
    *
-   * The sample's display face is a high-contrast serif that is not one of the
-   * fourteen fonts PDFKit can draw without embedding one. Helvetica-Bold at the
-   * same size keeps the proportion the page is built on — the headline is a
-   * third of the cover — which is what carries the design. Faking the italic
+   * The sample's display face is a high-contrast serif; the document's own bold
+   * at the same size keeps the proportion the page is built on — the headline is
+   * a third of the cover — which is what carries the design. Faking the italic
    * second line with a shear transform was tried and looked like a mistake.
    */
   private renderDisplay(
@@ -839,13 +1057,13 @@ export class PdfService {
     // not.." is what truncating a display line looks like, and the one thing a
     // headline may not be is unreadable — so an over-long one steps down in
     // size until it fits, to a floor where it is still a headline.
-    doc.font("Helvetica-Bold").fillColor(p.ink);
+    doc.font(BOLD).fillColor(p.ink);
     let size = block.size;
     const floor = block.size * 0.68;
     while (size > floor) {
       doc.fontSize(size);
       const widest = Math.max(
-        ...block.lines.map((line) => doc.widthOfString(latin(line))),
+        ...block.lines.map((line) => doc.widthOfString(drawable(line))),
       );
       if (widest <= CONTENT) break;
       size -= 1;
@@ -859,7 +1077,7 @@ export class PdfService {
     let y = doc.y;
 
     for (const line of block.lines) {
-      doc.text(fit(doc, latin(line), CONTENT), MARGIN, y, {
+      doc.text(fit(doc, drawable(line), CONTENT), MARGIN, y, {
         width: CONTENT,
         lineBreak: false,
       });
@@ -878,8 +1096,8 @@ export class PdfService {
   ): void {
     const top = doc.y;
 
-    doc.font("Helvetica-Bold").fontSize(SIZE.sectionOrdinal).fillColor(p.ink);
-    const ordinal = latin(block.ordinal);
+    doc.font(BOLD).fontSize(SIZE.sectionOrdinal).fillColor(p.ink);
+    const ordinal = drawable(block.ordinal);
     doc.text(ordinal, MARGIN, top, { lineBreak: false });
     const ordinalWidth = doc.widthOfString(ordinal);
 
@@ -888,9 +1106,9 @@ export class PdfService {
     const titleY = top + SIZE.sectionOrdinal * 0.53;
     const titleX = MARGIN + ordinalWidth + 10;
 
-    doc.font("Helvetica-Bold").fontSize(SIZE.sectionTitle).fillColor(p.ink);
+    doc.font(BOLD).fontSize(SIZE.sectionTitle).fillColor(p.ink);
     doc.text(
-      fit(doc, latin(block.title).toUpperCase(), CONTENT * 0.55, {
+      fit(doc, drawable(block.title).toUpperCase(), CONTENT * 0.55, {
         characterSpacing: TRACK,
       }),
       titleX,
@@ -920,16 +1138,16 @@ export class PdfService {
   ): void {
     const top = doc.y;
 
-    doc.font("Helvetica-Bold").fontSize(30).fillColor(p.ink);
-    const ordinal = latin(block.ordinal);
+    doc.font(BOLD).fontSize(30).fillColor(p.ink);
+    const ordinal = drawable(block.ordinal);
     doc.text(ordinal, MARGIN, top, { lineBreak: false });
     const ordinalWidth = doc.widthOfString(ordinal);
 
     doc
-      .font("Helvetica")
+      .font(BODY)
       .fontSize(21)
       .fillColor(p.ink)
-      .text(latin(block.label), MARGIN + ordinalWidth + 12, top + 6, {
+      .text(drawable(block.label), MARGIN + ordinalWidth + 12, top + 6, {
         lineBreak: false,
       });
 
@@ -961,10 +1179,24 @@ export class PdfService {
     const top = doc.y;
     const height = 114;
     const pad = 15;
+    const inner = BOX_WIDTH - pad * 2;
+
+    // Both boxes take the size the wider figure needs, so the cover's two
+    // headline numbers are the same size as each other.
+    doc.font(BOLD);
+    const figureSize =
+      SIZE.boxFigure *
+      sharedScale(
+        doc,
+        items.slice(0, 2).map((item) => ({
+          text: drawable(item.primary),
+          size: SIZE.boxFigure,
+          width: inner,
+        })),
+      );
 
     items.slice(0, 2).forEach((item, index) => {
       const x = MARGIN + index * (BOX_WIDTH + BOX_GAP);
-      const inner = BOX_WIDTH - pad * 2;
 
       doc
         .rect(x, top, BOX_WIDTH, height)
@@ -979,26 +1211,26 @@ export class PdfService {
         color: p.muted,
       });
 
-      doc.font("Helvetica-Bold").fontSize(SIZE.boxFigure).fillColor(p.ink);
-      doc.text(fit(doc, latin(item.primary), inner), x + pad, top + 33, {
+      doc.font(BOLD).fontSize(figureSize).fillColor(p.ink);
+      doc.text(fit(doc, drawable(item.primary), inner), x + pad, top + 33, {
         width: inner,
         lineBreak: false,
       });
 
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(10)
         .fillColor(p.body)
-        .text(fit(doc, latin(item.secondary), inner), x + pad, top + 71, {
+        .text(fit(doc, drawable(item.secondary), inner), x + pad, top + 71, {
           width: inner,
           lineBreak: false,
         });
 
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(8)
         .fillColor(p.faint)
-        .text(fit(doc, latin(item.source), inner), x + pad, top + 89, {
+        .text(fit(doc, drawable(item.source), inner), x + pad, top + 89, {
           width: inner,
           lineBreak: false,
         });
@@ -1022,13 +1254,40 @@ export class PdfService {
     const top = doc.y;
     const height = 102;
     const column = CONTENT / Math.max(1, items.length);
+    // A left-set figure stands off the divider that follows it, which is drawn
+    // 8pt into the next column: at 32pt with a ৳ on the front, "৳34,68,100" ran
+    // up against the rule. A right-set one keeps the full column, so it lands on
+    // the margin the rules above and below it are drawn to.
+    const cellFor = (align: string) =>
+      align === "right" ? column : column - 18;
 
     this.hairline(doc, top, p.rule, 0.8);
+
+    // One scale for the figures, which are read across and share a baseline. A
+    // word — "Reconciled" — sits on its own baseline anyway, so it is sized on
+    // its own rather than dragging three amounts down with it.
+    //
+    // The floor is low because the amounts are not: at 32pt a crore with a ৳ on
+    // the front is half again as wide as the column, and "৳11,83,00,.." across
+    // the foot of a cover is not a figure. 18pt against a 7.5pt label is still
+    // the biggest thing on the page.
+    doc.font(BOLD);
+    const scale = sharedScale(
+      doc,
+      items
+        .filter((item) => !item.word)
+        .map((item) => ({
+          text: drawable(item.value),
+          size: SIZE.bigFigure,
+          width: cellFor(item.align ?? "left"),
+        })),
+      0.58,
+    );
 
     items.forEach((item, index) => {
       const align = item.align ?? "left";
       const x = MARGIN + index * column;
-      const width = column - 10;
+      const width = cellFor(align);
 
       if (index > 0 && align === "left") {
         doc
@@ -1039,11 +1298,16 @@ export class PdfService {
           .stroke();
       }
 
-      const size = item.word ? SIZE.bigFigure * 0.86 : SIZE.bigFigure;
       const valueY = item.word ? top + 24 : top + 15;
+      const value = drawable(item.value);
 
-      doc.font("Helvetica-Bold").fontSize(size).fillColor(p.ink);
-      doc.text(fit(doc, latin(item.value), width), x, valueY, {
+      doc.font(BOLD).fillColor(p.ink);
+      if (item.word) {
+        sized(doc, value, width, SIZE.bigFigure * 0.86);
+      } else {
+        doc.fontSize(SIZE.bigFigure * scale);
+      }
+      doc.text(fit(doc, value, width), x, valueY, {
         width,
         align,
         lineBreak: false,
@@ -1051,10 +1315,10 @@ export class PdfService {
 
       if (item.secondary) {
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(SIZE.bigSecondary)
           .fillColor(p.body)
-          .text(fit(doc, latin(item.secondary), width), x, top + 56, {
+          .text(fit(doc, drawable(item.secondary), width), x, top + 56, {
             width,
             align,
             lineBreak: false,
@@ -1227,10 +1491,10 @@ export class PdfService {
 
       case "text":
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(SIZE.rowLabel)
           .fillColor(p.body)
-          .text(fit(doc, latin(cell.text), width), left, at.y, {
+          .text(fit(doc, drawable(cell.text), width), left, at.y, {
             width,
             align: at.align,
             lineBreak: false,
@@ -1238,18 +1502,18 @@ export class PdfService {
         return;
 
       case "label": {
-        doc.font("Helvetica-Bold").fontSize(SIZE.rowLabel).fillColor(p.ink);
-        doc.text(fit(doc, latin(cell.text), width), left, at.y, {
+        doc.font(BOLD).fontSize(SIZE.rowLabel).fillColor(p.ink);
+        doc.text(fit(doc, drawable(cell.text), width), left, at.y, {
           width,
           align: at.align,
           lineBreak: false,
         });
         if (cell.detail) {
           doc
-            .font("Helvetica")
+            .font(BODY)
             .fontSize(SIZE.rowDetail)
             .fillColor(p.muted)
-            .text(fit(doc, latin(cell.detail), width), left, at.y + 15, {
+            .text(fit(doc, drawable(cell.detail), width), left, at.y + 15, {
               width,
               align: at.align,
               lineBreak: false,
@@ -1262,34 +1526,35 @@ export class PdfService {
         const colour =
           cell.tone === "in" ? p.in : cell.tone === "out" ? p.out : p.ink;
         const size = cell.large ? SIZE.moneyLarge : SIZE.money;
+        const primary = drawable(cell.primary);
 
-        doc.font("Helvetica-Bold").fontSize(size).fillColor(colour);
-        doc.text(
-          fit(doc, latin(cell.primary), width),
-          left,
-          cell.large ? at.y - 3 : at.y,
-          { width, align: at.align, lineBreak: false },
-        );
+        // Sized down rather than cut: this is the figure the reader came for.
+        doc.font(BOLD).fillColor(colour);
+        sized(doc, primary, width, size);
+        doc.text(fit(doc, primary, width), left, cell.large ? at.y - 3 : at.y, {
+          width,
+          align: at.align,
+          lineBreak: false,
+        });
 
         if (cell.secondary) {
-          doc
-            .font("Helvetica")
-            .fontSize(SIZE.moneySecondary)
-            .fillColor(p.muted)
-            .text(
-              fit(doc, latin(cell.secondary), width),
-              left,
-              at.y + (cell.large ? 20 : 16),
-              { width, align: at.align, lineBreak: false },
-            );
+          const secondary = drawable(cell.secondary);
+          doc.font(BODY).fillColor(p.muted);
+          sized(doc, secondary, width, SIZE.moneySecondary);
+          doc.text(
+            fit(doc, secondary, width),
+            left,
+            at.y + (cell.large ? 20 : 16),
+            { width, align: at.align, lineBreak: false },
+          );
         }
         return;
       }
 
       case "pill": {
         const colour = cell.tone === "out" ? p.out : p.in;
-        doc.font("Helvetica-Bold").fontSize(6);
-        const label = latin(cell.text).toUpperCase();
+        doc.font(BOLD).fontSize(6);
+        const label = drawable(cell.text).toUpperCase();
         const textWidth = doc.widthOfString(label, { characterSpacing: 1 });
         const boxWidth = Math.min(width, textWidth + 14);
         const boxHeight = 13;
@@ -1339,18 +1604,18 @@ export class PdfService {
       .stroke();
 
     doc
-      .font("Helvetica-Bold")
+      .font(BOLD)
       .fontSize(SIZE.panelTitle)
       .fillColor(p.ink)
-      .text(fit(doc, latin(title), CONTENT - 56), MARGIN + 28, top + 22, {
+      .text(fit(doc, drawable(title), CONTENT - 56), MARGIN + 28, top + 22, {
         lineBreak: false,
       });
 
     doc
-      .font("Helvetica")
+      .font(BODY)
       .fontSize(SIZE.panelSubtitle)
       .fillColor(p.muted)
-      .text(latin(subtitle), MARGIN + 28, top + 44, {
+      .text(drawable(subtitle), MARGIN + 28, top + 44, {
         width: CONTENT - 56,
         lineGap: 4,
       });
@@ -1460,10 +1725,10 @@ export class PdfService {
         step.kind === "in" ? SERIES[1] : step.kind === "out" ? p.out : p.ink;
 
       doc
-        .font("Helvetica-Bold")
+        .font(BOLD)
         .fontSize(8)
         .fillColor(labelColour)
-        .text(fit(doc, latin(primary), labelWidth), labelX, yTop - 18, {
+        .text(fit(doc, drawable(primary), labelWidth), labelX, yTop - 18, {
           width: labelWidth,
           align: "center",
           lineBreak: false,
@@ -1471,17 +1736,17 @@ export class PdfService {
 
       if (secondary) {
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(6)
           .fillColor(p.muted)
-          .text(fit(doc, latin(secondary), labelWidth), labelX, yTop - 8, {
+          .text(fit(doc, drawable(secondary), labelWidth), labelX, yTop - 8, {
             width: labelWidth,
             align: "center",
             lineBreak: false,
           });
       }
 
-      const words = latin(step.label).toUpperCase().split(" ");
+      const words = drawable(step.label).toUpperCase().split(" ");
       const half = Math.ceil(words.length / 2);
       const lines =
         words.length > 1
@@ -1559,20 +1824,14 @@ export class PdfService {
       align: "center",
       spacing: 0.4,
     });
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(12)
-      .fillColor(p.ink)
-      .text(
-        fit(doc, latin(block.centreValue), inner * 2 + 12),
-        cx - inner - 6,
-        cy - 2,
-        {
-          width: inner * 2 + 12,
-          align: "center",
-          lineBreak: false,
-        },
-      );
+    const centre = drawable(block.centreValue);
+    doc.font(BOLD).fillColor(p.ink);
+    sized(doc, centre, inner * 2 + 12, 12);
+    doc.text(fit(doc, centre, inner * 2 + 12), cx - inner - 6, cy - 2, {
+      width: inner * 2 + 12,
+      align: "center",
+      lineBreak: false,
+    });
 
     /* --- the list beside it ---------------------------------------------- */
 
@@ -1588,18 +1847,18 @@ export class PdfService {
         .fill();
 
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(10.5)
         .fillColor(p.ink)
         .text(
-          fit(doc, latin(slice.label), listWidth - 90),
+          fit(doc, drawable(slice.label), listWidth - 90),
           listLeft + 17,
           y + 1,
           { width: listWidth - 90, lineBreak: false },
         );
 
       doc
-        .font("Helvetica-Bold")
+        .font(BOLD)
         .fontSize(13)
         .fillColor(p.ink)
         .text(`${slice.share.toFixed(1)}%`, listLeft, y - 2, {
@@ -1659,9 +1918,9 @@ export class PdfService {
     items.forEach((item, index) => {
       // Measure first: a note that would land half on the next sheet moves
       // whole, which is the difference between a document and a printout.
-      doc.font("Helvetica").fontSize(SIZE.note);
+      doc.font(BODY).fontSize(SIZE.note);
       const needed =
-        doc.heightOfString(latin(item.replace(/\*\*/g, "")), {
+        doc.heightOfString(drawable(item.replace(/\*\*/g, "")), {
           width: CONTENT - gutter,
           lineGap: 4.5,
         }) + 9;
@@ -1670,7 +1929,7 @@ export class PdfService {
 
       const top = doc.y;
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(SIZE.note)
         .fillColor(p.muted)
         .text(`${index + 1}.`, MARGIN, top, {
@@ -1723,19 +1982,19 @@ export class PdfService {
       this.hairline(doc, top + 50, p.panelRule, 0.8, x + pad, inner);
 
       doc
-        .font("Helvetica-Bold")
+        .font(BOLD)
         .fontSize(13)
         .fillColor(p.ink)
-        .text(fit(doc, latin(item.name), inner), x + pad, top + 60, {
+        .text(fit(doc, drawable(item.name), inner), x + pad, top + 60, {
           width: inner,
           lineBreak: false,
         });
 
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(8)
         .fillColor(p.muted)
-        .text(fit(doc, latin(item.title), inner), x + pad, top + 81, {
+        .text(fit(doc, drawable(item.title), inner), x + pad, top + 81, {
           width: inner,
           lineBreak: false,
         });
@@ -1760,19 +2019,21 @@ export class PdfService {
       case "heading":
         this.keepTogether(doc, 40);
         doc
-          .font("Helvetica-Bold")
+          .font(BOLD)
           .fontSize(11)
           .fillColor(INK)
-          .text(latin(block.text), PAGE.margin, doc.y, { width })
+          .text(drawable(block.text), PAGE.margin, doc.y, { width })
           .moveDown(0.35);
         return;
 
+      // Set in the body weight, not an italic: the embedded family is two
+      // weights, and a sheared upright is worse than an upright.
       case "note":
         doc
-          .font("Helvetica-Oblique")
+          .font(BODY)
           .fontSize(8.5)
           .fillColor(MUTED)
-          .text(latin(block.text), PAGE.margin, doc.y, { width })
+          .text(drawable(block.text), PAGE.margin, doc.y, { width })
           .moveDown(0.5);
         return;
 
@@ -1806,6 +2067,22 @@ export class PdfService {
     const boxWidth = (width - gap * (perRow - 1)) / perRow;
     const boxHeight = 52;
 
+    // Every tile takes the size the widest figure needs, across the whole
+    // block: eight boxes of money in five different sizes is a mess, and a
+    // cut-off amount is worse than a small one.
+    doc.font(BOLD);
+    const figureSize =
+      12 *
+      sharedScale(
+        doc,
+        items.map((item) => ({
+          text: drawable(item.value),
+          size: 12,
+          width: boxWidth - 16,
+        })),
+        0.75,
+      );
+
     for (let i = 0; i < items.length; i += perRow) {
       const row = items.slice(i, i + perRow);
       this.keepTogether(doc, boxHeight + 10);
@@ -1821,39 +2098,49 @@ export class PdfService {
           .stroke();
 
         doc
-          .font("Helvetica")
+          .font(BODY)
           .fontSize(7)
           .fillColor(MUTED)
-          .text(latin(item.label).toUpperCase(), x + 8, top + 8, {
+          .text(drawable(item.label).toUpperCase(), x + 8, top + 8, {
             width: boxWidth - 16,
             characterSpacing: 0.4,
           });
 
         doc
-          .font("Helvetica-Bold")
-          .fontSize(12)
+          .font(BOLD)
+          .fontSize(figureSize)
           .fillColor(
             item.value.trim().startsWith("−") ||
               item.value.trim().startsWith("-")
               ? NEGATIVE
               : INK,
           )
-          .text(fit(doc, latin(item.value), boxWidth - 16), x + 8, top + 21, {
-            width: boxWidth - 16,
-            lineBreak: false,
-            ellipsis: true,
-          });
-
-        if (item.hint) {
-          doc
-            .font("Helvetica")
-            .fontSize(7)
-            .fillColor(MUTED)
-            .text(fit(doc, latin(item.hint), boxWidth - 16), x + 8, top + 38, {
+          .text(
+            fit(doc, drawable(item.value), boxWidth - 16),
+            x + 8,
+            top + 21,
+            {
               width: boxWidth - 16,
               lineBreak: false,
               ellipsis: true,
-            });
+            },
+          );
+
+        if (item.hint) {
+          doc
+            .font(BODY)
+            .fontSize(7)
+            .fillColor(MUTED)
+            .text(
+              fit(doc, drawable(item.hint), boxWidth - 16),
+              x + 8,
+              top + 38,
+              {
+                width: boxWidth - 16,
+                lineBreak: false,
+                ellipsis: true,
+              },
+            );
         }
       });
 
@@ -1875,11 +2162,11 @@ export class PdfService {
 
     const header = () => {
       const top = doc.y;
-      doc.font("Helvetica-Bold").fontSize(8).fillColor(MUTED);
+      doc.font(BOLD).fontSize(8).fillColor(MUTED);
       let x = PAGE.margin;
       block.columns.forEach((column, i) => {
         doc.text(
-          fit(doc, latin(column.header).toUpperCase(), widths[i] - 6),
+          fit(doc, drawable(column.header).toUpperCase(), widths[i] - 6),
           x,
           top,
           {
@@ -1912,7 +2199,7 @@ export class PdfService {
       }
 
       const top = doc.y;
-      doc.font("Helvetica").fontSize(8.5).fillColor(INK);
+      doc.font(BODY).fontSize(8.5).fillColor(INK);
       let x = PAGE.margin;
       row.forEach((cell, i) => {
         const value = cell ?? "";
@@ -1922,7 +2209,7 @@ export class PdfService {
               ? NEGATIVE
               : INK,
           )
-          .text(fit(doc, latin(value), widths[i] - 6), x, top, {
+          .text(fit(doc, drawable(value), widths[i] - 6), x, top, {
             width: widths[i] - 6,
             align: block.columns[i]?.align ?? "left",
             lineBreak: false,
@@ -1942,10 +2229,10 @@ export class PdfService {
         .strokeColor(RULE)
         .stroke();
 
-      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(INK);
+      doc.font(BOLD).fontSize(8.5).fillColor(INK);
       let x = PAGE.margin;
       block.total.forEach((cell, i) => {
-        doc.text(fit(doc, latin(cell ?? ""), widths[i] - 6), x, top + 5, {
+        doc.text(fit(doc, drawable(cell ?? ""), widths[i] - 6), x, top + 5, {
           width: widths[i] - 6,
           align: block.columns[i]?.align ?? "left",
           lineBreak: false,
@@ -1974,14 +2261,19 @@ export class PdfService {
       const top = doc.y;
 
       doc
-        .font("Helvetica")
+        .font(BODY)
         .fontSize(8.5)
         .fillColor(INK)
-        .text(fit(doc, latin(item.label), labelWidth - 6), PAGE.margin, top, {
-          width: labelWidth - 6,
-          lineBreak: false,
-          ellipsis: true,
-        });
+        .text(
+          fit(doc, drawable(item.label), labelWidth - 6),
+          PAGE.margin,
+          top,
+          {
+            width: labelWidth - 6,
+            lineBreak: false,
+            ellipsis: true,
+          },
+        );
 
       const barX = PAGE.margin + labelWidth;
       doc
@@ -1999,10 +2291,10 @@ export class PdfService {
         .fill();
 
       doc
-        .font("Helvetica-Bold")
+        .font(BOLD)
         .fontSize(8.5)
         .fillColor(INK)
-        .text(latin(item.value), barX + barWidth + 12, top, {
+        .text(drawable(item.value), barX + barWidth + 12, top, {
           width: valueWidth,
           align: "right",
           lineBreak: false,

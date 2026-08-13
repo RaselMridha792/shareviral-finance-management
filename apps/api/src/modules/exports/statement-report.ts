@@ -36,16 +36,18 @@ import type {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Amounts carry no ৳ sign.
+ * Taka, with the ৳ on it.
  *
- * PDFKit's built-in fonts are Latin-1 and the taka sign is not in them; it
- * would render as mojibake beside every figure. So the currency is stated in
- * the column heading — "AMOUNT (BDT / USD)" — and in the small caps above each
- * figure, which is how a printed statement has always done it. Dollars keep
- * their `$`, which *is* Latin-1, so the two currencies stay told apart.
+ * The sign used to be stripped: PDFKit's built-in fonts are Latin-1 and it is
+ * not in them, so it came out as mojibake and the currency was left to the
+ * column heading. The layer that draws these pages now embeds a face that has
+ * the glyph, so a statement of a Bangladeshi company's accounts reads in taka
+ * the way the hand-made document it replaces always did — and the ৳ against the
+ * `$` on the line beneath tells the two currencies apart at a glance, rather
+ * than by remembering which line is which.
  */
 function bdt(value: string, format: NumberFormat): string {
-  return formatMoney(value, { format, hideSymbol: true, hideDecimals: true });
+  return formatMoney(value, { format, hideDecimals: true });
 }
 
 /**
@@ -205,10 +207,10 @@ export function buildStatementReport(
           kind: "figureBoxes",
           items: [
             {
-              // The currency rides in the label, not in front of the figure:
-              // the taka sign cannot be drawn, and "BDT 3,162,271" turns the
-              // headline number into a sentence.
-              label: "Closing bank balance · BDT",
+              // The currency is on the figure, where a statement puts it. It
+              // rode in the label — "Closing bank balance · BDT" — only for as
+              // long as the ৳ could not be drawn.
+              label: "Closing bank balance",
               primary: bdt(bank.bdt, fmt),
               secondary: usd(bank),
               source: bankLedger
@@ -218,7 +220,7 @@ export function buildStatementReport(
             ...(card
               ? [
                   {
-                    label: `${cardLedger?.name ?? "Prepaid card"} balance · BDT`,
+                    label: `${cardLedger?.name ?? "Prepaid card"} balance`,
                     primary: bdt(card.bdt, fmt),
                     secondary: usd(card),
                     source: cardLedger
@@ -238,12 +240,12 @@ export function buildStatementReport(
             {
               value: bdt(totalIn.bdt, fmt),
               secondary: usd(totalIn),
-              label: "Transfer received · BDT",
+              label: "Transfer received",
             },
             {
               value: bdt(statement.outflow.total.bdt, fmt),
               secondary: usd(statement.outflow.total),
-              label: "Total outflow · BDT",
+              label: "Total outflow",
             },
             {
               value: stateWord,
@@ -783,19 +785,19 @@ export function buildStatementReport(
             {
               value: bdt(composition.free.bdt, fmt),
               secondary: usd(composition.free),
-              label: "Free cash · BDT",
+              label: "Free cash",
             },
             {
               value: bdt(composition.restricted.bdt, fmt),
               secondary: usd(composition.restricted),
-              label: "Tax held · BDT",
+              label: "Tax held",
             },
             ...(card
               ? [
                   {
                     value: bdt(card.bdt, fmt),
                     secondary: usd(card),
-                    label: `${cardLedger?.name ?? "Card"} · BDT`,
+                    label: `${cardLedger?.name ?? "Card"}`,
                   },
                 ]
               : []),

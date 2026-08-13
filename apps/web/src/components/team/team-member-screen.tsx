@@ -5,6 +5,7 @@ import {
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
   GENDER_LABELS,
+  PAYROLL_STATUS_LABELS,
   PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
@@ -15,6 +16,7 @@ import {
   LoaderCircle,
   Lock,
   Plus,
+  Printer,
   SquarePen,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,7 +31,12 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
-import { teamApi, type CompensationDto, type TeamMemberDto } from "@/lib/payroll";
+import {
+  teamApi,
+  type CompensationDto,
+  type MemberPayslipDto,
+  type TeamMemberDto,
+} from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
 
@@ -46,9 +53,16 @@ type Tab = (typeof TABS)[number][0];
 export function TeamMemberScreen({
   member,
   compensation,
+  payslips,
 }: {
   member: TeamMemberDto;
   compensation: CompensationDto[];
+  /**
+   * Empty both when there are none and when the role cannot read payroll —
+   * which is safe here only because the whole Pay tab is already behind the
+   * compensation gate. Never render this outside it.
+   */
+  payslips: MemberPayslipDto[];
 }) {
   const router = useRouter();
   const canWrite = useCan("team.write");
@@ -353,18 +367,10 @@ export function TeamMemberScreen({
                     <table className="table-data min-w-[520px] text-sm">
                       <thead>
                         <tr className="border-b border-border bg-surface-muted/50 text-left">
-                          <th className="px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            From
-                          </th>
-                          <th className="px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            Until
-                          </th>
-                          <th className="px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            Why
-                          </th>
-                          <th className="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            Gross
-                          </th>
+                          <Th>From</Th>
+                          <Th>Until</Th>
+                          <Th>Why</Th>
+                          <Th className="text-right">Gross</Th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -384,6 +390,104 @@ export function TeamMemberScreen({
                                 value={entry.grossAmount}
                                 className="block font-medium"
                               />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Payslips"
+                description="Every month they appear on a finalised salary sheet"
+              />
+              <CardBody className="p-0">
+                {payslips.length === 0 ? (
+                  <p className="px-5 py-6 text-sm text-muted-foreground">
+                    No payslips yet — one appears here for each month whose
+                    salary sheet has been finalised.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="table-data min-w-[620px] text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-surface-muted/50 text-left">
+                          <Th>Month</Th>
+                          <Th>Salary sheet</Th>
+                          <Th className="text-right">Gross</Th>
+                          <Th className="text-right">Tax</Th>
+                          <Th className="text-right">Net</Th>
+                          <Th className="w-24" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {payslips.map((slip) => (
+                          <tr key={slip.id} className="row-finance">
+                            <td className="px-5 py-2.5">
+                              <span className="font-medium">
+                                {slip.runLabel}
+                              </span>
+                              <span className="block text-xs text-muted-foreground">
+                                {slip.paidOn ? (
+                                  <>
+                                    Paid{" "}
+                                    <span className="num">{slip.paidOn}</span>
+                                  </>
+                                ) : (
+                                  "Not paid yet"
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-5 py-2.5">
+                              <Badge
+                                tone={
+                                  slip.runStatus === "paid"
+                                    ? "positive"
+                                    : slip.runStatus === "finalized"
+                                      ? "primary"
+                                      : "neutral"
+                                }
+                              >
+                                {PAYROLL_STATUS_LABELS[slip.runStatus]}
+                              </Badge>
+                            </td>
+                            <td className="px-5 py-2.5">
+                              <Amount
+                                value={slip.grossAmount}
+                                tone="neutral"
+                                className="block"
+                              />
+                            </td>
+                            <td className="px-5 py-2.5">
+                              <Amount
+                                value={slip.tdsAmount}
+                                tone="neutral"
+                                className="block"
+                              />
+                            </td>
+                            <td className="px-5 py-2.5">
+                              <Amount
+                                value={slip.netAmount}
+                                tone="neutral"
+                                className="block font-medium"
+                              />
+                            </td>
+                            <td className="px-5 py-2.5 text-right">
+                              {/*
+                                The route's segment is named runId but carries
+                                the payroll line id — one payslip is one line.
+                              */}
+                              <Link
+                                href={`/payroll/${slip.id}/payslip`}
+                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                              >
+                                <Printer className="size-3" />
+                                Payslip
+                              </Link>
                             </td>
                           </tr>
                         ))}
@@ -511,6 +615,29 @@ function ageInYears(dateOfBirth: string): number | null {
   let age = thisYear - year;
   if (thisMonth < month || (thisMonth === month && thisDay < day)) age -= 1;
   return age >= 0 && age < 130 ? age : null;
+}
+
+/**
+ * A column heading, defined once so the two tables on the Pay tab cannot drift
+ * apart — they sit one above the other, where any difference is obvious.
+ */
+function Th({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <th
+      className={cn(
+        "px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
+        className,
+      )}
+    >
+      {children}
+    </th>
+  );
 }
 
 /**
