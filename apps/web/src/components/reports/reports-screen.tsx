@@ -9,16 +9,24 @@ import {
   type Granularity,
   type PeriodReport,
 } from "@finance/shared";
-import { Info, LoaderCircle, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  Download,
+  Info,
+  LoaderCircle,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
+import { exportUrl } from "@/lib/ledger";
 import { reportsApi, type AvailablePeriods } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +56,11 @@ export function ReportsScreen({
   initialReport: PeriodReport;
 }) {
   const canSeeUsd = useCan("reports.usd");
+  // Each read unconditionally: the right to download plus the right to see
+  // the report being downloaded.
+  const canRunExports = useCan("exports.run");
+  const canSeeReports = useCan("reports.view");
+  const canExport = canRunExports && canSeeReports;
   const [tab, setTab] = useState<TabId>("period");
 
   const [granularity, setGranularity] = useState<Granularity>("month");
@@ -121,11 +134,41 @@ export function ReportsScreen({
     };
   }, [granularity]);
 
+  /**
+   * The open tab, with the selection it is showing.
+   *
+   * Each tab is its own sheet from its own endpoint, so the download is the
+   * table being looked at rather than a bundle of all three.
+   */
+  function download() {
+    const target =
+      tab === "period"
+        ? exportUrl("reports/period", {
+            granularity,
+            fiscalYear,
+            index,
+            currency,
+          })
+        : tab === "bank"
+          ? exportUrl("reports/bank-stats", { year: fiscalYear, currency })
+          : exportUrl("reports/funding", {});
+
+    window.location.href = target;
+  }
+
   return (
     <>
       <PageHeader
         title="Reports"
         description="What came in, what went out, and what it looks like in dollars."
+        actions={
+          canExport ? (
+            <Button variant="secondary" size="md" onClick={download}>
+              <Download className="size-4" />
+              Excel
+            </Button>
+          ) : null
+        }
       />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -186,15 +229,31 @@ export function ReportsScreen({
           ) : null}
 
           {tab !== "funding" ? (
+            /* One control, two meanings. "The period" reads this as a fiscal
+               year — July to June, when the setting says so — while "Month by
+               month" groups by calendar year. Both used to render a bare
+               "2026", so the same choice showed two different windows with
+               nothing on screen to say so. The label now names which. */
             <Select
-              aria-label="Year"
-              className="h-9 w-24"
+              aria-label={
+                tab === "bank" ? "Calendar year" : "Financial year"
+              }
+              title={
+                tab === "bank"
+                  ? "January to December"
+                  : periods.fiscalYearMode === "bd_july_june"
+                    ? "July to June"
+                    : "January to December"
+              }
+              className="h-9 w-auto"
               value={fiscalYear}
               onChange={(e) => setFiscalYear(Number(e.target.value))}
             >
               {periods.years.map((y) => (
                 <option key={y} value={y}>
-                  {y}
+                  {tab !== "bank" && periods.fiscalYearMode === "bd_july_june"
+                    ? `FY ${y}–${String(y + 1).slice(2)}`
+                    : y}
                 </option>
               ))}
             </Select>
