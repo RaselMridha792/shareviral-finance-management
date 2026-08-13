@@ -32,7 +32,8 @@ export type PeriodRange = {
   fiscalYear: number;
 };
 
-const MONTH_NAMES = [
+/** Calendar month names, 0-based like `Date#getMonth`. */
+export const MONTH_NAMES = [
   "January",
   "February",
   "March",

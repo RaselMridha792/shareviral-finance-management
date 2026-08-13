@@ -1,18 +1,14 @@
 "use client";
 
 import {
-  GRANULARITIES,
+  MONTH_NAMES,
   formatMoney,
   type AccountGroup,
-  type Granularity,
   type OverviewReport,
-  type PendingItem,
 } from "@finance/shared";
 import {
   ArrowDownLeft,
-  ArrowRight,
   ArrowUpRight,
-  Banknote,
   CalendarClock,
   CreditCard,
   FileDown,
@@ -23,53 +19,46 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { CategoryDonut } from "@/components/charts/category-donut";
-import { TrendChart } from "@/components/charts/trend-chart";
-import { PendingCard } from "@/components/dashboard/pending-card";
 import { StatTile, percentChange } from "@/components/dashboard/stat-tile";
-import { Amount } from "@/components/money/amount";
 import { useSettings } from "@/components/settings-provider";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { API_BASE_URL } from "@/lib/api-client";
-import { cn } from "@/lib/utils";
-
-const GRANULARITY_LABELS: Record<Granularity, string> = {
-  month: "Month",
-  quarter: "Quarter",
-  half: "Half year",
-  year: "Year",
-};
-
-const CHART_COLOURS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--chart-6)",
-];
 
 /**
  * The screen somebody opens first, and often the only one they open.
  *
- * Ordered by what a person actually needs before they need anything else: what
- * is in the bank, what moved this period, what is owed and when, then the
- * shape of it, then the detail. A dashboard that opens with a chart makes the
- * reader hunt for the figure they came for.
+ * Three blocks and nothing else: what the bank holds, what the card holds,
+ * what was spent. It carried a trend chart, a category donut, a deadline card,
+ * a vendor ranking, an account list and a recent-entries feed below them —
+ * every one of which restates, in a smaller and less exact form, something a
+ * dedicated screen already shows properly. Cut on the owner's instruction, and
+ * the page is better for it: the figures somebody opens this for are now the
+ * whole page rather than the top of a long scroll.
+ *
+ * Each of those still lives where it belongs — the categories under Expenses,
+ * the deadlines under TDS, the entries under Transactions.
  */
 export function OverviewScreen({
   firstName,
   report,
-  pending,
+  month,
+  year,
+  years,
+  fiscalYear,
+  index,
 }: {
   firstName: string;
   report: OverviewReport;
-  pending: PendingItem[];
+  /** Calendar month, 1–12 — what the picker shows, not a fiscal index. */
+  month: number;
+  year: number;
+  years: number[];
+  /** The same month in the terms the API takes, for the export. */
+  fiscalYear: number;
+  index: number;
 }) {
   const router = useRouter();
   const settings = useSettings();
@@ -84,16 +73,25 @@ export function OverviewScreen({
       ...options,
     });
 
-  function move(next: { granularity: string }) {
-    startTransition(() =>
-      router.push(`/?granularity=${next.granularity}`),
-    );
+  // Both go in the URL, so a chosen month survives a refresh and can be sent
+  // to somebody else and open on the same figures.
+  function move(next: { month?: number; year?: number }) {
+    const params = new URLSearchParams({
+      month: String(next.month ?? month),
+      year: String(next.year ?? year),
+    });
+    startTransition(() => router.push(`/?${params.toString()}`));
   }
 
   function exportPdf() {
     setExporting(true);
+    // The month on screen, not whatever the server would default to. A report
+    // that quietly covers a different period than the page it was downloaded
+    // from is worse than no button.
     const params = new URLSearchParams({
       granularity: report.period.granularity,
+      fiscalYear: String(fiscalYear),
+      index: String(index),
     });
     // A download, not a navigation: an anchor with `download` leaves the page
     // where it is, and the API's Content-Disposition names the file. Assigning
@@ -108,14 +106,6 @@ export function OverviewScreen({
     // The browser takes over from here; the spinner would otherwise never stop.
     window.setTimeout(() => setExporting(false), 2000);
   }
-
-  const spendData = report.spendByCategory.slice(0, 6).map((line, i) => ({
-    name: line.name,
-    value: Number(line.total),
-    color: line.color ?? CHART_COLOURS[i % CHART_COLOURS.length],
-  }));
-
-  const biggestVendor = report.topVendors[0];
 
   return (
     <>
@@ -141,15 +131,29 @@ export function OverviewScreen({
 
         <div className="flex flex-wrap items-center gap-2">
           <Select
-            aria-label="Period length"
+            aria-label="Month"
             className="h-9 w-auto"
-            value={report.period.granularity}
+            value={month}
             disabled={busy}
-            onChange={(event) => move({ granularity: event.target.value })}
+            onChange={(event) => move({ month: Number(event.target.value) })}
           >
-            {GRANULARITIES.map((option) => (
+            {MONTH_NAMES.map((name, i) => (
+              <option key={name} value={i + 1}>
+                {name}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            aria-label="Year"
+            className="h-9 w-auto"
+            value={year}
+            disabled={busy}
+            onChange={(event) => move({ year: Number(event.target.value) })}
+          >
+            {years.map((option) => (
               <option key={option} value={option}>
-                {GRANULARITY_LABELS[option]}
+                {option}
               </option>
             ))}
           </Select>
@@ -225,174 +229,6 @@ export function OverviewScreen({
         </div>
       </section>
 
-      {/* --- the shape of it ------------------------------------------ */}
-      <Card>
-        <CardHeader
-          title="Twelve months"
-          description="Bars are what moved each month. The line is what was left in the bank at the end of it."
-        />
-        <CardBody className="pt-2">
-          <TrendChart months={report.months} currency={report.currency} />
-        </CardBody>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Where the money went"
-            description={report.period.label}
-            action={
-              <Link
-                href="/expenses"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                Expenses
-                <ArrowRight className="size-3" />
-              </Link>
-            }
-          />
-          <CardBody>
-            {spendData.length ? (
-              <CategoryDonut data={spendData} />
-            ) : (
-              <Empty>Nothing was spent in this period.</Empty>
-            )}
-          </CardBody>
-        </Card>
-
-        <PendingCard items={pending} />
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        {/* --- top vendors ------------------------------------------- */}
-        <Card>
-          <CardHeader
-            title="Paid the most"
-            description={report.period.label}
-            action={
-              <Link
-                href="/vendors"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                Vendors
-                <ArrowRight className="size-3" />
-              </Link>
-            }
-          />
-          <CardBody className="flex flex-col gap-3">
-            {report.topVendors.length ? (
-              report.topVendors.map((vendor) => (
-                <div key={vendor.name} className="flex flex-col gap-1.5">
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate">{vendor.name}</span>
-                    <Amount
-                      value={vendor.total}
-                      hideDecimals
-                      className="shrink-0 text-sm font-medium"
-                    />
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{
-                        width: `${biggestVendor ? (Number(vendor.total) / Number(biggestVendor.total)) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <Empty>Nothing was paid to a named vendor.</Empty>
-            )}
-          </CardBody>
-        </Card>
-
-        {/* --- accounts ---------------------------------------------- */}
-        <Card>
-          <CardHeader
-            title="Accounts"
-            description={`${report.balances.length} in use`}
-            action={
-              <Link
-                href="/accounts"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                All
-                <ArrowRight className="size-3" />
-              </Link>
-            }
-          />
-          <CardBody className="flex flex-col gap-3">
-            {report.balances.map((account) => (
-              <Link
-                key={account.id}
-                href={`/accounts/${account.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 -mx-2 transition hover:bg-surface-muted"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-muted-foreground">
-                    <Banknote className="size-4" />
-                  </span>
-                  <span className="truncate text-sm">{account.name}</span>
-                </span>
-                <Amount
-                  value={account.balance}
-                  hideDecimals
-                  className="shrink-0 text-sm font-medium"
-                />
-              </Link>
-            ))}
-          </CardBody>
-        </Card>
-
-        {/* --- recent ------------------------------------------------- */}
-        <Card>
-          <CardHeader
-            title="Latest entries"
-            action={
-              <Link
-                href="/transactions"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                All
-                <ArrowRight className="size-3" />
-              </Link>
-            }
-          />
-          <CardBody className="flex flex-col gap-2.5">
-            {report.recent.length ? (
-              report.recent.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm">
-                      {entry.description}
-                    </span>
-                    <span className="num text-xs text-muted-foreground">
-                      {entry.txnDate}
-                      {entry.categoryName ? ` · ${entry.categoryName}` : ""}
-                    </span>
-                  </span>
-                  <Amount
-                    value={
-                      entry.direction === "out"
-                        ? `-${entry.amount}`
-                        : entry.amount
-                    }
-                    hideDecimals
-                    tone={entry.direction === "in" ? "in" : "out"}
-                    className="shrink-0 text-sm font-medium"
-                  />
-                </div>
-              ))
-            ) : (
-              <Empty>Nothing recorded yet.</Empty>
-            )}
-          </CardBody>
-        </Card>
-      </div>
     </>
   );
 }
@@ -460,12 +296,4 @@ function AccountBlock({ group }: { group: AccountGroup }) {
 function trimRate(rate: string): string {
   const value = Number(rate);
   return Number.isFinite(value) ? value.toFixed(2) : rate;
-}
-
-function Empty({ children }: { children: string }) {
-  return (
-    <p className={cn("py-6 text-center text-sm text-muted-foreground")}>
-      {children}
-    </p>
-  );
 }
