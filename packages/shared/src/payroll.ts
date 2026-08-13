@@ -1,0 +1,175 @@
+import { z } from "zod";
+
+import {
+  amountSchema,
+  assessmentYearSchema,
+  etinSchema,
+  isoDateSchema,
+  psrStatusSchema,
+} from "./masters.ts";
+import { paginationQuerySchema } from "./pagination.ts";
+import { paymentMethodSchema } from "./transactions.ts";
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => (v === "" ? undefined : v))
+    .optional();
+
+const optionalOf = <T extends z.ZodType<string>>(schema: T) =>
+  z
+    .union([schema, z.literal("")])
+    .transform((v) => (v === "" ? undefined : v))
+    .optional();
+
+/* -------------------------------------------------------------------------- */
+/*  Team members                                                               */
+/* -------------------------------------------------------------------------- */
+
+export const ENGAGEMENT_TYPES = ["employee", "contractor"] as const;
+export const engagementTypeSchema = z.enum(ENGAGEMENT_TYPES);
+export type EngagementType = z.infer<typeof engagementTypeSchema>;
+
+export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
+  employee: "Employee",
+  contractor: "Contractor",
+};
+
+export const EMPLOYMENT_STATUSES = [
+  "active",
+  "on_leave",
+  "resigned",
+  "terminated",
+] as const;
+export const employmentStatusSchema = z.enum(EMPLOYMENT_STATUSES);
+export type EmploymentStatus = z.infer<typeof employmentStatusSchema>;
+
+export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
+  active: "Working",
+  on_leave: "On leave",
+  resigned: "Resigned",
+  terminated: "Let go",
+};
+
+export const createTeamMemberSchema = z.strictObject({
+  employeeCode: z.string().trim().min(1, "Give them a code").max(20),
+  fullName: z.string().trim().min(2, "Enter their full name").max(120),
+  engagementType: engagementTypeSchema.default("employee"),
+  department: optionalText(60),
+  designation: optionalText(80),
+  joinedOn: isoDateSchema,
+  personalEmail: optionalOf(z.string().trim().email("Enter a valid email")),
+  workEmail: optionalOf(z.string().trim().email("Enter a valid email")),
+  phone: optionalText(30),
+  nid: optionalText(20),
+  etin: optionalOf(etinSchema),
+  psrStatus: psrStatusSchema.default("unknown"),
+  psrAssessmentYear: optionalOf(assessmentYearSchema),
+  bankName: optionalText(80),
+  bankAccountNumber: optionalText(40),
+  bankRouting: optionalText(20),
+  walletProvider: optionalText(30),
+  walletNumber: optionalText(20),
+  address: optionalText(300),
+  notes: optionalText(500),
+});
+export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
+
+export const updateTeamMemberSchema = createTeamMemberSchema
+  .partial()
+  .extend({
+    status: employmentStatusSchema.optional(),
+    endedOn: optionalOf(isoDateSchema),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
+export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>;
+
+export const listTeamQuerySchema = paginationQuerySchema.extend({
+  q: z.string().trim().max(120).optional(),
+  engagementType: engagementTypeSchema.optional(),
+  status: employmentStatusSchema.optional(),
+  department: z.string().trim().max(60).optional(),
+});
+export type ListTeamQuery = z.infer<typeof listTeamQuerySchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Compensation                                                               */
+/* -------------------------------------------------------------------------- */
+
+export const setCompensationSchema = z.strictObject({
+  grossAmount: amountSchema,
+  effectiveFrom: isoDateSchema,
+  changeReason: optionalText(200),
+});
+export type SetCompensationInput = z.infer<typeof setCompensationSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Payroll                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export const PAYROLL_STATUSES = [
+  "draft",
+  "finalized",
+  "partially_paid",
+  "paid",
+] as const;
+export const payrollStatusSchema = z.enum(PAYROLL_STATUSES);
+export type PayrollStatus = z.infer<typeof payrollStatusSchema>;
+
+export const PAYROLL_STATUS_LABELS: Record<PayrollStatus, string> = {
+  draft: "Draft",
+  finalized: "Finalised",
+  partially_paid: "Partly paid",
+  paid: "Paid",
+};
+
+export const PAYMENT_MODES = ["consolidated", "individual"] as const;
+export const paymentModeSchema = z.enum(PAYMENT_MODES);
+export type PaymentMode = z.infer<typeof paymentModeSchema>;
+
+export const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
+  consolidated: "One entry for the whole run",
+  individual: "One entry per person",
+};
+
+export const createPayrollRunSchema = z.strictObject({
+  periodYear: z.coerce.number().int().min(2000).max(2200),
+  periodMonth: z.coerce.number().int().min(1).max(12),
+  notes: optionalText(500),
+});
+export type CreatePayrollRunInput = z.infer<typeof createPayrollRunSchema>;
+
+export const updatePayrollLineSchema = z
+  .strictObject({
+    grossAmount: amountSchema.optional(),
+    bonusAmount: amountSchema.optional(),
+    otherAdditions: amountSchema.optional(),
+    tdsAmount: amountSchema.optional(),
+    otherDeductions: amountSchema.optional(),
+    deductionNote: optionalText(200),
+    remarks: optionalText(200),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
+export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
+
+export const payPayrollSchema = z.strictObject({
+  paymentDate: isoDateSchema,
+  accountId: z.string().uuid("Choose the account paying"),
+  paymentMode: paymentModeSchema.default("consolidated"),
+  paymentMethod: paymentMethodSchema.default("bank_transfer"),
+});
+export type PayPayrollInput = z.infer<typeof payPayrollSchema>;
+
+export const listPayrollRunsQuerySchema = paginationQuerySchema.extend({
+  status: payrollStatusSchema.optional(),
+  year: z.coerce.number().int().min(2000).max(2200).optional(),
+});
+export type ListPayrollRunsQuery = z.infer<typeof listPayrollRunsQuerySchema>;
+
+/**
+ * A TDS figure far above the gross is almost always a typo — 250000 where
+ * 25000 was meant. The app does not calculate tax, but it can notice that.
+ */
+export const TDS_WARNING_RATIO = 0.3;
