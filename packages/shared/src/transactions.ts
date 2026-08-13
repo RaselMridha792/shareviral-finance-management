@@ -110,6 +110,17 @@ export const createTransactionSchema = z
     billAmount: amountSchema.optional(),
     withheldTaxAmount: amountSchema.optional(),
 
+    /**
+     * Where this came from, when the caller is entitled to say.
+     *
+     * Only the two a person can honestly claim. `payroll`, `tax_payment`,
+     * `excel_import` and `system` are stamped by the code that does those
+     * things — accepting them here would make "this row came from a payroll
+     * run" a sentence anybody could write, and the provenance column exists
+     * precisely so that it is not.
+     */
+    createdVia: z.enum(["manual", "ai_intake"]).optional(),
+
     /** For a USD remittance: what was sent, and the rate the bank gave. */
     originalAmount: amountSchema.optional(),
     originalCurrency: z.string().trim().length(3).optional(),

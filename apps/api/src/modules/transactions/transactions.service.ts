@@ -529,7 +529,10 @@ export class TransactionsService {
               originalCurrency: input.originalCurrency,
               fxRate: input.fxRate,
               fxRateSource: input.fxRate ? "manual" : null,
-              createdVia: "manual",
+              // Typed by hand unless the caller said otherwise, and the schema
+              // only lets it say "ai_intake" — a row cannot claim to have come
+              // from payroll or a tax payment.
+              createdVia: input.createdVia ?? "manual",
               dedupeHash: dedupeKey({
                 accountId: input.accountId,
                 txnDate: input.txnDate,
