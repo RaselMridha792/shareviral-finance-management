@@ -1,0 +1,188 @@
+@import "tailwindcss";
+
+/* --------------------------------------------------------------------------
+   Design tokens. Light values live on :root, dark values are swapped under
+   both the media query and an explicit [data-theme="dark"] so the in-app
+   toggle can win in either direction.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --foreground: #0d1117;
+  --muted-foreground: #5b6472;
+  --border: #e3e7ed;
+  --border-strong: #cfd5de;
+
+  /* Brand blue is for ACTIONS only — never for balances or amounts. */
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --accent: #0ea5e9;
+
+  --positive: #047857;
+  --negative: #b91c1c;
+  --warning: #b45309;
+
+  --chart-1: #4f46e5;
+  --chart-2: #0ea5e9;
+  --chart-3: #0d9488;
+  --chart-4: #d97706;
+  --chart-5: #db2777;
+  --chart-6: #7c3aed;
+
+  /* Exactly two elevation levels. No gradients, no third shadow. */
+  --shadow-1: 0 1px 2px rgba(13, 17, 23, 0.06);
+  --shadow-2: 0 4px 12px rgba(13, 17, 23, 0.1);
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+}
+
+:root[data-theme="dark"] {
+  --background: #0b0e14;
+  --surface: #131822;
+  --surface-muted: #1a2130;
+  --foreground: #e8ecf3;
+  --muted-foreground: #94a1b5;
+  --border: #232c3b;
+  --border-strong: #384558;
+
+  --primary: #6d64f7;
+  --primary-foreground: #ffffff;
+  --accent: #38bdf8;
+
+  --positive: #34d399;
+  --negative: #f87171;
+  --warning: #fbbf24;
+
+  --chart-1: #6d64f7;
+  --chart-2: #38bdf8;
+  --chart-3: #2dd4bf;
+  --chart-4: #fbbf24;
+  --chart-5: #f472b6;
+  --chart-6: #a78bfa;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  --shadow-e1: var(--shadow-1);
+  --shadow-e2: var(--shadow-2);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------------------------------------------------------
+   Numerals
+   --------------------------------------------------------------------------
+   Mono is for numbers that get COMPARED or CHANGE: amount, balance, account
+   number, card number, date, percentage, reference ID, OTP, quantity.
+
+   Sans stays for numbers that are just prose: "3 accounts" in a heading,
+   pagination, badge counts. Over-using mono makes the UI read like a terminal.
+   -------------------------------------------------------------------------- */
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  /* 'zero' 1 = slashed zero, so 0 and O are never confused in an account
+     number or reference ID. JetBrains Mono ships this feature. */
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Amount columns in tables and lists. Right-aligned because the eye compares
+   from the ones place — left-aligned, ৳1,000 vs ৳100,000 is hard to scan. */
+.col-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Density
+   --------------------------------------------------------------------------
+   48px rows on pointer devices, 56px on touch so every row clears the 44px
+   minimum target. Tighter mis-taps, airier means more scrolling.
+   -------------------------------------------------------------------------- */
+
+.row-finance {
+  min-height: 3rem;
+}
+
+/* min-height is ignored on <tr> in table layout, so drive it from the cells. */
+tr.row-finance > td,
+tr.row-finance > th {
+  height: 3rem;
+}
+
+@media (pointer: coarse) {
+  .row-finance {
+    min-height: 3.5rem;
+  }
+
+  tr.row-finance > td,
+  tr.row-finance > th {
+    height: 3.5rem;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--primary) 25%, transparent);
+}
+
+/* Slim scrollbars that follow the theme instead of the OS. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
