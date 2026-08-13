@@ -29,6 +29,7 @@ import {
   overviewQuerySchema,
   periodQuerySchema,
   registerQuerySchema,
+  statementQuerySchema,
   tdsLiabilityQuerySchema,
   todayInDhaka,
   type BankStatsQuery,
@@ -42,6 +43,7 @@ import {
   type OverviewQuery,
   type PeriodQuery,
   type RegisterQuery,
+  type StatementQuery,
   type TdsLiabilityQuery,
 } from "@finance/shared";
 import type { Response } from "express";
@@ -63,12 +65,14 @@ import { IncomeTaxService } from "../income-tax/income-tax.service";
 import { PayrollService } from "../payroll/payroll.service";
 import { OverviewService } from "../reports/overview.service";
 import { ReportsService } from "../reports/reports.service";
+import { StatementService } from "../reports/statement.service";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { TeamMembersService } from "../team-members/team-members.service";
 import { ExcelService } from "./excel.service";
 import { buildOverviewReport } from "./overview-report";
 import { PdfService } from "./pdf.service";
+import { buildStatementReport } from "./statement-report";
 
 const uuidSchema = z.string().uuid("Not a valid id");
 
@@ -103,7 +107,59 @@ export class ExportsController {
     private readonly payroll: PayrollService,
     private readonly team: TeamMembersService,
     private readonly reports: ReportsService,
+    private readonly statement: StatementService,
   ) {}
+
+  /**
+   * The financial statement — the six-page document this company was producing
+   * by hand every month.
+   *
+   * The other PDF export is a report: the figures, laid out to be read. This is
+   * a *statement*: a position, reconciled to a closing balance, with notes and
+   * a signature block, and it is the file that gets sent outside the company.
+   * It is deliberately not assembled here — `StatementService` is the same one
+   * the statement screen calls, so what somebody signs off on screen and what
+   * lands in the PDF cannot be two different calculations.
+   *
+   * `dashboard.money` on top of `reports.view` because this is the cash
+   * position itself, in both currencies, down to the last line of the ledger.
+   */
+  @Get("statement.pdf")
+  @RequirePermission("exports.run", "reports.view", "dashboard.money")
+  async statementPdf(
+    @ZodQuery(statementQuerySchema) query: StatementQuery,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const [statement, settings] = await Promise.all([
+      this.statement.build(query),
+      this.settings.get(),
+    ]);
+
+    const buffer = await this.pdf.buildPages(
+      buildStatementReport(statement, {
+        numberFormat: settings.numberFormat,
+        generatedOn: todayInDhaka(),
+      }),
+    );
+
+    // The signed position leaving the building is the export most worth having
+    // a row for — this is the document an auditor will be handed.
+    await this.audit.log({
+      action: "export",
+      entityTable: "transactions",
+      summary:
+        `Exported the ${statement.period.label} financial statement to PDF ` +
+        `(${statement.status}, ${statement.lineItems} line items)`,
+      module: "exports",
+      isSensitive: true,
+    });
+
+    return sendPdf(
+      response,
+      buffer,
+      `statement-${statement.period.start}-to-${statement.period.end}.pdf`,
+    );
+  }
 
   /**
    * The overview, as a document somebody can send to an accountant.

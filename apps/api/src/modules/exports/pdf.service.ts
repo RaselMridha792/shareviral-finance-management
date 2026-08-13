@@ -13,6 +13,16 @@ import PDFDocument from "pdfkit";
  * Chromium download per deploy to render one page of figures is a poor trade.
  * Vector text and shapes also come out sharp at any zoom, which a screenshot
  * of a web page does not.
+ *
+ * There are two documents in here, sharing the drawing primitives:
+ *
+ * `build` produces the plain internal report — a masthead, then blocks flowing
+ * down as many pages as they need. `buildPages` produces the *statement*, which
+ * is a designed document: each page is composed rather than flowed, the cover
+ * and the closing page are full-bleed, and only the ledgers are allowed to run
+ * on. The two share `latin`, `fit`, the palettes and the footer pass; they do
+ * not share a block vocabulary, because a section heading in one is an 11pt
+ * bold line and in the other is a 28pt numeral beside tracked small caps.
  */
 
 export type PdfBlock =
@@ -97,11 +107,16 @@ function latin(text: string): string {
  * row beneath it. Counting characters is not enough either: at 8.5pt Helvetica
  * a run of capitals is half again as wide as the same number of lowercase.
  */
-function fit(doc: PDFKit.PDFDocument, text: string, maxWidth: number): string {
-  if (doc.widthOfString(text) <= maxWidth) return text;
+function fit(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  maxWidth: number,
+  options?: { characterSpacing?: number },
+): string {
+  if (doc.widthOfString(text, options) <= maxWidth) return text;
 
   let cut = text;
-  while (cut.length > 1 && doc.widthOfString(cut + "..") > maxWidth) {
+  while (cut.length > 1 && doc.widthOfString(cut + "..", options) > maxWidth) {
     cut = cut.slice(0, -1);
   }
   return cut.trimEnd() + "..";
@@ -113,6 +128,250 @@ const RULE = "#e5e7eb";
 const ACCENT = "#4f46e5";
 const POSITIVE = "#047857";
 const NEGATIVE = "#b91c1c";
+
+/* ========================================================================== */
+/*  The statement                                                              */
+/* ========================================================================== */
+
+/**
+ * The statement's two grounds.
+ *
+ * Read off the document this replaces rather than invented: the cover and the
+ * closing page are printed on the dark green, everything between on the cream.
+ * A block does not know which it is on — it asks the palette — so the same
+ * table renders correctly on either.
+ */
+export type PdfTheme = "cream" | "dark";
+
+type Palette = {
+  page: string;
+  panel: string;
+  /** Headlines and figures. */
+  ink: string;
+  /** Running prose. */
+  body: string;
+  /** Detail lines under a label. */
+  muted: string;
+  /** Tracked small caps: eyebrows, column headings, footers. */
+  faint: string;
+  rule: string;
+  panelRule: string;
+  /** Money coming in, and money going out. */
+  in: string;
+  out: string;
+};
+
+const PALETTES: Record<PdfTheme, Palette> = {
+  cream: {
+    page: "#efede4",
+    panel: "#fbfaf5",
+    ink: "#123026",
+    body: "#43433a",
+    muted: "#6f6c61",
+    faint: "#8c8a7d",
+    rule: "#dcd9cc",
+    panelRule: "#e3e1d6",
+    in: "#1e4a37",
+    out: "#b08968",
+  },
+  dark: {
+    page: "#123026",
+    panel: "#17392c",
+    ink: "#efede4",
+    body: "#dfe6dd",
+    muted: "#93ab9e",
+    faint: "#8aa295",
+    rule: "#415c50",
+    panelRule: "#38534a",
+    in: "#9dc0a7",
+    out: "#cfa482",
+  },
+};
+
+/** The chart ramp, darkest first — the order shares are drawn in. */
+const SERIES = [
+  "#1e4a37",
+  "#3e7d5a",
+  "#5e8b6f",
+  "#8cae97",
+  "#b9cfbe",
+  "#d3e0d5",
+];
+
+/* --- the sheet, in points -------------------------------------------------- */
+
+const SHEET = { width: 595.28, height: 841.89 };
+const MARGIN = 61;
+const CONTENT = SHEET.width - MARGIN * 2;
+/** Two boxes across, with the gap the sample uses. */
+const BOX_GAP = 11.4;
+const BOX_WIDTH = (CONTENT - BOX_GAP) / 2;
+
+const EYEBROW_Y = 62;
+/** Where a page's composed content starts, under the eyebrow. */
+const HEAD_BOTTOM = 85;
+/** Nothing in the flow may be drawn below this; the footer lives under it. */
+const BODY_BOTTOM = 752;
+/** What a closing-balance row needs under the last rule of a ledger. */
+const TOTAL_ROW = 40;
+/** Right-aligned cells stand off the column to their left by this much. */
+const CELL_GUTTER = 10;
+const FOOTER_RULE_Y = 764;
+const FOOTER_TEXT_Y = 775;
+
+const SIZE = {
+  eyebrow: 7.5,
+  caps: 7.5,
+  lede: 12,
+  ledeCover: 12.5,
+  sectionOrdinal: 28,
+  sectionTitle: 9.5,
+  tableHead: 7.5,
+  rowLabel: 10.5,
+  rowDetail: 8,
+  money: 12.5,
+  moneySecondary: 8,
+  moneyLarge: 16.5,
+  bigFigure: 32,
+  bigSecondary: 8.5,
+  boxFigure: 28,
+  panelTitle: 14,
+  panelSubtitle: 8.5,
+  note: 9,
+};
+
+/** Tracking for small caps, which is most of the document's furniture. */
+const TRACK = 1.4;
+
+export type PdfPagedSpec = {
+  title: string;
+  pages: PdfPage[];
+};
+
+export type PdfPage = {
+  theme?: PdfTheme;
+  eyebrowLeft?: string;
+  eyebrowRight?: string;
+  footer?: {
+    left: string;
+    /** Appended after "PAGE n OF N", or used alone when there is no number. */
+    right?: string;
+    /** Off for the cover, which carries its own bottom furniture. */
+    pageNumber?: boolean;
+    rule?: boolean;
+  };
+  blocks: PdfPagedBlock[];
+};
+
+export type PdfTone = "in" | "out" | "plain";
+
+/** One cell of a ledger row. Money stacks ৳ over $, which is the whole point. */
+export type PdfStackCell =
+  | { kind: "label"; text: string; detail?: string | null }
+  | { kind: "caps"; text: string }
+  | { kind: "text"; text: string }
+  | {
+      kind: "money";
+      primary: string;
+      secondary?: string | null;
+      tone?: PdfTone;
+      large?: boolean;
+    }
+  | { kind: "pill"; text: string; tone: PdfTone }
+  | { kind: "empty" };
+
+export type PdfStackColumn = {
+  header: string;
+  /** Share of the content width. */
+  width: number;
+  align?: "left" | "right" | "center";
+};
+
+export type PdfWaterfallStep = {
+  label: string;
+  /** Signed, already formatted. Blank for the opening and closing pillars. */
+  delta: string;
+  deltaSecondary: string;
+  /** Where the balance stands after this step — the top of the pillar. */
+  balance: number;
+  balanceLabel: string;
+  balanceSecondary: string;
+  kind: "opening" | "in" | "out" | "closing";
+};
+
+export type PdfPagedBlock =
+  /** Absolute vertical space, in points. */
+  | { kind: "gap"; height: number }
+  /** Jump to a fixed distance above the foot of the sheet. */
+  | { kind: "anchor"; fromBottom: number }
+  | { kind: "rule"; weight?: number }
+  | { kind: "capsRow"; left: string; right?: string }
+  | {
+      /** The very large headline. Helvetica-Bold standing in for the serif. */
+      kind: "display";
+      eyebrow?: string;
+      lines: string[];
+      size: number;
+    }
+  | { kind: "lede"; text: string; size?: number; width?: number }
+  | { kind: "sectionHead"; ordinal: string; title: string; right?: string }
+  | { kind: "periodMark"; ordinal: string; label: string; right: string }
+  | {
+      /** Two bordered figure boxes across — the cover's headline numbers. */
+      kind: "figureBoxes";
+      items: Array<{
+        label: string;
+        primary: string;
+        secondary: string;
+        source: string;
+      }>;
+    }
+  | {
+      kind: "bigFigures";
+      items: Array<{
+        value: string;
+        secondary?: string;
+        label: string;
+        align?: "left" | "right";
+        /** A word rather than a figure — "Reconciled". */
+        word?: boolean;
+      }>;
+    }
+  | {
+      kind: "stackTable";
+      columns: PdfStackColumn[];
+      rows: PdfStackCell[][];
+      total?: PdfStackCell[];
+    }
+  | {
+      kind: "waterfall";
+      title: string;
+      subtitle: string;
+      steps: PdfWaterfallStep[];
+    }
+  | {
+      kind: "donut";
+      title: string;
+      subtitle: string;
+      centreLabel: string;
+      centreValue: string;
+      slices: Array<{ label: string; share: number; color?: string | null }>;
+    }
+  | { kind: "notes"; items: string[] }
+  | { kind: "signatures"; items: Array<{ name: string; title: string }> };
+
+/** What the footer pass needs to know about a physical page. */
+type PageChrome = {
+  theme: PdfTheme;
+  footer?: PdfPage["footer"];
+};
+
+/** Everything a block needs that is not the block itself. */
+type Flow = {
+  palette: Palette;
+  /** Continues this page's chrome onto a fresh sheet. */
+  next: () => void;
+};
 
 @Injectable()
 export class PdfService {
@@ -186,6 +445,1304 @@ export class PdfService {
 
       doc.end();
     });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /*  The statement                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A composed document: one sheet per page spec, plus continuation sheets
+   * wherever a ledger runs longer than one.
+   *
+   * A continuation inherits the page's whole chrome — ground, eyebrows, footer
+   * — so a quarter's ledger reads as more of the same page rather than as a
+   * different document that lost its heading.
+   */
+  buildPages(spec: PdfPagedSpec): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({
+        size: "A4",
+        margin: MARGIN,
+        bufferPages: true,
+        info: { Title: spec.title, Creator: "ShareViral Finance Management" },
+      });
+
+      const chunks: Buffer[] = [];
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+
+      const chrome: PageChrome[] = [];
+
+      spec.pages.forEach((page, index) => {
+        if (index > 0) doc.addPage();
+        this.paintPage(doc, page, chrome);
+
+        const flow: Flow = {
+          palette: PALETTES[page.theme ?? "cream"],
+          next: () => {
+            doc.addPage();
+            this.paintPage(doc, page, chrome);
+          },
+        };
+
+        for (const block of page.blocks) {
+          this.renderPaged(doc, block, flow);
+        }
+      });
+
+      this.writeFooters(doc, chrome);
+      doc.end();
+    });
+  }
+
+  /** Ground, eyebrows, and the starting position for the flow. */
+  private paintPage(
+    doc: PDFKit.PDFDocument,
+    page: PdfPage,
+    chrome: PageChrome[],
+  ): void {
+    const theme = page.theme ?? "cream";
+    const palette = PALETTES[theme];
+    chrome.push({ theme, footer: page.footer });
+
+    // Full bleed: the sheet is the colour, not a panel drawn inside margins.
+    doc.save();
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill(palette.page);
+    doc.restore();
+
+    if (page.eyebrowLeft) {
+      this.caps(doc, page.eyebrowLeft, {
+        x: MARGIN,
+        y: EYEBROW_Y,
+        width: CONTENT * 0.45,
+        color: palette.muted,
+      });
+    }
+    if (page.eyebrowRight) {
+      this.caps(doc, page.eyebrowRight, {
+        x: MARGIN + CONTENT * 0.45,
+        y: EYEBROW_Y,
+        width: CONTENT * 0.55,
+        color: palette.muted,
+        align: "right",
+      });
+    }
+
+    doc.x = MARGIN;
+    doc.y = HEAD_BOTTOM;
+  }
+
+  /**
+   * Page numbers can only be written once the count is known, so the footer is
+   * a second pass over the buffered pages.
+   */
+  private writeFooters(doc: PDFKit.PDFDocument, chrome: PageChrome[]): void {
+    const range = doc.bufferedPageRange();
+
+    for (let i = 0; i < range.count; i++) {
+      const sheet = chrome[i];
+      if (!sheet?.footer) continue;
+
+      doc.switchToPage(range.start + i);
+      // Writing below the bottom margin makes PDFKit start a new page — and
+      // then that page needs a footer too. Four blank pages came from exactly
+      // this.
+      doc.page.margins.bottom = 0;
+
+      const palette = PALETTES[sheet.theme];
+      const { left, right, pageNumber = true, rule = true } = sheet.footer;
+
+      if (rule) {
+        doc
+          .moveTo(MARGIN, FOOTER_RULE_Y)
+          .lineTo(MARGIN + CONTENT, FOOTER_RULE_Y)
+          .lineWidth(0.8)
+          .strokeColor(palette.rule)
+          .stroke();
+      }
+
+      const tail = pageNumber
+        ? `Page ${i + 1} of ${range.count}${right ? ` · ${right}` : ""}`
+        : (right ?? "");
+
+      // The two halves are measured against each other rather than given a
+      // fixed split, so a long company name shortens itself instead of running
+      // into the page number.
+      doc.font("Helvetica-Bold").fontSize(SIZE.caps);
+      const tailWidth = tail
+        ? Math.min(
+            CONTENT * 0.62,
+            doc.widthOfString(latin(tail).toUpperCase(), {
+              characterSpacing: TRACK,
+            }) + 3,
+          )
+        : 0;
+
+      this.caps(doc, left, {
+        x: MARGIN,
+        y: FOOTER_TEXT_Y,
+        width: CONTENT - tailWidth - 12,
+        color: palette.muted,
+      });
+
+      if (tail) {
+        this.caps(doc, tail, {
+          x: MARGIN + CONTENT - tailWidth,
+          y: FOOTER_TEXT_Y,
+          width: tailWidth,
+          color: palette.muted,
+          align: "right",
+        });
+      }
+    }
+  }
+
+  /* --- primitives -------------------------------------------------------- */
+
+  /**
+   * Tracked small caps — the document's entire furniture vocabulary.
+   *
+   * Measured two points short of the space available: PDFKit charges the
+   * tracking after the final character when it *draws* but not always when it
+   * *measures*, and a heading one point too wide wraps onto a second line that
+   * lands on top of whatever is beneath it.
+   */
+  private caps(
+    doc: PDFKit.PDFDocument,
+    text: string,
+    options: {
+      x: number;
+      y: number;
+      width: number;
+      color: string;
+      size?: number;
+      align?: "left" | "right" | "center";
+      spacing?: number;
+      /** Column headings wrap rather than truncate — "AMOUNT (BDT /" "USD)". */
+      wrap?: boolean;
+    },
+  ): number {
+    if (!text) return options.y;
+    const size = options.size ?? SIZE.caps;
+    const spacing = options.spacing ?? TRACK;
+
+    doc.font("Helvetica-Bold").fontSize(size).fillColor(options.color);
+    const upper = latin(text).toUpperCase();
+    const value = options.wrap
+      ? upper
+      : fit(doc, upper, options.width - 2, { characterSpacing: spacing });
+
+    doc.text(value, options.x, options.y, {
+      width: options.width,
+      align: options.align ?? "left",
+      characterSpacing: spacing,
+      lineGap: 2,
+      lineBreak: options.wrap === true,
+    });
+
+    return doc.y;
+  }
+
+  private hairline(
+    doc: PDFKit.PDFDocument,
+    y: number,
+    color: string,
+    weight = 0.7,
+    x = MARGIN,
+    width = CONTENT,
+  ): void {
+    doc
+      .moveTo(x, y)
+      .lineTo(x + width, y)
+      .lineWidth(weight)
+      .strokeColor(color)
+      .stroke();
+  }
+
+  /**
+   * Prose with **emphasis**, drawn inline.
+   *
+   * The notes to the accounts bold the figure and the finding — "**payable
+   * following appointment of a tax adviser**" — and a note that cannot do that
+   * is a wall of grey the reader skims. PDFKit's `continued` runs are the only
+   * way to change font mid-paragraph and keep the wrapping.
+   */
+  private richText(
+    doc: PDFKit.PDFDocument,
+    text: string,
+    options: {
+      x: number;
+      y: number;
+      width: number;
+      color: string;
+      size: number;
+      lineGap: number;
+    },
+  ): number {
+    // Alternating runs: even is body, odd is bold. An empty run keeps its
+    // place in the alternation rather than being dropped, or a note that opens
+    // with **bold** would come out the wrong way round the whole way down.
+    const parts = latin(text).split("**");
+    doc.fontSize(options.size).fillColor(options.color);
+
+    parts.forEach((part, index) => {
+      doc.font(index % 2 === 1 ? "Helvetica-Bold" : "Helvetica");
+      const last = index === parts.length - 1;
+
+      // Only the opening run may carry a position. PDFKit reads a *missing*
+      // x as "the options object is the second argument" and throws the real
+      // options away, which put every bold phrase on a line of its own.
+      if (index === 0) {
+        doc.text(part, options.x, options.y, {
+          width: options.width,
+          lineGap: options.lineGap,
+          continued: !last,
+        });
+      } else {
+        doc.text(part, { continued: !last });
+      }
+    });
+
+    return doc.y;
+  }
+
+  /* --- the block vocabulary ---------------------------------------------- */
+
+  private renderPaged(
+    doc: PDFKit.PDFDocument,
+    block: PdfPagedBlock,
+    flow: Flow,
+  ): void {
+    const p = flow.palette;
+
+    switch (block.kind) {
+      case "gap":
+        doc.y += block.height;
+        return;
+
+      case "anchor":
+        doc.y = SHEET.height - block.fromBottom;
+        return;
+
+      case "rule":
+        this.hairline(doc, doc.y, p.rule, block.weight ?? 0.8);
+        doc.y += 1;
+        return;
+
+      case "capsRow": {
+        const top = doc.y;
+        this.caps(doc, block.left, {
+          x: MARGIN,
+          y: top,
+          width: block.right ? CONTENT * 0.62 : CONTENT,
+          color: p.muted,
+        });
+        if (block.right) {
+          this.caps(doc, block.right, {
+            x: MARGIN + CONTENT * 0.38,
+            y: top,
+            width: CONTENT * 0.62,
+            color: p.muted,
+            align: "right",
+          });
+        }
+        doc.y = top + SIZE.caps + 3;
+        return;
+      }
+
+      case "display":
+        this.renderDisplay(doc, block, p);
+        return;
+
+      case "lede": {
+        const size = block.size ?? SIZE.lede;
+        doc
+          .font("Helvetica")
+          .fontSize(size)
+          .fillColor(p.body)
+          .text(latin(block.text), MARGIN, doc.y, {
+            width: block.width ?? CONTENT,
+            lineGap: size * 0.42,
+            align: "left",
+          });
+        doc.x = MARGIN;
+        return;
+      }
+
+      case "sectionHead":
+        this.renderSectionHead(doc, block, p);
+        return;
+
+      case "periodMark":
+        this.renderPeriodMark(doc, block, p);
+        return;
+
+      case "figureBoxes":
+        this.renderFigureBoxes(doc, block.items, p);
+        return;
+
+      case "bigFigures":
+        this.renderBigFigures(doc, block.items, p);
+        return;
+
+      case "stackTable":
+        this.renderStackTable(doc, block, flow);
+        return;
+
+      case "waterfall":
+        this.renderWaterfall(doc, block, p);
+        return;
+
+      case "donut":
+        this.renderDonut(doc, block, p);
+        return;
+
+      case "notes":
+        this.renderNotes(doc, block.items, flow);
+        return;
+
+      case "signatures":
+        this.renderSignatures(doc, block.items, p);
+        return;
+    }
+  }
+
+  /**
+   * The headline.
+   *
+   * The sample's display face is a high-contrast serif that is not one of the
+   * fourteen fonts PDFKit can draw without embedding one. Helvetica-Bold at the
+   * same size keeps the proportion the page is built on — the headline is a
+   * third of the cover — which is what carries the design. Faking the italic
+   * second line with a shear transform was tried and looked like a mistake.
+   */
+  private renderDisplay(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "display" }>,
+    p: Palette,
+  ): void {
+    const top = doc.y;
+
+    if (block.eyebrow) {
+      this.caps(doc, block.eyebrow, {
+        x: MARGIN,
+        y: top,
+        width: CONTENT,
+        color: p.muted,
+      });
+      doc.y = top + SIZE.caps + 19.5;
+    }
+
+    // A headline is set to the width, not cut to it. "The second account &
+    // not.." is what truncating a display line looks like, and the one thing a
+    // headline may not be is unreadable — so an over-long one steps down in
+    // size until it fits, to a floor where it is still a headline.
+    doc.font("Helvetica-Bold").fillColor(p.ink);
+    let size = block.size;
+    const floor = block.size * 0.68;
+    while (size > floor) {
+      doc.fontSize(size);
+      const widest = Math.max(
+        ...block.lines.map((line) => doc.widthOfString(latin(line))),
+      );
+      if (widest <= CONTENT) break;
+      size -= 1;
+    }
+    doc.fontSize(size);
+
+    // Each line is placed at a measured position rather than left to PDFKit's
+    // line box: at 58pt the difference between a 1.01 and a 1.16 leading is a
+    // centimetre, and the cover is built on the headline sitting where it does.
+    const pitch = block.size * 1.012;
+    let y = doc.y;
+
+    for (const line of block.lines) {
+      doc.text(fit(doc, latin(line), CONTENT), MARGIN, y, {
+        width: CONTENT,
+        lineBreak: false,
+      });
+      y += pitch;
+    }
+
+    doc.x = MARGIN;
+    doc.y = y - pitch + block.size * 1.15;
+  }
+
+  /** "01  EXECUTIVE SUMMARY" on the left, the scope note on the right. */
+  private renderSectionHead(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "sectionHead" }>,
+    p: Palette,
+  ): void {
+    const top = doc.y;
+
+    doc.font("Helvetica-Bold").fontSize(SIZE.sectionOrdinal).fillColor(p.ink);
+    const ordinal = latin(block.ordinal);
+    doc.text(ordinal, MARGIN, top, { lineBreak: false });
+    const ordinalWidth = doc.widthOfString(ordinal);
+
+    // The title sits on the numeral's baseline rather than its top, which is
+    // what makes the pair read as one mark instead of two stacked things.
+    const titleY = top + SIZE.sectionOrdinal * 0.53;
+    const titleX = MARGIN + ordinalWidth + 10;
+
+    doc.font("Helvetica-Bold").fontSize(SIZE.sectionTitle).fillColor(p.ink);
+    doc.text(
+      fit(doc, latin(block.title).toUpperCase(), CONTENT * 0.55, {
+        characterSpacing: TRACK,
+      }),
+      titleX,
+      titleY,
+      { characterSpacing: TRACK, lineBreak: false },
+    );
+
+    if (block.right) {
+      this.caps(doc, block.right, {
+        x: MARGIN + CONTENT * 0.45,
+        y: titleY + 1,
+        width: CONTENT * 0.55,
+        color: p.muted,
+        align: "right",
+      });
+    }
+
+    doc.x = MARGIN;
+    doc.y = top + SIZE.sectionOrdinal + 6;
+  }
+
+  /** The big period numeral, with the reconciliation state opposite. */
+  private renderPeriodMark(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "periodMark" }>,
+    p: Palette,
+  ): void {
+    const top = doc.y;
+
+    doc.font("Helvetica-Bold").fontSize(30).fillColor(p.ink);
+    const ordinal = latin(block.ordinal);
+    doc.text(ordinal, MARGIN, top, { lineBreak: false });
+    const ordinalWidth = doc.widthOfString(ordinal);
+
+    doc
+      .font("Helvetica")
+      .fontSize(21)
+      .fillColor(p.ink)
+      .text(latin(block.label), MARGIN + ordinalWidth + 12, top + 6, {
+        lineBreak: false,
+      });
+
+    this.caps(doc, block.right, {
+      x: MARGIN + CONTENT * 0.4,
+      y: top + 18,
+      width: CONTENT * 0.6,
+      color: p.muted,
+      align: "right",
+    });
+
+    doc.x = MARGIN;
+    doc.y = top + 36;
+    this.hairline(doc, doc.y, p.rule, 0.8);
+    doc.y += 1;
+  }
+
+  /**
+   * The cover's two figures, each in its own rule.
+   *
+   * The source line under each is the part a hand-made statement always had
+   * and a generated one usually loses: which account this is, in words.
+   */
+  private renderFigureBoxes(
+    doc: PDFKit.PDFDocument,
+    items: Extract<PdfPagedBlock, { kind: "figureBoxes" }>["items"],
+    p: Palette,
+  ): void {
+    const top = doc.y;
+    const height = 114;
+    const pad = 15;
+
+    items.slice(0, 2).forEach((item, index) => {
+      const x = MARGIN + index * (BOX_WIDTH + BOX_GAP);
+      const inner = BOX_WIDTH - pad * 2;
+
+      doc
+        .rect(x, top, BOX_WIDTH, height)
+        .lineWidth(0.8)
+        .strokeColor(p.panelRule)
+        .stroke();
+
+      this.caps(doc, item.label, {
+        x: x + pad,
+        y: top + 15,
+        width: inner,
+        color: p.muted,
+      });
+
+      doc.font("Helvetica-Bold").fontSize(SIZE.boxFigure).fillColor(p.ink);
+      doc.text(fit(doc, latin(item.primary), inner), x + pad, top + 33, {
+        width: inner,
+        lineBreak: false,
+      });
+
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor(p.body)
+        .text(fit(doc, latin(item.secondary), inner), x + pad, top + 71, {
+          width: inner,
+          lineBreak: false,
+        });
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor(p.faint)
+        .text(fit(doc, latin(item.source), inner), x + pad, top + 89, {
+          width: inner,
+          lineBreak: false,
+        });
+    });
+
+    doc.x = MARGIN;
+    doc.y = top + height;
+  }
+
+  /**
+   * The figures across the foot of the cover and the closing page.
+   *
+   * Ruled above and below, divided between columns, because these are the
+   * numbers somebody reads without reading the document.
+   */
+  private renderBigFigures(
+    doc: PDFKit.PDFDocument,
+    items: Extract<PdfPagedBlock, { kind: "bigFigures" }>["items"],
+    p: Palette,
+  ): void {
+    const top = doc.y;
+    const height = 102;
+    const column = CONTENT / Math.max(1, items.length);
+
+    this.hairline(doc, top, p.rule, 0.8);
+
+    items.forEach((item, index) => {
+      const align = item.align ?? "left";
+      const x = MARGIN + index * column;
+      const width = column - 10;
+
+      if (index > 0 && align === "left") {
+        doc
+          .moveTo(x - 8, top + 12)
+          .lineTo(x - 8, top + height - 12)
+          .lineWidth(0.8)
+          .strokeColor(p.rule)
+          .stroke();
+      }
+
+      const size = item.word ? SIZE.bigFigure * 0.86 : SIZE.bigFigure;
+      const valueY = item.word ? top + 24 : top + 15;
+
+      doc.font("Helvetica-Bold").fontSize(size).fillColor(p.ink);
+      doc.text(fit(doc, latin(item.value), width), x, valueY, {
+        width,
+        align,
+        lineBreak: false,
+      });
+
+      if (item.secondary) {
+        doc
+          .font("Helvetica")
+          .fontSize(SIZE.bigSecondary)
+          .fillColor(p.body)
+          .text(fit(doc, latin(item.secondary), width), x, top + 56, {
+            width,
+            align,
+            lineBreak: false,
+          });
+      }
+
+      this.caps(doc, item.label, {
+        x,
+        y: top + 76,
+        width,
+        color: p.muted,
+        align,
+      });
+    });
+
+    this.hairline(doc, top + height, p.rule, 0.8);
+    doc.x = MARGIN;
+    doc.y = top + height + 1;
+  }
+
+  /* --- the ledger table --------------------------------------------------- */
+
+  /**
+   * A ledger, with every cell free to stack ৳ over $.
+   *
+   * The column headings repeat on every sheet and the closing balance is
+   * printed once, after the last row, wherever that lands — which is the only
+   * arrangement that survives a quarter without either losing the headings or
+   * claiming a balance three sheets early.
+   */
+  private renderStackTable(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "stackTable" }>,
+    flow: Flow,
+  ): void {
+    const p = flow.palette;
+    const units = block.columns.reduce((sum, c) => sum + c.width, 0);
+    const widths = block.columns.map((c) => (c.width / units) * CONTENT);
+    const offsets: number[] = [];
+    let running = MARGIN;
+    for (const w of widths) {
+      offsets.push(running);
+      running += w;
+    }
+
+    const header = () => {
+      const top = doc.y;
+      let deepest = top;
+      block.columns.forEach((column, i) => {
+        // "AMOUNT (BDT / USD)" over a narrow column wraps onto a second line
+        // rather than being cut to "AMOUNT (BDT /..", which would leave the
+        // reader guessing at the currency of every figure beneath it.
+        deepest = Math.max(
+          deepest,
+          this.caps(doc, column.header, {
+            x: offsets[i],
+            y: top,
+            width: widths[i],
+            color: p.muted,
+            align: column.align ?? "left",
+            size: SIZE.tableHead,
+            wrap: true,
+          }),
+        );
+      });
+      doc.y = Math.max(top + 16, deepest + 2);
+      this.hairline(doc, doc.y, p.ink, 1.1);
+      doc.y += 1;
+    };
+
+    header();
+
+    for (const row of block.rows) {
+      const height = this.stackRowHeight(row);
+      // A row split across a page break is a row nobody can read.
+      if (doc.y + height > BODY_BOTTOM) {
+        flow.next();
+        header();
+      }
+      this.drawStackRow(doc, row, block.columns, offsets, widths, p, height);
+    }
+
+    if (block.total) {
+      if (doc.y + TOTAL_ROW > BODY_BOTTOM) {
+        flow.next();
+        header();
+      }
+      const top = doc.y;
+      block.total.forEach((cell, i) => {
+        this.drawStackCell(doc, cell, {
+          x: offsets[i],
+          y: top + 8,
+          width: widths[i],
+          align: block.columns[i]?.align ?? "left",
+          palette: p,
+        });
+      });
+      doc.y = top + TOTAL_ROW;
+    }
+
+    doc.x = MARGIN;
+  }
+
+  private stackRowHeight(row: PdfStackCell[]): number {
+    const stacked = row.some(
+      (cell) =>
+        (cell.kind === "label" && cell.detail) ||
+        (cell.kind === "money" && cell.secondary),
+    );
+    return stacked ? 36.5 : 26;
+  }
+
+  private drawStackRow(
+    doc: PDFKit.PDFDocument,
+    row: PdfStackCell[],
+    columns: PdfStackColumn[],
+    offsets: number[],
+    widths: number[],
+    p: Palette,
+    height: number,
+  ): void {
+    const top = doc.y;
+
+    row.forEach((cell, i) => {
+      this.drawStackCell(doc, cell, {
+        x: offsets[i],
+        y: top + 7,
+        width: widths[i],
+        align: columns[i]?.align ?? "left",
+        palette: p,
+      });
+    });
+
+    doc.y = top + height;
+    this.hairline(doc, doc.y, p.rule, 0.6);
+    doc.y += 1;
+  }
+
+  private drawStackCell(
+    doc: PDFKit.PDFDocument,
+    cell: PdfStackCell,
+    at: {
+      x: number;
+      y: number;
+      width: number;
+      align: "left" | "right" | "center";
+      palette: Palette;
+    },
+  ): void {
+    const p = at.palette;
+    // A right-aligned figure grows leftwards. Without a standing gap the
+    // closing position ran straight into "BANK / CARD" beside it.
+    const gutter = at.align === "right" ? CELL_GUTTER : 0;
+    const width = at.width - gutter;
+    const left = at.x + gutter;
+
+    switch (cell.kind) {
+      case "empty":
+        return;
+
+      case "caps":
+        this.caps(doc, cell.text, {
+          x: left,
+          y: at.y + 3,
+          width,
+          color: p.ink,
+          align: at.align,
+        });
+        return;
+
+      case "text":
+        doc
+          .font("Helvetica")
+          .fontSize(SIZE.rowLabel)
+          .fillColor(p.body)
+          .text(fit(doc, latin(cell.text), width), left, at.y, {
+            width,
+            align: at.align,
+            lineBreak: false,
+          });
+        return;
+
+      case "label": {
+        doc.font("Helvetica-Bold").fontSize(SIZE.rowLabel).fillColor(p.ink);
+        doc.text(fit(doc, latin(cell.text), width), left, at.y, {
+          width,
+          align: at.align,
+          lineBreak: false,
+        });
+        if (cell.detail) {
+          doc
+            .font("Helvetica")
+            .fontSize(SIZE.rowDetail)
+            .fillColor(p.muted)
+            .text(fit(doc, latin(cell.detail), width), left, at.y + 15, {
+              width,
+              align: at.align,
+              lineBreak: false,
+            });
+        }
+        return;
+      }
+
+      case "money": {
+        const colour =
+          cell.tone === "in" ? p.in : cell.tone === "out" ? p.out : p.ink;
+        const size = cell.large ? SIZE.moneyLarge : SIZE.money;
+
+        doc.font("Helvetica-Bold").fontSize(size).fillColor(colour);
+        doc.text(
+          fit(doc, latin(cell.primary), width),
+          left,
+          cell.large ? at.y - 3 : at.y,
+          { width, align: at.align, lineBreak: false },
+        );
+
+        if (cell.secondary) {
+          doc
+            .font("Helvetica")
+            .fontSize(SIZE.moneySecondary)
+            .fillColor(p.muted)
+            .text(
+              fit(doc, latin(cell.secondary), width),
+              left,
+              at.y + (cell.large ? 20 : 16),
+              { width, align: at.align, lineBreak: false },
+            );
+        }
+        return;
+      }
+
+      case "pill": {
+        const colour = cell.tone === "out" ? p.out : p.in;
+        doc.font("Helvetica-Bold").fontSize(6);
+        const label = latin(cell.text).toUpperCase();
+        const textWidth = doc.widthOfString(label, { characterSpacing: 1 });
+        const boxWidth = Math.min(width, textWidth + 14);
+        const boxHeight = 13;
+        const x =
+          at.align === "right"
+            ? left + width - boxWidth
+            : at.align === "center"
+              ? left + (width - boxWidth) / 2
+              : left;
+
+        doc
+          .rect(x, at.y - 1, boxWidth, boxHeight)
+          .lineWidth(0.7)
+          .strokeColor(colour)
+          .stroke();
+
+        doc.fillColor(colour).text(label, x, at.y + 3, {
+          width: boxWidth,
+          align: "center",
+          characterSpacing: 1,
+          lineBreak: false,
+        });
+        return;
+      }
+    }
+  }
+
+  /* --- the charts --------------------------------------------------------- */
+
+  /** A bordered panel with its own title, the way both charts sit on page 3. */
+  private panel(
+    doc: PDFKit.PDFDocument,
+    title: string,
+    subtitle: string,
+    height: number,
+    p: Palette,
+  ): { top: number; bodyTop: number } {
+    const top = doc.y;
+
+    doc
+      .rect(MARGIN, top, CONTENT, height)
+      .fillColor(p.panel)
+      .fill()
+      .rect(MARGIN, top, CONTENT, height)
+      .lineWidth(0.8)
+      .strokeColor(p.panelRule)
+      .stroke();
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(SIZE.panelTitle)
+      .fillColor(p.ink)
+      .text(fit(doc, latin(title), CONTENT - 56), MARGIN + 28, top + 22, {
+        lineBreak: false,
+      });
+
+    doc
+      .font("Helvetica")
+      .fontSize(SIZE.panelSubtitle)
+      .fillColor(p.muted)
+      .text(latin(subtitle), MARGIN + 28, top + 44, {
+        width: CONTENT - 56,
+        lineGap: 4,
+      });
+
+    return { top, bodyTop: Math.max(doc.y + 8, top + 68) };
+  }
+
+  /**
+   * Opening, every movement, closing — drawn rather than tabulated.
+   *
+   * A waterfall is the one chart that answers "where did it go" in a single
+   * look, and it is the chart the hand-made statement drew by hand each month.
+   * Pillars stand between the balance before and the balance after, so the
+   * height of a bar *is* the amount and the reader never has to trust a legend.
+   */
+  private renderWaterfall(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "waterfall" }>,
+    p: Palette,
+  ): void {
+    const height = 238;
+    const { top, bodyTop } = this.panel(
+      doc,
+      block.title,
+      block.subtitle,
+      height,
+      p,
+    );
+
+    const steps = block.steps;
+    const plotLeft = MARGIN + 30;
+    const plotWidth = CONTENT - 60;
+    const plotTop = bodyTop + 24;
+    const baseline = top + height - 44;
+    const plotHeight = baseline - plotTop;
+
+    const peak = steps.reduce(
+      (max, step) => Math.max(max, step.balance),
+      0.0001,
+    );
+    // Headroom for the value labels standing over the tallest pillar.
+    const scale = plotHeight / (peak * 1.02);
+    const yOf = (value: number) => baseline - value * scale;
+
+    for (let i = 1; i <= 3; i++) {
+      this.hairline(
+        doc,
+        plotTop + (plotHeight / 3) * (i - 1),
+        p.panelRule,
+        0.6,
+        plotLeft,
+        plotWidth,
+      );
+    }
+    this.hairline(doc, baseline, p.rule, 0.9, plotLeft, plotWidth);
+
+    const slot = plotWidth / Math.max(1, steps.length);
+    const barWidth = Math.min(32, slot * 0.46);
+
+    let previous = 0;
+
+    steps.forEach((step, index) => {
+      const centre = plotLeft + slot * (index + 0.5);
+      const x = centre - barWidth / 2;
+
+      const isPillar = step.kind === "opening" || step.kind === "closing";
+      const bottom = isPillar ? 0 : Math.min(previous, step.balance);
+      const topValue = isPillar
+        ? step.balance
+        : Math.max(previous, step.balance);
+
+      const yTop = yOf(topValue);
+      const barHeight = Math.max(1.5, yOf(bottom) - yTop);
+
+      const colour =
+        step.kind === "in"
+          ? SERIES[1]
+          : step.kind === "out"
+            ? p.out
+            : SERIES[0];
+
+      doc.rect(x, yTop, barWidth, barHeight).fillColor(colour).fill();
+
+      // The connector carries the eye from one balance to the next; without it
+      // a falling bar looks like it starts at nothing.
+      if (index < steps.length - 1 && step.kind !== "closing") {
+        doc
+          .save()
+          .moveTo(x + barWidth, yOf(step.balance))
+          .lineTo(
+            plotLeft + slot * (index + 1.5) - barWidth / 2,
+            yOf(step.balance),
+          )
+          .lineWidth(0.6)
+          .dash(1.6, { space: 2 })
+          .strokeColor(p.panelRule)
+          .stroke()
+          .undash()
+          .restore();
+      }
+
+      const labelWidth = slot * 1.5;
+      const labelX = centre - labelWidth / 2;
+      const primary = step.delta || step.balanceLabel;
+      const secondary = step.deltaSecondary || step.balanceSecondary;
+      const labelColour =
+        step.kind === "in" ? SERIES[1] : step.kind === "out" ? p.out : p.ink;
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor(labelColour)
+        .text(fit(doc, latin(primary), labelWidth), labelX, yTop - 18, {
+          width: labelWidth,
+          align: "center",
+          lineBreak: false,
+        });
+
+      if (secondary) {
+        doc
+          .font("Helvetica")
+          .fontSize(6)
+          .fillColor(p.muted)
+          .text(fit(doc, latin(secondary), labelWidth), labelX, yTop - 8, {
+            width: labelWidth,
+            align: "center",
+            lineBreak: false,
+          });
+      }
+
+      const words = latin(step.label).toUpperCase().split(" ");
+      const half = Math.ceil(words.length / 2);
+      const lines =
+        words.length > 1
+          ? [words.slice(0, half).join(" "), words.slice(half).join(" ")]
+          : words;
+      lines.forEach((line, row) => {
+        this.caps(doc, line, {
+          x: labelX,
+          y: baseline + 8 + row * 9,
+          width: labelWidth,
+          color: p.muted,
+          size: 5.8,
+          align: "center",
+          spacing: 0.5,
+        });
+      });
+
+      previous = step.balance;
+    });
+
+    doc.x = MARGIN;
+    doc.y = top + height;
+  }
+
+  /**
+   * Where the outflow went, as a ring with the total inside it.
+   *
+   * Drawn from arcs rather than an image so it stays sharp at any zoom and the
+   * file stays a few tens of kilobytes.
+   */
+  private renderDonut(
+    doc: PDFKit.PDFDocument,
+    block: Extract<PdfPagedBlock, { kind: "donut" }>,
+    p: Palette,
+  ): void {
+    const height = 228;
+    const { top } = this.panel(doc, block.title, block.subtitle, height, p);
+
+    const cx = MARGIN + 98;
+    const cy = top + 137;
+    const outer = 55;
+    const inner = 33;
+
+    const total = block.slices.reduce(
+      (sum, s) => sum + Math.max(0, s.share),
+      0,
+    );
+    let angle = -90;
+
+    block.slices.forEach((slice, index) => {
+      const sweep = total > 0 ? (Math.max(0, slice.share) / total) * 360 : 0;
+      if (sweep <= 0) return;
+      // A hair of ground between segments, so two neighbouring greens read as
+      // two shares rather than one.
+      const gap = sweep > 4 ? 0.9 : 0;
+      this.arc(
+        doc,
+        cx,
+        cy,
+        inner,
+        outer,
+        angle + gap / 2,
+        angle + sweep - gap / 2,
+        slice.color || SERIES[index % SERIES.length],
+      );
+      angle += sweep;
+    });
+
+    this.caps(doc, block.centreLabel, {
+      x: cx - inner,
+      y: cy - 12,
+      width: inner * 2,
+      color: p.muted,
+      size: 5.6,
+      align: "center",
+      spacing: 0.4,
+    });
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(12)
+      .fillColor(p.ink)
+      .text(
+        fit(doc, latin(block.centreValue), inner * 2 + 12),
+        cx - inner - 6,
+        cy - 2,
+        {
+          width: inner * 2 + 12,
+          align: "center",
+          lineBreak: false,
+        },
+      );
+
+    /* --- the list beside it ---------------------------------------------- */
+
+    const listLeft = MARGIN + 200;
+    const listWidth = MARGIN + CONTENT - 18 - listLeft;
+    const pitch = Math.min(30, 150 / Math.max(1, block.slices.length));
+    let y = cy - (pitch * block.slices.length) / 2 + 4;
+
+    block.slices.forEach((slice, index) => {
+      doc
+        .rect(listLeft, y + 2, 9, 9)
+        .fillColor(slice.color || SERIES[index % SERIES.length])
+        .fill();
+
+      doc
+        .font("Helvetica")
+        .fontSize(10.5)
+        .fillColor(p.ink)
+        .text(
+          fit(doc, latin(slice.label), listWidth - 90),
+          listLeft + 17,
+          y + 1,
+          { width: listWidth - 90, lineBreak: false },
+        );
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .fillColor(p.ink)
+        .text(`${slice.share.toFixed(1)}%`, listLeft, y - 2, {
+          width: listWidth,
+          align: "right",
+          lineBreak: false,
+        });
+
+      y += pitch;
+      this.hairline(doc, y - 6, p.panelRule, 0.6, listLeft, listWidth);
+    });
+
+    doc.x = MARGIN;
+    doc.y = top + height;
+  }
+
+  /** One ring segment, as an SVG path PDFKit can fill. */
+  private arc(
+    doc: PDFKit.PDFDocument,
+    cx: number,
+    cy: number,
+    inner: number,
+    outer: number,
+    from: number,
+    to: number,
+    colour: string,
+  ): void {
+    const point = (angle: number, radius: number) => {
+      const rad = (angle * Math.PI) / 180;
+      return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+    };
+    const large = to - from > 180 ? 1 : 0;
+    const [ox0, oy0] = point(from, outer);
+    const [ox1, oy1] = point(to, outer);
+    const [ix1, iy1] = point(to, inner);
+    const [ix0, iy0] = point(from, inner);
+
+    // Sweep 1 runs clockwise on the page, because PDFKit's y grows downwards.
+    const path =
+      `M ${ox0} ${oy0} A ${outer} ${outer} 0 ${large} 1 ${ox1} ${oy1} ` +
+      `L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`;
+
+    doc.path(path).fillColor(colour).fill();
+  }
+
+  /* --- notes and signatures ------------------------------------------------ */
+
+  /** The notes to the accounts: numbered prose, with the findings in bold. */
+  private renderNotes(
+    doc: PDFKit.PDFDocument,
+    items: string[],
+    flow: Flow,
+  ): void {
+    const p = flow.palette;
+    const gutter = 16;
+
+    items.forEach((item, index) => {
+      // Measure first: a note that would land half on the next sheet moves
+      // whole, which is the difference between a document and a printout.
+      doc.font("Helvetica").fontSize(SIZE.note);
+      const needed =
+        doc.heightOfString(latin(item.replace(/\*\*/g, "")), {
+          width: CONTENT - gutter,
+          lineGap: 4.5,
+        }) + 9;
+
+      if (doc.y + needed > BODY_BOTTOM) flow.next();
+
+      const top = doc.y;
+      doc
+        .font("Helvetica")
+        .fontSize(SIZE.note)
+        .fillColor(p.muted)
+        .text(`${index + 1}.`, MARGIN, top, {
+          width: gutter - 6,
+          align: "right",
+          lineBreak: false,
+        });
+
+      this.richText(doc, item, {
+        x: MARGIN + gutter,
+        y: top,
+        width: CONTENT - gutter,
+        color: p.body,
+        size: SIZE.note,
+        lineGap: 4.5,
+      });
+
+      doc.x = MARGIN;
+      doc.y += 9;
+    });
+  }
+
+  /** Two ruled boxes: the line, the name, the title. */
+  private renderSignatures(
+    doc: PDFKit.PDFDocument,
+    items: Array<{ name: string; title: string }>,
+    p: Palette,
+  ): void {
+    const top = doc.y;
+    const height = 105;
+    const pad = 15;
+
+    items.slice(0, 2).forEach((item, index) => {
+      const x = MARGIN + index * (BOX_WIDTH + BOX_GAP);
+      const inner = BOX_WIDTH - pad * 2;
+
+      doc
+        .rect(x, top, BOX_WIDTH, height)
+        .lineWidth(0.8)
+        .strokeColor(p.panelRule)
+        .stroke();
+
+      this.caps(doc, "Signature", {
+        x: x + pad,
+        y: top + 18,
+        width: inner,
+        color: p.faint,
+      });
+
+      this.hairline(doc, top + 50, p.panelRule, 0.8, x + pad, inner);
+
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .fillColor(p.ink)
+        .text(fit(doc, latin(item.name), inner), x + pad, top + 60, {
+          width: inner,
+          lineBreak: false,
+        });
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor(p.muted)
+        .text(fit(doc, latin(item.title), inner), x + pad, top + 81, {
+          width: inner,
+          lineBreak: false,
+        });
+    });
+
+    doc.x = MARGIN;
+    doc.y = top + height;
   }
 
   /* ---------------------------------------------------------------------- */
