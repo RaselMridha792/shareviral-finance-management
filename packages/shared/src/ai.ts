@@ -51,6 +51,66 @@ export const AI_TARGET_ENDPOINT: Record<AiTarget, string> = {
   tds_deposit: "/tds/deposits",
 };
 
+/* -------------------------------------------------------------------------- */
+/*  What the assistant may see, and which model answers                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How much of the books the assistant may read.
+ *
+ * This is the honest knob. Letting it answer "how much did we spend on rent in
+ * August" means the answer — real figures from the ledger — is sent to
+ * Anthropic to be turned into a sentence. That may be entirely fine, and it may
+ * not be; it is not a decision to make silently on somebody's behalf.
+ */
+export const AI_DATA_ACCESS = ["off", "names_only", "full"] as const;
+export const aiDataAccessSchema = z.enum(AI_DATA_ACCESS);
+export type AiDataAccess = z.infer<typeof aiDataAccessSchema>;
+
+export const AI_DATA_ACCESS_LABELS: Record<AiDataAccess, string> = {
+  off: "Nothing — the assistant is switched off",
+  names_only: "Names only — it can fill in forms, not answer questions",
+  full: "Full — it can also look up figures and answer questions",
+};
+
+export const AI_DATA_ACCESS_DETAIL: Record<AiDataAccess, string> = {
+  off: "No request is made and no data leaves.",
+  names_only:
+    "What is sent: the message typed, and the names of your categories, accounts and vendors so it can pick a real one. No amounts, no balances, no salaries, nothing from the ledger.",
+  full: "As above, plus the results of any lookup it makes — real dates, amounts, descriptions and balances from your books. It can only reach what the person asking could reach by clicking; it can never reach pay.",
+};
+
+export const AI_MODELS = [
+  "claude-sonnet-5",
+  "claude-opus-5",
+  "claude-haiku-4-5-20251001",
+] as const;
+export const aiModelSchema = z.enum(AI_MODELS);
+export type AiModel = z.infer<typeof aiModelSchema>;
+
+export const AI_MODEL_LABELS: Record<AiModel, string> = {
+  "claude-sonnet-5": "Sonnet 5 — the sensible default",
+  "claude-opus-5": "Opus 5 — the most capable, and the most expensive",
+  "claude-haiku-4-5-20251001": "Haiku 4.5 — fastest and cheapest",
+};
+
+export const AI_MODEL_DETAIL: Record<AiModel, string> = {
+  "claude-sonnet-5":
+    "Ample for filling in a form and answering a question about the books.",
+  "claude-opus-5":
+    "Worth it only if you find Sonnet is misreading how people here actually write.",
+  "claude-haiku-4-5-20251001":
+    "Noticeably quicker and cheaper. Fine for straightforward entries; less reliable on a long, rambling one.",
+};
+
+export const updateAiSettingsSchema = z
+  .strictObject({
+    model: aiModelSchema.optional(),
+    dataAccess: aiDataAccessSchema.optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
+export type UpdateAiSettingsInput = z.infer<typeof updateAiSettingsSchema>;
+
 export const aiMessageSchema = z.strictObject({
   role: z.enum(["user", "assistant"]),
   content: z.string().trim().min(1).max(4000),
@@ -94,6 +154,8 @@ export type AiAvailability = {
   setBy?: string | null;
   /** True when it came from the environment rather than Settings. */
   fromEnvironment?: boolean;
+  model?: AiModel;
+  dataAccess?: AiDataAccess;
 };
 
 /**

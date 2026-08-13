@@ -86,6 +86,19 @@ export const appSettings = pgTable(
     }),
     anthropicKeySetBy: uuid("anthropic_key_set_by"),
 
+    /** Which model answers. Changeable without a deploy. */
+    aiModel: text("ai_model").notNull().default("claude-sonnet-5"),
+
+    /**
+     * How much of the books the assistant may read.
+     *
+     * Defaults to names_only: it can fill in a form, which is what it was
+     * asked for, without any figure from the ledger leaving the building.
+     * Widening that is a deliberate act by a Super Admin who has read what it
+     * means.
+     */
+    aiDataAccess: text("ai_data_access").notNull().default("names_only"),
+
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
