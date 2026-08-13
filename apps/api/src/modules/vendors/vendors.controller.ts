@@ -43,8 +43,11 @@ export class VendorsController {
   }
 
   /**
-   * Everything that renews. Declared before `:id` or "subscriptions" would be
-   * read as a vendor id and 400 on the uuid parse.
+   * The tools the company uses and what was actually paid for them this month.
+   * Nothing is projected forward — see `VendorsService.subscriptions`.
+   *
+   * Declared before `:id` or "subscriptions" would be read as a vendor id and
+   * 400 on the uuid parse.
    */
   @Get("subscriptions")
   @RequirePermission("vendors.read")

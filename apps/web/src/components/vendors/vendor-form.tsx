@@ -2,13 +2,12 @@
 
 import {
   BILLING_CYCLES,
-  BILLING_CYCLE_LABELS,
+  BILLING_CYCLE_HABIT_LABELS,
   PSR_STATUSES,
   PSR_STATUS_LABELS,
   VENDOR_TYPES,
   VENDOR_TYPE_LABELS,
   isRecurringType,
-  todayInDhaka,
   type VendorType,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
@@ -67,7 +66,6 @@ export function VendorForm({
         "billingCycle",
         "billingAmount",
         "billingCurrency",
-        "nextRenewalOn",
       ].map((key) => [key, String(data.get(key) ?? "")]),
     ) as Parameters<typeof vendorsApi.create>[0];
 
@@ -101,7 +99,7 @@ export function VendorForm({
     <Drawer
       open={open}
       onClose={onClose}
-      title={editing ? "Edit" : "Add a subscription or vendor"}
+      title={editing ? "Edit" : "Add a tool or vendor"}
       description="An AI tool, a subscription, or anyone else money is paid to. Tax identifiers matter for the latter: without a filed return the TDS rate rises by half."
     >
       <form
@@ -127,22 +125,42 @@ export function VendorForm({
           </Select>
         </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Renews">
-            <Select
-              name="billingCycle"
-              value={cycle}
-              onChange={(event) => setCycle(event.target.value as typeof cycle)}
-            >
-              {BILLING_CYCLES.map((option) => (
-                <option key={option} value={option}>
-                  {BILLING_CYCLE_LABELS[option]}
-                </option>
-              ))}
-            </Select>
-          </Field>
+        {/* No renewal date. These are bought month by month — some months yes,
+            some months no — so a stored next date would be a promise the
+            company never made, and the screen would count money that may never
+            leave. What was actually paid comes from the ledger. */}
+        <Field
+          label="Usually bought"
+          hint="Roughly how often, so the price below has a scale. Nothing is scheduled from it."
+        >
+          <Select
+            name="billingCycle"
+            value={cycle}
+            onChange={(event) => setCycle(event.target.value as typeof cycle)}
+          >
+            {BILLING_CYCLES.map((option) => (
+              <option key={option} value={option}>
+                {BILLING_CYCLE_HABIT_LABELS[option]}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
-          {recurring ? (
+        {recurring ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Usual cost"
+              error={fieldErrors.billingAmount}
+              hint="What it normally comes to — context, not a bill"
+            >
+              <Input
+                name="billingAmount"
+                inputMode="decimal"
+                className="col-amount"
+                placeholder="20.00"
+                defaultValue={vendor?.billingAmount ?? ""}
+              />
+            </Field>
             <Field
               label="Billed in"
               hint="Most AI tools charge in dollars — say so and the totals stay honest"
@@ -154,32 +172,6 @@ export function VendorForm({
                 <option value="BDT">BDT</option>
                 <option value="USD">USD</option>
               </Select>
-            </Field>
-          ) : null}
-        </div>
-
-        {recurring ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Amount each time" error={fieldErrors.billingAmount}>
-              <Input
-                name="billingAmount"
-                inputMode="decimal"
-                className="col-amount"
-                placeholder="20.00"
-                defaultValue={vendor?.billingAmount ?? ""}
-              />
-            </Field>
-            <Field
-              label="Next renewal"
-              error={fieldErrors.nextRenewalOn}
-              hint="Any past date works — it rolls forward on its own"
-            >
-              <Input
-                name="nextRenewalOn"
-                type="date"
-                className="num"
-                defaultValue={vendor?.nextRenewalOn ?? todayInDhaka()}
-              />
             </Field>
           </div>
         ) : (

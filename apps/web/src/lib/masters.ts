@@ -31,6 +31,7 @@ export type AccountDto = {
   branch: string | null;
   accountNumber: string | null;
   routingNumber: string | null;
+  swiftCode: string | null;
   currency: string;
   openingBalance: string;
   openingBalanceOn: string;
@@ -68,12 +69,14 @@ export type VendorDto = {
   address: string | null;
   defaultCategoryId: string | null;
 
-  /** What renews, how often, and when next. `none` for a one-off payee. */
+  /**
+   * What it usually costs and how often it tends to be bought — context, not
+   * a schedule. Nothing is due because of these; what was actually paid comes
+   * from the ledger, via `vendorsApi.subscriptions()`.
+   */
   billingCycle: BillingCycle;
   billingAmount: string | null;
   billingCurrency: string;
-  /** An anchor, not a promise — the API rolls the next date forward from it. */
-  nextRenewalOn: string | null;
   billingAccountId: string | null;
 
   notes: string | null;
@@ -111,6 +114,8 @@ export const accountsApi = {
     }),
   archive: (id: string) =>
     apiFetch<AccountDto>(`/accounts/${id}/archive`, { method: "POST" }),
+  restore: (id: string) =>
+    apiFetch<AccountDto>(`/accounts/${id}/restore`, { method: "POST" }),
 };
 
 export const categoriesApi = {
@@ -146,7 +151,7 @@ export const vendorsApi = {
       cache: "no-store",
     });
   },
-  /** Everything that renews, with the next date rolled forward from its anchor. */
+  /** Every AI tool and subscription, with what was actually paid this month. */
   subscriptions: () =>
     apiFetch<SubscriptionSummary>("/vendors/subscriptions", {
       cache: "no-store",

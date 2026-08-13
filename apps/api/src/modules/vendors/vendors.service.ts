@@ -5,10 +5,12 @@ import {
 } from "@nestjs/common";
 import {
   VENDOR_TYPE_LABELS,
-  daysBetween,
-  monthlyEquivalent,
-  nextRenewal,
+  fromMinorUnits,
+  monthRange,
+  parseIsoDate,
+  toMinorUnits,
   todayInDhaka,
+  type BillingCycle,
   type CreateVendorInput,
   type ListVendorsQuery,
   type Paginated,
@@ -16,15 +18,40 @@ import {
   type SubscriptionSummary,
   type UpdateVendorInput,
 } from "@finance/shared";
-import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
-import { accounts, vendors, type Vendor } from "../../db/schema";
+import { accounts, transactions, vendors, type Vendor } from "../../db/schema";
+import { isToolSpend, isToolVendor } from "./tool-spend";
 
-export type VendorDto = Omit<Vendor, "deletedAt" | "entityId">;
+/**
+ * `nextRenewalOn` is deliberately not returned.
+ *
+ * The column still exists — dropping it is not worth a migration — but these
+ * are bought month by month rather than on a schedule, so a stored renewal
+ * date is not something the app may present. Leaving it on the DTO is an
+ * invitation to render it again.
+ */
+export type VendorDto = Omit<
+  Vendor,
+  "deletedAt" | "entityId" | "nextRenewalOn"
+>;
 
 @Injectable()
 export class VendorsService {
@@ -207,78 +234,121 @@ export class VendorsService {
   }
 
   /**
-   * Everything that renews, with the next date rolled forward.
+   * The tools the company uses, and what was actually paid for them.
    *
-   * The stored date is an anchor somebody set once; this is what it means
-   * today. Totals stay split by the currency each is billed in — most AI tools
-   * charge dollars while the books are taka, and one number covering both
-   * would be wrong by the exchange rate and look entirely normal.
+   * Nothing here is projected. These get bought some months and not others, so
+   * the stored cycle and price are carried as context — "about $20 a month" —
+   * while every figure comes from the ledger. The question the screen exists to
+   * answer is "have I bought Claude this month", which only the ledger knows.
+   *
+   * The period is the current calendar month: that is the unit the buying
+   * decision is made in.
    */
   async subscriptions(): Promise<SubscriptionSummary> {
-    const today = todayInDhaka();
+    const { year, month } = parseIsoDate(todayInDhaka());
+    const period = monthRange(year, month);
 
-    const rows = await this.db.client
-      .select({
-        id: vendors.id,
-        name: vendors.name,
-        type: vendors.type,
-        billingCycle: vendors.billingCycle,
-        billingAmount: vendors.billingAmount,
-        billingCurrency: vendors.billingCurrency,
-        anchor: vendors.nextRenewalOn,
-        billingAccountId: vendors.billingAccountId,
-        billingAccountName: accounts.name,
-      })
-      .from(vendors)
-      .leftJoin(accounts, eq(vendors.billingAccountId, accounts.id))
-      .where(
-        and(
-          isNull(vendors.deletedAt),
-          eq(vendors.isActive, true),
-          sql`${vendors.billingCycle} <> 'none'`,
+    const inPeriod = sql`${transactions.txnDate} between ${period.start} and ${period.end}`;
+
+    const [tools, ledger, [total]] = await Promise.all([
+      this.db.client
+        .select({
+          id: vendors.id,
+          name: vendors.name,
+          type: vendors.type,
+          billingCycle: vendors.billingCycle,
+          billingAmount: vendors.billingAmount,
+          billingCurrency: vendors.billingCurrency,
+          billingAccountId: vendors.billingAccountId,
+          billingAccountName: accounts.name,
+        })
+        .from(vendors)
+        .leftJoin(accounts, eq(vendors.billingAccountId, accounts.id))
+        .where(
+          and(
+            isNull(vendors.deletedAt),
+            eq(vendors.isActive, true),
+            isToolVendor(),
+          ),
+        )
+        .orderBy(asc(vendors.name)),
+
+      // One pass over the outgoing ledger for both figures. `last paid` is
+      // deliberately all-time: "last bought in April" is the answer somebody
+      // needs when this month is empty, and a period-bound max would just
+      // repeat what the period column already says.
+      this.db.client
+        .select({
+          vendorId: transactions.vendorId,
+          paid: sql<string>`coalesce(sum(${transactions.amount}) filter (where ${inPeriod}), 0)::text`,
+          entries: sql<number>`(count(*) filter (where ${inPeriod}))::int`,
+          lastPaidOn: sql<string | null>`max(${transactions.txnDate})::text`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            isNull(transactions.voidedAt),
+            eq(transactions.direction, "out"),
+            isNotNull(transactions.vendorId),
+          ),
+        )
+        .groupBy(transactions.vendorId),
+
+      // The headline, by the same rule the overview's tooling tile uses — so
+      // the dashboard and this screen cannot show different numbers for the
+      // same month. It also picks up card spend nobody attributed to a named
+      // tool, which is why it can exceed the sum of the lines.
+      this.db.client
+        .select({
+          total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
+        })
+        .from(transactions)
+        .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
+        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+        .where(
+          and(
+            gte(transactions.txnDate, period.start),
+            lte(transactions.txnDate, period.end),
+            isNull(transactions.voidedAt),
+            eq(transactions.direction, "out"),
+            isToolSpend(),
+          ),
         ),
-      );
+    ]);
 
-    let monthlyBdt = 0;
-    let monthlyUsd = 0;
+    const byVendor = new Map(ledger.map((row) => [row.vendorId, row]));
 
-    const lines: SubscriptionLine[] = rows.map((row) => {
-      const cycle = row.billingCycle as SubscriptionLine["billingCycle"];
-      const per = monthlyEquivalent(row.billingAmount, cycle);
-      if (row.billingCurrency === "USD") monthlyUsd += per;
-      else monthlyBdt += per;
-
-      const next = nextRenewal(row.anchor, cycle, today);
-
+    const lines: SubscriptionLine[] = tools.map((tool) => {
+      const spend = byVendor.get(tool.id);
       return {
-        id: row.id,
-        name: row.name,
-        type: row.type,
-        billingCycle: cycle,
-        billingAmount: row.billingAmount,
-        billingCurrency: row.billingCurrency,
-        nextRenewalOn: next,
-        daysAway: next ? daysBetween(today, next) : null,
-        billingAccountId: row.billingAccountId,
-        billingAccountName: row.billingAccountName,
+        id: tool.id,
+        name: tool.name,
+        type: tool.type,
+        billingCycle: tool.billingCycle as BillingCycle,
+        billingAmount: tool.billingAmount,
+        billingCurrency: tool.billingCurrency,
+        paidThisPeriod: Number(spend?.paid ?? 0).toFixed(2),
+        entriesThisPeriod: Number(spend?.entries ?? 0),
+        lastPaidOn: spend?.lastPaidOn ?? null,
+        billingAccountId: tool.billingAccountId,
+        billingAccountName: tool.billingAccountName,
       };
     });
 
-    // Soonest first, and anything with no date at the end — it is not urgent,
-    // it is unfinished.
-    lines.sort((a, b) => {
-      if (a.nextRenewalOn === b.nextRenewalOn)
-        return a.name.localeCompare(b.name);
-      if (!a.nextRenewalOn) return 1;
-      if (!b.nextRenewalOn) return -1;
-      return a.nextRenewalOn < b.nextRenewalOn ? -1 : 1;
-    });
+    // What the headline covers that no named tool does — card spending nobody
+    // attributed. Poisha, not floats: a difference of two ledger figures is
+    // exactly where binary floating point goes wrong.
+    const paid = toMinorUnits(Number(total.total).toFixed(2));
+    const named = lines.reduce(
+      (sum, line) => sum + toMinorUnits(line.paidThisPeriod),
+      0n,
+    );
 
     return {
-      monthlyBdt: monthlyBdt.toFixed(2),
-      monthlyUsd: monthlyUsd.toFixed(2),
+      period: { label: period.label, start: period.start, end: period.end },
+      paidThisPeriod: fromMinorUnits(paid),
+      unattributed: fromMinorUnits(paid > named ? paid - named : 0n),
       lines,
-      dueSoon: lines.filter((l) => l.daysAway !== null && l.daysAway <= 7),
     };
   }
 
@@ -320,7 +390,6 @@ const projection = {
   billingCycle: vendors.billingCycle,
   billingAmount: vendors.billingAmount,
   billingCurrency: vendors.billingCurrency,
-  nextRenewalOn: vendors.nextRenewalOn,
   billingAccountId: vendors.billingAccountId,
   notes: vendors.notes,
   isActive: vendors.isActive,

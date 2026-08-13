@@ -13,7 +13,7 @@ import {
   type OverviewVendor,
   type PeriodRange,
 } from "@finance/shared";
-import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import {
@@ -25,6 +25,7 @@ import {
   vendors,
 } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
+import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 
 /** Never count a voided row. It stays visible; it is not money. */
@@ -110,16 +111,27 @@ export class OverviewService {
       this.toolsAndSubscriptions(range),
     ]);
 
-    // USD is a translation of these figures, never a second set of books.
-    const fx =
-      query.currency === "USD" ? await this.fx.contextFor(range) : null;
-    const currency = fx?.unavailable ? "BDT" : query.currency;
-    const convert = (value: string) =>
-      currency === "USD" ? (FxService.convert(value, fx) ?? value) : value;
-    const convertLine = <T extends { total: string }>(line: T) => ({
-      ...line,
-      total: convert(line.total),
-    });
+    /**
+     * Every figure now carries its dollars beside it rather than behind a
+     * toggle, so the taka is never converted away — `convert` is a no-op and
+     * the USD half is produced separately.
+     *
+     * The rate is the month's own: money that arrives from abroad arrives at a
+     * known rate, and everything spent afterwards is spending that money. The
+     * settings rate is reached only when nothing was funded in the period.
+     */
+    const fx = await this.fx.contextFor(range);
+    const fundingRate = await this.fx.fundingRateFor(range);
+    const usdRate = fundingRate ?? (fx.unavailable ? null : fx.rate);
+
+    const currency = "BDT" as const;
+    const convert = (value: string) => value;
+    const convertLine = <T extends { total: string }>(line: T) => ({ ...line });
+    /** The approximate dollars beside a taka figure, or null with no rate. */
+    const usd = (value: string): string | null =>
+      usdRate
+        ? (FxService.convert(value, { ...fx, rate: usdRate }) ?? null)
+        : null;
 
     return {
       period: {
@@ -130,6 +142,7 @@ export class OverviewService {
       },
       currency,
       fx,
+      usdRate,
       totals: {
         moneyIn: convert(totals.moneyIn),
         moneyOut: convert(totals.moneyOut),
@@ -173,16 +186,24 @@ export class OverviewService {
       })),
       groups: groups.map((group) => ({
         ...group,
-        opening: convert(group.opening),
-        moneyIn: convert(group.moneyIn),
-        moneyOut: convert(group.moneyOut),
-        closing: convert(group.closing),
+        usd: {
+          opening: usd(group.opening),
+          moneyIn: usd(group.moneyIn),
+          moneyOut: usd(group.moneyOut),
+          closing: usd(group.closing),
+        },
       })),
       expense: {
-        salaryPaid: convert(salaryPaid),
-        toolsAndSubscriptions: convert(toolsSpend),
-        taxWithheld: convert(tax.withheld),
-        taxOutstanding: convert(outstanding),
+        salaryPaid,
+        toolsAndSubscriptions: toolsSpend,
+        taxWithheld: tax.withheld,
+        taxOutstanding: outstanding,
+        usd: {
+          salaryPaid: usd(salaryPaid),
+          toolsAndSubscriptions: usd(toolsSpend),
+          taxWithheld: usd(tax.withheld),
+          taxOutstanding: usd(outstanding),
+        },
       },
       headcount,
     };
@@ -341,7 +362,9 @@ export class OverviewService {
    * dashboard's four tiles have to tie together or they are four unrelated
    * numbers in a box.
    */
-  private async accountGroups(range: PeriodRange): Promise<AccountGroup[]> {
+  private async accountGroups(
+    range: PeriodRange,
+  ): Promise<Array<Omit<AccountGroup, "usd">>> {
     const rows = await this.db.client
       .select({
         id: accounts.id,
@@ -392,7 +415,7 @@ export class OverviewService {
       key: AccountGroup["key"],
       label: string,
       of: typeof rows,
-    ): AccountGroup | null => {
+    ): Omit<AccountGroup, "usd"> | null => {
       if (!of.length) return null;
 
       let opening = 0;
@@ -429,7 +452,7 @@ export class OverviewService {
         "Card overview",
         rows.filter((r) => r.currency !== base),
       ),
-    ].filter((group): group is AccountGroup => group !== null);
+    ].filter((group): group is Omit<AccountGroup, "usd"> => group !== null);
   }
 
   /**
@@ -438,6 +461,10 @@ export class OverviewService {
    *
    * One query with an OR rather than two summed together — a Vercel bill on
    * the card is both, and adding two counts would double it.
+   *
+   * The predicate is shared with the AI tools screen. Two hand-written copies
+   * of "what counts as tooling" drift the first time somebody adds a vendor
+   * type, and then the dashboard and the screen quietly disagree.
    */
   private async toolsAndSubscriptions(range: PeriodRange): Promise<string> {
     const [row] = await this.db.client
@@ -448,14 +475,7 @@ export class OverviewService {
       .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .where(
-        and(
-          inPeriod(range),
-          eq(transactions.direction, "out"),
-          or(
-            sql`${vendors.type} in ('ai_tool', 'subscription', 'hosting')`,
-            sql`${accounts.currency} <> 'BDT'`,
-          ),
-        ),
+        and(inPeriod(range), eq(transactions.direction, "out"), isToolSpend()),
       );
 
     return Number(row.total).toFixed(2);

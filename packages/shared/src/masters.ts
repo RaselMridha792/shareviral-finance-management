@@ -61,12 +61,7 @@ const optionalText = (schema: z.ZodType<string>) =>
 /*  Accounts                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export const ACCOUNT_TYPES = [
-  "bank",
-  "cash",
-  "mobile_wallet",
-  "card",
-] as const;
+export const ACCOUNT_TYPES = ["bank", "cash", "mobile_wallet", "card"] as const;
 export const accountTypeSchema = z.enum(ACCOUNT_TYPES);
 export type AccountType = z.infer<typeof accountTypeSchema>;
 
@@ -191,12 +186,15 @@ export const VENDOR_TYPE_LABELS: Record<VendorType, string> = {
 };
 
 /**
- * The ones that renew on their own.
+ * The ones bought over and over: AI tools, SaaS, hosting.
  *
- * Not a separate table: an AI tool is something the company pays, which is
- * what this list has always been. What changes is that these have a *next*
- * payment as well as a history, and a total that is owed monthly whether or
- * not anybody looks.
+ * Not a separate table — an AI tool is something the company pays, which is
+ * what this list has always been.
+ *
+ * They are deliberately **not** on an auto-renewing schedule. Some months
+ * these get bought and some months they do not, so the app records what was
+ * actually paid rather than projecting what is due. A screen that promises a
+ * renewal that never happens is worse than one that says nothing.
  */
 export const RECURRING_VENDOR_TYPES: readonly VendorType[] = [
   "ai_tool",
@@ -257,8 +255,9 @@ export const createVendorSchema = z.strictObject({
   billingAmount: optionalText(amountSchema),
   billingCurrency: z.enum(["BDT", "USD"]).default("BDT"),
   /**
-   * Any past renewal date works — the next one is rolled forward from it, so
-   * a date set a year ago still shows the right upcoming month.
+   * Kept for the rows that already carry one. Nothing reads it any more: these
+   * are not on a renewal schedule, and a stored date that nothing honours is a
+   * promise the screen would be making on the app's behalf.
    */
   nextRenewalOn: optionalText(isoDateSchema),
   billingAccountId: z.string().uuid().nullish(),

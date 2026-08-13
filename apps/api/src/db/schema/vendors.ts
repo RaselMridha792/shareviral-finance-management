@@ -90,8 +90,6 @@ export const vendors = pgTable(
     ),
     index("vendors_active_idx").on(t.isActive),
     index("vendors_etin_idx").on(t.etin),
-    // "What renews soon" is the question this screen exists to answer.
-    index("vendors_renewal_idx").on(t.nextRenewalOn),
   ],
 );
 
