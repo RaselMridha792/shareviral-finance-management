@@ -3,13 +3,17 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { ChartTooltip } from "@/components/charts/chart-tooltip";
-import { formatCurrency } from "@/lib/utils";
+import { useMoney } from "@/components/settings-provider";
 
 export function CategoryDonut({
   data,
 }: {
   data: { name: string; value: number; color: string }[];
 }) {
+  // The app's own formatter: taka, grouped the Bangladeshi way. This used to
+  // call formatCurrency, whose default currency is USD — so the centre of the
+  // donut read "$45,000" for ৳45,000.
+  const money = useMoney();
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
   // Container query, not viewport: this card is often a narrow grid column on a
@@ -27,6 +31,7 @@ export function CategoryDonut({
               outerRadius={92}
               paddingAngle={2}
               stroke="none"
+              isAnimationActive={false}
             >
               {data.map((entry) => (
                 <Cell key={entry.name} fill={entry.color} />
@@ -38,7 +43,7 @@ export function CategoryDonut({
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-[11px] text-muted-foreground">Total spent</span>
           <span className="num text-lg font-semibold">
-            {formatCurrency(total, "USD", { maximumFractionDigits: 0 })}
+            {money(total, { hideDecimals: true })}
           </span>
         </div>
       </div>
@@ -52,7 +57,7 @@ export function CategoryDonut({
             />
             <span className="truncate text-muted-foreground">{entry.name}</span>
             <span className="num ml-auto font-medium">
-              {formatCurrency(entry.value, "USD", { maximumFractionDigits: 0 })}
+              {money(entry.value, { hideDecimals: true })}
             </span>
             <span className="num w-9 shrink-0 text-right text-xs text-muted-foreground">
               {((entry.value / total) * 100).toFixed(0)}%

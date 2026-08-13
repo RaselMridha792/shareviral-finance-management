@@ -135,6 +135,64 @@ export function formatMoney(
   return `${negative ? MINUS : ""}${symbol}${body}`;
 }
 
+/**
+ * Short form, for an axis tick or a tile where the full figure will not fit.
+ *
+ * Bangladeshi by default, and that means lakh and crore — not k and M. A
+ * finance team here reads "12.5L" instantly and has to convert "1.25M" in
+ * their head, which is the opposite of what an abbreviation is for.
+ *
+ * Never use this where a figure is being checked or reconciled: it rounds, and
+ * a rounded amount in a ledger is a wrong amount.
+ */
+export function formatCompactMoney(
+  value: string | number,
+  options: FormatMoneyOptions = {},
+): string {
+  const {
+    currency = BDT,
+    format = "bangladeshi",
+    hideSymbol = false,
+  } = options;
+
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return formatMoney(value, options);
+
+  const symbol = hideSymbol
+    ? ""
+    : (CURRENCY_SYMBOLS[currency] ?? `${currency} `);
+  const negative = amount < 0;
+  const magnitude = Math.abs(amount);
+
+  const units: Array<[number, string]> =
+    format === "western"
+      ? [
+          [1_000_000_000, "B"],
+          [1_000_000, "M"],
+          [1_000, "k"],
+        ]
+      : [
+          [10_000_000, "Cr"],
+          [100_000, "L"],
+          [1_000, "k"],
+        ];
+
+  const sign = negative ? MINUS : "";
+
+  for (const [size, suffix] of units) {
+    if (magnitude >= size) {
+      const scaled = magnitude / size;
+      // One decimal below 10, none above — "9.4L" and "12L", never "12.3L",
+      // which reads as precision the number does not have.
+      const shown =
+        scaled < 10 ? scaled.toFixed(1) : Math.round(scaled).toString();
+      return `${sign}${symbol}${shown.replace(/\.0$/, "")}${suffix}`;
+    }
+  }
+
+  return `${sign}${symbol}${Math.round(magnitude)}`;
+}
+
 /** Direction-aware sign for the in/out ledger. */
 export function signFor(direction: "in" | "out"): string {
   return direction === "in" ? PLUS : MINUS;
