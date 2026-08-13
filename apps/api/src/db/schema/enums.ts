@@ -19,6 +19,7 @@ export const accountTypeEnum = pgEnum("account_type", [
   "bank",
   "cash",
   "mobile_wallet",
+  "card",
 ]);
 
 /** Which side of the ledger a category belongs to. */

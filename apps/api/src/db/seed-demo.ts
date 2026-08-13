@@ -218,7 +218,27 @@ async function load() {
     })
     .returning();
 
-  console.log("  2 accounts — ৳18,50,000 in the bank, ৳40,000 petty cash");
+  // The prepaid card the AI tooling is settled on. It holds dollars, and the
+  // statement converts it at its own rate — which is the whole reason the rate
+  // is recorded per entry rather than once per period.
+  const [card] = await db
+    .insert(accounts)
+    .values({
+      name: "USD card (demo)",
+      type: "card",
+      currency: "USD",
+      openingBalance: "187083.00",
+      openingBalanceOn: "2026-06-30",
+      sortOrder: 2,
+      notes: `Prepaid, for AI tooling. Made-up account. ${TAG}`,
+      createdBy: by,
+      updatedBy: by,
+    })
+    .returning();
+
+  console.log(
+    "  3 accounts — ৳18,50,000 bank, ৳40,000 petty cash, ৳1,87,083 prepaid card",
+  );
 
   /* --- who is paid -------------------------------------------------------- */
 
@@ -623,12 +643,51 @@ async function load() {
       desc: "Electricity — August",
       category: cat.utility,
     },
+    // Settled on the prepaid card, in dollars, at the card's own rate.
+    {
+      date: "2026-07-06",
+      dir: "out",
+      amount: "117546.00",
+      desc: "AI tooling & subscriptions",
+      category: cat.software,
+      account: "card",
+      method: "card",
+    },
+    {
+      date: "2026-08-06",
+      dir: "out",
+      amount: "39975.00",
+      desc: "AI tooling & subscriptions",
+      category: cat.software,
+      account: "card",
+      method: "card",
+    },
   ];
+
+  /**
+   * What a dollar was worth, day by day.
+   *
+   * Deliberately not one number: the statement's whole point is that a figure
+   * carries the rate of the day it happened, and a demo where every rate is
+   * identical would demonstrate nothing.
+   */
+  const rateOn = (date: string): string => {
+    const table: Record<string, string> = {
+      "2026-07": "122.77",
+      "2026-08": "118.30",
+    };
+    return table[date.slice(0, 7)] ?? "122.00";
+  };
 
   for (const row of rows) {
     await db.insert(transactions).values({
       refNo: ref(row.date),
-      accountId: row.account === "cash" ? cash.id : bank.id,
+      accountId:
+        row.account === "cash"
+          ? cash.id
+          : row.account === "card"
+            ? card.id
+            : bank.id,
       direction: row.dir,
       txnDate: row.date,
       amount: row.amount,
@@ -637,12 +696,19 @@ async function load() {
       paymentMethod:
         row.method ?? (row.account === "cash" ? "cash" : "bank_transfer"),
       description: `${row.desc} ${TAG}`,
+      // Named on the transfers, so the statement's summary can say who sent it
+      // instead of falling back to "N transfers received".
+      counterparty: row.usd ? "ShareViral Corp (USA)" : null,
       billAmount: row.bill ?? null,
       withheldTaxAmount: row.withheld ?? "0",
       originalAmount: row.usd ?? null,
       originalCurrency: row.usd ? "USD" : null,
       fxRate: row.rate ?? null,
       fxRateSource: row.rate ? "manual" : null,
+      // The rate on the day, captured as the entry was made. The card settles
+      // at its own, a shade above the bank's, exactly as the real statement
+      // shows.
+      usdRate: row.account === "card" ? "123.00" : rateOn(row.date),
       createdVia: "manual",
       createdBy: by,
       updatedBy: by,

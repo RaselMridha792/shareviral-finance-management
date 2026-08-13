@@ -61,7 +61,12 @@ const optionalText = (schema: z.ZodType<string>) =>
 /*  Accounts                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export const ACCOUNT_TYPES = ["bank", "cash", "mobile_wallet"] as const;
+export const ACCOUNT_TYPES = [
+  "bank",
+  "cash",
+  "mobile_wallet",
+  "card",
+] as const;
 export const accountTypeSchema = z.enum(ACCOUNT_TYPES);
 export type AccountType = z.infer<typeof accountTypeSchema>;
 
@@ -69,6 +74,8 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   bank: "Bank account",
   cash: "Cash",
   mobile_wallet: "Mobile wallet",
+  /** A prepaid card, usually held in dollars and used for tooling. */
+  card: "Card",
 };
 
 export const createAccountSchema = z.strictObject({
