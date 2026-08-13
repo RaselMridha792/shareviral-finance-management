@@ -2,110 +2,105 @@
 
 import {
   AI_TARGET_LABELS,
-  formatMoney,
   type AiAvailability,
+  type AiChatSummary,
+  type AiDataAccess,
   type AiIntakeReply,
   type AiMessage,
+  type AiModel,
 } from "@finance/shared";
 import {
   ArrowRight,
-  CircleAlert,
+  History,
   LoaderCircle,
-  Send,
   Sparkles,
+  SquarePen,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useCan } from "@/components/auth/session-provider";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Field, Input, Textarea } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/page-header";
+import { ChatRail } from "@/components/assistant/chat-rail";
+import { Composer } from "@/components/assistant/composer";
+import { DraftCard } from "@/components/assistant/draft-card";
+import { Welcome } from "@/components/assistant/welcome";
+import { useCan, useSession } from "@/components/auth/session-provider";
+import { Card } from "@/components/ui/card";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
-import { cn } from "@/lib/utils";
-
-/** Fields the person should not have to read as a database column name. */
-const FIELD_LABELS: Record<string, string> = {
-  txnDate: "Date",
-  amount: "Amount",
-  description: "What it was for",
-  categoryId: "Category",
-  categoryName: "Category",
-  accountName: "Account",
-  accountId: "Account",
-  vendorName: "Paid to",
-  billAmount: "Gross bill",
-  withheldTaxAmount: "Tax withheld",
-  fullName: "Name",
-  employeeCode: "Employee code",
-  joinedOn: "Joined on",
-  challanNumber: "Challan number",
-  challanDate: "Challan date",
-  depositDate: "Deposited on",
-  periodYear: "For year",
-  periodMonth: "For month",
-  name: "Name",
-  etin: "e-TIN",
-  bin: "BIN",
-  type: "Type",
-};
 
 /**
- * The amount, read back — or the raw text if it cannot be parsed.
+ * The assistant, as a room rather than a page.
  *
- * The model writes what it heard, which may carry a separator or a stray
- * character. formatMoney is strict on purpose, so this is where that meets
- * reality: showing the raw string is a fine outcome, throwing inside a render
- * and blanking the screen is not.
+ * Three regions: the conversations you have had, the one you are having, and
+ * the box you type in. It fills the window below the top bar so the composer
+ * stays put and the transcript scrolls behind it — a chat that grows the page
+ * downward means hunting for the input after every reply.
  */
-function safeMoney(raw: string): string {
-  const cleaned = raw.replace(/[,s৳$]/g, "");
-  if (!/^-?d+(.d{1,2})?$/.test(cleaned)) return raw;
-  try {
-    return formatMoney(cleaned);
-  } catch {
-    return raw;
-  }
-}
-
 export function AssistantScreen({
   availability,
 }: {
   availability: AiAvailability;
 }) {
   const router = useRouter();
+  const user = useSession();
   const canConfigure = useCan("settings.write");
+
+  const [chats, setChats] = useState<AiChatSummary[]>([]);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
-  const [input, setInput] = useState("");
   const [reply, setReply] = useState<AiIntakeReply | null>(null);
+  const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [drawer, setDrawer] = useState(false);
+  const [model, setModel] = useState<AiModel>(
+    availability.model ?? "claude-sonnet-5",
+  );
+  const dataAccess: AiDataAccess =
+    availability.dataAccess && availability.dataAccess !== "off"
+      ? availability.dataAccess
+      : "names_only";
+
+  const scroller = useRef<HTMLDivElement>(null);
+  const configured = availability.configured;
+
+  const loadChats = useCallback(async () => {
+    try {
+      setChats(await aiApi.chats());
+    } catch {
+      // The history list is a convenience. Losing it must not take the
+      // conversation with it.
+    }
+  }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, reply]);
+    // Fetching on mount, which is exactly the external-system sync effects are
+    // for; the rule cannot tell that from a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (configured) void loadChats();
+  }, [configured, loadChats]);
 
-  if (!availability.configured) {
+  // Follow the conversation down as it grows. `scrollTop` on the container
+  // rather than scrollIntoView, which drags the whole page on some browsers.
+  // Only once something has been said — otherwise the welcome opens scrolled
+  // past its own greeting on a short screen.
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && messages.length) el.scrollTop = el.scrollHeight;
+  }, [messages, reply, thinking]);
+
+  if (!configured) {
     return (
-      <>
-        <PageHeader
-          title="Assistant"
-          description="Describe an entry and it fills in the form."
-        />
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+      <div className="flex h-[calc(100dvh-4rem)] items-center justify-center px-4">
+        <Card className="flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
           <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
             <Sparkles className="size-5" />
           </span>
           <div>
             <p className="text-sm font-semibold">Not switched on</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {availability.reason}
             </p>
           </div>
@@ -119,12 +114,43 @@ export function AssistantScreen({
             </Link>
           ) : null}
         </Card>
-      </>
+      </div>
     );
   }
 
-  async function send(event: FormEvent) {
-    event.preventDefault();
+  function startNew() {
+    setChatId(null);
+    setMessages([]);
+    setReply(null);
+    setInput("");
+    setError(null);
+    setDrawer(false);
+  }
+
+  async function open(id: string) {
+    setDrawer(false);
+    setError(null);
+    try {
+      const chat = await aiApi.chat(id);
+      setChatId(chat.id);
+      setMessages(chat.messages);
+      setReply(chat.reply);
+    } catch {
+      setError("That conversation could not be opened.");
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      await aiApi.removeChat(id);
+      setChats((current) => current.filter((chat) => chat.id !== id));
+      if (id === chatId) startNew();
+    } catch {
+      setError("That conversation could not be deleted.");
+    }
+  }
+
+  async function send() {
     const text = input.trim();
     if (!text || thinking) return;
 
@@ -133,19 +159,22 @@ export function AssistantScreen({
     setInput("");
     setThinking(true);
     setError(null);
-    setSaved(null);
 
     try {
       const result = await aiApi.turn({
         messages: next,
         target: reply?.target ?? undefined,
         draft: reply?.draft,
+        chatId: chatId ?? undefined,
       });
+
       setReply(result);
-      const said = result.nextQuestion ?? result.clarification ?? result.summary;
-      if (said) {
-        setMessages([...next, { role: "assistant", content: said }]);
-      }
+      const said =
+        result.nextQuestion ?? result.clarification ?? result.summary;
+      if (said) setMessages([...next, { role: "assistant", content: said }]);
+
+      if (result.chatId && result.chatId !== chatId) setChatId(result.chatId);
+      void loadChats();
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -164,9 +193,17 @@ export function AssistantScreen({
 
     try {
       const created = await aiApi.save(reply.target, edited);
-      setSaved(created.refNo ?? "Saved");
+      const label = AI_TARGET_LABELS[reply.target];
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: `Saved — ${label.toLowerCase()}${
+            created.refNo ? `, ${created.refNo}` : ""
+          }.`,
+        },
+      ]);
       setReply(null);
-      setMessages([]);
       router.refresh();
     } catch (caught) {
       setError(
@@ -179,223 +216,142 @@ export function AssistantScreen({
     }
   }
 
-  const ready = reply && reply.target && reply.missingFields.length === 0;
-
-  return (
-    <>
-      <PageHeader
-        title="Assistant"
-        description="Describe an entry in Bangla or English. It asks for whatever is missing, then fills in the form for you to check."
-      />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="flex min-h-[26rem] flex-col">
-          <CardHeader
-            title="What are you recording?"
-            description={
-              reply?.target ? AI_TARGET_LABELS[reply.target] : "Just say it"
-            }
-          />
-          <CardBody className="flex flex-1 flex-col gap-3">
-            <div className="flex-1 space-y-3 overflow-y-auto">
-              {messages.length === 0 ? (
-                <div className="flex flex-col gap-2 py-6 text-sm text-muted-foreground">
-                  <p>For example:</p>
-                  <p className="rounded-lg bg-surface-muted px-3 py-2">
-                    ami office rent add korte chai
-                  </p>
-                  <p className="rounded-lg bg-surface-muted px-3 py-2">
-                    Paid 6,200 to Grameenphone for August internet
-                  </p>
-                </div>
-              ) : (
-                messages.map((message, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "max-w-[85%] rounded-lg px-3 py-2 text-sm",
-                      message.role === "user"
-                        ? "ml-auto bg-primary text-white"
-                        : "bg-surface-muted",
-                    )}
-                  >
-                    {message.content}
-                  </div>
-                ))
-              )}
-              {thinking ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <LoaderCircle className="size-4 animate-spin" />
-                  Thinking…
-                </div>
-              ) : null}
-              <div ref={endRef} />
-            </div>
-
-            <form onSubmit={send} className="flex gap-2">
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Type it however you would say it…"
-                disabled={thinking}
-                autoFocus
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={thinking || !input.trim()}
-              >
-                <Send className="size-4" />
-              </Button>
-            </form>
-          </CardBody>
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          {saved ? (
-            <Card className="flex items-center gap-3 px-4 py-3">
-              <Badge tone="positive">Saved</Badge>
-              <span className="num text-sm">{saved}</span>
-            </Card>
-          ) : null}
-
-          {error ? (
-            <p
-              role="alert"
-              className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
-            >
-              {error}
-            </p>
-          ) : null}
-
-          {reply && reply.target ? (
-            <DraftForm
-              key={JSON.stringify(reply.draft)}
-              reply={reply}
-              ready={Boolean(ready)}
-              saving={saving}
-              onConfirm={confirm}
-            />
-          ) : (
-            <Card className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-                <Sparkles className="size-5" />
-              </span>
-              <p className="text-sm font-semibold">Nothing drafted yet</p>
-              <p className="max-w-xs text-sm text-muted-foreground">
-                Whatever it understands appears here as an ordinary form. It is
-                not saved until you press Save.
-              </p>
-            </Card>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-/**
- * The draft, as an editable form.
- *
- * Every value is a real input, not a read-only summary: the person is the one
- * who signs off on the figure, and a value they cannot change is one they
- * cannot correct. Nothing is written until Save is pressed.
- */
-function DraftForm({
-  reply,
-  ready,
-  saving,
-  onConfirm,
-}: {
-  reply: AiIntakeReply;
-  ready: boolean;
-  saving: boolean;
-  onConfirm: (draft: Record<string, unknown>) => void;
-}) {
-  const entries = Object.entries(reply.draft).filter(
-    ([, value]) => value !== null && value !== undefined && value !== "",
-  );
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const draft: Record<string, unknown> = {};
-    for (const [key, value] of data.entries()) {
-      const text = String(value).trim();
-      if (text) draft[key] = text;
+  async function changeModel(next: AiModel) {
+    const previous = model;
+    setModel(next);
+    try {
+      await aiApi.updateSettings({ model: next });
+    } catch {
+      setModel(previous);
+      setError("Could not change the model.");
     }
-    onConfirm(draft);
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="The draft"
-        description={
-          ready
-            ? "Check every line, then save."
-            : `Still needed: ${reply.missingFields.join(", ")}`
-        }
-      />
-      <CardBody>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          {entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nothing understood yet.
-            </p>
-          ) : (
-            entries.map(([key, value]) => (
-              <Field key={key} label={FIELD_LABELS[key] ?? key}>
-                {String(value).length > 60 ? (
-                  <Textarea name={key} defaultValue={String(value)} />
-                ) : (
-                  <Input
-                    name={key}
-                    defaultValue={String(value)}
-                    className={
-                      key.toLowerCase().includes("amount") ? "col-amount" : ""
-                    }
-                  />
-                )}
-              </Field>
-            ))
-          )}
+    <div className="flex h-[calc(100dvh-4rem)] min-h-0">
+      <aside className="hidden w-64 shrink-0 border-r border-border lg:block">
+        <ChatRail
+          chats={chats}
+          activeId={chatId}
+          onNew={startNew}
+          onOpen={open}
+          onDelete={remove}
+        />
+      </aside>
 
-          {reply.summary ? (
-            <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm">
-              {reply.summary}
-            </p>
-          ) : null}
-
-          {typeof reply.draft.amount === "string" ? (
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                Read the amount back before saving:{" "}
-                <strong>{safeMoney(String(reply.draft.amount))}</strong>. A
-                misheard figure looks exactly like a correct one.
-              </span>
-            </p>
-          ) : null}
-
-          <div className="flex items-center gap-3">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!ready || saving}
-              title={ready ? undefined : "Something is still missing"}
-            >
-              {saving ? <LoaderCircle className="size-4 animate-spin" /> : null}
-              Save it
-            </Button>
-            {!ready ? (
-              <span className="text-xs text-muted-foreground">
-                Answer the question on the left first
-              </span>
-            ) : null}
+      {drawer ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close history"
+            onClick={() => setDrawer(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <div className="absolute inset-y-0 left-0 w-72 border-r border-border">
+            <ChatRail
+              chats={chats}
+              activeId={chatId}
+              onNew={startNew}
+              onOpen={open}
+              onDelete={remove}
+              onClose={() => setDrawer(false)}
+            />
           </div>
-        </form>
-      </CardBody>
-    </Card>
+        </div>
+      ) : null}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setDrawer(true)}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <History className="size-4" />
+            History
+          </button>
+          <button
+            type="button"
+            onClick={startNew}
+            className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <SquarePen className="size-4" />
+            New
+          </button>
+        </div>
+
+        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+          {messages.length === 0 && !reply ? (
+            <Welcome
+              fullName={user.fullName}
+              dataAccess={dataAccess}
+              onPick={setInput}
+            />
+          ) : (
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+              {messages.map((message, index) =>
+                message.role === "user" ? (
+                  <p
+                    key={index}
+                    className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-primary-foreground"
+                  >
+                    {message.content}
+                  </p>
+                ) : (
+                  <div key={index} className="flex gap-3">
+                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                      <Sparkles className="size-3.5" />
+                    </span>
+                    <p className="min-w-0 pt-0.5 text-[15px] leading-relaxed whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  </div>
+                ),
+              )}
+
+              {thinking ? (
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  </span>
+                  Thinking…
+                </div>
+              ) : null}
+
+              {reply?.target ? (
+                <DraftCard
+                  key={JSON.stringify(reply.draft)}
+                  reply={reply}
+                  saving={saving}
+                  onConfirm={confirm}
+                />
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {error ? (
+          <div className="shrink-0 px-4 pt-2">
+            <p
+              role="alert"
+              className="mx-auto max-w-3xl rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+            >
+              {error}
+            </p>
+          </div>
+        ) : null}
+
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSend={() => void send()}
+          thinking={thinking}
+          model={model}
+          onModelChange={(next) => void changeModel(next)}
+          canChangeModel={canConfigure}
+          dataAccess={dataAccess}
+        />
+      </div>
+    </div>
   );
 }
