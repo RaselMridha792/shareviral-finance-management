@@ -60,6 +60,14 @@ export class AccountsController {
     return this.accounts.update(uuidSchema.parse(id), body, actor);
   }
 
+  /** Archiving is reversible; without this the only way back was a console. */
+  @Post(":id/restore")
+  @HttpCode(200)
+  @RequirePermission("accounts.write")
+  restore(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.restore(uuidSchema.parse(id), actor);
+  }
+
   @Post(":id/archive")
   @HttpCode(200)
   @RequirePermission("accounts.write")

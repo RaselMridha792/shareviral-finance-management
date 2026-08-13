@@ -47,6 +47,7 @@ export function AccountForm({
       branch: String(data.get("branch") ?? ""),
       accountNumber: String(data.get("accountNumber") ?? ""),
       routingNumber: String(data.get("routingNumber") ?? ""),
+      swiftCode: String(data.get("swiftCode") ?? "").toUpperCase(),
       currency: String(data.get("currency") ?? "BDT"),
       openingBalance: String(data.get("openingBalance") ?? "0"),
       openingBalanceOn: String(data.get("openingBalanceOn") ?? ""),
@@ -135,6 +136,20 @@ export function AccountForm({
             />
           </Field>
         </div>
+
+        <Field
+          label="SWIFT / BIC"
+          error={fieldErrors.swiftCode}
+          hint="8 or 11 characters, like SCBLBDDX — needed for transfers from abroad"
+        >
+          <Input
+            name="swiftCode"
+            className="num uppercase"
+            maxLength={11}
+            placeholder="SCBLBDDX"
+            defaultValue={account?.swiftCode ?? ""}
+          />
+        </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field

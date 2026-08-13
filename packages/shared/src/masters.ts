@@ -85,6 +85,20 @@ export const createAccountSchema = z.strictObject({
   branch: optionalText(z.string().trim().max(80)),
   accountNumber: optionalText(z.string().trim().max(40)),
   routingNumber: optionalText(z.string().trim().max(20)),
+  /**
+   * The bank's SWIFT/BIC. Eight or eleven characters — the shorter form is the
+   * head office, the longer one names a branch.
+   */
+  swiftCode: optionalText(
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(
+        /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/,
+        "A SWIFT code is 8 or 11 characters, like SCBLBDDX",
+      ),
+  ),
   currency: z.string().trim().length(3).default("BDT"),
   openingBalance: amountSchema.default("0"),
   openingBalanceOn: isoDateSchema,

@@ -163,6 +163,42 @@ export class AccountsService {
    * Accounts are archived, never deleted — transactions point at them, and a
    * deleted account would orphan its own history.
    */
+  /**
+   * Puts an archived account back into use.
+   *
+   * Archiving is a filing decision, not a deletion — the rows stay, the
+   * balance stays, and a gateway switched off in March is very often switched
+   * back on in September. Without this the only way back was a database
+   * console, which is not a thing anybody should need for a reversible act.
+   */
+  async restore(id: string, actor: AuthenticatedUser) {
+    const existing = await this.findOne(id);
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "accounts",
+      entityId: id,
+      summary: `Restored account "${existing.name}" from the archive`,
+      module: "accounts",
+      read: async (tx) => {
+        const [row] = await tx
+          .select(projection)
+          .from(accounts)
+          .where(eq(accounts.id, id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const [row] = await tx
+          .update(accounts)
+          .set({ isActive: true, updatedAt: new Date(), updatedBy: actor.id })
+          .where(eq(accounts.id, id))
+          .returning(projection);
+        return row;
+      },
+    });
+  }
+
   async archive(id: string, actor: AuthenticatedUser) {
     const existing = await this.findOne(id);
 
@@ -220,6 +256,7 @@ const projection = {
   branch: accounts.branch,
   accountNumber: accounts.accountNumber,
   routingNumber: accounts.routingNumber,
+  swiftCode: accounts.swiftCode,
   currency: accounts.currency,
   openingBalance: accounts.openingBalance,
   openingBalanceOn: accounts.openingBalanceOn,

@@ -7,6 +7,7 @@ import {
 } from "@finance/shared";
 import {
   Archive,
+  ArchiveRestore,
   Banknote,
   CreditCard,
   Download,
@@ -71,6 +72,25 @@ export function AccountsScreen({
   async function refresh() {
     setAccounts(await accountsApi.list(true));
     router.refresh();
+  }
+
+  /**
+   * Puts an archived account back.
+   *
+   * Archiving is filing, not deleting — a payment gateway switched off in
+   * March is very often switched back on in September, and the balance and
+   * every row against it were never going anywhere.
+   */
+  async function restore(account: AccountDto) {
+    setError(null);
+    try {
+      await accountsApi.restore(account.id);
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not restore that",
+      );
+    }
   }
 
   async function archive(account: AccountDto) {
@@ -203,6 +223,7 @@ export function AccountsScreen({
                 account={account}
                 canWrite={canWrite}
                 onEdit={() => setEditing(account)}
+                onRestore={() => restore(account)}
               />
             ))}
           </div>
@@ -230,11 +251,13 @@ function AccountCard({
   canWrite,
   onEdit,
   onArchive,
+  onRestore,
 }: {
   account: AccountDto;
   canWrite: boolean;
   onEdit: () => void;
   onArchive?: () => void;
+  onRestore?: () => void;
 }) {
   const Icon = ICONS[account.type];
 
@@ -274,6 +297,12 @@ function AccountCard({
             <Button size="sm" variant="ghost" onClick={onArchive}>
               <Archive className="size-3.5" />
               Archive
+            </Button>
+          ) : null}
+          {onRestore ? (
+            <Button size="sm" variant="ghost" onClick={onRestore}>
+              <ArchiveRestore className="size-3.5" />
+              Restore
             </Button>
           ) : null}
         </div>

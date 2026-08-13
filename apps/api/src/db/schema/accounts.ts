@@ -10,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 import { accountTypeEnum } from "./enums";
@@ -36,6 +37,8 @@ export const accounts = pgTable(
     branch: text("branch"),
     accountNumber: text("account_number"),
     routingNumber: text("routing_number"),
+    /** SWIFT/BIC, for the transfers that arrive from abroad. */
+    swiftCode: varchar("swift_code", { length: 11 }),
 
     currency: text("currency").notNull().default("BDT"),
     openingBalance: numeric("opening_balance", { precision: 14, scale: 2 })
