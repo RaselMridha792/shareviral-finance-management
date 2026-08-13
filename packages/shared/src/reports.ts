@@ -188,6 +188,22 @@ export type OverviewEntry = {
   accountName: string | null;
 };
 
+/**
+ * Which of the three possible rates a period ended up being read at.
+ *
+ * Carried to the screen so a reader can tell why the figure is what it is —
+ * particularly why editing the Settings rate did not move a month that was
+ * funded, which is the correct behaviour and looks like a bug without this.
+ */
+export const GOVERNING_RATE_SOURCES = ["funding", "settings", "table"] as const;
+export type GoverningRateSource = (typeof GOVERNING_RATE_SOURCES)[number];
+
+export const GOVERNING_RATE_LABELS: Record<GoverningRateSource, string> = {
+  funding: "the rate this month was funded at",
+  settings: "the rate set in Settings",
+  table: "the recorded rate for this period",
+};
+
 export type OverviewReport = {
   period: {
     label: string;
@@ -203,6 +219,8 @@ export type OverviewReport = {
    * and the dollar lines are then absent rather than guessed.
    */
   usdRate: string | null;
+  /** Where that rate came from. Null exactly when `usdRate` is. */
+  usdRateSource: GoverningRateSource | null;
   totals: OverviewTotals;
   /** Bank and card, each with its own opening, movement and closing. */
   groups: AccountGroup[];

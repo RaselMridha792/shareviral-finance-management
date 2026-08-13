@@ -3,7 +3,6 @@
 import {
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
-  PSR_STATUS_LABELS,
   type Paginated,
 } from "@finance/shared";
 import { Download, Eye, Plus, Search, Users } from "lucide-react";
@@ -12,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,7 +51,9 @@ export function TeamScreen({
   }
 
   const employees = page.items.filter((m) => m.engagementType === "employee");
-  const contractors = page.items.filter((m) => m.engagementType === "contractor");
+  const contractors = page.items.filter(
+    (m) => m.engagementType === "contractor",
+  );
 
   return (
     <>
@@ -77,7 +79,11 @@ export function TeamScreen({
               </Button>
             ) : null}
             {canWrite ? (
-              <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setCreating(true)}
+              >
                 <Plus className="size-4" />
                 Add person
               </Button>
@@ -181,15 +187,18 @@ function Section({
                 <Th>Name</Th>
                 <Th className="w-40">Designation</Th>
                 <Th className="w-32">Department</Th>
-                <Th className="w-28">Joined</Th>
-                <Th className="w-32">Return filed</Th>
+                <Th className="w-28">Date of Joining</Th>
+                <Th className="w-36 text-right">Joining Salary</Th>
                 <Th className="w-28">Status</Th>
                 <Th className="w-24 text-right" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {members.map((member) => (
-                <tr key={member.id} className="row-finance hover:bg-surface-muted/50">
+                <tr
+                  key={member.id}
+                  className="row-finance hover:bg-surface-muted/50"
+                >
                   <td className="num px-4 py-2.5 text-muted-foreground">
                     {member.employeeCode}
                   </td>
@@ -213,21 +222,22 @@ function Section({
                   <td className="num px-4 py-2.5 text-muted-foreground">
                     {member.joinedOn}
                   </td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={
-                        member.psrStatus === "submitted"
-                          ? "positive"
-                          : member.psrStatus === "not_submitted"
-                            ? "negative"
-                            : "warning"
-                      }
-                    >
-                      {PSR_STATUS_LABELS[member.psrStatus]}
-                    </Badge>
+                  {/* Replaced the PSR badge. Whether somebody filed a return
+                      is a withholding question and it is answered on the TDS
+                      screen; on a staff list it took a column and told a
+                      reader nothing they came here for. What was agreed at
+                      hire does belong here. */}
+                  <td className="col-amount px-4 py-2.5">
+                    {member.joiningSalary ? (
+                      <Amount value={member.joiningSalary} hideDecimals />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge tone={member.status === "active" ? "positive" : "neutral"}>
+                    <Badge
+                      tone={member.status === "active" ? "positive" : "neutral"}
+                    >
                       {EMPLOYMENT_STATUS_LABELS[member.status]}
                     </Badge>
                   </td>

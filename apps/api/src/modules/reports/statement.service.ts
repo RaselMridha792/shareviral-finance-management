@@ -138,16 +138,15 @@ export class StatementService {
      * dollar column is honest, a taka figure behind a dollar sign is not.
      */
     /**
-     * The month's own rate, before the settings fallback.
+     * The month's own rate, then the one set in Settings, then the table.
      *
-     * Money that arrives from abroad arrives at a known rate, and everything
-     * the company spends afterwards is spending that money — so reading those
-     * taka back in dollars at the rate they landed at is the honest
-     * translation. The settings rate is only reached when nothing was funded.
+     * The same resolver the dashboard uses, deliberately: a statement and the
+     * overview covering the same month must not disagree about what a dollar
+     * was worth, and they will the moment this order is written down twice.
+     * This used to fall back to `fx.rate` directly, which skipped the Settings
+     * rate entirely in `live` mode.
      */
-    const periodRate =
-      (await this.fx.fundingRateFor(range)) ??
-      (fx.unavailable ? null : fx.rate);
+    const periodRate = (await this.fx.governingRateFor(range))?.rate ?? null;
 
     // One register per account — the same call the account screen makes, so a
     // ledger page here and the register behind it cannot disagree.

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  GOVERNING_RATE_LABELS,
   MONTH_NAMES,
   formatMoney,
   type AccountGroup,
@@ -119,12 +120,19 @@ export function OverviewScreen({
             {report.period.label}
             {report.usdRate ? (
               <>
-                {" · dollars shown at "}
+                {" · dollars at "}
                 <span className="num">{trimRate(report.usdRate)}</span>
-                {" per USD"}
+                {" per USD — "}
+                {/* Which of the three rates won. Without this, a month that
+                    was funded looks broken after somebody edits the Settings
+                    rate and sees nothing move: the funding rate is meant to
+                    outrank it, and the screen has to say so. */}
+                {report.usdRateSource
+                  ? GOVERNING_RATE_LABELS[report.usdRateSource]
+                  : null}
               </>
             ) : (
-              " · no rate on record, so no dollar figures"
+              " · no rate for this period, so no dollar figures. Set one in Settings, or record the month's funding with its rate."
             )}
           </p>
         </div>
@@ -228,7 +236,6 @@ export function OverviewScreen({
           />
         </div>
       </section>
-
     </>
   );
 }

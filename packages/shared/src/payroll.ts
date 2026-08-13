@@ -234,7 +234,20 @@ export const updateTeamMemberSchema = createTeamMemberSchema
   .partial()
   .extend({
     status: employmentStatusSchema.optional(),
-    endedOn: optionalOf(isoDateSchema),
+    /**
+     * Nullable, unlike every other optional field here.
+     *
+     * In a PATCH `undefined` means "leave it alone", so with only that there
+     * is no way to say "they came back — they have no last day any more". A
+     * person moved from Resigned to Working would keep the leaving date they
+     * were given, and the record would read as someone who left and is still
+     * employed. `null` clears it; `""` is treated the same way, because that
+     * is what an emptied date input sends.
+     */
+    endedOn: z
+      .union([isoDateSchema, z.literal(""), z.null()])
+      .transform((v) => (v === "" ? null : v))
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>;

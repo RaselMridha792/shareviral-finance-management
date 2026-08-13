@@ -121,8 +121,11 @@ export class OverviewService {
      * settings rate is reached only when nothing was funded in the period.
      */
     const fx = await this.fx.contextFor(range);
-    const fundingRate = await this.fx.fundingRateFor(range);
-    const usdRate = fundingRate ?? (fx.unavailable ? null : fx.rate);
+    // One resolver, not a rule reimplemented here: funded rate, then the rate
+    // set in Settings, then the table. `FxService.governingRateFor` is the
+    // only place that order is written down.
+    const governing = await this.fx.governingRateFor(range);
+    const usdRate = governing?.rate ?? null;
 
     const currency = "BDT" as const;
     const convert = (value: string) => value;
@@ -161,6 +164,7 @@ export class OverviewService {
       currency,
       fx,
       usdRate,
+      usdRateSource: governing?.source ?? null,
       totals: {
         moneyIn: convert(totals.moneyIn),
         moneyOut: convert(totals.moneyOut),

@@ -3,6 +3,7 @@ import {
   todayInDhaka,
   type FxContext,
   type FxReportBasis,
+  type GoverningRateSource,
   type ListFxRatesQuery,
   type SetFxRateInput,
 } from "@finance/shared";
@@ -156,6 +157,56 @@ export class FxService {
 
     const rate = row?.rate ?? row?.usdRate ?? null;
     return rate && Number(rate) > 0 ? rate : null;
+  }
+
+  /**
+   * The one rate a period is read in dollars at, and where it came from.
+   *
+   * This is the whole rule, in one place, in the owner's order:
+   *
+   *   1. What the month was funded at. Money arriving from abroad arrives at a
+   *      known rate — the bank has just said so — and everything spent
+   *      afterwards is spending that money.
+   *   2. Otherwise the rate set in Settings.
+   *   3. Otherwise whatever the rate table holds.
+   *
+   * Step 2 is the fix for a real complaint: in `live` mode the number somebody
+   * types into Settings was never read at all, so editing it appeared to do
+   * nothing. A rate a person set by hand is now always consulted — it just
+   * yields to the month's own funding, which is a recorded fact about money
+   * that actually moved rather than a reference figure.
+   *
+   * The source travels with the rate because "I changed it and nothing
+   * happened" is only confusing while the screen refuses to say which of the
+   * three won.
+   */
+  async governingRateFor(period: {
+    start: string;
+    end: string;
+  }): Promise<{ rate: string; source: GoverningRateSource } | null> {
+    const funded = await this.fundingRateFor(period);
+    if (funded) return { rate: funded, source: "funding" };
+
+    const settings = await this.settings.get();
+    const fixed = settings.fxFixedUsdBdt;
+
+    // In `fixed` mode this is the only answer there is, so it is taken before
+    // the table is consulted at all.
+    if (settings.fxMode === "fixed" && fixed && Number(fixed) > 0) {
+      return { rate: fixed, source: "settings" };
+    }
+
+    const context = await this.contextFor(period);
+    if (!context.unavailable && Number(context.rate) > 0) {
+      return { rate: context.rate, source: "table" };
+    }
+
+    // `live` mode with an empty table still falls back to the hand-set number
+    // rather than showing nothing, because a stale rate somebody chose beats
+    // no dollar figures at all — and the caption says where it came from.
+    if (fixed && Number(fixed) > 0) return { rate: fixed, source: "settings" };
+
+    return null;
   }
 
   /**
