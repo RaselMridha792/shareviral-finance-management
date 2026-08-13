@@ -1,6 +1,8 @@
 import {
   AI_TARGET_ENDPOINT,
   type AiAvailability,
+  type AiChat,
+  type AiChatSummary,
   type AiKeyResult,
   type UpdateAiSettingsInput,
   type AiIntakeReply,
@@ -36,6 +38,21 @@ export const aiApi = {
 
   turn: (request: AiIntakeRequest) =>
     apiFetch<AiIntakeReply>("/ai/turn", { method: "POST", ...json(request) }),
+
+  /**
+   * The history list. Always the signed-in person's own — the API has no
+   * endpoint that returns anybody else's, so there is no id to pass.
+   */
+  chats: () => apiFetch<AiChatSummary[]>("/ai/chats", { cache: "no-store" }),
+
+  chat: (id: string) =>
+    apiFetch<AiChat>(`/ai/chats/${id}`, { cache: "no-store" }),
+
+  removeChat: (id: string) =>
+    apiFetch<void>(`/ai/chats/${id}`, { method: "DELETE" }),
+
+  clearChats: () =>
+    apiFetch<{ deleted: number }>("/ai/chats", { method: "DELETE" }),
 
   /**
    * Saving goes to the record's own endpoint, not to anything AI-specific.
