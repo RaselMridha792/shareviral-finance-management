@@ -2,6 +2,7 @@
 
 import {
   AI_TARGET_LABELS,
+  type AiAttachment,
   type AiAvailability,
   type AiChatSummary,
   type AiDataAccess,
@@ -20,6 +21,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AttachmentCard } from "@/components/assistant/attachment-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
 import { DraftCard, FIELD_LABELS } from "@/components/assistant/draft-card";
@@ -81,6 +83,9 @@ export function AssistantScreen({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
+  const [attachment, setAttachment] = useState<AiAttachment | null>(null);
+  const [attaching, setAttaching] = useState(false);
+  const [staging, setStaging] = useState(false);
   const [model, setModel] = useState<AiModel>(
     availability.model ?? "claude-sonnet-5",
   );
@@ -151,6 +156,7 @@ export function AssistantScreen({
     setInput("");
     setError(null);
     setDrawer(false);
+    setAttachment(null);
   }
 
   async function open(id: string) {
@@ -161,8 +167,45 @@ export function AssistantScreen({
       setChatId(chat.id);
       setMessages(chat.messages);
       setReply(chat.reply);
+      setAttachment(chat.attachments[0] ?? null);
     } catch {
       setError("That conversation could not be opened.");
+    }
+  }
+
+  async function attach(file: File) {
+    setAttaching(true);
+    setError(null);
+    try {
+      setAttachment(await aiApi.attach(file));
+    } catch (caught) {
+      setError(explain(caught, "That file could not be read."));
+    } finally {
+      setAttaching(false);
+    }
+  }
+
+  async function detach() {
+    if (!attachment) return;
+    const id = attachment.id;
+    setAttachment(null);
+    // The row goes too — a spreadsheet of real figures should not linger
+    // because somebody changed their mind about asking.
+    await aiApi.detach(id).catch(() => undefined);
+  }
+
+  async function sendToImport() {
+    if (!attachment) return;
+    setStaging(true);
+    setError(null);
+    try {
+      const { batchId } = await aiApi.sendToImport(attachment.id);
+      setAttachment({ ...attachment, importBatchId: batchId });
+      router.push("/import");
+    } catch (caught) {
+      setError(explain(caught, "Those rows could not be staged for import."));
+    } finally {
+      setStaging(false);
     }
   }
 
@@ -192,6 +235,7 @@ export function AssistantScreen({
         target: reply?.target ?? undefined,
         draft: reply?.draft,
         chatId: chatId ?? undefined,
+        attachmentId: attachment?.id,
       });
 
       setReply(result);
@@ -304,7 +348,7 @@ export function AssistantScreen({
         </div>
 
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {messages.length === 0 && !reply ? (
+          {messages.length === 0 && !reply && !attachment ? (
             <Welcome
               fullName={user.fullName}
               dataAccess={dataAccess}
@@ -312,6 +356,15 @@ export function AssistantScreen({
             />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+              {attachment ? (
+                <AttachmentCard
+                  attachment={attachment}
+                  staging={staging}
+                  onSendToImport={() => void sendToImport()}
+                  onRemove={() => void detach()}
+                />
+              ) : null}
+
               {messages.map((message, index) =>
                 message.role === "user" ? (
                   <p
@@ -373,6 +426,10 @@ export function AssistantScreen({
           onModelChange={(next) => void changeModel(next)}
           canChangeModel={canConfigure}
           dataAccess={dataAccess}
+          onAttach={(file) => void attach(file)}
+          attaching={attaching}
+          attachedName={attachment?.name ?? null}
+          onDetach={() => void detach()}
         />
       </div>
     </div>

@@ -1,13 +1,22 @@
 "use client";
 
 import {
+  AI_ATTACHMENT_EXTENSIONS,
   AI_MODELS,
   AI_MODEL_LABELS,
   AI_MODEL_SHORT,
   type AiDataAccess,
   type AiModel,
 } from "@finance/shared";
-import { ArrowUp, ChevronDown, Eye, EyeOff, LoaderCircle } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  Paperclip,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 
 /** Beyond this the box stops growing and scrolls instead. */
@@ -32,6 +41,10 @@ export function Composer({
   onModelChange,
   canChangeModel,
   dataAccess,
+  onAttach,
+  attaching,
+  attachedName,
+  onDetach,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -41,8 +54,13 @@ export function Composer({
   onModelChange: (model: AiModel) => void;
   canChangeModel: boolean;
   dataAccess: AiDataAccess;
+  onAttach: (file: File) => void;
+  attaching: boolean;
+  attachedName: string | null;
+  onDetach: () => void;
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
 
   // Grows with what is being written, up to a point. Reset first, or the
   // height only ever ratchets upward as text is deleted.
@@ -78,6 +96,23 @@ export function Composer({
     <div className="shrink-0 border-t border-border bg-background px-4 pt-3 pb-4">
       <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
         <div className="rounded-2xl border border-border bg-surface shadow-e1 transition focus-within:border-primary">
+          {attachedName ? (
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <Paperclip className="size-3.5 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                {attachedName}
+              </span>
+              <button
+                type="button"
+                onClick={onDetach}
+                aria-label="Remove the attached file"
+                className="cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+
           <label className="sr-only" htmlFor="assistant-input">
             What are you recording?
           </label>
@@ -94,6 +129,33 @@ export function Composer({
           />
 
           <div className="flex items-center gap-1.5 px-2.5 pb-2.5">
+            <input
+              ref={picker}
+              type="file"
+              accept={AI_ATTACHMENT_EXTENSIONS.join(",")}
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onAttach(file);
+                // Cleared so choosing the same file twice fires again.
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => picker.current?.click()}
+              disabled={attaching}
+              aria-label="Attach a spreadsheet"
+              title="Attach a CSV or Excel file for it to read"
+              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {attaching ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Paperclip className="size-4" />
+              )}
+            </button>
+
             {canChangeModel ? (
               <div className="relative">
                 <label className="sr-only" htmlFor="assistant-model">
