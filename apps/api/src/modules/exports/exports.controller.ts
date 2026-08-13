@@ -1,13 +1,23 @@
-import { Controller, Get, Param, Res, StreamableFile } from "@nestjs/common";
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Res,
+  StreamableFile,
+} from "@nestjs/common";
 import {
   ACCOUNT_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
   TXN_ORIGIN_LABELS,
   formatMoney,
+  hasPermission,
   listTransactionsQuerySchema,
+  overviewQuerySchema,
   registerQuerySchema,
   todayInDhaka,
   type ListTransactionsQuery,
+  type OverviewQuery,
   type RegisterQuery,
 } from "@finance/shared";
 import type { Response } from "express";
@@ -25,7 +35,13 @@ import {
   TransactionsService,
   type TransactionDto,
 } from "../transactions/transactions.service";
+import { IncomeTaxService } from "../income-tax/income-tax.service";
+import { OverviewService } from "../reports/overview.service";
+import { SettingsService } from "../settings/settings.service";
+import { TdsService } from "../tds/tds.service";
 import { ExcelService } from "./excel.service";
+import { buildOverviewReport } from "./overview-report";
+import { PdfService } from "./pdf.service";
 
 const uuidSchema = z.string().uuid("Not a valid id");
 
@@ -47,7 +63,70 @@ export class ExportsController {
     private readonly accounts: AccountsService,
     private readonly excel: ExcelService,
     private readonly audit: AuditService,
+    private readonly pdf: PdfService,
+    private readonly overview: OverviewService,
+    private readonly settings: SettingsService,
+    private readonly tds: TdsService,
+    private readonly incomeTax: IncomeTaxService,
   ) {}
+
+  /**
+   * The overview, as a document somebody can send to an accountant.
+   *
+   * Same figures as the screen, from the same service — not a second
+   * calculation that agrees with it today and drifts next quarter.
+   */
+  @Get("overview.pdf")
+  @RequirePermission("exports.run", "dashboard.money")
+  async overviewPdf(
+    @ZodQuery(overviewQuerySchema) query: OverviewQuery,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (query.currency === "USD" && !hasPermission(actor.role, "reports.usd")) {
+      throw new ForbiddenException(
+        "Your role cannot do this (needs reports.usd)",
+      );
+    }
+
+    const [report, settings, tds, incomeTax] = await Promise.all([
+      this.overview.build(query),
+      this.settings.get(),
+      hasPermission(actor.role, "tds.read")
+        ? this.tds.pending({ withinDays: 45 })
+        : Promise.resolve([]),
+      hasPermission(actor.role, "incometax.read")
+        ? this.incomeTax.pending({ withinDays: 45 })
+        : Promise.resolve([]),
+    ]);
+
+    const pending = [...tds, ...incomeTax].sort((a, b) =>
+      a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0,
+    );
+
+    const buffer = await this.pdf.build(
+      buildOverviewReport(report, pending, {
+        companyName: settings.companyName,
+        numberFormat: settings.numberFormat,
+        generatedBy: actor.fullName,
+        generatedOn: todayInDhaka(),
+      }),
+    );
+
+    // An export of the whole position is exactly the event worth having logged.
+    await this.audit.log({
+      action: "export",
+      entityTable: "transactions",
+      summary: `Exported the overview for ${report.period.label} to PDF`,
+      module: "exports",
+    });
+
+    return sendPdf(
+      response,
+      buffer,
+      `overview-${report.period.start}-to-${report.period.end}.pdf`,
+    );
+  }
 
   @Get("transactions")
   @RequirePermission("exports.run", "transactions.read")
@@ -399,6 +478,15 @@ function send(response: Response, buffer: Buffer, filename: string) {
   response.set({
     "Content-Type":
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Length": String(buffer.length),
+  });
+  return new StreamableFile(buffer);
+}
+
+function sendPdf(response: Response, buffer: Buffer, filename: string) {
+  response.set({
+    "Content-Type": "application/pdf",
     "Content-Disposition": `attachment; filename="${filename}"`,
     "Content-Length": String(buffer.length),
   });
