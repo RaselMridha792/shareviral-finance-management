@@ -1,6 +1,7 @@
 import {
   AI_TARGET_ENDPOINT,
   type AiAvailability,
+  type AiKeyResult,
   type AiIntakeReply,
   type AiIntakeRequest,
   type AiTarget,
@@ -13,6 +14,18 @@ const json = (body: unknown) => ({ body: JSON.stringify(body) });
 export const aiApi = {
   availability: () =>
     apiFetch<AiAvailability>("/ai/availability", { cache: "no-store" }),
+
+  /**
+   * The key travels one way. Nothing this module receives ever contains it —
+   * only whether one is set and its last four characters.
+   */
+  setKey: (apiKey: string) =>
+    apiFetch<AiKeyResult>("/ai/key", {
+      method: "POST",
+      ...json({ apiKey }),
+    }),
+
+  clearKey: () => apiFetch<AiKeyResult>("/ai/key", { method: "DELETE" }),
 
   turn: (request: AiIntakeRequest) =>
     apiFetch<AiIntakeReply>("/ai/turn", { method: "POST", ...json(request) }),

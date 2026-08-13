@@ -7,10 +7,18 @@ import {
   type AiIntakeReply,
   type AiMessage,
 } from "@finance/shared";
-import { CircleAlert, LoaderCircle, Send, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  CircleAlert,
+  LoaderCircle,
+  Send,
+  Sparkles,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { useCan } from "@/components/auth/session-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -70,6 +78,7 @@ export function AssistantScreen({
   availability: AiAvailability;
 }) {
   const router = useRouter();
+  const canConfigure = useCan("settings.write");
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [input, setInput] = useState("");
   const [reply, setReply] = useState<AiIntakeReply | null>(null);
@@ -100,6 +109,15 @@ export function AssistantScreen({
               {availability.reason}
             </p>
           </div>
+          {canConfigure ? (
+            <Link
+              href="/settings?tab=assistant"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              Add an API key
+              <ArrowRight className="size-3.5" />
+            </Link>
+          ) : null}
         </Card>
       </>
     );

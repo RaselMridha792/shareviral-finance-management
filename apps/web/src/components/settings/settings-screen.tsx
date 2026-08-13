@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
 import { FxPanel } from "./fx-panel";
+import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
 import { UsersPanel } from "./users-panel";
 import { useCan } from "@/components/auth/session-provider";
@@ -22,6 +23,7 @@ const TABS = [
   // this tab is Super Admin only — and the API refuses everyone else anyway.
   { id: "users", label: "People who can sign in", permission: "users.manage" },
   { id: "audit", label: "What changed", permission: "audit.read" },
+  { id: "assistant", label: "Assistant", permission: "settings.write" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -30,17 +32,25 @@ export function SettingsScreen({
   initialSettings,
   initialTree,
   initialUsers,
+  initialTab,
 }: {
   initialSettings: AppSettingsDto;
   initialTree: CategoryNode[];
   initialUsers: UserDto[];
+  initialTab?: string;
 }) {
-  const [tab, setTab] = useState<TabId>("company");
+  const [tab, setTab] = useState<TabId>(
+    TABS.some((entry) => entry.id === initialTab)
+      ? (initialTab as TabId)
+      : "company",
+  );
   const canManageUsers = useCan("users.manage");
   const canReadAudit = useCan("audit.read");
+  const canWriteSettings = useCan("settings.write");
   const allowed: Record<string, boolean> = {
     "users.manage": canManageUsers,
     "audit.read": canReadAudit,
+    "settings.write": canWriteSettings,
   };
   const tabs = TABS.filter(
     (entry) => !("permission" in entry) || allowed[entry.permission],
@@ -86,6 +96,7 @@ export function SettingsScreen({
         <UsersPanel initialUsers={initialUsers} />
       ) : null}
       {tab === "audit" && canReadAudit ? <AuditPanel /> : null}
+      {tab === "assistant" && canWriteSettings ? <AssistantPanel /> : null}
     </>
   );
 }
