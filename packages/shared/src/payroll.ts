@@ -72,12 +72,14 @@ export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
 };
 
 /**
- * The fields a Bangladeshi employment record actually carries.
+ * The fields the company's own employee sheet carries, and no more.
  *
- * Parents' names are not sentiment: they appear on most statutory forms here,
- * and an HR team that has to chase them one by one at filing time will keep a
- * second spreadsheet instead — which is the thing this app exists to end.
- * Blood group is for the day somebody needs it in a hurry.
+ * The sheet is the specification: name, designation, age, gender, blood group,
+ * both addresses, date of birth, NID, contact number, email, CV, joining date,
+ * signed appointment letter, joining salary, education level and major, photo,
+ * notes. Fields this app adds on top of that are the ones other features need —
+ * bank and wallet details for payroll, e-TIN and PSR for withholding, and the
+ * code / engagement / status trio the app is built around.
  *
  * Everything below is optional. A person is added with a name, a code and a
  * joining date; the rest is filled in as it becomes known, and a required
@@ -91,24 +93,6 @@ export const GENDER_LABELS: Record<Gender, string> = {
   female: "Female",
   male: "Male",
   other: "Other",
-  undisclosed: "Not stated",
-};
-
-export const MARITAL_STATUSES = [
-  "single",
-  "married",
-  "divorced",
-  "widowed",
-  "undisclosed",
-] as const;
-export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
-export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
-
-export const MARITAL_STATUS_LABELS: Record<MaritalStatus, string> = {
-  single: "Single",
-  married: "Married",
-  divorced: "Divorced",
-  widowed: "Widowed",
   undisclosed: "Not stated",
 };
 
@@ -155,6 +139,15 @@ export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
   other: "Other",
 };
 
+/**
+ * Strict on purpose.
+ *
+ * A field that is no longer collected — the ones this app once asked for and
+ * the sheet never did: marital status, parents' names, religion, passport,
+ * emergency contact, reporting manager, probation and confirmation dates — is
+ * not silently ignored here, it is rejected. `strictObject` is what makes
+ * "we removed that" true rather than a claim about the form.
+ */
 export const createTeamMemberSchema = z.strictObject({
   employeeCode: z.string().trim().min(1, "Give them a code").max(20),
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
@@ -162,6 +155,12 @@ export const createTeamMemberSchema = z.strictObject({
   department: optionalText(60),
   designation: optionalText(80),
   joinedOn: isoDateSchema,
+  /**
+   * The sheet has one Email column, and what it holds is personal addresses —
+   * so an import maps it here. `workEmail` stays for the company address,
+   * which some people have and the sheet has never recorded; whoever imports
+   * decides per row if a value is one or the other.
+   */
   personalEmail: optionalOf(z.string().trim().email("Enter a valid email")),
   workEmail: optionalOf(z.string().trim().email("Enter a valid email")),
   phone: optionalText(30),
@@ -182,31 +181,21 @@ export const createTeamMemberSchema = z.strictObject({
   /**
    * A link, not a file. This app stores no blobs — receipts are Drive links
    * and so is this, which keeps backups a database dump and nothing else.
+   *
+   * The sheet calls this "Decent Image of the Employee".
    */
   photoUrl: optionalLink(),
+  /** The sheet's Age column is derived from this rather than typed in. */
   dateOfBirth: optionalOf(isoDateSchema),
   gender: genderSchema.optional(),
-  maritalStatus: maritalStatusSchema.optional(),
-  spouseName: optionalText(120),
-  fatherName: optionalText(120),
-  motherName: optionalText(120),
   bloodGroup: bloodGroupSchema.optional(),
-  religion: optionalText(40),
-  passportNumber: optionalText(20),
 
-  /* --- where they are and who to call ---------------------------------- */
+  /* --- where they are --------------------------------------------------- */
 
   /** `address` above is the present one; this is the permanent one. */
   permanentAddress: optionalText(300),
-  emergencyContactName: optionalText(120),
-  emergencyContactRelation: optionalText(40),
-  emergencyContactPhone: optionalText(30),
 
   /* --- the shape of the job -------------------------------------------- */
-
-  reportingManagerId: z.string().uuid().nullish(),
-  probationUntil: optionalOf(isoDateSchema),
-  confirmedOn: optionalOf(isoDateSchema),
 
   /**
    * The salary agreed at hire — and the one deliberate exception to the rule
@@ -225,12 +214,6 @@ export const createTeamMemberSchema = z.strictObject({
    */
   joiningSalary: optionalOf(amountSchema),
 
-  /**
-   * Superseded by `educationLevel` + `educationMajor`, which say the same
-   * thing in two sortable halves. Kept because it holds data that was typed in
-   * before the split existed; it is no longer offered on the form.
-   */
-  lastQualification: optionalText(120),
   educationLevel: educationLevelSchema.optional(),
   /**
    * Free text, deliberately. The real answers run from CSE and HRM to Wet

@@ -110,41 +110,43 @@ export const teamMembers = pgTable(
     photoUrl: text("photo_url"),
     dateOfBirth: date("date_of_birth"),
     gender: text("gender"),
-    maritalStatus: text("marital_status"),
-    spouseName: text("spouse_name"),
-    /**
-     * Parents' names are not sentiment: most statutory forms here ask for
-     * them, and HR chasing them one by one at filing time is how a second
-     * spreadsheet gets started.
-     */
-    fatherName: text("father_name"),
-    motherName: text("mother_name"),
     bloodGroup: varchar("blood_group", { length: 3 }),
-    religion: varchar("religion", { length: 40 }),
-    passportNumber: varchar("passport_number", { length: 20 }),
-
-    /* --- where they are, and who to call ------------------------------- */
 
     /** `address` above is where they live now; this is home. */
     permanentAddress: text("permanent_address"),
+
+    /* --- retained, no longer collected --------------------------------- */
+
+    /**
+     * Kept for rows that already carry values; nothing writes here any more.
+     *
+     * The company's employee sheet is the specification, and none of these are
+     * on it — they were added on a guess about what a Bangladeshi HR record
+     * usually holds. `createTeamMemberSchema` no longer accepts them and the
+     * form no longer offers them, so a value below is one somebody typed in
+     * before that decision.
+     *
+     * Dropping the columns would destroy that data to satisfy a preference,
+     * which is not a trade worth making. Bringing one back is a line in the
+     * shared schema and a field in the form — not an archaeology exercise.
+     */
+    maritalStatus: text("marital_status"),
+    spouseName: text("spouse_name"),
+    fatherName: text("father_name"),
+    motherName: text("mother_name"),
+    religion: varchar("religion", { length: 40 }),
+    passportNumber: varchar("passport_number", { length: 20 }),
     emergencyContactName: text("emergency_contact_name"),
     emergencyContactRelation: varchar("emergency_contact_relation", {
       length: 40,
     }),
     emergencyContactPhone: varchar("emergency_contact_phone", { length: 30 }),
-
-    /* --- the shape of the job ------------------------------------------ */
-
-    /**
-     * Deliberately not a foreign key to this same table.
-     *
-     * A manager who leaves is soft-deleted, and a hard reference would either
-     * block that or cascade into the reports' records. The name is resolved on
-     * read; a dangling id shows nothing rather than breaking a page.
-     */
+    /** Never a foreign key — a manager who leaves is only soft-deleted. */
     reportingManagerId: uuid("reporting_manager_id"),
     probationUntil: date("probation_until"),
     confirmedOn: date("confirmed_on"),
+
+    /* --- the shape of the job ------------------------------------------ */
 
     /**
      * What was agreed at hire. The one money column on this table, and the one
@@ -154,9 +156,9 @@ export const teamMembers = pgTable(
     joiningSalary: numeric("joining_salary", { precision: 14, scale: 2 }),
 
     /**
-     * Superseded by the level/major pair below, which say the same thing but
-     * can be grouped and counted. Kept, not dropped: it holds what was typed
-     * in before the split existed. The form no longer offers it.
+     * Superseded by the level/major pair below, which are the two columns the
+     * sheet actually has. Kept, not dropped, on the same terms as the block
+     * above: it holds what was typed in before the split existed.
      */
     lastQualification: varchar("last_qualification", { length: 120 }),
     educationLevel: text("education_level"),

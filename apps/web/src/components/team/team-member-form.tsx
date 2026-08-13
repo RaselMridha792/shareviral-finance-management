@@ -10,14 +10,12 @@ import {
   ENGAGEMENT_TYPES,
   GENDERS,
   GENDER_LABELS,
-  MARITAL_STATUSES,
-  MARITAL_STATUS_LABELS,
   PSR_STATUSES,
   PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -33,16 +31,10 @@ import { ApiError } from "@/lib/api-client";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 
 /**
- * Enums and a uuid on the API side, where "" is not a valid answer. An
- * unanswered one is left out of the request rather than sent empty.
+ * Enums on the API side, where "" is not a valid answer. An unanswered one is
+ * left out of the request rather than sent empty.
  */
-const OMIT_WHEN_BLANK = [
-  "gender",
-  "maritalStatus",
-  "bloodGroup",
-  "educationLevel",
-  "reportingManagerId",
-] as const;
+const OMIT_WHEN_BLANK = ["gender", "bloodGroup", "educationLevel"] as const;
 
 export function TeamMemberForm({
   open,
@@ -60,38 +52,6 @@ export function TeamMemberForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  // A spouse's name only means anything for someone married, and a box of
-  // empty fields is a box people fill in wrongly. It appears when the status
-  // says it should, or when a name is already on record.
-  const [maritalStatus, setMaritalStatus] = useState<string>(
-    member?.maritalStatus ?? "",
-  );
-  const married = maritalStatus === "married" || Boolean(member?.spouseName);
-
-  // The manager is stored as an id, so the picker needs the directory. Fetched
-  // when the panel opens; a controlled value keeps the right person selected
-  // however late the list arrives.
-  const [colleagues, setColleagues] = useState<TeamMemberDto[]>([]);
-  const [managerId, setManagerId] = useState(member?.reportingManagerId ?? "");
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    void teamApi
-      .list()
-      .then((page) => {
-        if (!cancelled) setColleagues(page.items);
-      })
-      // Without the list the field simply keeps whoever is already set.
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
-  const managerOptions = colleagues.filter((person) => person.id !== member?.id);
-  const managerMissing =
-    Boolean(managerId) && !managerOptions.some((person) => person.id === managerId);
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -101,6 +61,11 @@ export function TeamMemberForm({
     const data = new FormData(event.currentTarget);
     const text = (key: string) => String(data.get(key) ?? "");
 
+    // Exactly the company's sheet, plus what the app itself runs on — a code,
+    // an engagement type, and the bank and tax details payroll needs. The
+    // columns that are retained but no longer collected are simply not sent:
+    // an update is partial, so whatever was typed in before this change stays
+    // where it is rather than being blanked on the next save.
     const payload = {
       employeeCode: text("employeeCode"),
       fullName: text("fullName"),
@@ -124,23 +89,10 @@ export function TeamMemberForm({
       notes: text("notes"),
       photoUrl: text("photoUrl"),
       dateOfBirth: text("dateOfBirth"),
-      spouseName: text("spouseName"),
-      fatherName: text("fatherName"),
-      motherName: text("motherName"),
-      religion: text("religion"),
-      passportNumber: text("passportNumber"),
       permanentAddress: text("permanentAddress"),
-      emergencyContactName: text("emergencyContactName"),
-      emergencyContactRelation: text("emergencyContactRelation"),
-      emergencyContactPhone: text("emergencyContactPhone"),
-      probationUntil: text("probationUntil"),
-      confirmedOn: text("confirmedOn"),
       // The offer figure, not payroll. Raises are set on the Pay tab, which
       // this drawer cannot reach and HR cannot open.
       joiningSalary: text("joiningSalary"),
-      // `lastQualification` is deliberately absent. Education level and major
-      // supersede it, and leaving it out of the payload means whatever was
-      // typed in before the split is kept rather than blanked on every save.
       educationMajor: text("educationMajor"),
       cvUrl: text("cvUrl"),
       appointmentLetterUrl: text("appointmentLetterUrl"),
@@ -243,37 +195,6 @@ export function TeamMemberForm({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Marital status">
-            <Select
-              name="maritalStatus"
-              value={maritalStatus}
-              onChange={(event) => setMaritalStatus(event.target.value)}
-            >
-              <option value="">Not set</option>
-              {MARITAL_STATUSES.map((option) => (
-                <option key={option} value={option}>
-                  {MARITAL_STATUS_LABELS[option]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {married ? (
-            <Field label="Spouse's name" error={fieldErrors.spouseName}>
-              <Input name="spouseName" defaultValue={member?.spouseName ?? ""} />
-            </Field>
-          ) : null}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Father's name" error={fieldErrors.fatherName}>
-            <Input name="fatherName" defaultValue={member?.fatherName ?? ""} />
-          </Field>
-          <Field label="Mother's name" error={fieldErrors.motherName}>
-            <Input name="motherName" defaultValue={member?.motherName ?? ""} />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Blood group" hint="For the day somebody needs it fast">
             <Select name="bloodGroup" defaultValue={member?.bloodGroup ?? ""}>
               <option value="">Not set</option>
@@ -284,21 +205,8 @@ export function TeamMemberForm({
               ))}
             </Select>
           </Field>
-          <Field label="Religion" error={fieldErrors.religion}>
-            <Input name="religion" defaultValue={member?.religion ?? ""} />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="NID" error={fieldErrors.nid}>
             <Input name="nid" className="num" defaultValue={member?.nid ?? ""} />
-          </Field>
-          <Field label="Passport" error={fieldErrors.passportNumber}>
-            <Input
-              name="passportNumber"
-              className="num"
-              defaultValue={member?.passportNumber ?? ""}
-            />
           </Field>
         </div>
 
@@ -308,17 +216,25 @@ export function TeamMemberForm({
           <Field label="Phone" error={fieldErrors.phone}>
             <Input name="phone" className="num" defaultValue={member?.phone ?? ""} />
           </Field>
-          <Field label="Work email" error={fieldErrors.workEmail}>
-            <Input name="workEmail" type="email" defaultValue={member?.workEmail ?? ""} />
+          <Field
+            label="Email"
+            error={fieldErrors.personalEmail}
+            hint="Their own address — this is the sheet's Email column"
+          >
+            <Input
+              name="personalEmail"
+              type="email"
+              defaultValue={member?.personalEmail ?? ""}
+            />
           </Field>
         </div>
 
-        <Field label="Personal email" error={fieldErrors.personalEmail}>
-          <Input
-            name="personalEmail"
-            type="email"
-            defaultValue={member?.personalEmail ?? ""}
-          />
+        <Field
+          label="Work email"
+          error={fieldErrors.workEmail}
+          hint="A company address, if they have one"
+        >
+          <Input name="workEmail" type="email" defaultValue={member?.workEmail ?? ""} />
         </Field>
 
         <Field label="Present address" error={fieldErrors.address}>
@@ -332,34 +248,6 @@ export function TeamMemberForm({
           />
         </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            label="Emergency contact"
-            error={fieldErrors.emergencyContactName}
-            hint="Who to call"
-          >
-            <Input
-              name="emergencyContactName"
-              defaultValue={member?.emergencyContactName ?? ""}
-            />
-          </Field>
-          <Field label="Relation" error={fieldErrors.emergencyContactRelation}>
-            <Input
-              name="emergencyContactRelation"
-              placeholder="Father, spouse, brother"
-              defaultValue={member?.emergencyContactRelation ?? ""}
-            />
-          </Field>
-        </div>
-
-        <Field label="Emergency phone" error={fieldErrors.emergencyContactPhone}>
-          <Input
-            name="emergencyContactPhone"
-            className="num"
-            defaultValue={member?.emergencyContactPhone ?? ""}
-          />
-        </Field>
-
         <SectionHeading>Employment</SectionHeading>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -370,24 +258,6 @@ export function TeamMemberForm({
             <Input name="department" defaultValue={member?.department ?? ""} />
           </Field>
         </div>
-
-        <Field label="Reports to" error={fieldErrors.reportingManagerId}>
-          <Select
-            name="reportingManagerId"
-            value={managerId}
-            onChange={(event) => setManagerId(event.target.value)}
-          >
-            <option value="">No one</option>
-            {managerMissing ? (
-              <option value={managerId}>Whoever is set now</option>
-            ) : null}
-            {managerOptions.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.fullName} ({person.employeeCode})
-              </option>
-            ))}
-          </Select>
-        </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Joined on" required error={fieldErrors.joinedOn}>
@@ -421,21 +291,6 @@ export function TeamMemberForm({
             </Select>
           </Field>
         ) : null}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Probation until" error={fieldErrors.probationUntil}>
-            <DateInput
-              name="probationUntil"
-              defaultValue={member?.probationUntil ?? ""}
-            />
-          </Field>
-          <Field label="Confirmed on" error={fieldErrors.confirmedOn}>
-            <DateInput
-              name="confirmedOn"
-              defaultValue={member?.confirmedOn ?? ""}
-            />
-          </Field>
-        </div>
 
         {editing ? (
           <Field

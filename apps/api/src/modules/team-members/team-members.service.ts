@@ -13,7 +13,6 @@ import {
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -60,14 +59,23 @@ export type TeamMemberDto = {
   photoUrl: string | null;
   dateOfBirth: string | null;
   gender: string | null;
+  bloodGroup: string | null;
+  permanentAddress: string | null;
+
+  /**
+   * Retained, no longer collected.
+   *
+   * Not on the company's employee sheet, so the form stopped offering them and
+   * the shared schema stopped accepting them. Still read back, because rows
+   * written before that decision carry values and a profile that silently
+   * dropped them would look like data loss.
+   */
   maritalStatus: string | null;
   spouseName: string | null;
   fatherName: string | null;
   motherName: string | null;
-  bloodGroup: string | null;
   religion: string | null;
   passportNumber: string | null;
-  permanentAddress: string | null;
   emergencyContactName: string | null;
   emergencyContactRelation: string | null;
   emergencyContactPhone: string | null;
@@ -89,9 +97,6 @@ export type TeamMemberDto = {
   /* Papers on file — links, never uploads. */
   cvUrl: string | null;
   appointmentLetterUrl: string | null;
-
-  /** Resolved on the detail read only; the list does not join for it. */
-  reportingManagerName?: string | null;
 };
 
 @Injectable()
@@ -143,22 +148,16 @@ export class TeamMembersService {
   }
 
   /**
-   * One person, with their manager's name resolved.
+   * One person.
    *
-   * A self-join rather than a foreign key: a manager who leaves is
-   * soft-deleted, and a hard reference would either block that or drag the
-   * reports' records along with it. A dangling id simply shows nothing.
+   * This used to self-join for the reporting manager's name. Nothing renders
+   * that any more — the field is no longer collected — and a join whose result
+   * reaches no screen is cost with nothing on the other side of it.
    */
   async findOne(id: string): Promise<TeamMemberDto> {
-    const manager = alias(teamMembers, "manager");
-
     const [row] = await this.db.client
-      .select({
-        ...projection,
-        reportingManagerName: manager.fullName,
-      })
+      .select(projection)
       .from(teamMembers)
-      .leftJoin(manager, eq(teamMembers.reportingManagerId, manager.id))
       .where(and(eq(teamMembers.id, id), isNull(teamMembers.deletedAt)))
       .limit(1);
 
@@ -395,14 +394,25 @@ const projection = {
   photoUrl: teamMembers.photoUrl,
   dateOfBirth: teamMembers.dateOfBirth,
   gender: teamMembers.gender,
+  bloodGroup: teamMembers.bloodGroup,
+  permanentAddress: teamMembers.permanentAddress,
+
+  /**
+   * Retained, no longer collected.
+   *
+   * None of these are on the company's employee sheet. The form no longer
+   * offers them and `createTeamMemberSchema` no longer accepts them, so
+   * nothing new is written here — but rows filled in before that decision keep
+   * their values, and reading them back is what makes "the columns are still
+   * there" mean something. Removing one from this list is the last step, not
+   * the first.
+   */
   maritalStatus: teamMembers.maritalStatus,
   spouseName: teamMembers.spouseName,
   fatherName: teamMembers.fatherName,
   motherName: teamMembers.motherName,
-  bloodGroup: teamMembers.bloodGroup,
   religion: teamMembers.religion,
   passportNumber: teamMembers.passportNumber,
-  permanentAddress: teamMembers.permanentAddress,
   emergencyContactName: teamMembers.emergencyContactName,
   emergencyContactRelation: teamMembers.emergencyContactRelation,
   emergencyContactPhone: teamMembers.emergencyContactPhone,

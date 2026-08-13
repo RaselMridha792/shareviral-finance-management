@@ -6,7 +6,6 @@ import type {
   EmploymentStatus,
   EngagementType,
   Gender,
-  MaritalStatus,
   Paginated,
   PaymentMode,
   PayPayrollInput,
@@ -19,6 +18,16 @@ import type {
 
 import { apiFetch } from "./api-client";
 
+/**
+ * What the team screens read.
+ *
+ * The company's employee sheet, plus what the app itself needs: a code, an
+ * engagement type, a status, and the bank / e-TIN details payroll and
+ * withholding depend on. The API still returns a handful of columns that are
+ * retained but no longer collected — marital status, parents' names, emergency
+ * contact and the rest — and they are deliberately absent here: nothing on
+ * screen shows them, so nothing on screen should be typed for them.
+ */
 export type TeamMemberDto = {
   id: string;
   employeeCode: string;
@@ -48,29 +57,15 @@ export type TeamMemberDto = {
 
   /** A link (Drive or any https URL). The app stores no files. */
   photoUrl: string | null;
+  /** The sheet's Age column is worked out from this, not stored. */
   dateOfBirth: string | null;
   gender: Gender | null;
-  maritalStatus: MaritalStatus | null;
-  spouseName: string | null;
-  fatherName: string | null;
-  motherName: string | null;
   bloodGroup: BloodGroup | null;
-  religion: string | null;
-  passportNumber: string | null;
-
-  /* --- where they are and who to call ------------------------------------ */
 
   /** `address` above is the present one; this is the permanent one. */
   permanentAddress: string | null;
-  emergencyContactName: string | null;
-  emergencyContactRelation: string | null;
-  emergencyContactPhone: string | null;
 
   /* --- the shape of the job ---------------------------------------------- */
-
-  reportingManagerId: string | null;
-  probationUntil: string | null;
-  confirmedOn: string | null;
 
   /**
    * The figure agreed at hire — the one salary anyone with `team.read` sees.
@@ -78,8 +73,6 @@ export type TeamMemberDto = {
    */
   joiningSalary: string | null;
 
-  /** Superseded by the two below; still returned so old data is not orphaned. */
-  lastQualification: string | null;
   educationLevel: EducationLevel | null;
   educationMajor: string | null;
 

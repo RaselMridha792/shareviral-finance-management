@@ -5,7 +5,6 @@ import {
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
   GENDER_LABELS,
-  MARITAL_STATUS_LABELS,
   PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
@@ -20,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -60,41 +59,11 @@ export function TeamMemberScreen({
   const [editing, setEditing] = useState(false);
   const [settingPay, setSettingPay] = useState(false);
 
-  // The record holds a manager's id; a profile has to say a name. One list
-  // call, and only when there is somebody to look up. The id is kept alongside
-  // the name so a stale answer is never shown against a different manager.
-  const [resolvedManager, setResolvedManager] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const managerId = member.reportingManagerId;
-  const managerName =
-    resolvedManager && resolvedManager.id === managerId
-      ? resolvedManager.name
-      : null;
-
-  useEffect(() => {
-    if (!managerId) return;
-    let cancelled = false;
-    void teamApi
-      .list()
-      .then((page) => {
-        const found = page.items.find((person) => person.id === managerId);
-        if (!cancelled && found) {
-          setResolvedManager({ id: managerId, name: found.fullName });
-        }
-      })
-      // A name that cannot be resolved simply stays a dash.
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [managerId]);
-
   const refresh = () => router.refresh();
   const currentPay = compensation.find((c) => c.effectiveTo === null) ?? compensation[0];
+  // The sheet has an Age column. Storing it would be storing something that is
+  // wrong by the next birthday, so it is counted from the date of birth.
   const age = member.dateOfBirth ? ageInYears(member.dateOfBirth) : null;
-  const married = member.maritalStatus === "married" || Boolean(member.spouseName);
 
   return (
     <>
@@ -165,6 +134,11 @@ export function TeamMemberScreen({
           <Card>
             <CardHeader title="Personal" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row
+                label="Gender"
+                value={member.gender ? GENDER_LABELS[member.gender] : null}
+              />
+              <Row label="Blood group" value={member.bloodGroup} />
               <Row label="Date of birth">
                 {member.dateOfBirth ? (
                   <>
@@ -177,36 +151,21 @@ export function TeamMemberScreen({
                   </>
                 ) : null}
               </Row>
-              <Row
-                label="Gender"
-                value={member.gender ? GENDER_LABELS[member.gender] : null}
-              />
-              <Row
-                label="Marital status"
-                value={
-                  member.maritalStatus
-                    ? MARITAL_STATUS_LABELS[member.maritalStatus]
-                    : null
-                }
-              />
-              {married ? (
-                <Row label="Spouse" value={member.spouseName} />
-              ) : null}
-              <Row label="Father's name" value={member.fatherName} />
-              <Row label="Mother's name" value={member.motherName} />
-              <Row label="Blood group" value={member.bloodGroup} />
-              <Row label="Religion" value={member.religion} />
+              <Row label="NID" mono value={member.nid} />
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader
-              title="Identity"
-              description="The numbers statutory forms ask for — some staff carry a passport and no NID"
+              title="Notes"
+              description="Whatever the sheet's last column carried"
             />
-            <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="NID" mono value={member.nid} />
-              <Row label="Passport" mono value={member.passportNumber} />
+            <CardBody className="text-sm">
+              {member.notes ? (
+                <p className="whitespace-pre-line">{member.notes}</p>
+              ) : (
+                <p className="text-muted-foreground">Nothing noted.</p>
+              )}
             </CardBody>
           </Card>
         </div>
@@ -218,24 +177,12 @@ export function TeamMemberScreen({
             <CardHeader title="Contact" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row label="Phone" mono value={member.phone} />
+              <Row label="Email" value={member.personalEmail} />
               <Row label="Work email" value={member.workEmail} />
-              <Row label="Personal email" value={member.personalEmail} />
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader
-              title="In an emergency"
-              description="Who to call, and how they are related"
-            />
-            <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="Name" value={member.emergencyContactName} />
-              <Row label="Relation" value={member.emergencyContactRelation} />
-              <Row label="Phone" mono value={member.emergencyContactPhone} />
-            </CardBody>
-          </Card>
-
-          <Card className="lg:col-span-2">
             <CardHeader title="Addresses" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row label="Present" value={member.address} />
@@ -248,7 +195,10 @@ export function TeamMemberScreen({
       {tab === "employment" ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Employment" />
+            <CardHeader
+              title="Employment"
+              description="The salary agreed at hire — what they are paid now is on the Pay tab"
+            />
             <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row label="Code" mono value={member.employeeCode} />
               <Row
@@ -257,14 +207,26 @@ export function TeamMemberScreen({
               />
               <Row label="Department" value={member.department} />
               <Row label="Designation" value={member.designation} />
-              <Row label="Reports to" value={managerName} />
+              <Row label="Joined" mono value={member.joinedOn} />
+              <Row label="Joining salary">
+                {member.joiningSalary ? (
+                  <Amount value={member.joiningSalary} className="font-medium" />
+                ) : null}
+              </Row>
               <Row label="Status">
                 <Badge tone={member.status === "active" ? "positive" : "neutral"}>
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
                 </Badge>
               </Row>
+              <Row label="Last day" mono value={member.endedOn} />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Education" />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row
-                label="Education"
+                label="Level"
                 value={
                   member.educationLevel
                     ? EDUCATION_LEVEL_LABELS[member.educationLevel]
@@ -272,24 +234,6 @@ export function TeamMemberScreen({
                 }
               />
               <Row label="Major" value={member.educationMajor} />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Joining &amp; dates"
-              description="The salary agreed at hire — what they are paid now is on the Pay tab"
-            />
-            <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="Joined" mono value={member.joinedOn} />
-              <Row label="Joining salary">
-                {member.joiningSalary ? (
-                  <Amount value={member.joiningSalary} className="font-medium" />
-                ) : null}
-              </Row>
-              <Row label="Probation until" mono value={member.probationUntil} />
-              <Row label="Confirmed on" mono value={member.confirmedOn} />
-              <Row label="Last day" mono value={member.endedOn} />
             </CardBody>
           </Card>
 
