@@ -2,25 +2,36 @@
   "name": "finance-management-software",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "predev": "npm run build --workspace @finance/shared",
+    "dev": "concurrently -n shared,api,web -c gray,magenta,cyan \"npm:dev:shared\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:shared": "npm run dev --workspace @finance/shared",
+    "dev:api": "npm run start:dev --workspace @finance/api",
+    "dev:web": "npm run dev --workspace @finance/web",
+    "build": "npm run build --workspace @finance/shared && npm run build --workspace @finance/api && npm run build --workspace @finance/web",
+    "build:shared": "npm run build --workspace @finance/shared",
+    "build:api": "npm run build --workspace @finance/api",
+    "build:web": "npm run build --workspace @finance/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:push": "npm run db:push --workspace @finance/api",
+    "db:generate": "npm run db:generate --workspace @finance/api",
+    "db:migrate": "npm run db:migrate --workspace @finance/api",
+    "db:studio": "npm run db:studio --workspace @finance/api",
+    "db:seed": "npm run db:seed --workspace @finance/api",
+    "db:check": "npm run db:check --workspace @finance/api",
+    "db:seed-categories": "npm run db:seed-categories --workspace @finance/api",
+    "db:demo": "npm run db:demo --workspace @finance/api --"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
