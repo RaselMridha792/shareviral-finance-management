@@ -4,6 +4,8 @@ import {
   Delete,
   Get,
   HttpCode,
+  Param,
+  ParseUUIDPipe,
   Patch,
   Post,
 } from "@nestjs/common";
@@ -22,6 +24,7 @@ import {
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
 import { ZodBody } from "../../common/pipes/zod-validation.pipe";
+import { AiChatsService } from "./ai-chats.service";
 import { AiIntakeService } from "./ai-intake.service";
 
 /**
@@ -37,7 +40,10 @@ import { AiIntakeService } from "./ai-intake.service";
  */
 @Controller("ai")
 export class AiIntakeController {
-  constructor(private readonly ai: AiIntakeService) {}
+  constructor(
+    private readonly ai: AiIntakeService,
+    private readonly chats: AiChatsService,
+  ) {}
 
   @Get("availability")
   @RequirePermission("ai.use")
@@ -55,6 +61,46 @@ export class AiIntakeController {
     // The actor travels with the request: every lookup the assistant makes
     // runs under this person permissions, never the server ones.
     return this.ai.turn(body, actor);
+  }
+
+  /* --- the history list ------------------------------------------------- */
+
+  /**
+   * Only ever this person's own conversations.
+   *
+   * The actor is not a filter applied to a wider result — it is in the where
+   * clause of every query in AiChatsService, so there is no shape of request
+   * that returns somebody else's transcript.
+   */
+  @Get("chats")
+  @RequirePermission("ai.use")
+  listChats(@CurrentUser() actor: AuthenticatedUser) {
+    return this.chats.list(actor);
+  }
+
+  @Get("chats/:id")
+  @RequirePermission("ai.use")
+  getChat(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.chats.get(id, actor);
+  }
+
+  @Delete("chats/:id")
+  @HttpCode(204)
+  @RequirePermission("ai.use")
+  removeChat(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.chats.remove(id, actor);
+  }
+
+  @Delete("chats")
+  @RequirePermission("ai.use")
+  clearChats(@CurrentUser() actor: AuthenticatedUser) {
+    return this.chats.clear(actor);
   }
 
   /** Category and account names to ids, checked against what exists. */

@@ -15,6 +15,7 @@ import {
   type AiIntakeRequest,
   type AiDataAccess,
   type AiKeyResult,
+  type AiMessage,
   type AiModel,
   type AiTarget,
   type UpdateAiSettingsInput,
@@ -22,6 +23,7 @@ import {
 import { and, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
+import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
 import { hint, open, seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -54,6 +56,7 @@ export class AiIntakeService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly tools: AiToolsService,
+    private readonly chats: AiChatsService,
   ) {}
 
   /**
@@ -287,6 +290,32 @@ export class AiIntakeService {
    * form afterwards.
    */
   async turn(
+    input: AiIntakeRequest,
+    actor: AuthenticatedUser,
+  ): Promise<AiIntakeReply> {
+    const reply = await this.think(input, actor);
+
+    // Written after the answer, not before: a turn that failed leaves no
+    // half-conversation in the history, and a question that was never answered
+    // is not worth keeping.
+    const said = reply.nextQuestion ?? reply.clarification ?? reply.summary;
+    const messages: AiMessage[] = said
+      ? [...input.messages, { role: "assistant", content: said }]
+      : [...input.messages];
+
+    const chatId = await this.chats
+      .record(input.chatId, messages, reply, actor)
+      .catch((error: unknown) => {
+        // History is a convenience. Losing it must never cost somebody the
+        // answer they just waited for.
+        this.log.warn(`Could not save the conversation: ${String(error)}`);
+        return input.chatId;
+      });
+
+    return { ...reply, chatId };
+  }
+
+  private async think(
     input: AiIntakeRequest,
     actor: AuthenticatedUser,
   ): Promise<AiIntakeReply> {
