@@ -6,7 +6,7 @@ import {
   PSR_STATUS_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Plus, Search, Users } from "lucide-react";
+import { Download, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { exportUrl } from "@/lib/ledger";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
@@ -29,13 +30,23 @@ export function TeamScreen({
   const router = useRouter();
   const canWrite = useCan("team.write");
   const canSeePay = useCan("team.compensation.read");
+  // Each read unconditionally: `exports.run` says this role may download
+  // things, `team.read` says it may see this.
+  const canRunExports = useCan("exports.run");
+  const canReadTeam = useCan("team.read");
+  const canExport = canRunExports && canReadTeam;
 
   const [page, setPage] = useState(initialPage);
   const [query, setQuery] = useState("");
+  // What the table is actually filtered by. The search box can hold text that
+  // has not been submitted yet, and the download has to match the rows on
+  // screen rather than the typing.
+  const [applied, setApplied] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function refresh(q = query) {
     setPage(await teamApi.list({ q: q || undefined }));
+    setApplied(q);
     router.refresh();
   }
 
@@ -48,12 +59,30 @@ export function TeamScreen({
         title="Team"
         description="Everyone on the payroll, and everyone who bills."
         actions={
-          canWrite ? (
-            <Button variant="primary" size="md" onClick={() => setCreating(true)}>
-              <Plus className="size-4" />
-              Add person
-            </Button>
-          ) : null
+          <>
+            {canExport ? (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  // The directory only. Pay is not in this DTO, so it cannot
+                  // be in this file.
+                  window.location.href = exportUrl("team-members", {
+                    q: applied || undefined,
+                  });
+                }}
+              >
+                <Download className="size-4" />
+                Excel
+              </Button>
+            ) : null}
+            {canWrite ? (
+              <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+                <Plus className="size-4" />
+                Add person
+              </Button>
+            ) : null}
+          </>
         }
       />
 

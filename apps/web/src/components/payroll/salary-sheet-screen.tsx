@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeft,
   CircleCheck,
+  Download,
   LoaderCircle,
   Lock,
   Printer,
@@ -28,6 +29,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Select } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
+import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { payrollApi, type PayrollLineDto, type PayrollRunDto } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,11 @@ export function SalarySheetScreen({
   const router = useRouter();
   const canWrite = useCan("payroll.write");
   const canPay = useCan("payroll.pay");
+  // `exports.run` alone is not enough for a file of salary figures — HR holds
+  // it and does not hold payroll.read.
+  const canRunExports = useCan("exports.run");
+  const canReadPayroll = useCan("payroll.read");
+  const canExport = canRunExports && canReadPayroll;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +93,18 @@ export function SalarySheetScreen({
         description={`${lines.length} people · ${PAYROLL_STATUS_LABELS[run.status]}`}
         actions={
           <>
+            {canExport ? (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  window.location.href = exportUrl(`payroll/${run.id}`, {});
+                }}
+              >
+                <Download className="size-4" />
+                Excel
+              </Button>
+            ) : null}
             {canWrite && draft ? (
               <Button
                 variant="secondary"

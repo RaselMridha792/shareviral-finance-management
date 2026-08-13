@@ -6,7 +6,13 @@ import {
   todayInDhaka,
   type TdsDepositType,
 } from "@finance/shared";
-import { AlertTriangle, Check, LoaderCircle, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Download,
+  LoaderCircle,
+  Plus,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -25,6 +31,7 @@ import {
   Textarea,
 } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -60,6 +67,11 @@ export function WithholdingScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("tds.write");
+  // Each read unconditionally: downloading needs both the right to export and
+  // the right to see the tax figures.
+  const canRunExports = useCan("exports.run");
+  const canReadTds = useCan("tds.read");
+  const canExport = canRunExports && canReadTds;
   const [recording, setRecording] = useState<{ year: number; month: number } | null>(
     null,
   );
@@ -113,6 +125,11 @@ export function WithholdingScreen({
         <CardHeader
           title="Month by month"
           description="Salary tax comes from the payroll sheet; vendor tax from the withheld column on payments."
+          action={
+            canExport ? (
+              <ExcelButton target="tds/liability" query={{ year }} />
+            ) : null
+          }
         />
         <div className="overflow-x-auto">
           <table className="table-data min-w-[820px] text-sm">
@@ -210,6 +227,11 @@ export function WithholdingScreen({
         <CardHeader
           title="Challans"
           description="Each A-Challan and the month of deductions it covers."
+          action={
+            canExport ? (
+              <ExcelButton target="tds/deposits" query={{ year }} />
+            ) : null
+          }
         />
         <div className="overflow-x-auto">
           <table className="table-data min-w-[820px] text-sm">
@@ -264,6 +286,11 @@ export function WithholdingScreen({
         <CardHeader
           title={`Quarterly returns · FY ${fiscalYear}-${String(fiscalYear + 1).slice(-2)}`}
           description="Due on the 25th of the month after each quarter — 25 Oct, 25 Jan, 25 Apr, 25 Jul."
+          action={
+            canExport ? (
+              <ExcelButton target="tds/returns" query={{ fiscalYear }} />
+            ) : null
+          }
         />
         <div className="overflow-x-auto">
           <table className="table-data min-w-[760px] text-sm">
@@ -347,6 +374,33 @@ export function WithholdingScreen({
         }}
       />
     </>
+  );
+}
+
+/**
+ * One button per table, not one for the screen.
+ *
+ * This page shows three different things — the monthly position, the challans,
+ * and the quarterly returns — and each is its own sheet with its own filter.
+ */
+function ExcelButton({
+  target,
+  query,
+}: {
+  target: string;
+  query: Record<string, string | number | undefined>;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      size="md"
+      onClick={() => {
+        window.location.href = exportUrl(target, query);
+      }}
+    >
+      <Download className="size-4" />
+      Excel
+    </Button>
   );
 }
 

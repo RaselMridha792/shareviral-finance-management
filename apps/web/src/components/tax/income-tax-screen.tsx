@@ -4,7 +4,7 @@ import {
   INCOME_TAX_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
-import { CalendarPlus, LoaderCircle, Pencil } from "lucide-react";
+import { CalendarPlus, Download, LoaderCircle, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
+import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { incomeTaxApi, type IncomeTaxListDto, type IncomeTaxRecordDto } from "@/lib/tax";
 
@@ -42,6 +43,11 @@ export function IncomeTaxScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("incometax.write");
+  // Each read unconditionally: the right to download plus the right to see
+  // what is in the file.
+  const canRunExports = useCan("exports.run");
+  const canReadIncomeTax = useCan("incometax.read");
+  const canExport = canRunExports && canReadIncomeTax;
   const [editing, setEditing] = useState<IncomeTaxRecordDto | null>(null);
   const [paying, setPaying] = useState<IncomeTaxRecordDto | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -63,21 +69,37 @@ export function IncomeTaxScreen({
         title="Company income tax"
         description="Tax on the company's own profit — four advance instalments and the annual return."
         actions={
-          canWrite ? (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={generate}
-              disabled={generating}
-            >
-              {generating ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <CalendarPlus className="size-4" />
-              )}
-              Open FY {fiscalYear}-{String(fiscalYear + 1).slice(-2)}
-            </Button>
-          ) : null
+          <>
+            {canExport ? (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  // No year filter: the screen lists every assessment year on
+                  // record, so the sheet does too.
+                  window.location.href = exportUrl("income-tax", {});
+                }}
+              >
+                <Download className="size-4" />
+                Excel
+              </Button>
+            ) : null}
+            {canWrite ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={generate}
+                disabled={generating}
+              >
+                {generating ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <CalendarPlus className="size-4" />
+                )}
+                Open FY {fiscalYear}-{String(fiscalYear + 1).slice(-2)}
+              </Button>
+            ) : null}
+          </>
         }
       />
 

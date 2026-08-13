@@ -8,6 +8,7 @@ import {
 import {
   Archive,
   Banknote,
+  Download,
   Landmark,
   Plus,
   Smartphone,
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
+import { exportUrl } from "@/lib/ledger";
 import { accountsApi, type AccountDto } from "@/lib/masters";
 import { AccountForm } from "./account-form";
 
@@ -40,6 +42,11 @@ export function AccountsScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("accounts.write");
+  // Both, and each read unconditionally — an export needs the permission to
+  // download and the permission to see what is being downloaded.
+  const canRunExports = useCan("exports.run");
+  const canReadAccounts = useCan("accounts.read");
+  const canExport = canRunExports && canReadAccounts;
 
   const [accounts, setAccounts] = useState(initialAccounts);
   const [editing, setEditing] = useState<AccountDto | null>(null);
@@ -82,16 +89,30 @@ export function AccountsScreen({
         title="Accounts"
         description="Where money sits — bank accounts, cash, and mobile wallets."
         actions={
-          canWrite ? (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setCreating(true)}
-            >
-              <Plus className="size-4" />
-              Add account
-            </Button>
-          ) : null
+          <>
+            {canExport ? (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  window.location.href = exportUrl("accounts", {});
+                }}
+              >
+                <Download className="size-4" />
+                Excel
+              </Button>
+            ) : null}
+            {canWrite ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setCreating(true)}
+              >
+                <Plus className="size-4" />
+                Add account
+              </Button>
+            ) : null}
+          </>
         }
       />
 
