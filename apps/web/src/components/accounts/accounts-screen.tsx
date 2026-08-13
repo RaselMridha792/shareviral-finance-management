@@ -8,6 +8,7 @@ import {
 import {
   Archive,
   Banknote,
+  CreditCard,
   Download,
   Landmark,
   Plus,
@@ -33,6 +34,7 @@ const ICONS: Record<AccountType, ComponentType<{ className?: string }>> = {
   bank: Landmark,
   cash: Banknote,
   mobile_wallet: Smartphone,
+  card: CreditCard,
 };
 
 export function AccountsScreen({

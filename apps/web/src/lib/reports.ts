@@ -1,11 +1,14 @@
 import type {
   BankStats,
   CurrencyView,
+  FinancialStatement,
   FundingReport,
   Granularity,
   OverviewReport,
   PeriodReport,
+  SaveStatementInput,
   SetFxRateInput,
+  StatementSignatory,
 } from "@finance/shared";
 
 import { apiFetch } from "./api-client";
@@ -19,6 +22,26 @@ export type AvailablePeriods = {
     start: string;
     end: string;
   }>;
+};
+
+/**
+ * What a save answers with: the stored row, not the rebuilt statement. The
+ * derived figures come from the ledger, so there is nothing in them for a save
+ * to change — callers that want the whole document ask for it again.
+ */
+export type SavedStatement = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  cycle: number;
+  status: "draft" | "reconciled";
+  audited: boolean;
+  notes: string[];
+  signatories: StatementSignatory[];
+  committedForwardTxnIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
 };
 
 export type FxRateDto = {
@@ -84,6 +107,31 @@ export const reportsApi = {
     if (params.to) search.set("to", params.to);
     return apiFetch<FundingReport>(`/reports/funding?${search}`, fresh);
   },
+
+  /**
+   * The signed document, not a report: one period, both currencies on every
+   * figure, reconciled back to a closing balance.
+   */
+  statement: (params: {
+    granularity: Granularity;
+    fiscalYear?: number;
+    index?: number;
+  }) => {
+    const search = new URLSearchParams({ granularity: params.granularity });
+    if (params.fiscalYear) search.set("fiscalYear", String(params.fiscalYear));
+    if (params.index) search.set("index", String(params.index));
+    return apiFetch<FinancialStatement>(`/reports/statement?${search}`, fresh);
+  },
+
+  /**
+   * The parts of the statement a ledger cannot derive — the notes somebody
+   * wrote, the cycle number, whether it has been reconciled, and who signs it.
+   */
+  saveStatement: (input: SaveStatementInput) =>
+    apiFetch<SavedStatement>("/reports/statement", {
+      method: "PATCH",
+      ...json(input),
+    }),
 };
 
 export const fxApi = {

@@ -5,6 +5,7 @@ import {
   todayInDhaka,
   type BankStats,
   type CurrencyView,
+  type FinancialStatement,
   type FundingReport,
   type Granularity,
   type PeriodReport,
@@ -20,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
+import { StatementView } from "@/components/reports/statement-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -34,6 +36,10 @@ const TABS = [
   { id: "period", label: "The period" },
   { id: "bank", label: "Month by month" },
   { id: "funding", label: "Funding from the CEO" },
+  // Not a fourth report. The other three answer a question; this one is the
+  // signed document, and it carries its own period controls because the
+  // statement is always about one period at a time.
+  { id: "statement", label: "Statement" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -51,9 +57,12 @@ const thRight = `${th} text-right`;
 export function ReportsScreen({
   initialPeriods,
   initialReport,
+  initialStatement,
 }: {
   initialPeriods: AvailablePeriods;
   initialReport: PeriodReport;
+  /** Null when the statement endpoint could not answer. */
+  initialStatement: FinancialStatement | null;
 }) {
   const canSeeUsd = useCan("reports.usd");
   // Each read unconditionally: the right to download plus the right to see
@@ -84,8 +93,15 @@ export function ReportsScreen({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Cleared before the early return below, so a failure on one tab does not
+    // leave its red banner sitting above a tab that loaded perfectly well.
     setError(null);
+
+    // The statement fetches itself: it has its own period, and reloading it
+    // from here would fight the controls in its own header strip.
+    if (tab === "statement") return;
+
+    setLoading(true);
     try {
       if (tab === "period") {
         setReport(
@@ -162,7 +178,7 @@ export function ReportsScreen({
         title="Reports"
         description="What came in, what went out, and what it looks like in dollars."
         actions={
-          canExport ? (
+          canExport && tab !== "statement" ? (
             <Button variant="secondary" size="md" onClick={download}>
               <Download className="size-4" />
               Excel
@@ -228,7 +244,7 @@ export function ReportsScreen({
             </>
           ) : null}
 
-          {tab !== "funding" ? (
+          {tab !== "funding" && tab !== "statement" ? (
             /* One control, two meanings. "The period" reads this as a fiscal
                year — July to June, when the setting says so — while "Month by
                month" groups by calendar year. Both used to render a bare
@@ -259,7 +275,9 @@ export function ReportsScreen({
             </Select>
           ) : null}
 
-          {canSeeUsd && tab !== "funding" ? (
+          {/* The statement always shows both currencies side by side, so it
+              has nothing to switch. */}
+          {canSeeUsd && tab !== "funding" && tab !== "statement" ? (
             <div className="flex rounded-lg border border-border p-0.5">
               {(["BDT", "USD"] as const).map((option) => (
                 <button
@@ -300,6 +318,19 @@ export function ReportsScreen({
       {tab === "period" && report ? <PeriodView report={report} /> : null}
       {tab === "bank" && bank ? <BankView stats={bank} /> : null}
       {tab === "funding" && funding ? <FundingView report={funding} /> : null}
+      {tab === "statement" ? (
+        <StatementView
+          initialStatement={initialStatement}
+          initialPeriods={initialPeriods}
+          initialFiscalYear={initialPeriods.years[1]}
+          initialIndex={Math.max(
+            1,
+            initialPeriods.periods.findIndex(
+              (p) => todayInDhaka() >= p.start && todayInDhaka() <= p.end,
+            ) + 1,
+          )}
+        />
+      ) : null}
     </>
   );
 }
