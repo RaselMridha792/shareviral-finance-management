@@ -5,7 +5,6 @@ import {
   Banknote,
   Bot,
   ChartColumn,
-  FileSpreadsheet,
   FileUp,
   Gauge,
   HandCoins,
@@ -160,6 +159,10 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: "chart-6",
     items: [
       {
+        // The only tax screen. Income tax was retired from the UI on the
+        // owner's instruction — TDS is where withholding lives now. Its data
+        // and its API endpoints are untouched; see
+        // `apps/api/src/modules/income-tax/income-tax.service.ts`.
         key: "tds",
         href: "/tax/withholding",
         label: "TDS",
@@ -167,16 +170,6 @@ export const NAV_GROUPS: NavGroup[] = [
         // that; a banknote said "money", which every other tax item is too.
         icon: BadgePercent,
         permission: "tds.read",
-      },
-      {
-        // Whether this folds under TDS is still an open question with the
-        // owner. Until it is answered it stays exactly here — a working screen
-        // is not removed on an inference.
-        key: "income-tax",
-        href: "/tax/income-tax",
-        label: "Income tax",
-        icon: FileSpreadsheet,
-        permission: "incometax.read",
       },
     ],
   },

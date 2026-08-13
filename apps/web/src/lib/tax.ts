@@ -3,15 +3,21 @@ import type {
   CreateTdsDepositInput,
   FileReturnInput,
   FilingStatus,
-  IncomeTaxRecordType,
-  IncomeTaxStatus,
-  PayIncomeTaxInput,
   PendingItem,
   TdsDepositType,
-  UpdateIncomeTaxInput,
 } from "@finance/shared";
 
 import { apiFetch } from "./api-client";
+
+/**
+ * Withholding only.
+ *
+ * There was an `incomeTaxApi` here as well. The income tax screen was retired
+ * on the owner's instruction — TDS covers what this company needs — so the web
+ * client for it went with the screen. The API still serves `/income-tax/*` and
+ * the records are still in the database: bringing the screen back is a routing
+ * change plus a client like the one below, not a rebuild.
+ */
 
 export type TdsMonthDto = {
   year: number;
@@ -99,35 +105,6 @@ export type WithholdingReturnDto = {
   isOverdue: boolean;
 };
 
-export type IncomeTaxRecordDto = {
-  id: string;
-  assessmentYear: string;
-  incomeYearStart: string;
-  incomeYearEnd: string;
-  recordType: IncomeTaxRecordType;
-  quarter: number | null;
-  dueDate: string;
-  amountPayable: string;
-  amountPaid: string;
-  outstanding: string;
-  paidOn: string | null;
-  challanNumber: string | null;
-  challanDate: string | null;
-  accountId: string | null;
-  transactionId: string | null;
-  returnSubmittedOn: string | null;
-  acknowledgementNo: string | null;
-  status: IncomeTaxStatus;
-  notes: string | null;
-  label: string;
-  isOverdue: boolean;
-};
-
-export type IncomeTaxListDto = {
-  items: IncomeTaxRecordDto[];
-  totals: { payable: string; paid: string; outstanding: string };
-};
-
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 const fresh = { cache: "no-store" as const };
 
@@ -168,32 +145,4 @@ export const tdsApi = {
     }),
   pending: (withinDays = 45) =>
     apiFetch<PendingItem[]>(`/tds/pending?withinDays=${withinDays}`, fresh),
-};
-
-export const incomeTaxApi = {
-  list: (assessmentYear?: string) =>
-    apiFetch<IncomeTaxListDto>(
-      `/income-tax${assessmentYear ? `?assessmentYear=${assessmentYear}` : ""}`,
-      fresh,
-    ),
-  schedule: (fiscalYear: number) =>
-    apiFetch<IncomeTaxListDto>("/income-tax/schedule", {
-      method: "POST",
-      ...json({ fiscalYear }),
-    }),
-  update: (id: string, input: UpdateIncomeTaxInput) =>
-    apiFetch<IncomeTaxRecordDto>(`/income-tax/${id}`, {
-      method: "PATCH",
-      ...json(input),
-    }),
-  pay: (id: string, input: PayIncomeTaxInput) =>
-    apiFetch<IncomeTaxRecordDto>(`/income-tax/${id}/pay`, {
-      method: "POST",
-      ...json(input),
-    }),
-  pending: (withinDays = 45) =>
-    apiFetch<PendingItem[]>(
-      `/income-tax/pending?withinDays=${withinDays}`,
-      fresh,
-    ),
 };

@@ -127,6 +127,13 @@ export type AccountGroup = {
   moneyIn: string;
   moneyOut: string;
   closing: string;
+  /** The same four in dollars, approximate, at the month's rate. */
+  usd: {
+    opening: string | null;
+    moneyIn: string | null;
+    moneyOut: string | null;
+    closing: string | null;
+  };
 };
 
 /** The three or four figures under "Expense overview". */
@@ -136,6 +143,12 @@ export type ExpenseOverview = {
   toolsAndSubscriptions: string;
   taxWithheld: string;
   taxOutstanding: string;
+  usd: {
+    salaryPaid: string | null;
+    toolsAndSubscriptions: string | null;
+    taxWithheld: string | null;
+    taxOutstanding: string | null;
+  };
 };
 
 export type OverviewTotals = {
@@ -184,6 +197,12 @@ export type OverviewReport = {
   };
   currency: CurrencyView;
   fx: FxContext | null;
+  /**
+   * The rate every dollar figure on this screen was produced at — the month's
+   * funding rate where there was one. Null when nothing could be converted,
+   * and the dollar lines are then absent rather than guessed.
+   */
+  usdRate: string | null;
   totals: OverviewTotals;
   /** Bank and card, each with its own opening, movement and closing. */
   groups: AccountGroup[];

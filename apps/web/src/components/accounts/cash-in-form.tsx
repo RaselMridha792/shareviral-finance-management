@@ -1,9 +1,10 @@
 "use client";
 
-import { todayInDhaka } from "@finance/shared";
+import { isValidAmount, todayInDhaka } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -52,6 +53,17 @@ export function CashInForm({
   const [usdRate, setUsdRate] = useState("");
   const [latestRate, setLatestRate] = useState<string | null>(null);
 
+  /**
+   * Both tracked only so the realised rate can be read back while it is being
+   * typed. A wrong figure is cheap to fix here and expensive to find later, in
+   * a report that quietly says a dollar cost ৳1,227.
+   */
+  const [amount, setAmount] = useState("");
+  const [usdSent, setUsdSent] = useState("");
+
+  const money = useMoney();
+  const realised = realisedRate(amount, usdSent);
+
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -82,6 +94,21 @@ export function CashInForm({
   );
   const defaultCategoryId = fundingCategoryId(usable);
 
+  /**
+   * Closing empties the two controlled boxes.
+   *
+   * Everything else in here is uncontrolled and the drawer unmounts its
+   * children, so the form comes back blank on its own. These two would not,
+   * and a reopened form pre-filled with the last transfer's figures is how the
+   * same amount gets recorded twice. The rate is deliberately not cleared —
+   * it is prefilled from the last one recorded anyway.
+   */
+  function close() {
+    setAmount("");
+    setUsdSent("");
+    onClose();
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -103,6 +130,10 @@ export function CashInForm({
         amount: String(data.get("amount")),
         categoryId: String(data.get("categoryId")),
         usdRate: String(data.get("usdRate")).trim(),
+        // Blank on a local receipt, and then this row is exactly what it was
+        // before: an ordinary money-in with a reference rate on it. Given, the
+        // API fills the conversion columns the funding report reads.
+        usdSent: plainAmount(String(data.get("usdSent") ?? "")) || undefined,
         senderBankName: text("senderBankName"),
         senderAccountName: text("senderAccountName"),
         senderAccountNumber: text("senderAccountNumber"),
@@ -114,7 +145,7 @@ export function CashInForm({
         receiptUrl: undefined,
       });
       await onSaved();
-      onClose();
+      close();
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -130,7 +161,7 @@ export function CashInForm({
   return (
     <Drawer
       open={open}
-      onClose={onClose}
+      onClose={close}
       title="Record cash in"
       description="Money received from abroad, as the remittance advice states it."
     >
@@ -145,7 +176,13 @@ export function CashInForm({
             error={fieldErrors.amount}
             hint="What landed, in taka"
           >
-            <MoneyInput name="amount" required placeholder="0.00" />
+            <MoneyInput
+              name="amount"
+              required
+              placeholder="0.00"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
           </Field>
         </div>
 
@@ -242,30 +279,76 @@ export function CashInForm({
           </Field>
         </fieldset>
 
-        {/* Asked here, at the only moment anybody knows it, because this one
-            number is read back all month: every taka figure after it is shown
-            in dollars at the rate the month's funding arrived at. A rate
-            looked up later is the rate on the day of the lookup. */}
-        <Field
-          label="Dollar rate"
-          required
-          error={fieldErrors.usdRate}
-          hint={
-            latestRate
-              ? `Last recorded: ৳${latestRate} per USD. This rate governs the whole month.`
-              : "What one US dollar was worth on the day. This rate governs the whole month."
-          }
-        >
-          <Input
-            name="usdRate"
+        {/* The dollar side of the transfer, and the only part of this form
+            nobody can reconstruct afterwards. The rate is asked here, at the
+            only moment anybody knows it, because it is read back all month:
+            every taka figure after it is shown in dollars at the rate the
+            month's funding arrived at. A rate looked up later is the rate on
+            the day of the lookup. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="USD sent"
+            error={fieldErrors.usdSent}
+            hint="Optional — what the sender sent, before conversion"
+          >
+            <MoneyInput
+              name="usdSent"
+              placeholder="0.00"
+              value={usdSent}
+              onChange={(event) => setUsdSent(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="Dollar rate"
             required
-            inputMode="decimal"
-            className="col-amount"
-            placeholder="122.77"
-            value={usdRate}
-            onChange={(event) => setUsdRate(event.target.value)}
-          />
-        </Field>
+            error={fieldErrors.usdRate}
+            hint={
+              latestRate
+                ? `Last recorded: ৳${latestRate}. It governs the whole month.`
+                : "What a dollar was worth on the day. It governs the whole month."
+            }
+          >
+            <Input
+              name="usdRate"
+              required
+              inputMode="decimal"
+              className="col-amount"
+              placeholder="122.77"
+              value={usdRate}
+              onChange={(event) => setUsdRate(event.target.value)}
+            />
+          </Field>
+        </div>
+
+        {/* The arithmetic, back in front of the person who typed it. A digit
+            too many in either box turns a plausible rate into an absurd one,
+            and that is obvious here and nearly invisible in a report next
+            quarter. This is also the figure the funding report will show for
+            this transfer — it divides the same two numbers. */}
+        {realised ? (
+          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
+            <span className="num">
+              {money(realised.bdt, { hideDecimals: true })} ÷{" "}
+              {money(realised.usd, { currency: "USD", hideDecimals: true })} ={" "}
+              <strong className="font-semibold text-foreground">
+                {money(realised.rate)}
+              </strong>
+            </span>{" "}
+            per USD — the rate this transfer actually achieved.
+          </p>
+        ) : usdSent.trim() ? (
+          <p className="text-xs text-muted-foreground">
+            Fill in both the amount received and the dollars sent to see the
+            rate this transfer achieved.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Leave <span className="font-medium">USD sent</span> blank for a
+            local receipt. Filled in, this transfer appears in the funding
+            report with the rate it achieved.
+          </p>
+        )}
 
         <Field label="Notes" error={fieldErrors.notes}>
           <Textarea name="notes" />
@@ -297,6 +380,39 @@ export function CashInForm({
       </div>
     </Drawer>
   );
+}
+
+/**
+ * Strips what a person types out of habit. "1,00,000" and "৳1,00,000" are the
+ * same figure to a reader and neither is one to `numeric(14,2)`.
+ */
+function plainAmount(value: string): string {
+  return value.replace(/[,\s৳$]/g, "").trim();
+}
+
+/**
+ * What a transfer actually achieved: what landed, over what was sent.
+ *
+ * Null until both figures are there and usable, so a half-typed amount shows
+ * nothing rather than a rate that lurches through several alarming values on
+ * the way to the right one.
+ *
+ * Deliberately the same division the funding report does — that report divides
+ * the stored taka by the stored dollars rather than trusting a recorded rate,
+ * so this preview is the number that will appear there, not an approximation
+ * of it.
+ */
+function realisedRate(
+  amountBdt: string,
+  usdSent: string,
+): { bdt: string; usd: string; rate: string } | null {
+  const bdt = plainAmount(amountBdt);
+  const usd = plainAmount(usdSent);
+
+  if (!isValidAmount(bdt) || !isValidAmount(usd)) return null;
+  if (Number(bdt) <= 0 || Number(usd) <= 0) return null;
+
+  return { bdt, usd, rate: (Number(bdt) / Number(usd)).toFixed(2) };
 }
 
 /**

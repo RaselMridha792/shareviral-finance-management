@@ -27,6 +27,25 @@ import {
 import { SettingsService } from "../settings/settings.service";
 import { nextRefNo } from "../transactions/ref-no";
 
+/**
+ * NOT DEAD CODE — the screen was retired, the module was not.
+ *
+ * The web UI for company income tax was removed on the owner's instruction
+ * ("income tax part ta bad dibo, TDS e enough"): withholding is where this
+ * company's tax work actually happens, and a second tax screen was noise. What
+ * went was the *surface* — the `/tax/income-tax` route, its screen component
+ * and the web client that called here.
+ *
+ * Everything below stays mounted and working, and `income_tax_records` keeps
+ * every row: the advance-tax instalments already recorded are real payments
+ * against a real liability, and a product decision about a menu item is not a
+ * reason to lose them. `/api/income-tax/*` and `GET /api/exports/income-tax`
+ * still answer.
+ *
+ * So: nothing in the frontend references this today, and that is expected.
+ * Bringing the screen back is a route plus a client — do not "clean up" the
+ * module or drop the table because the call graph looks empty from the web.
+ */
 @Injectable()
 export class IncomeTaxService {
   constructor(

@@ -66,12 +66,10 @@ export function OverviewScreen({
   firstName,
   report,
   pending,
-  canSeeUsd,
 }: {
   firstName: string;
   report: OverviewReport;
   pending: PendingItem[];
-  canSeeUsd: boolean;
 }) {
   const router = useRouter();
   const settings = useSettings();
@@ -85,21 +83,17 @@ export function OverviewScreen({
       format: settings.numberFormat,
       ...options,
     });
-  const usd = report.currency === "USD";
 
-  function move(next: Partial<{ granularity: string; currency: string }>) {
-    const params = new URLSearchParams({
-      granularity: next.granularity ?? report.period.granularity,
-      currency: next.currency ?? report.currency,
-    });
-    startTransition(() => router.push(`/?${params.toString()}`));
+  function move(next: { granularity: string }) {
+    startTransition(() =>
+      router.push(`/?granularity=${next.granularity}`),
+    );
   }
 
   function exportPdf() {
     setExporting(true);
     const params = new URLSearchParams({
       granularity: report.period.granularity,
-      currency: report.currency,
     });
     // A download, not a navigation: an anchor with `download` leaves the page
     // where it is, and the API's Content-Disposition names the file. Assigning
@@ -133,12 +127,15 @@ export function OverviewScreen({
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {report.period.label}
-            {report.fx ? (
+            {report.usdRate ? (
               <>
-                {" · "}
-                <span className="num">{report.fx.caption}</span>
+                {" · dollars shown at "}
+                <span className="num">{trimRate(report.usdRate)}</span>
+                {" per USD"}
               </>
-            ) : null}
+            ) : (
+              " · no rate on record, so no dollar figures"
+            )}
           </p>
         </div>
 
@@ -157,19 +154,6 @@ export function OverviewScreen({
             ))}
           </Select>
 
-          {canSeeUsd ? (
-            <Select
-              aria-label="Currency"
-              className="h-9 w-auto"
-              value={report.currency}
-              disabled={busy}
-              onChange={(event) => move({ currency: event.target.value })}
-            >
-              <option value="BDT">৳ BDT</option>
-              <option value="USD">$ USD</option>
-            </Select>
-          ) : null}
-
           <button
             type="button"
             onClick={exportPdf}
@@ -185,15 +169,6 @@ export function OverviewScreen({
           </button>
         </div>
       </div>
-
-      {usd ? (
-        <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          Every figure here is taka translated at{" "}
-          <span className="num">{report.fx?.caption}</span>. Two periods at
-          different rates will look like the business moved when only the
-          currency did.
-        </p>
-      ) : null}
 
       {/* --- the figures, grouped by what the money is ------------------ */}
       {report.groups.map((group) => (
@@ -214,6 +189,7 @@ export function OverviewScreen({
           <StatTile
             label="Salary paid"
             value={report.expense.salaryPaid}
+            usd={report.expense.usd.salaryPaid}
             icon={Users}
             change={percentChange(
               report.expense.salaryPaid,
@@ -225,18 +201,21 @@ export function OverviewScreen({
           <StatTile
             label="AI & other tools"
             value={report.expense.toolsAndSubscriptions}
+            usd={report.expense.usd.toolsAndSubscriptions}
             icon={Sparkles}
             hint="subscriptions and the card"
           />
           <StatTile
             label="Tax withheld"
             value={report.expense.taxWithheld}
+            usd={report.expense.usd.taxWithheld}
             icon={Receipt}
             hint={`${money(totals.taxDeposited, { hideDecimals: true })} deposited`}
           />
           <StatTile
             label="Tax not yet deposited"
             value={report.expense.taxOutstanding}
+            usd={report.expense.usd.taxOutstanding}
             icon={CalendarClock}
             accent={
               Number(report.expense.taxOutstanding) > 0 ? "warning" : "muted"
@@ -475,6 +454,12 @@ function AccountBlock({ group }: { group: AccountGroup }) {
       </div>
     </section>
   );
+}
+
+/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }
 
 function Empty({ children }: { children: string }) {

@@ -592,6 +592,24 @@ export class TransactionsService {
         // "the bank actually converted at this". Only a recorded conversion,
         // with the foreign amount beside it, may claim that one.
         usdRate: input.usdRate,
+        // Which is exactly what "USD sent" supplies. With the dollars on the
+        // form the conversion is a recorded fact rather than a reference, so
+        // the three real conversion columns are filled: what was sent, in what
+        // currency, at what rate. Without it they stay null and the row behaves
+        // as it always has.
+        //
+        // `fxRate` takes the same figure as `usdRate` here, and that is not a
+        // duplicate: one says "a dollar was worth this in August", the other
+        // says "this transfer converted at it". They are only equal because the
+        // person filling in the advice knows one number. Both go in because the
+        // create schema requires a rate beside any foreign amount.
+        ...(input.usdSent
+          ? {
+              originalAmount: input.usdSent,
+              originalCurrency: "USD",
+              fxRate: input.usdRate,
+            }
+          : {}),
         senderBankName: input.senderBankName,
         senderAccountName: input.senderAccountName,
         senderAccountNumber: input.senderAccountNumber,

@@ -6,12 +6,22 @@ import {
   type ListFxRatesQuery,
   type SetFxRateInput,
 } from "@finance/shared";
-import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  isNull,
+  lte,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { fxRates } from "../../db/schema";
+import { fxRates, transactions } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 
 @Injectable()
@@ -103,6 +113,50 @@ export class FxService {
   }
 
   /* ---------------------------------------------------------------------- */
+
+  /**
+   * The rate the month itself was funded at.
+   *
+   * When money arrives from abroad the person recording it knows exactly what
+   * a dollar was worth that day, because the bank has just told them. That
+   * figure then governs the whole month: every taka amount the company spends
+   * afterwards is spending *that* money, so reading it back in dollars at the
+   * rate it arrived at is the honest translation.
+   *
+   * Only the funding sets it. An entry with its own rate keeps its own — a
+   * tool bought on the card is charged at whatever the card's rate was that
+   * day, not at the rate the month's transfer landed at.
+   *
+   * Null when nothing was funded in the period, and the caller falls back to
+   * the settings rate and marks the figures estimated.
+   */
+  async fundingRateFor(period: {
+    start: string;
+    end: string;
+  }): Promise<string | null> {
+    const [row] = await this.db.client
+      .select({
+        rate: transactions.fxRate,
+        usdRate: transactions.usdRate,
+      })
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.txnDate, period.start),
+          lte(transactions.txnDate, period.end),
+          eq(transactions.direction, "in"),
+          isNull(transactions.voidedAt),
+          sql`(${transactions.fxRate} is not null or ${transactions.usdRate} is not null)`,
+        ),
+      )
+      // The first funding of the period sets it — that is the one recorded at
+      // the start of the month, which is what the rule describes.
+      .orderBy(asc(transactions.txnDate), asc(transactions.createdAt))
+      .limit(1);
+
+    const rate = row?.rate ?? row?.usdRate ?? null;
+    return rate && Number(rate) > 0 ? rate : null;
+  }
 
   /**
    * The rate to translate a period's figures with, and the sentence explaining

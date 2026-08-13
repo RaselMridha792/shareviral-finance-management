@@ -137,7 +137,17 @@ export class StatementService {
      * Null rather than a guess when the period has no rate at all: a blank
      * dollar column is honest, a taka figure behind a dollar sign is not.
      */
-    const periodRate = fx.unavailable ? null : fx.rate;
+    /**
+     * The month's own rate, before the settings fallback.
+     *
+     * Money that arrives from abroad arrives at a known rate, and everything
+     * the company spends afterwards is spending that money — so reading those
+     * taka back in dollars at the rate they landed at is the honest
+     * translation. The settings rate is only reached when nothing was funded.
+     */
+    const periodRate =
+      (await this.fx.fundingRateFor(range)) ??
+      (fx.unavailable ? null : fx.rate);
 
     // One register per account — the same call the account screen makes, so a
     // ledger page here and the register behind it cannot disagree.

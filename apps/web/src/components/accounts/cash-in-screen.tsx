@@ -1,11 +1,17 @@
 "use client";
 
-import { monthRange, todayInDhaka } from "@finance/shared";
+import {
+  fiscalYearOf,
+  monthIndexInFiscalYear,
+  monthRange,
+  todayInDhaka,
+} from "@finance/shared";
 import { Landmark, LoaderCircle, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
+import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
@@ -13,6 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { reportsApi } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 import { CashInForm } from "./cash-in-form";
 
@@ -23,6 +30,13 @@ import { CashInForm } from "./cash-in-form";
  * the rate the month is running at. Every taka figure elsewhere is read back in
  * dollars at the rate the month's first funding landed at, so this is where a
  * reader finds out which rate that was and which transfer set it.
+ *
+ * That rate is *asked for*, not worked out here. It used to be recomputed on
+ * this screen from the rows it had already loaded, a second copy of a rule that
+ * decides every dollar figure in the app and that the API answers directly:
+ * `/reports/overview` returns `usdRate` for a period, resolved by
+ * `FxService.fundingRateFor` with the Settings rate behind it. One rule, one
+ * implementation — this screen can no longer drift away from the reports.
  */
 export function CashInScreen({
   accounts,
@@ -32,6 +46,14 @@ export function CashInScreen({
   categories: CategoryNode[];
 }) {
   const canWrite = useCan("transactions.write");
+  /**
+   * The overview needs `dashboard.money`; this screen needs `accounts.read`.
+   * A role can hold the second without the first, and the rate is a detail on
+   * a page whose subject is the receipts — so it is asked for only when it can
+   * be, and its absence takes nothing else down.
+   */
+  const canSeeRate = useCan("dashboard.money");
+  const { fiscalYearMode } = useSettings();
 
   const [month, setMonth] = useState(() => todayInDhaka().slice(0, 7));
   const [rows, setRows] = useState<TransactionDto[]>([]);
@@ -39,11 +61,28 @@ export function CashInScreen({
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
+  /** The month's rate, straight from the API. Null when there is none. */
+  const [rate, setRate] = useState<string | null>(null);
+  const [rateStatus, setRateStatus] = useState<"hidden" | "loading" | "ready">(
+    canSeeRate ? "loading" : "hidden",
+  );
+
   const requestRef = useRef(0);
+  const rateRequestRef = useRef(0);
   const range = monthRange(Number(month.slice(0, 4)), Number(month.slice(5, 7)));
 
   const from = range.start;
   const to = range.end;
+
+  // Which period of which financial year the chosen month is, in the terms
+  // /reports/overview takes. July is period 1 of a Bangladeshi financial year
+  // and January is period 1 of a calendar one, which is why the mode comes
+  // from settings rather than from an assumption.
+  const fiscalYear = fiscalYearOf(from, fiscalYearMode);
+  const periodIndex = monthIndexInFiscalYear(
+    Number(month.slice(5, 7)),
+    fiscalYearMode,
+  );
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
@@ -73,13 +112,42 @@ export function CashInScreen({
     }
   }, [from, to]);
 
+  /**
+   * The month's rate, as the API resolves it.
+   *
+   * A failure here is not a failure of this screen. The most likely one is a
+   * 403 from a role that may see the receipts and not the money figures, and
+   * the honest response to that is to drop the rate strip — never to take a
+   * working page down over a caption.
+   */
+  const loadRate = useCallback(async () => {
+    if (!canSeeRate) return;
+    const request = ++rateRequestRef.current;
+    setRateStatus("loading");
+    try {
+      const report = await reportsApi.overview({
+        granularity: "month",
+        fiscalYear,
+        index: periodIndex,
+      });
+      if (request !== rateRequestRef.current) return;
+      setRate(report.usdRate);
+      setRateStatus("ready");
+    } catch {
+      if (request !== rateRequestRef.current) return;
+      setRate(null);
+      setRateStatus("hidden");
+    }
+  }, [canSeeRate, fiscalYear, periodIndex]);
+
   useEffect(() => {
     // Fetching from the API when the month changes — the rule's own "subscribe
     // to an external system" case. The setState calls happen in the await
     // continuation, not during render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+    void loadRate();
+  }, [load, loadRate]);
 
   /**
    * Moving our own money between our own accounts is not money received, but
@@ -88,11 +156,16 @@ export function CashInScreen({
    */
   const received = rows.filter((row) => !row.transferGroupId);
 
-  // Computed over every money-in row, transfers included, because the rule on
-  // the server is written that way and two answers to "what rate is this month
-  // running at" would be one too many.
-  const governing = governingRateOf(rows);
-  const rate = governing?.rate ?? null;
+  /**
+   * Which entry the month's rate came off — for the caption only.
+   *
+   * Found over every money-in row, transfers included, because the server's
+   * rule is written that way. The *rate* shown is still the API's: if this
+   * attribution and that number ever disagree, the number is the one that is
+   * right, and showing it means the screen cannot quietly be wrong about the
+   * figure while being confident about the name.
+   */
+  const setBy = firstFunded(rows);
 
   const totalBdt = received
     .reduce((sum, row) => sum + Number(row.amount), 0)
@@ -143,7 +216,14 @@ export function CashInScreen({
         </label>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4",
+          // The rate card is not shown to a reader who cannot be told it, and
+          // two cards spread across three columns look like one went missing.
+          rateStatus === "hidden" ? "sm:grid-cols-2" : "sm:grid-cols-3",
+        )}
+      >
         <Card className="p-5">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Received in {range.label}
@@ -161,33 +241,38 @@ export function CashInScreen({
               approximate
               className="mt-0.5 block text-xs text-muted-foreground"
             />
-          ) : (
+          ) : rateStatus === "ready" ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
               No rate on record for this month
             </p>
-          )}
+          ) : null}
         </Card>
 
-        <Card className={cn("p-5", rate && "border-primary/40")}>
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Rate this month
-          </p>
-          <span className="col-amount mt-3 block text-2xl font-semibold tracking-tight">
-            {rate ? `৳${trimRate(rate)}` : "—"}
-          </span>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {governing ? (
-              <>
-                Set by{" "}
-                <span className="num">{governing.row.refNo}</span> on{" "}
-                <span className="num">{governing.row.txnDate}</span> — every
-                taka figure this month is read in dollars at it.
-              </>
-            ) : (
-              "Nothing funded yet this month. Reports fall back to the rate in Settings."
-            )}
-          </p>
-        </Card>
+        {rateStatus === "hidden" ? null : (
+          <Card className={cn("p-5", rate && "border-primary/40")}>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Rate this month
+            </p>
+            <span className="col-amount mt-3 block text-2xl font-semibold tracking-tight">
+              {rateStatus === "loading" ? "…" : rate ? `৳${trimRate(rate)}` : "—"}
+            </span>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {rateStatus === "loading" ? (
+                "Asking the API what rate this month is running at."
+              ) : !rate ? (
+                "Nothing funded yet this month, and no rate set in Settings."
+              ) : setBy ? (
+                <>
+                  Set by <span className="num">{setBy.refNo}</span> on{" "}
+                  <span className="num">{setBy.txnDate}</span> — every taka
+                  figure this month is read in dollars at it.
+                </>
+              ) : (
+                "Nothing funded this month — this is the fallback rate reports use."
+              )}
+            </p>
+          </Card>
+        )}
 
         <Card className="p-5">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -299,7 +384,11 @@ export function CashInScreen({
         accounts={accounts}
         categories={categories}
         onClose={() => setRecording(false)}
-        onSaved={load}
+        // Both: a transfer recorded into an empty month is the entry that sets
+        // the rate, so the strip is stale the moment the table is not.
+        onSaved={async () => {
+          await Promise.all([load(), loadRate()]);
+        }}
       />
     </>
   );
@@ -345,17 +434,18 @@ function rateOf(row: TransactionDto): string | null {
 }
 
 /**
- * The rate the month is running at.
+ * Which entry set the month's rate — the name, never the number.
  *
- * Mirrors `FxService.fundingRateFor` on the API: the first funded money-in of
- * the period — earliest date, then earliest entered — sets it, and everything
- * afterwards is read back in dollars at that rate. Computed here from rows this
- * screen already has rather than fetched, but it is the server's rule, and the
- * two must not drift: if that one changes, this changes with it.
+ * The first funded money-in of the period, earliest date then earliest
+ * entered, which is the row `FxService.fundingRateFor` reads the rate off. It
+ * is found here only because the API returns the rate without saying where it
+ * came from, and the caption is more use naming the transfer than not.
+ *
+ * This deliberately does not return a rate. That question has one answer and
+ * the API gives it; if this attribution and that number ever disagree, the
+ * number is the one to trust.
  */
-function governingRateOf(
-  rows: TransactionDto[],
-): { rate: string; row: TransactionDto } | null {
+function firstFunded(rows: TransactionDto[]): TransactionDto | null {
   const funded = rows
     .filter((row) => rateOf(row) !== null)
     .sort((a, b) =>
@@ -364,9 +454,7 @@ function governingRateOf(
         : a.txnDate.localeCompare(b.txnDate),
     );
 
-  const first = funded[0];
-  const rate = first ? rateOf(first) : null;
-  return first && rate ? { rate, row: first } : null;
+  return funded[0] ?? null;
 }
 
 /** Taka read in dollars. A translation, never a recorded figure. */

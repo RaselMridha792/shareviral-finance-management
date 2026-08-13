@@ -255,6 +255,27 @@ export const recordCashInSchema = z.strictObject({
     .trim()
     .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77"),
 
+  /**
+   * What the sender actually sent, in dollars — the figure at the top of the
+   * advice, before the bank converted anything.
+   *
+   * Optional, and that is the point: money-in through this form is not always a
+   * foreign remittance, and a local receipt must not be blocked by a dollar
+   * field it has no answer for. Given, it is what turns the row into a
+   * remittance the funding report can see — the report selects on
+   * `original_currency = 'USD'` and `original_amount > 0`, columns nothing was
+   * filling in before, which is why cash-in rows never appeared there.
+   *
+   * Only the dollars are asked for. `original_currency` and `fx_rate` follow
+   * from them in `TransactionsService.recordCashIn` rather than being sent, so
+   * this form cannot describe a euro transfer at a rate of its own choosing.
+   */
+  usdSent: amountSchema
+    .refine((v) => Number(v) > 0, {
+      message: "Leave this blank, or enter what was sent in dollars",
+    })
+    .optional(),
+
   ...senderFields,
 
   paymentMethod: paymentMethodSchema.default("bank_transfer"),
