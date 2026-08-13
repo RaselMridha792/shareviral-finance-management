@@ -1,9 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Patch,
+  Post,
+} from "@nestjs/common";
 import {
   aiIntakeRequestSchema,
   setAiKeySchema,
+  updateAiSettingsSchema,
   type AiIntakeRequest,
   type SetAiKeyInput,
+  type UpdateAiSettingsInput,
 } from "@finance/shared";
 
 import {
@@ -38,8 +48,13 @@ export class AiIntakeController {
   @Post("turn")
   @HttpCode(200)
   @RequirePermission("ai.use")
-  turn(@ZodBody(aiIntakeRequestSchema) body: AiIntakeRequest) {
-    return this.ai.turn(body);
+  turn(
+    @ZodBody(aiIntakeRequestSchema) body: AiIntakeRequest,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    // The actor travels with the request: every lookup the assistant makes
+    // runs under this person permissions, never the server ones.
+    return this.ai.turn(body, actor);
   }
 
   /** Category and account names to ids, checked against what exists. */
@@ -63,6 +78,16 @@ export class AiIntakeController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.ai.setKey(body.apiKey, actor);
+  }
+
+  /** Model and how much it may read. Super Admin only. */
+  @Patch("settings")
+  @RequirePermission("settings.write")
+  updateSettings(
+    @ZodBody(updateAiSettingsSchema) body: UpdateAiSettingsInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.ai.updateSettings(body, actor);
   }
 
   @Delete("key")

@@ -6,18 +6,23 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import {
+  AI_MODELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
   todayInDhaka,
   type AiAvailability,
   type AiIntakeReply,
   type AiIntakeRequest,
+  type AiDataAccess,
   type AiKeyResult,
+  type AiModel,
   type AiTarget,
+  type UpdateAiSettingsInput,
 } from "@finance/shared";
 import { and, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
+import { AiToolsService } from "./ai-tools";
 import { hint, open, seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -29,8 +34,17 @@ import {
   vendors,
 } from "../../db/schema";
 
-/** Small, fast, and entirely adequate for filling in a form. */
-const MODEL = "claude-sonnet-5";
+/** Used to check a key before the settings row is known to be readable. */
+const DEFAULT_MODEL = "claude-sonnet-5";
+
+/**
+ * How many times the model may look something up before it has to answer.
+ *
+ * Four is enough for "what did we pay Grameenphone this year, and is the tax on
+ * it deposited" — two lookups and a comparison. It is also low enough that a
+ * confused loop costs pennies and ends.
+ */
+const MAX_LOOKUPS = 4;
 
 @Injectable()
 export class AiIntakeService {
@@ -39,6 +53,7 @@ export class AiIntakeService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly tools: AiToolsService,
   ) {}
 
   /**
@@ -54,17 +69,26 @@ export class AiIntakeService {
     fromEnvironment: boolean;
     setAt: Date | null;
     setBy: string | null;
+    model: AiModel;
+    dataAccess: AiDataAccess;
   }> {
     const [row] = await this.db.client
       .select({
         sealed: appSettings.anthropicApiKey,
         setAt: appSettings.anthropicKeySetAt,
         setBy: users.fullName,
+        model: appSettings.aiModel,
+        dataAccess: appSettings.aiDataAccess,
       })
       .from(appSettings)
       .leftJoin(users, eq(appSettings.anthropicKeySetBy, users.id))
       .where(eq(appSettings.id, 1))
       .limit(1);
+
+    const model = (AI_MODELS as readonly string[]).includes(row?.model ?? "")
+      ? (row.model as AiModel)
+      : DEFAULT_MODEL;
+    const dataAccess = (row?.dataAccess ?? "names_only") as AiDataAccess;
 
     const fromSettings = open(row?.sealed);
     if (fromSettings) {
@@ -73,6 +97,8 @@ export class AiIntakeService {
         fromEnvironment: false,
         setAt: row?.setAt ?? null,
         setBy: row?.setBy ?? null,
+        model,
+        dataAccess,
       };
     }
 
@@ -81,7 +107,51 @@ export class AiIntakeService {
       fromEnvironment: Boolean(process.env.ANTHROPIC_API_KEY),
       setAt: null,
       setBy: null,
+      model,
+      dataAccess,
     };
+  }
+
+  /** Model and data access. The key is not touched here. */
+  async updateSettings(input: UpdateAiSettingsInput, actor: AuthenticatedUser) {
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary:
+        "Changed the assistant's " +
+        [
+          input.model ? "model to " + input.model : null,
+          input.dataAccess ? "data access to " + input.dataAccess : null,
+        ]
+          .filter(Boolean)
+          .join(" and "),
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({
+            model: appSettings.aiModel,
+            dataAccess: appSettings.aiDataAccess,
+          })
+          .from(appSettings)
+          .where(eq(appSettings.id, 1))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(appSettings)
+          .set({
+            ...(input.model ? { aiModel: input.model } : {}),
+            ...(input.dataAccess ? { aiDataAccess: input.dataAccess } : {}),
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(appSettings.id, 1));
+      },
+    });
+
+    return this.availability();
   }
 
   async availability(): Promise<AiAvailability> {
@@ -96,6 +166,8 @@ export class AiIntakeService {
         setAt: null,
         setBy: null,
         fromEnvironment: false,
+        model: stored.model,
+        dataAccess: "off",
       };
     }
 
@@ -106,6 +178,8 @@ export class AiIntakeService {
       setAt: stored.setAt ? stored.setAt.toISOString() : null,
       setBy: stored.setBy,
       fromEnvironment: stored.fromEnvironment,
+      model: stored.model,
+      dataAccess: stored.dataAccess,
     };
   }
 
@@ -119,7 +193,7 @@ export class AiIntakeService {
   async setKey(apiKey: string, actor: AuthenticatedUser): Promise<AiKeyResult> {
     try {
       await new Anthropic({ apiKey }).messages.create({
-        model: MODEL,
+        model: DEFAULT_MODEL,
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       });
@@ -204,37 +278,95 @@ export class AiIntakeService {
    * categories, accounts and vendors that exist so it can name a real one, and
    * it returns JSON. Everything after that is the app's own code.
    */
-  async turn(input: AiIntakeRequest): Promise<AiIntakeReply> {
+  /**
+   * One turn: look things up if needed, then answer or draft.
+   *
+   * The loop is bounded and every lookup runs as the person who asked — see
+   * ai-tools.ts. The model is never given a write tool of any kind; the only
+   * way anything reaches the books is a person pressing Save on a filled-in
+   * form afterwards.
+   */
+  async turn(
+    input: AiIntakeRequest,
+    actor: AuthenticatedUser,
+  ): Promise<AiIntakeReply> {
     const client = await this.anthropic();
+    const { model, dataAccess } = await this.storedKey();
     const context = await this.context();
 
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1200,
-      system: this.systemPrompt(context, input.target, input.draft),
-      messages: input.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      tools: [
-        {
-          name: "draft",
-          description:
-            "Record what you have understood so far and the next question to ask.",
-          input_schema: REPLY_SCHEMA,
-        },
-      ],
-      tool_choice: { type: "tool", name: "draft" },
-    });
+    const lookupTools =
+      dataAccess === "full" ? this.tools.definitionsFor(actor) : [];
 
-    const block = response.content.find((c) => c.type === "tool_use");
-    if (!block || block.type !== "tool_use") {
-      throw new ServiceUnavailableException(
-        "The assistant did not answer in the expected shape. Try the ordinary form.",
-      );
+    const messages: Anthropic.MessageParam[] = input.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const tools: Anthropic.Tool[] = [
+      ...lookupTools,
+      {
+        name: "answer",
+        description:
+          "Give the final answer: a draft to save, a question to ask, or a reply to what was asked.",
+        input_schema: REPLY_SCHEMA,
+      },
+    ];
+
+    for (let round = 0; round <= MAX_LOOKUPS; round++) {
+      const response = await client.messages.create({
+        model,
+        max_tokens: 1500,
+        system: this.systemPrompt(
+          context,
+          dataAccess,
+          actor,
+          input.target,
+          input.draft,
+        ),
+        messages,
+        tools,
+        // On the last round it must stop looking and answer.
+        tool_choice:
+          round === MAX_LOOKUPS
+            ? { type: "tool", name: "answer" }
+            : { type: "any" },
+      });
+
+      const calls = response.content.filter((c) => c.type === "tool_use");
+      const answer = calls.find((c) => c.name === "answer");
+
+      if (answer) {
+        return this.normalise(answer.input as Record<string, unknown>);
+      }
+
+      if (!calls.length) {
+        throw new ServiceUnavailableException(
+          "The assistant did not answer in the expected shape. Try the ordinary form.",
+        );
+      }
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const call of calls) {
+        const result = await this.tools.run(
+          call.name,
+          (call.input ?? {}) as Record<string, unknown>,
+          actor,
+        );
+        results.push({
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: result.text,
+          is_error: !result.ok,
+        });
+      }
+      messages.push({ role: "user", content: results });
     }
 
-    return this.normalise(block.input as Record<string, unknown>);
+    throw new ServiceUnavailableException(
+      "The assistant could not settle on an answer. Try the ordinary form.",
+    );
   }
 
   /* ---------------------------------------------------------------------- */
@@ -298,12 +430,67 @@ export class AiIntakeService {
 
   private systemPrompt(
     context: { categories: string[]; accounts: string[]; vendors: string[] },
+    dataAccess: AiDataAccess,
+    actor: AuthenticatedUser,
     target?: AiTarget,
     draft?: Record<string, unknown>,
   ): string {
-    return `You help someone record a finance entry in ShareViral Finance Management, a Bangladesh company's internal books. You fill in a form. You do not save anything — the person reviews and confirms every draft on an ordinary form afterwards.
+    return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: record what somebody describes, and answer questions about what is already recorded. You save nothing yourself.
 
-Today in Dhaka is ${todayInDhaka()}. The currency is BDT unless the person says otherwise.
+HOW TO WRITE
+Answer in one or two sentences. No greeting, no "I'd be happy to", no summary of
+what you are about to do, no offer of further help. The person is at work and
+wants the answer.
+State a figure and where it came from. If you do not know, say what is missing
+in one line.
+Never invent a number, a date or a name. An amount nobody gave you is the single
+most damaging thing you can produce here.
+
+WHAT THIS APP HOLDS
+- One ledger: every movement of money is IN or OUT of an account, with a date,
+  an amount, a category, and usually a vendor. Expenses, the transaction list
+  and the bank register are three views of that one list.
+- Accounts: bank, cash and mobile wallet, each with an opening balance.
+- Categories: two levels. A payment is filed against a sub-category, never a
+  heading.
+- Vendors: whoever is paid, with e-TIN, BIN and PSR status.
+- Team: employees and contractors. Pay is NOT stored on a person — it lives in a
+  separate table that most roles cannot reach, and you must never ask for it or
+  report it.
+- Payroll: one run a month. Generate the sheet, type each person's tax,
+  finalise (nothing moves), then mark paid (the net leaves the bank; the tax
+  stays until a challan is deposited). Contractors are never on the sheet.
+- Withholding tax: what was deducted from salaries and vendor bills, against
+  what was deposited by challan. Quarterly returns, due 25 Oct/Jan/Apr/Jul.
+- Company income tax: four advance instalments plus the annual return.
+- Reports: a period, month-by-month bank statistics, and funding from the CEO
+  in USD.
+
+WHERE A NEW RECORD BELONGS — decide this yourself, do not ask
+- Money paid or received, of any kind         -> transaction_out / transaction_in
+- Somebody the company pays                   -> vendor
+- Somebody who works here                     -> team_member
+- Tax deposited to the treasury, with challan -> tds_deposit
+Salary is never recorded as a transaction: it comes from a payroll run. If
+somebody describes paying salaries, say so and point them at Payroll.
+Tax withheld belongs only on money going OUT. If a client deducted tax when
+paying us, that is an advance-tax credit and belongs under Income tax, not on
+the receipt.
+
+Today in Dhaka is ${todayInDhaka()}. The currency is BDT unless the person says otherwise. The person asking is signed in as ${actor.fullName} (${actor.role}).
+
+${
+  dataAccess === "full"
+    ? `LOOKING THINGS UP
+You have read-only tools. Use them whenever a question is about what is already
+recorded rather than about something new — do not guess or say you cannot see
+the data. Every tool runs as this person: if one refuses, say plainly that their
+role cannot see that, and do not try another route to the same answer.
+When you have the answer, call \`answer\` with it in the summary field, target
+null and missingFields empty.`
+    : `You have no way to look anything up. If asked about existing records, say
+in one line that lookups are switched off in Settings, and answer nothing else.`
+}
 
 They write in Bangla, in English, or in both in one sentence. Answer in whichever they used. Bangla numerals and words for amounts are common: "pnach hajar" and "৫০০০" both mean 5000; "lakh" is 100,000; "crore" is 10,000,000.
 
