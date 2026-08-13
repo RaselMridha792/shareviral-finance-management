@@ -1,0 +1,389 @@
+"use client";
+
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  todayInDhaka,
+  type TxnDirection,
+} from "@finance/shared";
+import { LoaderCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
+import {
+  DateInput,
+  Field,
+  Input,
+  MoneyInput,
+  Select,
+  Textarea,
+} from "@/components/ui/field";
+import { ApiError } from "@/lib/api-client";
+import { ledgerApi, type TransactionDto } from "@/lib/ledger";
+import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { cn } from "@/lib/utils";
+
+export function TransactionForm({
+  open,
+  transaction,
+  defaultDirection = "out",
+  defaultAccountId,
+  accounts,
+  categories,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  transaction?: TransactionDto;
+  defaultDirection?: TxnDirection;
+  defaultAccountId?: string;
+  accounts: AccountDto[];
+  categories: CategoryNode[];
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const editing = Boolean(transaction);
+  const [direction, setDirection] = useState<TxnDirection>(
+    transaction?.direction ?? defaultDirection,
+  );
+  const [showTax, setShowTax] = useState(
+    Boolean(transaction && Number(transaction.withheldTaxAmount) > 0),
+  );
+  const [showFx, setShowFx] = useState(Boolean(transaction?.originalAmount));
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  // A money-out entry may only use a money-out category, and the reverse.
+  const usable = categories.filter(
+    (group) => group.kind === direction || group.kind === "both",
+  );
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setFieldErrors({});
+
+    const data = new FormData(event.currentTarget);
+    const text = (key: string) => {
+      const value = String(data.get(key) ?? "").trim();
+      return value === "" ? undefined : value;
+    };
+
+    try {
+      if (transaction) {
+        await ledgerApi.update(transaction.id, {
+          txnDate: text("txnDate"),
+          amount: text("amount"),
+          categoryId: text("categoryId"),
+          vendorName: text("vendorName"),
+          paymentMethod: text("paymentMethod") as never,
+          reference: text("reference"),
+          description: text("description"),
+          notes: text("notes"),
+          receiptUrl: text("receiptUrl"),
+          billAmount: showTax ? text("billAmount") : undefined,
+          withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
+        });
+      } else {
+        await ledgerApi.create({
+          direction,
+          txnDate: String(data.get("txnDate")),
+          accountId: String(data.get("accountId")),
+          amount: String(data.get("amount")),
+          categoryId: String(data.get("categoryId")),
+          vendorName: text("vendorName"),
+          paymentMethod: (text("paymentMethod") ?? "bank_transfer") as never,
+          reference: text("reference"),
+          description: String(data.get("description")),
+          notes: text("notes"),
+          receiptUrl: text("receiptUrl"),
+          billAmount: showTax ? text("billAmount") : undefined,
+          withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
+          originalAmount: showFx ? text("originalAmount") : undefined,
+          originalCurrency: showFx ? "USD" : undefined,
+          fxRate: showFx ? text("fxRate") : undefined,
+        } as never);
+      }
+      await onSaved();
+      onClose();
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setError(caught.message);
+        setFieldErrors(caught.fieldErrors ?? {});
+      } else {
+        setError("Could not save. Check the API is running.");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={editing ? `Edit ${transaction?.refNo}` : "Record a movement"}
+      description={
+        editing
+          ? "The account and the direction cannot change — void it and enter a new one instead."
+          : undefined
+      }
+    >
+      <form id="txn-form" onSubmit={onSubmit} className="flex flex-col gap-4">
+        {!editing ? (
+          <div
+            role="radiogroup"
+            aria-label="Direction"
+            className="grid grid-cols-2 gap-2"
+          >
+            {(["out", "in"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={direction === value}
+                onClick={() => setDirection(value)}
+                className={cn(
+                  "cursor-pointer rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                  direction === value
+                    ? value === "in"
+                      ? "border-positive bg-positive/10 text-positive"
+                      : "border-negative bg-negative/10 text-negative"
+                    : "border-border text-muted-foreground hover:bg-surface-muted",
+                )}
+              >
+                {value === "in" ? "Money in" : "Money out"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Date" required error={fieldErrors.txnDate}>
+            <DateInput
+              name="txnDate"
+              required
+              defaultValue={transaction?.txnDate ?? todayInDhaka()}
+            />
+          </Field>
+          <Field label="Amount" required error={fieldErrors.amount}>
+            <MoneyInput
+              name="amount"
+              required
+              placeholder="0.00"
+              defaultValue={transaction?.amount}
+            />
+          </Field>
+        </div>
+
+        {!editing ? (
+          <Field label="Account" required error={fieldErrors.accountId}>
+            <Select
+              name="accountId"
+              required
+              defaultValue={defaultAccountId ?? accounts[0]?.id}
+            >
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
+
+        <Field label="Category" required error={fieldErrors.categoryId}>
+          <Select
+            name="categoryId"
+            required
+            defaultValue={transaction?.categoryId ?? ""}
+          >
+            <option value="" disabled>
+              Choose a category
+            </option>
+            {usable.map((group) => (
+              <optgroup key={group.id} label={group.name}>
+                <option value={group.id}>{group.name} (general)</option>
+                {group.children
+                  .filter((child) => child.isActive)
+                  .map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {child.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Description" required error={fieldErrors.description}>
+          <Input
+            name="description"
+            required
+            placeholder="August office rent"
+            defaultValue={transaction?.description}
+          />
+        </Field>
+
+        <Field
+          label={direction === "in" ? "Received from" : "Paid to"}
+          error={fieldErrors.vendorName}
+          hint="Type a new name and it will be added to the vendor list"
+        >
+          <Input
+            name="vendorName"
+            list="vendor-options"
+            defaultValue={transaction?.vendorName ?? ""}
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Paid by" error={fieldErrors.paymentMethod}>
+            <Select
+              name="paymentMethod"
+              defaultValue={transaction?.paymentMethod ?? "bank_transfer"}
+            >
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {PAYMENT_METHOD_LABELS[method]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="Reference"
+            error={fieldErrors.reference}
+            hint="Cheque or bank reference"
+          >
+            <Input
+              name="reference"
+              className="num"
+              defaultValue={transaction?.reference ?? ""}
+            />
+          </Field>
+        </div>
+
+        <Field
+          label="Receipt link"
+          error={fieldErrors.receiptUrl}
+          hint="Paste the Google Drive link"
+        >
+          <Input
+            name="receiptUrl"
+            type="url"
+            placeholder="https://drive.google.com/…"
+            defaultValue={transaction?.receiptUrl ?? ""}
+          />
+        </Field>
+
+        {/*
+          Tax withheld: behind a toggle because most entries have none, and
+          money-out only. Tax a client deducts from money they send us is an
+          advance-tax credit, not something we owe the treasury — offering the
+          field here would let someone book a deposit obligation that does not
+          exist.
+        */}
+        {direction === "out" ? (
+          <label className="flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={showTax}
+              onChange={(event) => setShowTax(event.target.checked)}
+              className="size-4 accent-primary"
+            />
+            Tax was withheld from this payment
+          </label>
+        ) : null}
+
+        {showTax && direction === "out" ? (
+          <div className="grid gap-4 rounded-lg bg-surface-muted p-4 sm:grid-cols-2">
+            <Field
+              label="Gross bill"
+              error={fieldErrors.billAmount}
+              hint="Before tax was deducted"
+            >
+              <MoneyInput
+                name="billAmount"
+                defaultValue={transaction?.billAmount ?? ""}
+              />
+            </Field>
+            <Field label="Tax withheld" error={fieldErrors.withheldTaxAmount}>
+              <MoneyInput
+                name="withheldTaxAmount"
+                defaultValue={
+                  transaction && Number(transaction.withheldTaxAmount) > 0
+                    ? transaction.withheldTaxAmount
+                    : ""
+                }
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        {!editing && direction === "in" ? (
+          <>
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={showFx}
+                onChange={(event) => setShowFx(event.target.checked)}
+                className="size-4 accent-primary"
+              />
+              This arrived as a foreign currency transfer
+            </label>
+
+            {showFx ? (
+              <div className="grid gap-4 rounded-lg bg-surface-muted p-4 sm:grid-cols-2">
+                <Field
+                  label="USD sent"
+                  error={fieldErrors.originalAmount}
+                  hint="What left the sender"
+                >
+                  <MoneyInput name="originalAmount" placeholder="5000.00" />
+                </Field>
+                <Field
+                  label="Rate the bank gave"
+                  error={fieldErrors.fxRate}
+                  hint="Kept forever, never re-translated"
+                >
+                  <Input
+                    name="fxRate"
+                    className="col-amount"
+                    inputMode="decimal"
+                    placeholder="118.40"
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        <Field label="Notes" error={fieldErrors.notes}>
+          <Textarea name="notes" defaultValue={transaction?.notes ?? ""} />
+        </Field>
+
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+          >
+            {error}
+          </p>
+        ) : null}
+      </form>
+
+      <div className="mt-6 flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" form="txn-form" variant="primary" disabled={pending}>
+          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          {editing ? "Save changes" : "Record it"}
+        </Button>
+      </div>
+    </Drawer>
+  );
+}
