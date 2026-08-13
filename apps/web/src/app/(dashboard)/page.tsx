@@ -1,57 +1,41 @@
-import { hasPermission, monthRange, todayInDhaka } from "@finance/shared";
-import type { PendingItem } from "@finance/shared";
+import { hasPermission } from "@finance/shared";
+import type { CurrencyView, Granularity, PendingItem } from "@finance/shared";
 
-import { DashboardScreen } from "@/components/dashboard/dashboard-screen";
+import { HrDashboard } from "@/components/dashboard/hr-dashboard";
+import { OverviewScreen } from "@/components/dashboard/overview-screen";
 import { getSession } from "@/lib/api-client";
-import { ledgerApi } from "@/lib/ledger";
-import { accountsApi } from "@/lib/masters";
+import { reportsApi } from "@/lib/reports";
 import { incomeTaxApi, tdsApi } from "@/lib/tax";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+const GRANULARITIES = ["month", "quarter", "half", "year"] as const;
+
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await getSession();
+  const params = await searchParams;
 
-  const today = todayInDhaka();
-  const year = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7));
-  const thisMonth = monthRange(year, month);
-  const lastMonth = monthRange(
-    month === 1 ? year - 1 : year,
-    month === 1 ? 12 : month - 1,
-  );
+  const asked = String(params.granularity ?? "month");
+  const granularity: Granularity = (
+    GRANULARITIES as readonly string[]
+  ).includes(asked)
+    ? (asked as Granularity)
+    : "month";
 
-  // HR signs in here too, and holds none of the money permissions. Asking for
+  // HR signs in here too and holds none of the money permissions. Asking for
   // figures they may not see would 403 and take the whole page down, so the
-  // dashboard asks only for what this role is allowed to know.
+  // decision is made before the request rather than after it.
   const seesMoney = hasPermission(user?.role, "dashboard.money");
+  const seesUsd = hasPermission(user?.role, "reports.usd");
   const seesTds = hasPermission(user?.role, "tds.read");
   const seesIncomeTax = hasPermission(user?.role, "incometax.read");
 
-  const [accounts, current, previous, expenses] = seesMoney
-    ? await Promise.all([
-        accountsApi.list(),
-        ledgerApi.summary({ from: thisMonth.start, to: thisMonth.end }),
-        ledgerApi.summary({ from: lastMonth.start, to: lastMonth.end }),
-        ledgerApi.expenseSummary({ from: thisMonth.start, to: thisMonth.end }),
-      ])
-    : [[], null, null, null];
-
-  // Phase 7 replaces this with a balances endpoint that folds in the ledger;
-  // until then the opening balance plus this month's net is the honest figure
-  // we can show without a second round of queries per account.
-  const balances = await Promise.all(
-    accounts.map(async (account) => {
-      const register = await ledgerApi.register(account.id);
-      return {
-        id: account.id,
-        name: account.name,
-        type: account.type,
-        currency: account.currency,
-        balance: register.closingBalance,
-      };
-    }),
-  );
+  const currency: CurrencyView =
+    seesUsd && params.currency === "USD" ? "USD" : "BDT";
 
   const pending: PendingItem[] = (
     await Promise.all([
@@ -62,15 +46,25 @@ export default async function DashboardPage() {
     .flat()
     .sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0));
 
+  if (!seesMoney) {
+    return (
+      <HrDashboard
+        firstName={user?.fullName.split(" ")[0] ?? "there"}
+        pending={pending}
+      />
+    );
+  }
+
+  // One request for the whole screen. It used to be one per account, before a
+  // single figure appeared.
+  const report = await reportsApi.overview({ granularity, currency });
+
   return (
-    <DashboardScreen
+    <OverviewScreen
       firstName={user?.fullName.split(" ")[0] ?? "there"}
-      monthLabel={thisMonth.label}
-      balances={balances}
-      current={current}
-      previous={previous}
-      expenses={expenses}
+      report={report}
       pending={pending}
+      canSeeUsd={seesUsd}
     />
   );
 }

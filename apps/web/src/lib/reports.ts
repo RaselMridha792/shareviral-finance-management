@@ -3,6 +3,7 @@ import type {
   CurrencyView,
   FundingReport,
   Granularity,
+  OverviewReport,
   PeriodReport,
   SetFxRateInput,
 } from "@finance/shared";
@@ -33,6 +34,20 @@ const fresh = { cache: "no-store" as const };
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
 export const reportsApi = {
+  /** The whole overview screen, in one request. */
+  overview: (params: {
+    granularity: Granularity;
+    fiscalYear?: number;
+    index?: number;
+    currency?: CurrencyView;
+  }) => {
+    const search = new URLSearchParams({ granularity: params.granularity });
+    if (params.fiscalYear) search.set("fiscalYear", String(params.fiscalYear));
+    if (params.index) search.set("index", String(params.index));
+    if (params.currency) search.set("currency", params.currency);
+    return apiFetch<OverviewReport>(`/reports/overview?${search}`, fresh);
+  },
+
   periods: (granularity: Granularity) =>
     apiFetch<AvailablePeriods>(
       `/reports/periods?granularity=${granularity}`,
