@@ -24,3 +24,4 @@ export * from "./team";
 export * from "./tax";
 export * from "./fx";
 export * from "./ai-chats";
+export * from "./ai-attachments";

@@ -134,8 +134,60 @@ export const aiIntakeRequestSchema = z.strictObject({
    * server starts one and returns its id.
    */
   chatId: z.string().uuid().optional(),
+  /** A file attached to this conversation, for the assistant to read. */
+  attachmentId: z.string().uuid().optional(),
 });
 export type AiIntakeRequest = z.infer<typeof aiIntakeRequestSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Attaching a file                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A spreadsheet somebody wants read rather than typed.
+ *
+ * The arithmetic is done here, on the server, and only the result is described
+ * to the model. Asking a language model to total a column of 400 figures is
+ * asking for a number that looks right — the sums, ranges and counts below are
+ * computed in code, so "how much is in this file" has one answer and it is the
+ * correct one.
+ */
+export const AI_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const AI_ATTACHMENT_EXTENSIONS = [
+  ".csv",
+  ".tsv",
+  ".txt",
+  ".xlsx",
+  ".xls",
+] as const;
+
+export type AiAttachmentColumn = {
+  name: string;
+  /** How many rows have anything in this column. */
+  filled: number;
+  kind: "number" | "date" | "text";
+  /** Set for a numeric column. Strings, because these are money. */
+  total?: string;
+  min?: string;
+  max?: string;
+  /** Set for a text column with few enough values to be worth listing. */
+  distinct?: number;
+  examples: string[];
+};
+
+export type AiAttachment = {
+  id: string;
+  name: string;
+  /** Rows in the file. */
+  rowCount: number;
+  /** Rows kept for analysis — fewer than rowCount for a very large file. */
+  storedRows: number;
+  columns: AiAttachmentColumn[];
+  /** The first few rows, so the person can see it read the file correctly. */
+  sample: Array<Record<string, string | number | null>>;
+  /** Set once the rows have been handed to the import screen. */
+  importBatchId: string | null;
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Saved conversations                                                        */
@@ -160,6 +212,8 @@ export type AiChat = AiChatSummary & {
   messages: AiMessage[];
   /** The last draft, so reopening a conversation resumes where it stopped. */
   reply: AiIntakeReply | null;
+  /** Files attached to it, so reopening shows what was being discussed. */
+  attachments: AiAttachment[];
 };
 
 /** The first thing said, trimmed to something readable in a list. */
