@@ -168,8 +168,6 @@ export function CategoryDetailScreen({
         emptyMessage={`Nothing filed under ${heading.name} in ${range.label}.`}
       />
 
-      <datalist id="vendor-options" />
-
       <TransactionForm
         key={editing?.id}
         open={Boolean(editing)}

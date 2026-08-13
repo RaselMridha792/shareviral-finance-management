@@ -213,8 +213,6 @@ export function OtherExpensesScreen({
         </CardBody>
       </Card>
 
-      <datalist id="vendor-options" />
-
       <TransactionForm
         open={creating}
         defaultDirection="out"

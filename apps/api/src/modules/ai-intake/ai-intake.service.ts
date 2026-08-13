@@ -593,8 +593,11 @@ transaction_out / transaction_in
   categoryId    the exact category NAME from the list below; the app resolves it
   accountName   which account it moved through, if they said
 
-transaction_out may also have: vendorName, billAmount, withheldTaxAmount
+transaction_out may also have: billAmount, withheldTaxAmount
   (tax withheld only applies to money going out — never to money coming in)
+  Never ask who was paid as a separate field. The company keeps no supplier
+  list and the form no longer collects one — who it went to belongs in the
+  description, in their own words.
 
 vendor: name. May also have: type, etin, bin
 team_member: fullName, employeeCode, joinedOn. Do not ask about pay. A joining

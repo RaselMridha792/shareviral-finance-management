@@ -191,8 +191,6 @@ export function TransactionsScreen({
         </div>
       ) : null}
 
-      <datalist id="vendor-options" />
-
       {/* Kept mounted for the row's edit action — this is the same drawer,
           opened with a transaction rather than empty. */}
       <TransactionForm

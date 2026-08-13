@@ -252,19 +252,20 @@ function AccountBlock({ group }: { group: AccountGroup }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* "Opening balance", not "Opening bank balance": the section heading
+            above already says which account this is, and the longer label was
+            the one that wrapped. */}
         <StatTile
-          label={
-            group.key === "card"
-              ? "Opening card balance"
-              : "Opening bank balance"
-          }
+          label="Opening balance"
           value={group.opening}
+          usd={group.usd.opening}
           icon={History}
           hint="carried forward"
         />
         <StatTile
           label="Cash inflow"
           value={group.moneyIn}
+          usd={group.usd.moneyIn}
           tone="in"
           icon={ArrowDownLeft}
           accent="positive"
@@ -272,17 +273,15 @@ function AccountBlock({ group }: { group: AccountGroup }) {
         <StatTile
           label="Cash outflow"
           value={group.moneyOut}
+          usd={group.usd.moneyOut}
           tone="out"
           icon={ArrowUpRight}
           accent="negative"
         />
         <StatTile
-          label={
-            group.key === "card"
-              ? "Current card balance"
-              : "Current bank balance"
-          }
+          label="Current balance"
           value={group.closing}
+          usd={group.usd.closing}
           icon={group.key === "card" ? CreditCard : Wallet}
           accent="primary"
           hint="opening + in − out"

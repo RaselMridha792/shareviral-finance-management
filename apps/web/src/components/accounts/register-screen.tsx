@@ -176,8 +176,6 @@ export function RegisterScreen({
         emptyMessage="No entries for this account in the chosen period."
       />
 
-      <datalist id="vendor-options" />
-
       <TransactionForm
         open={creating}
         defaultAccountId={account.id}

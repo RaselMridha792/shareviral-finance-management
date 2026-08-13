@@ -53,10 +53,17 @@ export function StatTile({
     warning: "bg-warning/12 text-warning",
   };
 
+  const showsFooter =
+    (change !== undefined && change !== null) || Boolean(hint);
+
   return (
     <Card className="flex flex-col p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="flex items-start justify-between gap-2">
+        {/* Smaller than the body scale on purpose. This is a caption naming
+            the figure below it, not text anybody reads — at 13px uppercase it
+            wrapped to two lines and pushed the figures in a row out of line
+            with each other. */}
+        <p className="text-[0.6875rem] leading-4 font-semibold tracking-[0.07em] text-muted-foreground uppercase">
           {label}
         </p>
         <span
@@ -69,37 +76,46 @@ export function StatTile({
         </span>
       </div>
 
-      <Amount
-        value={value}
-        tone={tone === "neutral" ? "auto" : tone}
-        className="mt-3 block text-xl font-semibold tracking-tight sm:text-2xl"
-      />
-
-      {usd ? (
+      {/* The taka and its dollars are one unit: a tight pair with the pair
+          itself separated from everything around it, so the eye reads them
+          together rather than as two unrelated lines. */}
+      <div className="mt-3 flex flex-col gap-1">
         <Amount
-          value={usd}
-          currency="USD"
-          tone="neutral"
-          className="mt-0.5 block text-xs text-muted-foreground"
-          approximate
+          value={value}
+          tone={tone === "neutral" ? "auto" : tone}
+          className="block text-xl font-semibold tracking-tight sm:text-2xl"
         />
-      ) : null}
 
-      <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs">
-        {change !== undefined && change !== null ? (
-          <span
-            className={cn(
-              "num inline-flex items-center gap-1 font-medium",
-              good ? "text-positive" : "text-negative",
-            )}
-          >
-            <Trend className="size-3.5" />
-            {rising ? "+" : "−"}
-            {Math.abs(change).toFixed(1)}%
-          </span>
+        {usd ? (
+          <Amount
+            value={usd}
+            currency="USD"
+            tone="neutral"
+            className="block text-sm font-medium text-muted-foreground"
+            approximate
+          />
         ) : null}
-        {hint ? <span className="text-muted-foreground">{hint}</span> : null}
       </div>
+
+      {/* Only when there is something to say. An empty row still has padding,
+          and four tiles with different amounts of it stop lining up. */}
+      {showsFooter ? (
+        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-3 text-xs">
+          {change !== undefined && change !== null ? (
+            <span
+              className={cn(
+                "num inline-flex items-center gap-1 font-medium",
+                good ? "text-positive" : "text-negative",
+              )}
+            >
+              <Trend className="size-3.5" />
+              {rising ? "+" : "−"}
+              {Math.abs(change).toFixed(1)}%
+            </span>
+          ) : null}
+          {hint ? <span className="text-muted-foreground">{hint}</span> : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

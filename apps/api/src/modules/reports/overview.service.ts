@@ -127,10 +127,28 @@ export class OverviewService {
     const currency = "BDT" as const;
     const convert = (value: string) => value;
     const convertLine = <T extends { total: string }>(line: T) => ({ ...line });
-    /** The approximate dollars beside a taka figure, or null with no rate. */
+    /**
+     * The approximate dollars beside a taka figure, or null with no rate.
+     *
+     * `unavailable: false` is not cosmetic. `fx` describes what the *rate
+     * table* could answer, and `convert` refuses outright when that flag is
+     * set. But a month funded from abroad has a rate whether or not anybody
+     * ever filled in Settings — `fundingRateFor` found it on the transfer
+     * itself. Spreading `fx` unchanged carried its "no rate" verdict into a
+     * call that does have one, so every dollar figure came back null while the
+     * heading above them read "dollars shown at 118.30 per USD".
+     *
+     * Rebuilt rather than spread through, so the two can no longer disagree:
+     * if `usdRate` is set the conversion happens, and if it is not, nothing is
+     * shown at all.
+     */
     const usd = (value: string): string | null =>
       usdRate
-        ? (FxService.convert(value, { ...fx, rate: usdRate }) ?? null)
+        ? (FxService.convert(value, {
+            ...fx,
+            rate: usdRate,
+            unavailable: false,
+          }) ?? null)
         : null;
 
     return {

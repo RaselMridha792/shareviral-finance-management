@@ -109,7 +109,9 @@ export function TransactionForm({
           txnDate: text("txnDate"),
           amount: text("amount"),
           categoryId: text("categoryId"),
-          vendorName: text("vendorName"),
+          // No vendorName: the form no longer collects one. Left out rather
+          // than sent empty, so editing an older entry that has one keeps it
+          // instead of quietly clearing it.
           paymentMethod: text("paymentMethod") as never,
           reference: text("reference"),
           description: text("description"),
@@ -125,7 +127,6 @@ export function TransactionForm({
           accountId: String(data.get("accountId")),
           amount: String(data.get("amount")),
           categoryId: String(data.get("categoryId")),
-          vendorName: text("vendorName"),
           paymentMethod: (text("paymentMethod") ?? "bank_transfer") as never,
           reference: text("reference"),
           description: String(data.get("description")),
@@ -260,17 +261,12 @@ export function TransactionForm({
           />
         </Field>
 
-        <Field
-          label={direction === "in" ? "Received from" : "Paid to"}
-          error={fieldErrors.vendorName}
-          hint="Type a new name and it will be added to the vendor list"
-        >
-          <Input
-            name="vendorName"
-            list="vendor-options"
-            defaultValue={transaction?.vendorName ?? ""}
-          />
-        </Field>
+        {/* There was a "Paid to" box here that created a vendor from whatever
+            was typed. The company does not keep a supplier list — what it has
+            is tools and subscriptions, which have their own screen — and a
+            free-text box that silently creates master data is how "150000.00"
+            once became a vendor, from an amount tabbed into the wrong field.
+            Who was paid belongs in the description. */}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Paid by" error={fieldErrors.paymentMethod}>
