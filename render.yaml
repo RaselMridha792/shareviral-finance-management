@@ -44,6 +44,9 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      # Encrypts secrets kept in the database, such as the assistant API key.
+      - key: SECRET_ENCRYPTION_KEY
+        generateValue: true
       - key: JWT_ACCESS_TTL
         value: 15m
       - key: JWT_REFRESH_TTL
