@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { isoDateSchema, type FxReportBasis } from "./masters.ts";
-import { granularitySchema } from "./periods.ts";
+import { granularitySchema, type Granularity } from "./periods.ts";
 
 /* -------------------------------------------------------------------------- */
 /*  Exchange rates                                                             */
@@ -87,6 +87,97 @@ export const fundingQuerySchema = z.strictObject({
   to: isoDateSchema.optional(),
 });
 export type FundingQuery = z.infer<typeof fundingQuerySchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  The overview                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Everything the first screen shows, in one request.
+ *
+ * Gathered server-side on purpose. The dashboard used to ask for each account's
+ * register in turn, which is one query per account before a single figure
+ * appears; this is a fixed number of queries whatever the company grows into.
+ */
+export const overviewQuerySchema = z.strictObject({
+  granularity: granularitySchema.default("month"),
+  fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
+  index: z.coerce.number().int().min(1).max(12).optional(),
+  currency: currencyViewSchema.default("BDT"),
+});
+export type OverviewQuery = z.infer<typeof overviewQuerySchema>;
+
+export type OverviewTotals = {
+  moneyIn: string;
+  moneyOut: string;
+  net: string;
+  entries: number;
+  /** Every account's opening balance plus everything that has moved. Not period-bound. */
+  cashInHand: string;
+  /** Net pay that actually left the bank in this period. */
+  salaryPaid: string;
+  /** BDT that landed from the CEO's remittances in this period. */
+  fundingReceived: string;
+  /** Tax held back from payments in this period. */
+  taxWithheld: string;
+  /** Deposited by challan in this period. */
+  taxDeposited: string;
+  /** Held back and not yet deposited, all time — an obligation, not a period figure. */
+  taxOutstanding: string;
+};
+
+export type OverviewVendor = {
+  name: string;
+  total: string;
+  entries: number;
+};
+
+export type OverviewEntry = {
+  id: string;
+  refNo: string;
+  txnDate: string;
+  description: string;
+  direction: "in" | "out";
+  amount: string;
+  categoryName: string | null;
+  vendorName: string | null;
+  accountName: string | null;
+};
+
+export type OverviewReport = {
+  period: {
+    label: string;
+    start: string;
+    end: string;
+    granularity: Granularity;
+  };
+  currency: CurrencyView;
+  fx: FxContext | null;
+  totals: OverviewTotals;
+  /** The comparable period before, for the change figures. */
+  previous: {
+    label: string;
+    moneyIn: string;
+    moneyOut: string;
+    net: string;
+    salaryPaid: string;
+    fundingReceived: string;
+  } | null;
+  /** Twelve months to the end of the period, for the trend. */
+  months: MonthStat[];
+  spendByCategory: CategoryLine[];
+  incomeByCategory: CategoryLine[];
+  topVendors: OverviewVendor[];
+  balances: Array<{
+    id: string;
+    name: string;
+    type: string;
+    currency: string;
+    balance: string;
+  }>;
+  recent: OverviewEntry[];
+  headcount: { employees: number; contractors: number };
+};
 
 export type CategoryLine = {
   id: string | null;

@@ -4,10 +4,12 @@ import {
   bankStatsQuerySchema,
   fundingQuerySchema,
   granularitySchema,
+  overviewQuerySchema,
   periodQuerySchema,
   type BankStatsQuery,
   type CurrencyView,
   type FundingQuery,
+  type OverviewQuery,
   type PeriodQuery,
 } from "@finance/shared";
 import { z } from "zod";
@@ -18,6 +20,7 @@ import {
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
 import { ZodQuery } from "../../common/pipes/zod-validation.pipe";
+import { OverviewService } from "./overview.service";
 import { ReportsService } from "./reports.service";
 
 const periodsQuerySchema = z.strictObject({
@@ -40,7 +43,26 @@ function assertMaySeeUsd(currency: CurrencyView, actor: AuthenticatedUser) {
 
 @Controller("reports")
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly overviewService: OverviewService,
+  ) {}
+
+  /**
+   * The whole overview screen, in one request.
+   *
+   * Needs `dashboard.money` rather than `reports.view`: this is the figures
+   * themselves, and HR holds the second permission but not the first.
+   */
+  @Get("overview")
+  @RequirePermission("dashboard.money")
+  overview(
+    @ZodQuery(overviewQuerySchema) query: OverviewQuery,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    assertMaySeeUsd(query.currency, actor);
+    return this.overviewService.build(query);
+  }
 
   /** Which periods exist, so a picker never offers one the app cannot build. */
   @Get("periods")
