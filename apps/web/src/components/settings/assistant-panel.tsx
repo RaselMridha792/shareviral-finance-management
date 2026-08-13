@@ -1,7 +1,18 @@
 "use client";
 
-import type { AiAvailability } from "@finance/shared";
 import {
+  AI_DATA_ACCESS,
+  AI_DATA_ACCESS_DETAIL,
+  AI_DATA_ACCESS_LABELS,
+  AI_MODELS,
+  AI_MODEL_DETAIL,
+  AI_MODEL_LABELS,
+  type AiAvailability,
+  type AiDataAccess,
+  type AiModel,
+} from "@finance/shared";
+import {
+  CircleAlert,
   CircleCheck,
   ExternalLink,
   Eye,
@@ -16,7 +27,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Field, Input } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
 
@@ -33,8 +44,34 @@ export function AssistantPanel() {
   const [key, setKey] = useState("");
   const [visible, setVisible] = useState(false);
   const [pending, setPending] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const model: AiModel = status?.model ?? "claude-sonnet-5";
+  const access: AiDataAccess =
+    status?.dataAccess && status.dataAccess !== "off"
+      ? status.dataAccess
+      : "names_only";
+
+  async function changeSettings(input: {
+    model?: AiModel;
+    dataAccess?: AiDataAccess;
+  }) {
+    setSaving(true);
+    setError(null);
+    try {
+      setStatus(await aiApi.updateSettings(input));
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not change that setting.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function load() {
     try {
@@ -226,26 +263,79 @@ export function AssistantPanel() {
       </Card>
 
       <Card>
-        <CardHeader title="What it can and cannot do" />
+        <CardHeader
+          title="What leaves the building"
+          description="Anything the assistant is given is sent to Anthropic to be turned into a sentence. This decides how much that is."
+        />
+        <CardBody className="flex flex-col gap-4">
+          <Field label="How much it may read" hint={AI_DATA_ACCESS_DETAIL[access]}>
+            <Select
+              value={access}
+              disabled={saving}
+              onChange={(event) =>
+                void changeSettings({
+                  dataAccess: event.target.value as AiDataAccess,
+                })
+              }
+            >
+              {AI_DATA_ACCESS.filter((option) => option !== "off").map(
+                (option) => (
+                  <option key={option} value={option}>
+                    {AI_DATA_ACCESS_LABELS[option]}
+                  </option>
+                ),
+              )}
+            </Select>
+          </Field>
+
+          {access === "full" ? (
+            <div className="flex items-start gap-3 rounded-lg bg-warning/10 px-4 py-3">
+              <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+              <p className="text-sm text-muted-foreground">
+                Real figures from your books will be sent to Anthropic when
+                somebody asks a question. Each lookup still runs as the person
+                asking, so nobody sees more through the assistant than they
+                would by clicking — and pay is unreachable either way.
+              </p>
+            </div>
+          ) : null}
+
+          <Field label="Which model answers" hint={AI_MODEL_DETAIL[model]}>
+            <Select
+              value={model}
+              disabled={saving}
+              onChange={(event) =>
+                void changeSettings({ model: event.target.value as AiModel })
+              }
+            >
+              {AI_MODELS.map((option) => (
+                <option key={option} value={option}>
+                  {AI_MODEL_LABELS[option]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="What it cannot do, whatever the setting" />
         <CardBody>
           <ul className="flex max-w-2xl flex-col gap-2 text-sm text-muted-foreground">
             <li>
-              It fills in a form. It holds no tools, reads nothing from the
-              database except the list of your categories, accounts and vendors,
-              and <strong>cannot save anything</strong>.
+              <strong>Save anything.</strong> It has no write tool of any kind.
+              Every draft becomes an ordinary form that a person presses Save
+              on, going through the same endpoint, permission check and audit
+              row as typing it would.
             </li>
             <li>
-              Saving happens when a person presses Save on the filled-in form,
-              which goes through the same endpoint, the same permission check
-              and the same audit trail as typing it would.
+              <strong>Reach anybody&apos;s pay.</strong> Compensation lives in a
+              table no lookup touches, and it is told never to ask.
             </li>
             <li>
-              It is never asked about salary, and is told not to collect it.
-            </li>
-            <li>
-              What is sent to Anthropic: the message typed, and the names of
-              your categories, accounts and vendors. No amounts, no salaries, no
-              bank details, and nothing from the ledger.
+              <strong>See more than the person asking.</strong> Every lookup is
+              checked against their own permissions, so HR gets the same refusal
+              here as on a screen.
             </li>
           </ul>
         </CardBody>

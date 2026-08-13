@@ -2,6 +2,7 @@ import {
   AI_TARGET_ENDPOINT,
   type AiAvailability,
   type AiKeyResult,
+  type UpdateAiSettingsInput,
   type AiIntakeReply,
   type AiIntakeRequest,
   type AiTarget,
@@ -26,6 +27,12 @@ export const aiApi = {
     }),
 
   clearKey: () => apiFetch<AiKeyResult>("/ai/key", { method: "DELETE" }),
+
+  updateSettings: (input: UpdateAiSettingsInput) =>
+    apiFetch<AiAvailability>("/ai/settings", {
+      method: "PATCH",
+      ...json(input),
+    }),
 
   turn: (request: AiIntakeRequest) =>
     apiFetch<AiIntakeReply>("/ai/turn", { method: "POST", ...json(request) }),
