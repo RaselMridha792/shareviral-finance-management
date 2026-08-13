@@ -21,10 +21,15 @@ import { DbService } from "../../db/db.service";
 import { compensationHistory, teamMembers } from "../../db/schema";
 
 /**
- * What anyone may see about a person. Deliberately contains no money.
+ * What anyone who can read the team may see about a person.
  *
- * Compensation is fetched separately through a separately-gated endpoint, so
- * there is no shape of this object that could accidentally carry a salary.
+ * The only money on it is `joiningSalary`, the figure agreed at hire — HR's own
+ * paperwork, fixed on the joining date, and intentionally visible to them.
+ *
+ * Everything about what somebody is paid *now* is fetched separately through a
+ * separately-gated endpoint, and this projection never joins
+ * `compensation_history`. So no shape of this object can carry a current
+ * salary, a raise, or a payroll figure — only the one number from the offer.
  */
 export type TeamMemberDto = {
   id: string;
@@ -69,7 +74,22 @@ export type TeamMemberDto = {
   reportingManagerId: string | null;
   probationUntil: string | null;
   confirmedOn: string | null;
+
+  /**
+   * The figure agreed at hire — the one salary HR may see. Numeric comes back
+   * from the driver as a string, like every other amount in this app.
+   */
+  joiningSalary: string | null;
+
+  /** Superseded by the two below; still returned so old data is not orphaned. */
   lastQualification: string | null;
+  educationLevel: string | null;
+  educationMajor: string | null;
+
+  /* Papers on file — links, never uploads. */
+  cvUrl: string | null;
+  appointmentLetterUrl: string | null;
+
   /** Resolved on the detail read only; the list does not join for it. */
   reportingManagerName?: string | null;
 };
@@ -366,9 +386,11 @@ const projection = {
   /**
    * The personal half of an employment record.
    *
-   * Every one of these is HR's business and none of them is pay. The salary
-   * boundary is unchanged: compensation lives in its own table, this
-   * projection does not join it, and adding fields here cannot reach it.
+   * All of it is HR's business. The salary boundary still holds where it
+   * matters: `compensation_history` lives in its own table, this projection
+   * does not join it, and adding fields here cannot reach it. The one money
+   * column below is `joiningSalary`, which is on `team_members` by decision —
+   * the offer figure, not the payroll one.
    */
   photoUrl: teamMembers.photoUrl,
   dateOfBirth: teamMembers.dateOfBirth,
@@ -387,7 +409,12 @@ const projection = {
   reportingManagerId: teamMembers.reportingManagerId,
   probationUntil: teamMembers.probationUntil,
   confirmedOn: teamMembers.confirmedOn,
+  joiningSalary: teamMembers.joiningSalary,
   lastQualification: teamMembers.lastQualification,
+  educationLevel: teamMembers.educationLevel,
+  educationMajor: teamMembers.educationMajor,
+  cvUrl: teamMembers.cvUrl,
+  appointmentLetterUrl: teamMembers.appointmentLetterUrl,
 };
 
 function describeUpdate(

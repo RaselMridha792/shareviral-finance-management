@@ -46,11 +46,17 @@ export const payrollPaymentModeEnum = pgEnum("payroll_payment_mode", [
 ]);
 
 /**
- * People. **There is deliberately no salary column here.**
+ * People.
  *
- * Compensation lives in its own table, so HR endpoints — which never join it —
- * have no code path to a salary figure at all. A field-stripping serializer can
- * be forgotten; a missing join cannot.
+ * **The only money here is `joiningSalary` — the figure agreed at hire.** It is
+ * a fact about the offer, fixed on the day they joined, and it is visible to
+ * anyone who can read the team, HR included. That is intended.
+ *
+ * Everything about what somebody is *paid* — the current figure, every raise,
+ * the history — lives in `compensation_history`, and no HR-facing query joins
+ * it. That is what keeps the boundary structural rather than a promise: a
+ * field-stripping serializer can be forgotten, a missing join cannot. Adding a
+ * column here can never reach that table.
  */
 export const teamMembers = pgTable(
   "team_members",
@@ -139,7 +145,30 @@ export const teamMembers = pgTable(
     reportingManagerId: uuid("reporting_manager_id"),
     probationUntil: date("probation_until"),
     confirmedOn: date("confirmed_on"),
+
+    /**
+     * What was agreed at hire. The one money column on this table, and the one
+     * salary figure HR may see — a fact about the offer, not about payroll.
+     * It never changes; raises go to `compensation_history`.
+     */
+    joiningSalary: numeric("joining_salary", { precision: 14, scale: 2 }),
+
+    /**
+     * Superseded by the level/major pair below, which say the same thing but
+     * can be grouped and counted. Kept, not dropped: it holds what was typed
+     * in before the split existed. The form no longer offers it.
+     */
     lastQualification: varchar("last_qualification", { length: 120 }),
+    educationLevel: text("education_level"),
+    /** Free text — the real answers include "Wet Process Engineering". */
+    educationMajor: varchar("education_major", { length: 120 }),
+
+    /* --- papers on file ------------------------------------------------ */
+
+    /** Links, like `photoUrl`. Nothing is uploaded to this app. */
+    cvUrl: text("cv_url"),
+    appointmentLetterUrl: text("appointment_letter_url"),
+
     notes: text("notes"),
 
     createdAt: timestamp("created_at", { withTimezone: true })

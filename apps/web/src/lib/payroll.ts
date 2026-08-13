@@ -2,6 +2,7 @@ import type {
   BloodGroup,
   CreatePayrollRunInput,
   CreateTeamMemberInput,
+  EducationLevel,
   EmploymentStatus,
   EngagementType,
   Gender,
@@ -70,7 +71,23 @@ export type TeamMemberDto = {
   reportingManagerId: string | null;
   probationUntil: string | null;
   confirmedOn: string | null;
+
+  /**
+   * The figure agreed at hire — the one salary anyone with `team.read` sees.
+   * What they are paid now is `CompensationDto`, behind its own permission.
+   */
+  joiningSalary: string | null;
+
+  /** Superseded by the two below; still returned so old data is not orphaned. */
   lastQualification: string | null;
+  educationLevel: EducationLevel | null;
+  educationMajor: string | null;
+
+  /* --- papers on file ----------------------------------------------------- */
+
+  /** Links, like `photoUrl`. Nothing is uploaded to this app. */
+  cvUrl: string | null;
+  appointmentLetterUrl: string | null;
 };
 
 export type CompensationDto = {

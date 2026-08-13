@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
   GENDER_LABELS,
@@ -8,7 +9,15 @@ import {
   PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
-import { ArrowLeft, LoaderCircle, Lock, Plus, SquarePen } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  FileText,
+  LoaderCircle,
+  Lock,
+  Plus,
+  SquarePen,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -193,7 +202,7 @@ export function TeamMemberScreen({
           <Card>
             <CardHeader
               title="Identity"
-              description="The numbers statutory forms ask for"
+              description="The numbers statutory forms ask for — some staff carry a passport and no NID"
             />
             <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row label="NID" mono value={member.nid} />
@@ -254,17 +263,47 @@ export function TeamMemberScreen({
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
                 </Badge>
               </Row>
-              <Row label="Last qualification" value={member.lastQualification} />
+              <Row
+                label="Education"
+                value={
+                  member.educationLevel
+                    ? EDUCATION_LEVEL_LABELS[member.educationLevel]
+                    : null
+                }
+              />
+              <Row label="Major" value={member.educationMajor} />
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Dates" />
+            <CardHeader
+              title="Joining &amp; dates"
+              description="The salary agreed at hire — what they are paid now is on the Pay tab"
+            />
             <CardBody className="flex flex-col gap-2.5 text-sm">
               <Row label="Joined" mono value={member.joinedOn} />
+              <Row label="Joining salary">
+                {member.joiningSalary ? (
+                  <Amount value={member.joiningSalary} className="font-medium" />
+                ) : null}
+              </Row>
               <Row label="Probation until" mono value={member.probationUntil} />
               <Row label="Confirmed on" mono value={member.confirmedOn} />
               <Row label="Last day" mono value={member.endedOn} />
+            </CardBody>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader
+              title="Documents"
+              description="Links, not uploads — this app keeps no files of its own"
+            />
+            <CardBody className="flex flex-wrap gap-2">
+              <DocumentLink href={member.cvUrl} label="CV" />
+              <DocumentLink
+                href={member.appointmentLetterUrl}
+                label="Appointment letter"
+              />
             </CardBody>
           </Card>
         </div>
@@ -465,6 +504,44 @@ function MemberPhoto({
       onError={() => setBroken(true)}
       className="size-16 shrink-0 rounded-xl border border-border object-cover"
     />
+  );
+}
+
+/**
+ * A paper somebody pasted a link to.
+ *
+ * Named by what it is, never by its address — a Drive URL is eighty characters
+ * of noise that tells nobody what it opens. Absent is stated rather than left
+ * blank: "no signed letter on file" is itself something HR needs to see.
+ */
+function DocumentLink({
+  href,
+  label,
+}: {
+  href: string | null;
+  label: string;
+}) {
+  if (!href) {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-sm">
+        <FileText className="size-4 text-muted-foreground" />
+        {label}
+        <span className="text-muted-foreground">Not on file</span>
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition hover:border-primary hover:text-primary"
+    >
+      <FileText className="size-4 text-muted-foreground" />
+      {label}
+      <ExternalLink className="size-3.5 text-muted-foreground" />
+    </a>
   );
 }
 

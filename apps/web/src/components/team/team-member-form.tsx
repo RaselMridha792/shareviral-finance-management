@@ -2,6 +2,8 @@
 
 import {
   BLOOD_GROUPS,
+  EDUCATION_LEVELS,
+  EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUSES,
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
@@ -23,6 +25,7 @@ import {
   DateInput,
   Field,
   Input,
+  MoneyInput,
   Select,
   Textarea,
 } from "@/components/ui/field";
@@ -37,6 +40,7 @@ const OMIT_WHEN_BLANK = [
   "gender",
   "maritalStatus",
   "bloodGroup",
+  "educationLevel",
   "reportingManagerId",
 ] as const;
 
@@ -131,7 +135,15 @@ export function TeamMemberForm({
       emergencyContactPhone: text("emergencyContactPhone"),
       probationUntil: text("probationUntil"),
       confirmedOn: text("confirmedOn"),
-      lastQualification: text("lastQualification"),
+      // The offer figure, not payroll. Raises are set on the Pay tab, which
+      // this drawer cannot reach and HR cannot open.
+      joiningSalary: text("joiningSalary"),
+      // `lastQualification` is deliberately absent. Education level and major
+      // supersede it, and leaving it out of the payload means whatever was
+      // typed in before the split is kept rather than blanked on every save.
+      educationMajor: text("educationMajor"),
+      cvUrl: text("cvUrl"),
+      appointmentLetterUrl: text("appointmentLetterUrl"),
       ...(editing
         ? { status: text("status"), endedOn: text("endedOn") }
         : {}),
@@ -385,18 +397,30 @@ export function TeamMemberForm({
               defaultValue={member?.joinedOn ?? todayInDhaka()}
             />
           </Field>
-          {editing ? (
-            <Field label="Status">
-              <Select name="status" defaultValue={member?.status}>
-                {EMPLOYMENT_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {EMPLOYMENT_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : null}
+          <Field
+            label="Joining salary"
+            error={fieldErrors.joiningSalary}
+            hint="What was agreed at hire. Later raises go on the Pay tab, not here."
+          >
+            <MoneyInput
+              name="joiningSalary"
+              placeholder="45000.00"
+              defaultValue={member?.joiningSalary ?? ""}
+            />
+          </Field>
         </div>
+
+        {editing ? (
+          <Field label="Status">
+            <Select name="status" defaultValue={member?.status}>
+              {EMPLOYMENT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {EMPLOYMENT_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Probation until" error={fieldErrors.probationUntil}>
@@ -423,14 +447,57 @@ export function TeamMemberForm({
           </Field>
         ) : null}
 
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Education" hint="The highest one finished">
+            <Select
+              name="educationLevel"
+              defaultValue={member?.educationLevel ?? ""}
+            >
+              <option value="">Not set</option>
+              {EDUCATION_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {EDUCATION_LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="Major"
+            error={fieldErrors.educationMajor}
+            hint="The subject — CSE, HRM, Psychology"
+          >
+            <Input
+              name="educationMajor"
+              defaultValue={member?.educationMajor ?? ""}
+            />
+          </Field>
+        </div>
+
         <Field
-          label="Last qualification"
-          error={fieldErrors.lastQualification}
-          hint="The highest one finished — BSc in CSE, HSC"
+          label="CV"
+          error={fieldErrors.cvUrl}
+          hint="A link, not an upload — a Drive file or any https:// address"
         >
           <Input
-            name="lastQualification"
-            defaultValue={member?.lastQualification ?? ""}
+            name="cvUrl"
+            type="url"
+            inputMode="url"
+            placeholder="https://drive.google.com/…"
+            defaultValue={member?.cvUrl ?? ""}
+          />
+        </Field>
+
+        <Field
+          label="Signed appointment letter"
+          error={fieldErrors.appointmentLetterUrl}
+          hint="A link, not an upload — a Drive file or any https:// address"
+        >
+          <Input
+            name="appointmentLetterUrl"
+            type="url"
+            inputMode="url"
+            placeholder="https://drive.google.com/…"
+            defaultValue={member?.appointmentLetterUrl ?? ""}
           />
         </Field>
 

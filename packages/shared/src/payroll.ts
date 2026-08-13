@@ -24,6 +24,24 @@ const optionalOf = <T extends z.ZodType<string>>(schema: T) =>
     .transform((v) => (v === "" ? undefined : v))
     .optional();
 
+/**
+ * A link, not an upload.
+ *
+ * This app stores no files anywhere — a receipt is a Drive link, and so are a
+ * photo, a CV and an appointment letter. One definition so every one of them
+ * accepts exactly the same thing: `https://` and nothing else. `http://` is
+ * refused rather than upgraded, because a link that silently downgrades is a
+ * link somebody pastes a password into.
+ */
+const optionalLink = () =>
+  optionalOf(
+    z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => /^https:\/\/\S+$/.test(v), "Paste an https:// link"),
+  );
+
 /* -------------------------------------------------------------------------- */
 /*  Team members                                                               */
 /* -------------------------------------------------------------------------- */
@@ -107,6 +125,36 @@ export const BLOOD_GROUPS = [
 export const bloodGroupSchema = z.enum(BLOOD_GROUPS);
 export type BloodGroup = z.infer<typeof bloodGroupSchema>;
 
+/**
+ * How far somebody got in school.
+ *
+ * The list is longer than the two answers currently on record, on purpose: an
+ * HR list that only offers what today's staff happen to hold is a list that
+ * gets bypassed the first time somebody joins with a diploma. `other` is the
+ * escape hatch, and the major beside it carries the detail.
+ */
+export const EDUCATION_LEVELS = [
+  "ssc",
+  "hsc",
+  "diploma",
+  "bachelors",
+  "masters",
+  "phd",
+  "other",
+] as const;
+export const educationLevelSchema = z.enum(EDUCATION_LEVELS);
+export type EducationLevel = z.infer<typeof educationLevelSchema>;
+
+export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
+  ssc: "SSC",
+  hsc: "HSC",
+  diploma: "Diploma",
+  bachelors: "Bachelor's",
+  masters: "Master's",
+  phd: "PhD",
+  other: "Other",
+};
+
 export const createTeamMemberSchema = z.strictObject({
   employeeCode: z.string().trim().min(1, "Give them a code").max(20),
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
@@ -135,13 +183,7 @@ export const createTeamMemberSchema = z.strictObject({
    * A link, not a file. This app stores no blobs — receipts are Drive links
    * and so is this, which keeps backups a database dump and nothing else.
    */
-  photoUrl: optionalOf(
-    z
-      .string()
-      .trim()
-      .max(500)
-      .refine((v) => /^https:\/\/\S+$/.test(v), "Paste an https:// link"),
-  ),
+  photoUrl: optionalLink(),
   dateOfBirth: optionalOf(isoDateSchema),
   gender: genderSchema.optional(),
   maritalStatus: maritalStatusSchema.optional(),
@@ -165,7 +207,43 @@ export const createTeamMemberSchema = z.strictObject({
   reportingManagerId: z.string().uuid().nullish(),
   probationUntil: optionalOf(isoDateSchema),
   confirmedOn: optionalOf(isoDateSchema),
+
+  /**
+   * The salary agreed at hire — and the one deliberate exception to the rule
+   * that HR sees no pay.
+   *
+   * Read the exception narrowly. This is a fact about the offer that was made,
+   * frozen on the day they joined; it is HR's own paperwork and it never
+   * changes again. What anybody is paid *now* — every raise, the current
+   * figure, the history — stays in `compensation_history`, behind
+   * `team.compensation.read`, which HR does not hold. A field here can never
+   * reach that table: this schema drives `team_members` and nothing joins the
+   * two.
+   *
+   * So the boundary is not gone, it moved: HR sees one number from the offer
+   * letter, and nothing about payroll.
+   */
+  joiningSalary: optionalOf(amountSchema),
+
+  /**
+   * Superseded by `educationLevel` + `educationMajor`, which say the same
+   * thing in two sortable halves. Kept because it holds data that was typed in
+   * before the split existed; it is no longer offered on the form.
+   */
   lastQualification: optionalText(120),
+  educationLevel: educationLevelSchema.optional(),
+  /**
+   * Free text, deliberately. The real answers run from CSE and HRM to Wet
+   * Process Engineering — a list somebody has to maintain is a list that is
+   * missing the next person's subject on the day they join.
+   */
+  educationMajor: optionalText(120),
+
+  /* --- papers on file --------------------------------------------------- */
+
+  /** Links, like the photo. Nothing is uploaded to this app. */
+  cvUrl: optionalLink(),
+  appointmentLetterUrl: optionalLink(),
 });
 export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
 

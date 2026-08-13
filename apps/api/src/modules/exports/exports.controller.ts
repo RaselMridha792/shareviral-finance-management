@@ -586,11 +586,17 @@ export class ExportsController {
   /**
    * The team directory.
    *
-   * `TeamMemberDto` is the projection the list screen gets, and it deliberately
-   * contains no money — compensation lives behind `team.compensation.read` and
-   * is fetched by a different endpoint. Feeding the sheet that same DTO is what
-   * makes "HR's download cannot contain a salary" structural rather than a
-   * promise.
+   * `TeamMemberDto` is the projection the list screen gets. It carries the
+   * salary agreed at hire — a deliberate decision, since HR maintains that
+   * record — and nothing else about pay: compensation history lives behind
+   * `team.compensation.read` and is fetched by a different endpoint. Feeding
+   * the sheet that same DTO is what keeps "HR's download cannot contain what
+   * anybody is paid now" structural rather than a promise.
+   *
+   * The columns below are listed by hand, so joining salary is not in the
+   * sheet today even though the DTO holds it. Adding it is a column
+   * definition; leaving it out is also a defensible answer. It is a choice
+   * either way, not an accident.
    */
   @Get("team-members")
   @RequirePermission("exports.run", "team.read")
