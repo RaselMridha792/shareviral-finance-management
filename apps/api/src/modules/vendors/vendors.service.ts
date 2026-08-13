@@ -5,9 +5,15 @@ import {
 } from "@nestjs/common";
 import {
   VENDOR_TYPE_LABELS,
+  daysBetween,
+  monthlyEquivalent,
+  nextRenewal,
+  todayInDhaka,
   type CreateVendorInput,
   type ListVendorsQuery,
   type Paginated,
+  type SubscriptionLine,
+  type SubscriptionSummary,
   type UpdateVendorInput,
 } from "@finance/shared";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
@@ -16,7 +22,7 @@ import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
-import { vendors, type Vendor } from "../../db/schema";
+import { accounts, vendors, type Vendor } from "../../db/schema";
 
 export type VendorDto = Omit<Vendor, "deletedAt" | "entityId">;
 
@@ -200,6 +206,82 @@ export class VendorsService {
     });
   }
 
+  /**
+   * Everything that renews, with the next date rolled forward.
+   *
+   * The stored date is an anchor somebody set once; this is what it means
+   * today. Totals stay split by the currency each is billed in — most AI tools
+   * charge dollars while the books are taka, and one number covering both
+   * would be wrong by the exchange rate and look entirely normal.
+   */
+  async subscriptions(): Promise<SubscriptionSummary> {
+    const today = todayInDhaka();
+
+    const rows = await this.db.client
+      .select({
+        id: vendors.id,
+        name: vendors.name,
+        type: vendors.type,
+        billingCycle: vendors.billingCycle,
+        billingAmount: vendors.billingAmount,
+        billingCurrency: vendors.billingCurrency,
+        anchor: vendors.nextRenewalOn,
+        billingAccountId: vendors.billingAccountId,
+        billingAccountName: accounts.name,
+      })
+      .from(vendors)
+      .leftJoin(accounts, eq(vendors.billingAccountId, accounts.id))
+      .where(
+        and(
+          isNull(vendors.deletedAt),
+          eq(vendors.isActive, true),
+          sql`${vendors.billingCycle} <> 'none'`,
+        ),
+      );
+
+    let monthlyBdt = 0;
+    let monthlyUsd = 0;
+
+    const lines: SubscriptionLine[] = rows.map((row) => {
+      const cycle = row.billingCycle as SubscriptionLine["billingCycle"];
+      const per = monthlyEquivalent(row.billingAmount, cycle);
+      if (row.billingCurrency === "USD") monthlyUsd += per;
+      else monthlyBdt += per;
+
+      const next = nextRenewal(row.anchor, cycle, today);
+
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        billingCycle: cycle,
+        billingAmount: row.billingAmount,
+        billingCurrency: row.billingCurrency,
+        nextRenewalOn: next,
+        daysAway: next ? daysBetween(today, next) : null,
+        billingAccountId: row.billingAccountId,
+        billingAccountName: row.billingAccountName,
+      };
+    });
+
+    // Soonest first, and anything with no date at the end — it is not urgent,
+    // it is unfinished.
+    lines.sort((a, b) => {
+      if (a.nextRenewalOn === b.nextRenewalOn)
+        return a.name.localeCompare(b.name);
+      if (!a.nextRenewalOn) return 1;
+      if (!b.nextRenewalOn) return -1;
+      return a.nextRenewalOn < b.nextRenewalOn ? -1 : 1;
+    });
+
+    return {
+      monthlyBdt: monthlyBdt.toFixed(2),
+      monthlyUsd: monthlyUsd.toFixed(2),
+      lines,
+      dueSoon: lines.filter((l) => l.daysAway !== null && l.daysAway <= 7),
+    };
+  }
+
   private async assertNameFree(name: string, exceptId?: string) {
     const [clash] = await this.db.client
       .select({ id: vendors.id })
@@ -235,6 +317,11 @@ const projection = {
   email: vendors.email,
   address: vendors.address,
   defaultCategoryId: vendors.defaultCategoryId,
+  billingCycle: vendors.billingCycle,
+  billingAmount: vendors.billingAmount,
+  billingCurrency: vendors.billingCurrency,
+  nextRenewalOn: vendors.nextRenewalOn,
+  billingAccountId: vendors.billingAccountId,
   notes: vendors.notes,
   isActive: vendors.isActive,
   createdAt: vendors.createdAt,

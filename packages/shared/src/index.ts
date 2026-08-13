@@ -21,6 +21,7 @@ export * from "./money.ts";
 export * from "./periods.ts";
 export * from "./deadlines.ts";
 export * from "./masters.ts";
+export * from "./subscriptions.ts";
 export * from "./transactions.ts";
 export * from "./payroll.ts";
 export * from "./tax.ts";

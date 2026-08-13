@@ -144,6 +144,9 @@ export type ListCategoriesQuery = z.infer<typeof listCategoriesQuerySchema>;
 /* -------------------------------------------------------------------------- */
 
 export const VENDOR_TYPES = [
+  "ai_tool",
+  "subscription",
+  "hosting",
   "supplier",
   "contractor",
   "landlord",
@@ -155,12 +158,57 @@ export const vendorTypeSchema = z.enum(VENDOR_TYPES);
 export type VendorType = z.infer<typeof vendorTypeSchema>;
 
 export const VENDOR_TYPE_LABELS: Record<VendorType, string> = {
+  ai_tool: "AI tool",
+  subscription: "Subscription",
+  hosting: "Hosting",
   supplier: "Supplier",
   contractor: "Contractor",
   landlord: "Landlord",
   utility: "Utility",
   government: "Government",
   other: "Other",
+};
+
+/**
+ * The ones that renew on their own.
+ *
+ * Not a separate table: an AI tool is something the company pays, which is
+ * what this list has always been. What changes is that these have a *next*
+ * payment as well as a history, and a total that is owed monthly whether or
+ * not anybody looks.
+ */
+export const RECURRING_VENDOR_TYPES: readonly VendorType[] = [
+  "ai_tool",
+  "subscription",
+  "hosting",
+];
+
+export function isRecurringType(type: VendorType): boolean {
+  return RECURRING_VENDOR_TYPES.includes(type);
+}
+
+export const BILLING_CYCLES = [
+  "none",
+  "monthly",
+  "quarterly",
+  "yearly",
+] as const;
+export const billingCycleSchema = z.enum(BILLING_CYCLES);
+export type BillingCycle = z.infer<typeof billingCycleSchema>;
+
+export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
+  none: "Not recurring",
+  monthly: "Every month",
+  quarterly: "Every quarter",
+  yearly: "Every year",
+};
+
+/** Months per cycle, for putting a yearly and a monthly cost on one scale. */
+export const BILLING_CYCLE_MONTHS: Record<BillingCycle, number> = {
+  none: 0,
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
 };
 
 export const PSR_STATUSES = ["unknown", "submitted", "not_submitted"] as const;
@@ -176,6 +224,23 @@ export const PSR_STATUS_LABELS: Record<PsrStatus, string> = {
 export const createVendorSchema = z.strictObject({
   name: z.string().trim().min(2, "Give the vendor a name").max(120),
   type: vendorTypeSchema.default("supplier"),
+
+  /**
+   * What renews, how often, and when next.
+   *
+   * `billingCurrency` is its own field and not a convenience: most AI tools
+   * bill in dollars while the books are in taka, and adding the two together
+   * at 1:1 is a mistake this app has already made once elsewhere.
+   */
+  billingCycle: billingCycleSchema.default("none"),
+  billingAmount: optionalText(amountSchema),
+  billingCurrency: z.enum(["BDT", "USD"]).default("BDT"),
+  /**
+   * Any past renewal date works — the next one is rolled forward from it, so
+   * a date set a year ago still shows the right upcoming month.
+   */
+  nextRenewalOn: optionalText(isoDateSchema),
+  billingAccountId: z.string().uuid().nullish(),
   etin: optionalText(etinSchema),
   bin: optionalText(binSchema),
   psrStatus: psrStatusSchema.default("unknown"),

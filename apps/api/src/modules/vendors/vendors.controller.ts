@@ -42,6 +42,16 @@ export class VendorsController {
     return this.vendors.search(query.q, query.limit);
   }
 
+  /**
+   * Everything that renews. Declared before `:id` or "subscriptions" would be
+   * read as a vendor id and 400 on the uuid parse.
+   */
+  @Get("subscriptions")
+  @RequirePermission("vendors.read")
+  subscriptions() {
+    return this.vendors.subscriptions();
+  }
+
   @Get(":id")
   @RequirePermission("vendors.read")
   findOne(@Param("id") id: string) {

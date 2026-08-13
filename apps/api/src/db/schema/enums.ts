@@ -25,6 +25,10 @@ export const accountTypeEnum = pgEnum("account_type", [
 export const categoryKindEnum = pgEnum("category_kind", ["in", "out", "both"]);
 
 export const vendorTypeEnum = pgEnum("vendor_type", [
+  // The recurring ones, first because they are what this company mostly pays.
+  "ai_tool",
+  "subscription",
+  "hosting",
   "supplier",
   "contractor",
   "landlord",

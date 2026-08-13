@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -50,6 +52,24 @@ export const vendors = pgTable(
     /** Pre-selected when recording a payment to this vendor. */
     defaultCategoryId: uuid("default_category_id"),
 
+    /**
+     * What renews, how often, and when next.
+     *
+     * On the vendor rather than in a table of its own: an AI subscription is
+     * something the company pays, which is what this table has always held.
+     * What these columns add is a *next* payment beside the history.
+     *
+     * The currency is stored, not assumed. Most of these bill in dollars while
+     * the books are in taka, and adding the two at 1:1 is a mistake this app
+     * has already made once.
+     */
+    billingCycle: text("billing_cycle").notNull().default("none"),
+    billingAmount: numeric("billing_amount", { precision: 14, scale: 2 }),
+    billingCurrency: text("billing_currency").notNull().default("BDT"),
+    /** An anchor, not a promise — the next date is rolled forward from it. */
+    nextRenewalOn: date("next_renewal_on"),
+    billingAccountId: uuid("billing_account_id"),
+
     notes: text("notes"),
     isActive: boolean("is_active").notNull().default(true),
 
@@ -70,6 +90,8 @@ export const vendors = pgTable(
     ),
     index("vendors_active_idx").on(t.isActive),
     index("vendors_etin_idx").on(t.etin),
+    // "What renews soon" is the question this screen exists to answer.
+    index("vendors_renewal_idx").on(t.nextRenewalOn),
   ],
 );
 
