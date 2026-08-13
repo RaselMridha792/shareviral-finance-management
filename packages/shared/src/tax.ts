@@ -167,10 +167,7 @@ export type PendingQuery = z.infer<typeof pendingQuerySchema>;
 
 export type PendingItem = {
   kind:
-    | "tds_deposit"
-    | "withholding_return"
-    | "advance_tax"
-    | "income_tax_return";
+    "tds_deposit" | "withholding_return" | "advance_tax" | "income_tax_return";
   title: string;
   detail: string;
   /** Set when there is a figure attached; null for a filing with no amount. */

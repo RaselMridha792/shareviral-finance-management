@@ -198,18 +198,20 @@ export const voidTransactionSchema = z.strictObject({
 export type VoidTransactionInput = z.infer<typeof voidTransactionSchema>;
 
 /** Moving money between our own accounts creates a linked pair of rows. */
-export const transferSchema = z.strictObject({
-  txnDate: isoDateSchema,
-  fromAccountId: z.string().uuid("Choose the account money leaves"),
-  toAccountId: z.string().uuid("Choose the account money arrives in"),
-  amount: amountSchema,
-  description: z.string().trim().min(2).max(300),
-  reference: optionalText(120),
-  paymentMethod: paymentMethodSchema.default("bank_transfer"),
-}).refine((v) => v.fromAccountId !== v.toAccountId, {
-  message: "Pick two different accounts",
-  path: ["toAccountId"],
-});
+export const transferSchema = z
+  .strictObject({
+    txnDate: isoDateSchema,
+    fromAccountId: z.string().uuid("Choose the account money leaves"),
+    toAccountId: z.string().uuid("Choose the account money arrives in"),
+    amount: amountSchema,
+    description: z.string().trim().min(2).max(300),
+    reference: optionalText(120),
+    paymentMethod: paymentMethodSchema.default("bank_transfer"),
+  })
+  .refine((v) => v.fromAccountId !== v.toAccountId, {
+    message: "Pick two different accounts",
+    path: ["toAccountId"],
+  });
 export type TransferInput = z.infer<typeof transferSchema>;
 
 /* -------------------------------------------------------------------------- */
