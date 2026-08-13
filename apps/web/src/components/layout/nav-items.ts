@@ -1,103 +1,178 @@
 import type { Permission } from "@finance/shared";
 import {
   ArrowLeftRight,
+  BadgePercent,
   Banknote,
-  ChartPie,
+  Bot,
+  ChartColumn,
   FileSpreadsheet,
-  LayoutDashboard,
+  FileUp,
+  Gauge,
+  HandCoins,
   Landmark,
+  LayoutGrid,
   Receipt,
   Settings,
+  ShoppingBag,
   Sparkles,
-  RefreshCw,
-  Upload,
-  Users,
-  Wallet,
+  UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
+/**
+ * The section accent, named after a chart token in globals.css.
+ *
+ * A name rather than a class string because the class has to be written out in
+ * full somewhere Tailwind's scanner can see it — that map lives in
+ * `sidebar.tsx`. Never a hex here: both themes swap these tokens.
+ */
+export type NavAccent =
+  | "chart-1"
+  | "chart-2"
+  | "chart-3"
+  | "chart-4"
+  | "chart-5"
+  | "chart-6";
+
 export type NavItem = {
-  href: string;
+  /** Stable identity — the accordion's open/closed state is keyed by this. */
+  key: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
+  /**
+   * Omitted on a parent that only opens its children: that row navigates
+   * nowhere, it toggles.
+   */
+  href?: string;
   /** Hidden unless the signed-in role holds this. The API enforces the same. */
-  permission: Permission;
+  permission?: Permission;
+  /**
+   * Sub-items. A parent survives the permission filter only if at least one of
+   * these does, so a role that can see only subscriptions still gets to them
+   * through Expenses.
+   */
+  children?: NavItem[];
   /** Not built yet — shown greyed out so the shape of the app is visible. */
   comingSoon?: boolean;
 };
 
-export type NavGroup = { title: string; items: NavItem[] };
+export type NavGroup = { title: string; accent: NavAccent; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Overview",
+    accent: "chart-1",
     items: [
       {
+        key: "dashboard",
         href: "/",
         label: "Dashboard",
-        icon: LayoutDashboard,
+        // A dial, not another panel grid: at 16px the round silhouette is the
+        // only one of its kind in the rail, so the first item is unmistakable.
+        icon: Gauge,
         permission: "dashboard.view",
       },
     ],
   },
   {
     title: "Money",
+    accent: "chart-3",
     items: [
       {
-        href: "/expenses",
-        label: "Expenses",
-        icon: Receipt,
-        permission: "transactions.read",
+        key: "accounts",
+        href: "/accounts",
+        label: "Accounts",
+        icon: Landmark,
+        permission: "accounts.read",
+        children: [
+          {
+            key: "accounts-cash-in",
+            href: "/accounts/cash-in",
+            label: "Cash-In",
+            icon: HandCoins,
+            permission: "accounts.read",
+          },
+        ],
       },
       {
+        // No href: the parent opens the three screens under it. /expenses is
+        // reachable as "Overview", the first child.
+        key: "expenses",
+        label: "Expenses",
+        icon: Receipt,
+        children: [
+          {
+            key: "expenses-overview",
+            href: "/expenses",
+            label: "Overview",
+            icon: LayoutGrid,
+            permission: "transactions.read",
+          },
+          {
+            // Still /vendors underneath — the table is the same one, and a URL
+            // change would break every bookmark for a label.
+            key: "expenses-subscriptions",
+            href: "/vendors",
+            label: "AI tools and subscriptions",
+            icon: Sparkles,
+            permission: "vendors.read",
+          },
+          {
+            key: "expenses-other",
+            href: "/expenses/other",
+            label: "Other expenses",
+            icon: ShoppingBag,
+            permission: "transactions.read",
+          },
+        ],
+      },
+      {
+        key: "transactions",
         href: "/transactions",
         label: "All transactions",
         icon: ArrowLeftRight,
         permission: "transactions.read",
       },
-      {
-        href: "/accounts",
-        label: "Accounts",
-        icon: Landmark,
-        permission: "accounts.read",
-      },
-      {
-        // Still /vendors underneath — the table is the same one, and a URL
-        // change would break every bookmark for a label.
-        href: "/vendors",
-        label: "Subscriptions",
-        icon: RefreshCw,
-        permission: "vendors.read",
-      },
     ],
   },
   {
     title: "People",
+    accent: "chart-2",
     items: [
       {
+        key: "team",
         href: "/team",
         label: "Team",
-        icon: Users,
+        icon: UsersRound,
         permission: "team.read",
       },
       {
+        key: "payroll",
         href: "/payroll",
         label: "Payroll",
-        icon: Wallet,
+        icon: Banknote,
         permission: "payroll.read",
       },
     ],
   },
   {
     title: "Tax",
+    accent: "chart-6",
     items: [
       {
+        key: "tds",
         href: "/tax/withholding",
         label: "TDS",
-        icon: Banknote,
+        // Withholding is a percentage taken off a bill — the percent badge says
+        // that; a banknote said "money", which every other tax item is too.
+        icon: BadgePercent,
         permission: "tds.read",
       },
       {
+        // Whether this folds under TDS is still an open question with the
+        // owner. Until it is answered it stays exactly here — a working screen
+        // is not removed on an inference.
+        key: "income-tax",
         href: "/tax/income-tax",
         label: "Income tax",
         icon: FileSpreadsheet,
@@ -107,34 +182,42 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Insight",
+    accent: "chart-4",
     items: [
       {
+        key: "reports",
         href: "/reports",
         label: "Reports",
-        icon: ChartPie,
+        icon: ChartColumn,
         permission: "reports.view",
       },
       {
+        key: "assistant",
         href: "/assistant",
-        label: "Assistant",
-        icon: Sparkles,
+        label: "AI Assistant",
+        icon: Bot,
         permission: "ai.use",
       },
     ],
   },
 ];
 
+/** Pinned to the bottom of the rail. */
 export const SECONDARY_NAV: NavItem[] = [
   {
+    key: "import",
     href: "/import",
-    label: "Import",
-    icon: Upload,
+    label: "Imports",
+    icon: FileUp,
     permission: "imports.run",
   },
   {
+    key: "settings",
     href: "/settings",
     label: "Settings",
     icon: Settings,
     permission: "settings.read",
   },
 ];
+
+export const SECONDARY_ACCENT: NavAccent = "chart-5";

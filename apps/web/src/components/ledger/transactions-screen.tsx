@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, Download, LoaderCircle, Plus } from "lucide-react";
+import { Download, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -19,11 +19,18 @@ import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { FilterBar, type LedgerFilters } from "./filter-bar";
 import { TransactionForm } from "./transaction-form";
 import { TransactionTable } from "./transaction-table";
-import { TransferForm } from "./transfer-form";
 import { VoidDialog } from "./void-dialog";
 
 const PAGE_SIZE = 50;
 
+/**
+ * The whole ledger, read-only at the top.
+ *
+ * Nothing is created from here any more: money in is recorded from Accounts →
+ * Cash-In and money out from the Expenses screens, so a new entry always
+ * starts from a screen that knows its direction. The row actions stay — this
+ * is still where an entry is corrected or voided.
+ */
 export function TransactionsScreen({
   accounts,
   categories,
@@ -31,7 +38,6 @@ export function TransactionsScreen({
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
-  const canWrite = useCan("transactions.write");
   const canExport = useCan("exports.run");
 
   const [filters, setFilters] = useState<LedgerFilters>({});
@@ -43,8 +49,6 @@ export function TransactionsScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [creating, setCreating] = useState(false);
-  const [transferring, setTransferring] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
@@ -96,42 +100,20 @@ export function TransactionsScreen({
         title="Transactions"
         description="Every movement of money, in and out."
         actions={
-          <>
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  // The filter only. The sheet is every matching row, not the
-                  // page being looked at.
-                  window.location.href = exportUrl("transactions", filters);
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
-            {canWrite ? (
-              <>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() => setTransferring(true)}
-                >
-                  <ArrowLeftRight className="size-4" />
-                  Transfer
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => setCreating(true)}
-                >
-                  <Plus className="size-4" />
-                  Record
-                </Button>
-              </>
-            ) : null}
-          </>
+          canExport ? (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => {
+                // The filter only. The sheet is every matching row, not the
+                // page being looked at.
+                window.location.href = exportUrl("transactions", filters);
+              }}
+            >
+              <Download className="size-4" />
+              Excel
+            </Button>
+          ) : null
         }
       />
 
@@ -211,13 +193,8 @@ export function TransactionsScreen({
 
       <datalist id="vendor-options" />
 
-      <TransactionForm
-        open={creating}
-        accounts={accounts}
-        categories={categories}
-        onClose={() => setCreating(false)}
-        onSaved={load}
-      />
+      {/* Kept mounted for the row's edit action — this is the same drawer,
+          opened with a transaction rather than empty. */}
       <TransactionForm
         key={editing?.id}
         open={Boolean(editing)}
@@ -225,12 +202,6 @@ export function TransactionsScreen({
         accounts={accounts}
         categories={categories}
         onClose={() => setEditing(null)}
-        onSaved={load}
-      />
-      <TransferForm
-        open={transferring}
-        accounts={accounts}
-        onClose={() => setTransferring(false)}
         onSaved={load}
       />
       <VoidDialog
