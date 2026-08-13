@@ -53,6 +53,60 @@ export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
   terminated: "Let go",
 };
 
+/**
+ * The fields a Bangladeshi employment record actually carries.
+ *
+ * Parents' names are not sentiment: they appear on most statutory forms here,
+ * and an HR team that has to chase them one by one at filing time will keep a
+ * second spreadsheet instead — which is the thing this app exists to end.
+ * Blood group is for the day somebody needs it in a hurry.
+ *
+ * Everything below is optional. A person is added with a name, a code and a
+ * joining date; the rest is filled in as it becomes known, and a required
+ * field nobody has to hand is a required field people invent an answer for.
+ */
+export const GENDERS = ["female", "male", "other", "undisclosed"] as const;
+export const genderSchema = z.enum(GENDERS);
+export type Gender = z.infer<typeof genderSchema>;
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  female: "Female",
+  male: "Male",
+  other: "Other",
+  undisclosed: "Not stated",
+};
+
+export const MARITAL_STATUSES = [
+  "single",
+  "married",
+  "divorced",
+  "widowed",
+  "undisclosed",
+] as const;
+export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
+export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
+
+export const MARITAL_STATUS_LABELS: Record<MaritalStatus, string> = {
+  single: "Single",
+  married: "Married",
+  divorced: "Divorced",
+  widowed: "Widowed",
+  undisclosed: "Not stated",
+};
+
+export const BLOOD_GROUPS = [
+  "A+",
+  "A-",
+  "B+",
+  "B-",
+  "AB+",
+  "AB-",
+  "O+",
+  "O-",
+] as const;
+export const bloodGroupSchema = z.enum(BLOOD_GROUPS);
+export type BloodGroup = z.infer<typeof bloodGroupSchema>;
+
 export const createTeamMemberSchema = z.strictObject({
   employeeCode: z.string().trim().min(1, "Give them a code").max(20),
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
@@ -74,6 +128,44 @@ export const createTeamMemberSchema = z.strictObject({
   walletNumber: optionalText(20),
   address: optionalText(300),
   notes: optionalText(500),
+
+  /* --- who they are ---------------------------------------------------- */
+
+  /**
+   * A link, not a file. This app stores no blobs — receipts are Drive links
+   * and so is this, which keeps backups a database dump and nothing else.
+   */
+  photoUrl: optionalOf(
+    z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => /^https:\/\/\S+$/.test(v), "Paste an https:// link"),
+  ),
+  dateOfBirth: optionalOf(isoDateSchema),
+  gender: genderSchema.optional(),
+  maritalStatus: maritalStatusSchema.optional(),
+  spouseName: optionalText(120),
+  fatherName: optionalText(120),
+  motherName: optionalText(120),
+  bloodGroup: bloodGroupSchema.optional(),
+  religion: optionalText(40),
+  passportNumber: optionalText(20),
+
+  /* --- where they are and who to call ---------------------------------- */
+
+  /** `address` above is the present one; this is the permanent one. */
+  permanentAddress: optionalText(300),
+  emergencyContactName: optionalText(120),
+  emergencyContactRelation: optionalText(40),
+  emergencyContactPhone: optionalText(30),
+
+  /* --- the shape of the job -------------------------------------------- */
+
+  reportingManagerId: z.string().uuid().nullish(),
+  probationUntil: optionalOf(isoDateSchema),
+  confirmedOn: optionalOf(isoDateSchema),
+  lastQualification: optionalText(120),
 });
 export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
 

@@ -13,6 +13,7 @@ import {
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -49,6 +50,28 @@ export type TeamMemberDto = {
   walletNumber: string | null;
   address: string | null;
   notes: string | null;
+
+  /* The personal half. HR's business, and none of it is pay. */
+  photoUrl: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  spouseName: string | null;
+  fatherName: string | null;
+  motherName: string | null;
+  bloodGroup: string | null;
+  religion: string | null;
+  passportNumber: string | null;
+  permanentAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelation: string | null;
+  emergencyContactPhone: string | null;
+  reportingManagerId: string | null;
+  probationUntil: string | null;
+  confirmedOn: string | null;
+  lastQualification: string | null;
+  /** Resolved on the detail read only; the list does not join for it. */
+  reportingManagerName?: string | null;
 };
 
 @Injectable()
@@ -99,10 +122,23 @@ export class TeamMembersService {
     };
   }
 
+  /**
+   * One person, with their manager's name resolved.
+   *
+   * A self-join rather than a foreign key: a manager who leaves is
+   * soft-deleted, and a hard reference would either block that or drag the
+   * reports' records along with it. A dangling id simply shows nothing.
+   */
   async findOne(id: string): Promise<TeamMemberDto> {
+    const manager = alias(teamMembers, "manager");
+
     const [row] = await this.db.client
-      .select(projection)
+      .select({
+        ...projection,
+        reportingManagerName: manager.fullName,
+      })
       .from(teamMembers)
+      .leftJoin(manager, eq(teamMembers.reportingManagerId, manager.id))
       .where(and(eq(teamMembers.id, id), isNull(teamMembers.deletedAt)))
       .limit(1);
 
@@ -326,6 +362,32 @@ const projection = {
   walletNumber: teamMembers.walletNumber,
   address: teamMembers.address,
   notes: teamMembers.notes,
+
+  /**
+   * The personal half of an employment record.
+   *
+   * Every one of these is HR's business and none of them is pay. The salary
+   * boundary is unchanged: compensation lives in its own table, this
+   * projection does not join it, and adding fields here cannot reach it.
+   */
+  photoUrl: teamMembers.photoUrl,
+  dateOfBirth: teamMembers.dateOfBirth,
+  gender: teamMembers.gender,
+  maritalStatus: teamMembers.maritalStatus,
+  spouseName: teamMembers.spouseName,
+  fatherName: teamMembers.fatherName,
+  motherName: teamMembers.motherName,
+  bloodGroup: teamMembers.bloodGroup,
+  religion: teamMembers.religion,
+  passportNumber: teamMembers.passportNumber,
+  permanentAddress: teamMembers.permanentAddress,
+  emergencyContactName: teamMembers.emergencyContactName,
+  emergencyContactRelation: teamMembers.emergencyContactRelation,
+  emergencyContactPhone: teamMembers.emergencyContactPhone,
+  reportingManagerId: teamMembers.reportingManagerId,
+  probationUntil: teamMembers.probationUntil,
+  confirmedOn: teamMembers.confirmedOn,
+  lastQualification: teamMembers.lastQualification,
 };
 
 function describeUpdate(

@@ -6,7 +6,7 @@ import {
   PSR_STATUS_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Download, Plus, Search, Users } from "lucide-react";
+import { Download, Eye, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -174,7 +174,7 @@ function Section({
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="table-data min-w-[760px] text-sm">
+          <table className="table-data min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
                 <Th className="w-24">Code</Th>
@@ -184,6 +184,7 @@ function Section({
                 <Th className="w-28">Joined</Th>
                 <Th className="w-32">Return filed</Th>
                 <Th className="w-28">Status</Th>
+                <Th className="w-24 text-right" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -229,6 +230,18 @@ function Section({
                     <Badge tone={member.status === "active" ? "positive" : "neutral"}>
                       {EMPLOYMENT_STATUS_LABELS[member.status]}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {/* A link, not a Button with a router push: <button> inside
+                        <a> is invalid, so this borrows the secondary/sm look
+                        and stays a real link — middle-click still opens it. */}
+                    <Link
+                      href={`/team/${member.id}`}
+                      className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground transition hover:bg-surface-muted"
+                    >
+                      <Eye className="size-3.5" />
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

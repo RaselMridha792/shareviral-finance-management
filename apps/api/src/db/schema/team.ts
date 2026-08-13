@@ -91,6 +91,55 @@ export const teamMembers = pgTable(
     walletNumber: text("wallet_number"),
 
     address: text("address"),
+
+    /* --- who they are -------------------------------------------------- */
+
+    /**
+     * A link, not a file.
+     *
+     * This app stores no blobs anywhere — a receipt is a Drive link and so is
+     * this. It keeps a backup a database dump and nothing else, and it keeps
+     * the deployment free of a storage service to lose.
+     */
+    photoUrl: text("photo_url"),
+    dateOfBirth: date("date_of_birth"),
+    gender: text("gender"),
+    maritalStatus: text("marital_status"),
+    spouseName: text("spouse_name"),
+    /**
+     * Parents' names are not sentiment: most statutory forms here ask for
+     * them, and HR chasing them one by one at filing time is how a second
+     * spreadsheet gets started.
+     */
+    fatherName: text("father_name"),
+    motherName: text("mother_name"),
+    bloodGroup: varchar("blood_group", { length: 3 }),
+    religion: varchar("religion", { length: 40 }),
+    passportNumber: varchar("passport_number", { length: 20 }),
+
+    /* --- where they are, and who to call ------------------------------- */
+
+    /** `address` above is where they live now; this is home. */
+    permanentAddress: text("permanent_address"),
+    emergencyContactName: text("emergency_contact_name"),
+    emergencyContactRelation: varchar("emergency_contact_relation", {
+      length: 40,
+    }),
+    emergencyContactPhone: varchar("emergency_contact_phone", { length: 30 }),
+
+    /* --- the shape of the job ------------------------------------------ */
+
+    /**
+     * Deliberately not a foreign key to this same table.
+     *
+     * A manager who leaves is soft-deleted, and a hard reference would either
+     * block that or cascade into the reports' records. The name is resolved on
+     * read; a dangling id shows nothing rather than breaking a page.
+     */
+    reportingManagerId: uuid("reporting_manager_id"),
+    probationUntil: date("probation_until"),
+    confirmedOn: date("confirmed_on"),
+    lastQualification: varchar("last_qualification", { length: 120 }),
     notes: text("notes"),
 
     createdAt: timestamp("created_at", { withTimezone: true })

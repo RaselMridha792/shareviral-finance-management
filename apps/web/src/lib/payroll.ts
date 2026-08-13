@@ -1,8 +1,11 @@
 import type {
+  BloodGroup,
   CreatePayrollRunInput,
   CreateTeamMemberInput,
   EmploymentStatus,
   EngagementType,
+  Gender,
+  MaritalStatus,
   Paginated,
   PaymentMode,
   PayPayrollInput,
@@ -39,6 +42,35 @@ export type TeamMemberDto = {
   walletNumber: string | null;
   address: string | null;
   notes: string | null;
+
+  /* --- who they are ------------------------------------------------------ */
+
+  /** A link (Drive or any https URL). The app stores no files. */
+  photoUrl: string | null;
+  dateOfBirth: string | null;
+  gender: Gender | null;
+  maritalStatus: MaritalStatus | null;
+  spouseName: string | null;
+  fatherName: string | null;
+  motherName: string | null;
+  bloodGroup: BloodGroup | null;
+  religion: string | null;
+  passportNumber: string | null;
+
+  /* --- where they are and who to call ------------------------------------ */
+
+  /** `address` above is the present one; this is the permanent one. */
+  permanentAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelation: string | null;
+  emergencyContactPhone: string | null;
+
+  /* --- the shape of the job ---------------------------------------------- */
+
+  reportingManagerId: string | null;
+  probationUntil: string | null;
+  confirmedOn: string | null;
+  lastQualification: string | null;
 };
 
 export type CompensationDto = {

@@ -3,13 +3,15 @@
 import {
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
+  GENDER_LABELS,
+  MARITAL_STATUS_LABELS,
   PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
 import { ArrowLeft, LoaderCircle, Lock, Plus, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -18,11 +20,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { teamApi, type CompensationDto, type TeamMemberDto } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
+
+const TABS = [
+  ["personal", "Personal"],
+  ["contact", "Contact"],
+  ["employment", "Employment"],
+  ["tax", "Tax & bank"],
+  ["pay", "Pay"],
+] as const;
+
+type Tab = (typeof TABS)[number][0];
 
 export function TeamMemberScreen({
   member,
@@ -36,12 +47,45 @@ export function TeamMemberScreen({
   const canSeePay = useCan("team.compensation.read");
   const canSetPay = useCan("team.compensation.write");
 
-  const [tab, setTab] = useState<"details" | "pay">("details");
+  const [tab, setTab] = useState<Tab>("personal");
   const [editing, setEditing] = useState(false);
   const [settingPay, setSettingPay] = useState(false);
 
+  // The record holds a manager's id; a profile has to say a name. One list
+  // call, and only when there is somebody to look up. The id is kept alongside
+  // the name so a stale answer is never shown against a different manager.
+  const [resolvedManager, setResolvedManager] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const managerId = member.reportingManagerId;
+  const managerName =
+    resolvedManager && resolvedManager.id === managerId
+      ? resolvedManager.name
+      : null;
+
+  useEffect(() => {
+    if (!managerId) return;
+    let cancelled = false;
+    void teamApi
+      .list()
+      .then((page) => {
+        const found = page.items.find((person) => person.id === managerId);
+        if (!cancelled && found) {
+          setResolvedManager({ id: managerId, name: found.fullName });
+        }
+      })
+      // A name that cannot be resolved simply stays a dash.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [managerId]);
+
   const refresh = () => router.refresh();
   const currentPay = compensation.find((c) => c.effectiveTo === null) ?? compensation[0];
+  const age = member.dateOfBirth ? ageInYears(member.dateOfBirth) : null;
+  const married = member.maritalStatus === "married" || Boolean(member.spouseName);
 
   return (
     <>
@@ -53,32 +97,42 @@ export function TeamMemberScreen({
         All team
       </Link>
 
-      <PageHeader
-        title={member.fullName}
-        description={[
-          member.employeeCode,
-          member.designation,
-          ENGAGEMENT_LABELS[member.engagementType],
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          canWrite ? (
-            <Button variant="secondary" size="md" onClick={() => setEditing(true)}>
-              <SquarePen className="size-4" />
-              Edit
-            </Button>
-          ) : null
-        }
-      />
+      <Card className="flex flex-wrap items-center gap-4 p-5">
+        <MemberPhoto
+          // Resets the broken-image state when the link itself changes.
+          key={member.photoUrl ?? "none"}
+          fullName={member.fullName}
+          photoUrl={member.photoUrl}
+        />
 
-      <div role="tablist" className="flex gap-1 border-b border-border">
-        {(
-          [
-            ["details", "Details"],
-            ["pay", "Compensation"],
-          ] as const
-        ).map(([id, label]) => (
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-semibold tracking-tight">
+            {member.fullName}
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {[member.designation, member.department].filter(Boolean).join(" · ") ||
+              ENGAGEMENT_LABELS[member.engagementType]}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="num text-xs text-muted-foreground">
+              {member.employeeCode}
+            </span>
+            <Badge tone={member.status === "active" ? "positive" : "neutral"}>
+              {EMPLOYMENT_STATUS_LABELS[member.status]}
+            </Badge>
+          </div>
+        </div>
+
+        {canWrite ? (
+          <Button variant="secondary" size="md" onClick={() => setEditing(true)}>
+            <SquarePen className="size-4" />
+            Edit
+          </Button>
+        ) : null}
+      </Card>
+
+      <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
+        {TABS.map(([id, label]) => (
           <button
             key={id}
             role="tab"
@@ -97,52 +151,134 @@ export function TeamMemberScreen({
         ))}
       </div>
 
-      {tab === "details" ? (
+      {tab === "personal" ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader title="Personal" />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="Date of birth">
+                {member.dateOfBirth ? (
+                  <>
+                    <span className="num">{member.dateOfBirth}</span>
+                    {age !== null ? (
+                      <span className="ml-2 text-muted-foreground">
+                        <span className="num">{age}</span> yrs
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+              </Row>
+              <Row
+                label="Gender"
+                value={member.gender ? GENDER_LABELS[member.gender] : null}
+              />
+              <Row
+                label="Marital status"
+                value={
+                  member.maritalStatus
+                    ? MARITAL_STATUS_LABELS[member.maritalStatus]
+                    : null
+                }
+              />
+              {married ? (
+                <Row label="Spouse" value={member.spouseName} />
+              ) : null}
+              <Row label="Father's name" value={member.fatherName} />
+              <Row label="Mother's name" value={member.motherName} />
+              <Row label="Blood group" value={member.bloodGroup} />
+              <Row label="Religion" value={member.religion} />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Identity"
+              description="The numbers statutory forms ask for"
+            />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="NID" mono value={member.nid} />
+              <Row label="Passport" mono value={member.passportNumber} />
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === "contact" ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader title="Contact" />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="Phone" mono value={member.phone} />
+              <Row label="Work email" value={member.workEmail} />
+              <Row label="Personal email" value={member.personalEmail} />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="In an emergency"
+              description="Who to call, and how they are related"
+            />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="Name" value={member.emergencyContactName} />
+              <Row label="Relation" value={member.emergencyContactRelation} />
+              <Row label="Phone" mono value={member.emergencyContactPhone} />
+            </CardBody>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader title="Addresses" />
+            <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="Present" value={member.address} />
+              <Row label="Permanent" value={member.permanentAddress} />
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === "employment" ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="Employment" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
+              <Row label="Code" mono value={member.employeeCode} />
+              <Row
+                label="Engaged as"
+                value={ENGAGEMENT_LABELS[member.engagementType]}
+              />
+              <Row label="Department" value={member.department} />
+              <Row label="Designation" value={member.designation} />
+              <Row label="Reports to" value={managerName} />
               <Row label="Status">
                 <Badge tone={member.status === "active" ? "positive" : "neutral"}>
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
                 </Badge>
               </Row>
-              <Row label="Department">{member.department ?? "—"}</Row>
-              <Row label="Joined" mono>
-                {member.joinedOn}
-              </Row>
-              {member.endedOn ? (
-                <Row label="Last day" mono>
-                  {member.endedOn}
-                </Row>
-              ) : null}
+              <Row label="Last qualification" value={member.lastQualification} />
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Contact" />
+            <CardHeader title="Dates" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="Phone" mono>
-                {member.phone ?? "—"}
-              </Row>
-              <Row label="Work email">{member.workEmail ?? "—"}</Row>
-              <Row label="Personal email">{member.personalEmail ?? "—"}</Row>
-              <Row label="Address">{member.address ?? "—"}</Row>
+              <Row label="Joined" mono value={member.joinedOn} />
+              <Row label="Probation until" mono value={member.probationUntil} />
+              <Row label="Confirmed on" mono value={member.confirmedOn} />
+              <Row label="Last day" mono value={member.endedOn} />
             </CardBody>
           </Card>
+        </div>
+      ) : null}
 
+      {tab === "tax" ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader
               title="Tax"
               description="Missing PSR raises the withholding rate by half"
             />
             <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="e-TIN" mono>
-                {member.etin ?? "—"}
-              </Row>
-              <Row label="NID" mono>
-                {member.nid ?? "—"}
-              </Row>
+              <Row label="e-TIN" mono value={member.etin} />
               <Row label="Return filed">
                 <Badge
                   tone={
@@ -156,25 +292,18 @@ export function TeamMemberScreen({
                   {PSR_STATUS_LABELS[member.psrStatus]}
                 </Badge>
               </Row>
-              <Row label="Assessment year" mono>
-                {member.psrAssessmentYear ?? "—"}
-              </Row>
+              <Row label="Assessment year" mono value={member.psrAssessmentYear} />
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader title="Where they are paid" />
             <CardBody className="flex flex-col gap-2.5 text-sm">
-              <Row label="Bank">{member.bankName ?? "—"}</Row>
-              <Row label="Account" mono>
-                {member.bankAccountNumber ?? "—"}
-              </Row>
-              <Row label="Routing" mono>
-                {member.bankRouting ?? "—"}
-              </Row>
-              <Row label="Mobile wallet" mono>
-                {member.walletNumber ?? "—"}
-              </Row>
+              <Row label="Bank" value={member.bankName} />
+              <Row label="Account" mono value={member.bankAccountNumber} />
+              <Row label="Routing" mono value={member.bankRouting} />
+              <Row label="Wallet" value={member.walletProvider} />
+              <Row label="Wallet number" mono value={member.walletNumber} />
             </CardBody>
           </Card>
         </div>
@@ -302,19 +431,97 @@ export function TeamMemberScreen({
   );
 }
 
+/**
+ * The photo is a link somebody pasted — a Drive file that may be moved, made
+ * private, or deleted long after it was saved. A dead link must degrade to the
+ * initials the rest of the app already shows, not to a browser's broken-image
+ * icon on somebody's face.
+ */
+function MemberPhoto({
+  fullName,
+  photoUrl,
+}: {
+  fullName: string;
+  photoUrl: string | null;
+}) {
+  const [broken, setBroken] = useState(false);
+
+  if (!photoUrl || broken) {
+    return (
+      <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary/12 text-lg font-semibold text-primary">
+        {initialsOf(fullName)}
+      </span>
+    );
+  }
+
+  return (
+    // Not next/image: the host is whatever the pasted link points at, and
+    // remote hosts have to be declared up front for the optimiser.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photoUrl}
+      alt={fullName}
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="size-16 shrink-0 rounded-xl border border-border object-cover"
+    />
+  );
+}
+
+/** Only letters: a name like "HR (test)" must not render as "H(". */
+function initialsOf(fullName: string): string {
+  return (
+    fullName
+      .split(/\s+/)
+      .map((part) => part.replace(/[^\p{L}]/gu, ""))
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join("") || "?"
+  );
+}
+
+/** Whole years, counted against today in Dhaka. */
+function ageInYears(dateOfBirth: string): number | null {
+  const [year, month, day] = dateOfBirth.split("-").map(Number);
+  const [thisYear, thisMonth, thisDay] = todayInDhaka().split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  let age = thisYear - year;
+  if (thisMonth < month || (thisMonth === month && thisDay < day)) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
+/**
+ * One line of a profile. A field nobody has filled in still gets its label and
+ * a muted dash — a label with nothing after it reads as a rendering fault.
+ */
 function Row({
   label,
+  value,
   children,
   mono = false,
 }: {
   label: string;
-  children: React.ReactNode;
+  value?: string | null;
+  children?: React.ReactNode;
   mono?: boolean;
 }) {
+  const content = children ?? value;
+  const empty = content === null || content === undefined || content === "";
+
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className={cn("text-right", mono && "num")}>{children}</span>
+      <span
+        className={cn(
+          "text-right wrap-break-word",
+          mono && "num",
+          empty && "text-muted-foreground",
+        )}
+      >
+        {empty ? "—" : content}
+      </span>
     </div>
   );
 }
