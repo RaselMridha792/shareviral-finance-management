@@ -9,7 +9,7 @@ import {
   Receipt,
   Settings,
   Sparkles,
-  Store,
+  RefreshCw,
   Upload,
   Users,
   Wallet,
@@ -62,9 +62,11 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: "accounts.read",
       },
       {
+        // Still /vendors underneath — the table is the same one, and a URL
+        // change would break every bookmark for a label.
         href: "/vendors",
-        label: "Vendors",
-        icon: Store,
+        label: "Subscriptions",
+        icon: RefreshCw,
         permission: "vendors.read",
       },
     ],

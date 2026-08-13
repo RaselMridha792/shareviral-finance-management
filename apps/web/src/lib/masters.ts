@@ -1,5 +1,6 @@
 import type {
   AccountType,
+  BillingCycle,
   CategoryKind,
   CreateAccountInput,
   CreateCategoryInput,
@@ -7,6 +8,7 @@ import type {
   LockBooksInput,
   Paginated,
   PsrStatus,
+  SubscriptionSummary,
   UpdateAccountInput,
   UpdateCategoryInput,
   UpdateSettingsInput,
@@ -65,6 +67,15 @@ export type VendorDto = {
   email: string | null;
   address: string | null;
   defaultCategoryId: string | null;
+
+  /** What renews, how often, and when next. `none` for a one-off payee. */
+  billingCycle: BillingCycle;
+  billingAmount: string | null;
+  billingCurrency: string;
+  /** An anchor, not a promise — the API rolls the next date forward from it. */
+  nextRenewalOn: string | null;
+  billingAccountId: string | null;
+
   notes: string | null;
   isActive: boolean;
 };
@@ -135,6 +146,12 @@ export const vendorsApi = {
       cache: "no-store",
     });
   },
+  /** Everything that renews, with the next date rolled forward from its anchor. */
+  subscriptions: () =>
+    apiFetch<SubscriptionSummary>("/vendors/subscriptions", {
+      cache: "no-store",
+    }),
+
   create: (input: CreateVendorInput) =>
     apiFetch<VendorDto>("/vendors", { method: "POST", ...json(input) }),
   update: (id: string, input: UpdateVendorInput) =>

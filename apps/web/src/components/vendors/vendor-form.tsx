@@ -1,10 +1,15 @@
 "use client";
 
 import {
+  BILLING_CYCLES,
+  BILLING_CYCLE_LABELS,
   PSR_STATUSES,
   PSR_STATUS_LABELS,
   VENDOR_TYPES,
   VENDOR_TYPE_LABELS,
+  isRecurringType,
+  todayInDhaka,
+  type VendorType,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -27,6 +32,13 @@ export function VendorForm({
   onSaved: () => Promise<void> | void;
 }) {
   const editing = Boolean(vendor);
+  // The billing fields only make sense for something that recurs, and a form
+  // of empty boxes is a form people fill in wrongly. They appear when the type
+  // says they should, or when this one already has a cycle set.
+  const [type, setType] = useState<VendorType>(vendor?.type ?? "supplier");
+  const [cycle, setCycle] = useState(vendor?.billingCycle ?? "none");
+  const recurring = isRecurringType(type) || cycle !== "none";
+
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -52,8 +64,18 @@ export function VendorForm({
         "email",
         "address",
         "notes",
+        "billingCycle",
+        "billingAmount",
+        "billingCurrency",
+        "nextRenewalOn",
       ].map((key) => [key, String(data.get(key) ?? "")]),
     ) as Parameters<typeof vendorsApi.create>[0];
+
+    // An empty select is not a uuid, and the API would rather have nothing.
+    const account = String(data.get("billingAccountId") ?? "");
+    if (account) {
+      (payload as Record<string, unknown>).billingAccountId = account;
+    }
 
     try {
       if (vendor) {
@@ -79,8 +101,8 @@ export function VendorForm({
     <Drawer
       open={open}
       onClose={onClose}
-      title={editing ? "Edit vendor" : "Add a vendor"}
-      description="Tax identifiers matter: without a filed return the TDS rate rises by half."
+      title={editing ? "Edit" : "Add a subscription or vendor"}
+      description="An AI tool, a subscription, or anyone else money is paid to. Tax identifiers matter for the latter: without a filed return the TDS rate rises by half."
     >
       <form
         id="vendor-form"
@@ -92,14 +114,77 @@ export function VendorForm({
         </Field>
 
         <Field label="Type" required>
-          <Select name="type" defaultValue={vendor?.type ?? "supplier"}>
-            {VENDOR_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {VENDOR_TYPE_LABELS[type]}
+          <Select
+            name="type"
+            value={type}
+            onChange={(event) => setType(event.target.value as VendorType)}
+          >
+            {VENDOR_TYPES.map((option) => (
+              <option key={option} value={option}>
+                {VENDOR_TYPE_LABELS[option]}
               </option>
             ))}
           </Select>
         </Field>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Renews">
+            <Select
+              name="billingCycle"
+              value={cycle}
+              onChange={(event) => setCycle(event.target.value as typeof cycle)}
+            >
+              {BILLING_CYCLES.map((option) => (
+                <option key={option} value={option}>
+                  {BILLING_CYCLE_LABELS[option]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {recurring ? (
+            <Field
+              label="Billed in"
+              hint="Most AI tools charge in dollars — say so and the totals stay honest"
+            >
+              <Select
+                name="billingCurrency"
+                defaultValue={vendor?.billingCurrency ?? "BDT"}
+              >
+                <option value="BDT">BDT</option>
+                <option value="USD">USD</option>
+              </Select>
+            </Field>
+          ) : null}
+        </div>
+
+        {recurring ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Amount each time" error={fieldErrors.billingAmount}>
+              <Input
+                name="billingAmount"
+                inputMode="decimal"
+                className="col-amount"
+                placeholder="20.00"
+                defaultValue={vendor?.billingAmount ?? ""}
+              />
+            </Field>
+            <Field
+              label="Next renewal"
+              error={fieldErrors.nextRenewalOn}
+              hint="Any past date works — it rolls forward on its own"
+            >
+              <Input
+                name="nextRenewalOn"
+                type="date"
+                className="num"
+                defaultValue={vendor?.nextRenewalOn ?? todayInDhaka()}
+              />
+            </Field>
+          </div>
+        ) : (
+          <input type="hidden" name="billingCurrency" value="BDT" />
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="e-TIN" error={fieldErrors.etin} hint="12 digits">

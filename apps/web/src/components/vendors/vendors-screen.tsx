@@ -1,11 +1,21 @@
 "use client";
 
 import {
+  BILLING_CYCLE_LABELS,
   PSR_STATUS_LABELS,
   VENDOR_TYPE_LABELS,
+  isRecurringType,
   type Paginated,
+  type SubscriptionSummary,
 } from "@finance/shared";
-import { Plus, Search, SquarePen, Store } from "lucide-react";
+import {
+  CalendarClock,
+  Plus,
+  RefreshCw,
+  Search,
+  SquarePen,
+  Store,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -21,8 +31,10 @@ import { VendorForm } from "./vendor-form";
 
 export function VendorsScreen({
   initialPage,
+  summary,
 }: {
   initialPage: Paginated<VendorDto>;
+  summary: SubscriptionSummary;
 }) {
   const router = useRouter();
   const canWrite = useCan("vendors.write");
@@ -46,8 +58,8 @@ export function VendorsScreen({
   return (
     <>
       <PageHeader
-        title="Vendors"
-        description="Everyone money is paid to or received from."
+        title="Subscriptions"
+        description="What the company pays for, and when each one comes round again."
         actions={
           canWrite ? (
             <Button
@@ -56,11 +68,13 @@ export function VendorsScreen({
               onClick={() => setCreating(true)}
             >
               <Plus className="size-4" />
-              Add vendor
+              Add
             </Button>
           ) : null
         }
       />
+
+      <SubscriptionSummaryStrip summary={summary} />
 
       <form
         onSubmit={(event) => {
@@ -89,12 +103,12 @@ export function VendorsScreen({
           </span>
           <div>
             <p className="text-sm font-semibold">
-              {query ? "Nothing matched that search" : "No vendors yet"}
+              {query ? "Nothing matched that search" : "Nothing here yet"}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
               {query
-                ? "Try a shorter search, or add them as a new vendor."
-                : "Add them here, or type a new name while recording a payment and it will be added for you."}
+                ? "Try a shorter search, or add it as a new one."
+                : "Add an AI tool, a subscription or anyone else you pay. Typing a new name while recording a payment also adds it here."}
             </p>
           </div>
         </Card>
@@ -106,10 +120,10 @@ export function VendorsScreen({
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
                   <Th>Name</Th>
                   <Th>Type</Th>
-                  <Th>e-TIN</Th>
-                  <Th>BIN</Th>
-                  <Th>Return filed</Th>
-                  <Th>Contact</Th>
+                  <Th>Every</Th>
+                  <Th className="text-right">Cost</Th>
+                  <Th>Next</Th>
+                  <Th>Paid from</Th>
                   <Th className="text-right">{canWrite ? "" : null}</Th>
                 </tr>
               </thead>
@@ -129,21 +143,46 @@ export function VendorsScreen({
                           inactive
                         </span>
                       ) : null}
+                      {/* e-TIN and PSR only matter for somebody tax is
+                          withheld from, which a SaaS bill abroad is not.
+                          Kept, but out of the way of the columns that are
+                          read every week. */}
+                      {vendor.etin || vendor.bin ? (
+                        <span className="num mt-0.5 block text-xs text-muted-foreground">
+                          {vendor.etin ? `e-TIN ${vendor.etin}` : null}
+                          {vendor.etin && vendor.bin ? " · " : null}
+                          {vendor.bin ? `BIN ${vendor.bin}` : null}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {VENDOR_TYPE_LABELS[vendor.type]}
-                    </td>
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {vendor.etin ?? "—"}
-                    </td>
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {vendor.bin ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <PsrBadge status={vendor.psrStatus} />
+                      {!isRecurringType(vendor.type) &&
+                      vendor.psrStatus !== "unknown" ? (
+                        <span className="mt-0.5 block">
+                          <PsrBadge status={vendor.psrStatus} />
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {vendor.phone ?? vendor.contactName ?? "—"}
+                      {vendor.billingCycle === "none"
+                        ? "—"
+                        : BILLING_CYCLE_LABELS[vendor.billingCycle].replace(
+                            "Every ",
+                            "",
+                          )}
+                    </td>
+                    <td className="col-amount px-4 py-2.5">
+                      {vendor.billingAmount
+                        ? `${vendor.billingCurrency === "USD" ? "$" : "৳"}${vendor.billingAmount}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <RenewalCell id={vendor.id} summary={summary} />
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {renewalLine(vendor.id, summary)?.billingAccountName ??
+                        "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       {canWrite ? (
@@ -178,6 +217,128 @@ export function VendorsScreen({
         onSaved={() => refresh()}
       />
     </>
+  );
+}
+
+/** The rolled-forward line for a row, or undefined when it does not recur. */
+function renewalLine(id: string, summary: SubscriptionSummary) {
+  return summary.lines.find((line) => line.id === id);
+}
+
+/**
+ * When it comes round again, and how close that is.
+ *
+ * A date on its own makes the reader do the arithmetic. "in 3 days" is the
+ * part they came for; the date is there to confirm it.
+ */
+function RenewalCell({
+  id,
+  summary,
+}: {
+  id: string;
+  summary: SubscriptionSummary;
+}) {
+  const line = renewalLine(id, summary);
+  if (!line?.nextRenewalOn) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const days = line.daysAway ?? 0;
+  const soon = days <= 7;
+
+  return (
+    <span className="flex flex-col">
+      <span className="num text-sm">{line.nextRenewalOn}</span>
+      <span
+        className={cn(
+          "text-xs",
+          soon ? "font-medium text-warning" : "text-muted-foreground",
+        )}
+      >
+        {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * What the company is committed to each month.
+ *
+ * Taka and dollars are shown side by side rather than added. Most AI tools
+ * bill in dollars while the books are in taka; one combined figure would be
+ * wrong by the exchange rate and look entirely normal — a mistake this app
+ * has already made once, elsewhere.
+ */
+function SubscriptionSummaryStrip({
+  summary,
+}: {
+  summary: SubscriptionSummary;
+}) {
+  const nothing =
+    Number(summary.monthlyBdt) === 0 && Number(summary.monthlyUsd) === 0;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <Card className="flex items-center gap-3 p-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+          <RefreshCw className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Every month
+          </span>
+          <span className="num block text-lg font-semibold">
+            {nothing ? "—" : null}
+            {Number(summary.monthlyBdt) > 0
+              ? `৳${Number(summary.monthlyBdt).toFixed(0)}`
+              : null}
+            {Number(summary.monthlyBdt) > 0 && Number(summary.monthlyUsd) > 0
+              ? " + "
+              : null}
+            {Number(summary.monthlyUsd) > 0
+              ? `$${Number(summary.monthlyUsd).toFixed(0)}`
+              : null}
+          </span>
+        </span>
+      </Card>
+
+      <Card className="flex items-center gap-3 p-4">
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-lg",
+            summary.dueSoon.length
+              ? "bg-warning/12 text-warning"
+              : "bg-surface-muted text-muted-foreground",
+          )}
+        >
+          <CalendarClock className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Renewing this week
+          </span>
+          <span className="block truncate text-sm font-medium">
+            {summary.dueSoon.length
+              ? summary.dueSoon.map((line) => line.name).join(", ")
+              : "Nothing in the next 7 days"}
+          </span>
+        </span>
+      </Card>
+
+      <Card className="flex items-center gap-3 p-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-muted-foreground">
+          <Store className="size-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Recurring
+          </span>
+          <span className="block text-lg font-semibold">
+            {summary.lines.length}
+          </span>
+        </span>
+      </Card>
+    </div>
   );
 }
 

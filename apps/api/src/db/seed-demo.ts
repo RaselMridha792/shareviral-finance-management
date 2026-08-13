@@ -222,12 +222,59 @@ async function load() {
 
   /* --- who is paid -------------------------------------------------------- */
 
+  // A few of these recur, because that is what a software company mostly
+  // pays for — and a Subscriptions screen where every row reads "—" tells
+  // nobody what the screen is for.
   const vendorRows = [
     { name: "Beacon Properties Ltd", type: "landlord", etin: "417029385512" },
     { name: "Grameenphone", type: "utility", etin: "104582930017" },
-    { name: "Amazon Web Services", type: "supplier", etin: null },
+    {
+      name: "Amazon Web Services",
+      type: "hosting",
+      etin: null,
+      cycle: "monthly",
+      amount: "9200.00",
+      currency: "BDT",
+      renews: "2026-08-06",
+    },
     { name: "Rahman Traders", type: "supplier", etin: "553918274460" },
     { name: "Sadia Printing Press", type: "supplier", etin: null },
+    {
+      name: "Anthropic",
+      type: "ai_tool",
+      etin: null,
+      cycle: "monthly",
+      amount: "20.00",
+      currency: "USD",
+      renews: "2026-08-12",
+    },
+    {
+      name: "OpenAI",
+      type: "ai_tool",
+      etin: null,
+      cycle: "monthly",
+      amount: "20.00",
+      currency: "USD",
+      renews: "2026-08-01",
+    },
+    {
+      name: "Vercel",
+      type: "hosting",
+      etin: null,
+      cycle: "monthly",
+      amount: "20.00",
+      currency: "USD",
+      renews: "2026-08-03",
+    },
+    {
+      name: "Adobe Creative Cloud",
+      type: "subscription",
+      etin: null,
+      cycle: "yearly",
+      amount: "63000.00",
+      currency: "BDT",
+      renews: "2026-03-14",
+    },
   ] as const;
 
   const vendorIds: Record<string, string> = {};
@@ -239,6 +286,13 @@ async function load() {
         type: row.type,
         etin: row.etin,
         psrStatus: row.etin ? "submitted" : "unknown",
+        // The renewal dates are anchors in the past on purpose: the app rolls
+        // them forward, and a demo that only works with future dates would
+        // hide the part worth demonstrating.
+        billingCycle: "cycle" in row ? row.cycle : "none",
+        billingAmount: "amount" in row ? row.amount : null,
+        billingCurrency: "currency" in row ? row.currency : "BDT",
+        nextRenewalOn: "renews" in row ? row.renews : null,
         notes: `Made-up vendor. ${TAG}`,
         createdBy: by,
         updatedBy: by,
