@@ -88,6 +88,23 @@ export const transactions = pgTable(
     /** Free text when there is no master record for the other party. */
     counterparty: varchar("counterparty", { length: 160 }),
 
+    /**
+     * The sending side of an incoming wire, off the remittance advice.
+     *
+     * `account_id` above is our end — the account the money landed in. These
+     * four are the other end: the bank it left, the account on it and the name
+     * that account is held in. A transfer from abroad is the one movement
+     * somebody asks about a year later ("which account did that come from?"),
+     * and without these the answer is a description someone typed.
+     *
+     * All nullable. Most rows are not wires, and an advice missing a SWIFT is
+     * still a transfer that happened.
+     */
+    senderBankName: varchar("sender_bank_name", { length: 160 }),
+    senderAccountName: varchar("sender_account_name", { length: 160 }),
+    senderAccountNumber: varchar("sender_account_number", { length: 64 }),
+    senderSwiftCode: varchar("sender_swift_code", { length: 20 }),
+
     paymentMethod: paymentMethodEnum("payment_method")
       .notNull()
       .default("bank_transfer"),

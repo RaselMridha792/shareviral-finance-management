@@ -3,6 +3,7 @@ import type {
   ListTransactionsQuery,
   Paginated,
   PaymentMethod,
+  RecordCashInInput,
   TransferInput,
   TxnDirection,
   TxnOrigin,
@@ -44,6 +45,14 @@ export type TransactionDto = {
   vendorId: string | null;
   vendorName: string | null;
   counterparty: string | null;
+  /**
+   * The sending side of an incoming wire, off the remittance advice. Null on
+   * every row that is not one, which is most of them.
+   */
+  senderBankName: string | null;
+  senderAccountName: string | null;
+  senderAccountNumber: string | null;
+  senderSwiftCode: string | null;
   createdAt: string;
 };
 
@@ -128,6 +137,18 @@ export const ledgerApi = {
 
   create: (input: CreateTransactionInput) =>
     apiFetch<TransactionDto>("/transactions", { method: "POST", ...json(input) }),
+
+  /**
+   * Money arriving from abroad, read off the remittance advice.
+   *
+   * A different shape of request, not a different ledger — the API turns it
+   * into an ordinary money-in row and answers with the same DTO as `create`.
+   */
+  recordCashIn: (input: RecordCashInInput) =>
+    apiFetch<TransactionDto>("/transactions/cash-in", {
+      method: "POST",
+      ...json(input),
+    }),
 
   update: (id: string, input: UpdateTransactionInput) =>
     apiFetch<TransactionDto>(`/transactions/${id}`, {

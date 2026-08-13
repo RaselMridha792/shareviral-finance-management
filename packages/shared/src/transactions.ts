@@ -77,6 +77,26 @@ const receiptUrlSchema = z
     message: "Paste an https:// link",
   });
 
+/**
+ * The other end of a wire: who sent the money and from where.
+ *
+ * A remittance advice names the sending bank, the account it left and the
+ * name on it — the receiving side of the same transfer is our own account,
+ * which is chosen separately. These four describe the *sender*, so a transfer
+ * from abroad can be traced back to the company that made it months later.
+ *
+ * Every one is optional. Cash walked into a branch has no sending bank at all,
+ * and plenty of advices arrive without a SWIFT code — refusing the record over
+ * a field the bank did not print would lose the entry, not improve it.
+ */
+const senderFields = {
+  senderBankName: optionalText(160),
+  senderAccountName: optionalText(160),
+  senderAccountNumber: optionalText(64),
+  /** SWIFT/BIC of the sending bank. 8 or 11 characters, never validated hard. */
+  senderSwiftCode: optionalText(20),
+};
+
 export const createTransactionSchema = z
   .strictObject({
     direction: txnDirectionSchema,
@@ -148,6 +168,8 @@ export const createTransactionSchema = z
       .trim()
       .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 118.40")
       .optional(),
+
+    ...senderFields,
   })
   .refine(
     (v) =>
@@ -190,6 +212,56 @@ export const createTransactionSchema = z
     },
   );
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+
+/**
+ * Money arriving from abroad: an intercompany transfer, recorded off the
+ * remittance advice the bank sends.
+ *
+ * A narrower way of describing the same event, not a second ledger. Everything
+ * here is mapped onto `createTransactionSchema` and written by the one service
+ * that writes every other row, so a cash-in has the same ref number, the same
+ * audit entry and the same place in the register as anything else.
+ *
+ * Two things are tighter than on the general form. `direction` is not asked —
+ * an advice for money arriving cannot describe a payment out. And `usdRate` is
+ * required, because this is the entry that sets what a dollar was worth for the
+ * whole month: it is the first funded inflow's rate that every later taka
+ * figure is read back in. Nobody will know it as precisely again.
+ */
+export const recordCashInSchema = z.strictObject({
+  txnDate: isoDateSchema,
+
+  /** The bank's reference for the wire — what a query about it would quote. */
+  reference: optionalText(120),
+
+  description: z
+    .string()
+    .trim()
+    .min(2, "Say what this transfer was for")
+    .max(300),
+
+  /** One of our own accounts: where the money landed. */
+  accountId: z.string().uuid("Choose the account it landed in"),
+
+  /** What actually arrived, in the account's own currency. */
+  amount: amountSchema.refine((v) => Number(v) > 0, {
+    message: "The amount must be more than zero",
+  }),
+
+  categoryId: z.string().uuid("Choose a category"),
+
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77"),
+
+  ...senderFields,
+
+  paymentMethod: paymentMethodSchema.default("bank_transfer"),
+  notes: optionalText(1000),
+  receiptUrl: receiptUrlSchema,
+});
+export type RecordCashInInput = z.infer<typeof recordCashInSchema>;
 
 /** Everything except direction and account, which would rewrite history. */
 export const updateTransactionSchema = z

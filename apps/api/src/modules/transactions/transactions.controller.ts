@@ -3,6 +3,7 @@ import {
   createTransactionSchema,
   expenseSummaryQuerySchema,
   listTransactionsQuerySchema,
+  recordCashInSchema,
   registerQuerySchema,
   transactionFilterSchema,
   transferSchema,
@@ -11,6 +12,7 @@ import {
   type CreateTransactionInput,
   type ExpenseSummaryQuery,
   type ListTransactionsQuery,
+  type RecordCashInInput,
   type RegisterQuery,
   type TransactionFilter,
   type TransferInput,
@@ -78,6 +80,23 @@ export class TransactionsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.transactions.create(body, actor);
+  }
+
+  /**
+   * Money in from abroad, off a remittance advice.
+   *
+   * Its own route only so the advice's shape can be asked for exactly — the
+   * sender's bank, and the day's dollar rate as a requirement rather than a
+   * hope. It creates an ordinary money-in row through the same service call as
+   * `POST /transactions`, and needs the same permission for the same reason.
+   */
+  @Post("transactions/cash-in")
+  @RequirePermission("transactions.write")
+  recordCashIn(
+    @ZodBody(recordCashInSchema) body: RecordCashInInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.transactions.recordCashIn(body, actor);
   }
 
   @Post("transactions/transfer")

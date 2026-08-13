@@ -10,6 +10,7 @@ import {
   type CreateTransactionInput,
   type ListTransactionsQuery,
   type Paginated,
+  type RecordCashInInput,
   type TransactionFilter,
   type TransferInput,
   type UpdateTransactionInput,
@@ -97,6 +98,11 @@ export type TransactionDto = {
   vendorId: string | null;
   vendorName: string | null;
   counterparty: string | null;
+  /** The sending side of an incoming wire. Null on everything that isn't one. */
+  senderBankName: string | null;
+  senderAccountName: string | null;
+  senderAccountNumber: string | null;
+  senderSwiftCode: string | null;
   createdAt: Date;
 };
 
@@ -532,6 +538,10 @@ export class TransactionsService {
               fxRate: input.fxRate,
               fxRateSource: input.fxRate ? "manual" : null,
               usdRate: input.usdRate,
+              senderBankName: input.senderBankName,
+              senderAccountName: input.senderAccountName,
+              senderAccountNumber: input.senderAccountNumber,
+              senderSwiftCode: input.senderSwiftCode,
               // Typed by hand unless the caller said otherwise, and the schema
               // only lets it say "ai_intake" — a row cannot claim to have come
               // from payroll or a tax payment.
@@ -552,6 +562,44 @@ export class TransactionsService {
         },
       })
       .then((created) => this.findOne(created.id));
+  }
+
+  /**
+   * Money arriving from abroad, recorded off the remittance advice.
+   *
+   * This is a form, not a second way into the ledger: it fills in the parts an
+   * advice already decides — the direction is "in", the sender's details come
+   * off the paper — and hands the result to `create` above. Same validation,
+   * same ref number, same audit row, same place in the register. A cash-in that
+   * wrote its own row would be the first entry in this system that a reconciler
+   * could not treat like every other.
+   */
+  recordCashIn(input: RecordCashInInput, actor: AuthenticatedUser) {
+    return this.create(
+      {
+        direction: "in",
+        txnDate: input.txnDate,
+        accountId: input.accountId,
+        amount: input.amount,
+        categoryId: input.categoryId,
+        paymentMethod: input.paymentMethod,
+        reference: input.reference,
+        description: input.description,
+        notes: input.notes,
+        receiptUrl: input.receiptUrl,
+        // The rate that governs the month. It goes in `usdRate` — the reference
+        // rate a taka figure is read back in — and not in `fxRate`, which means
+        // "the bank actually converted at this". Only a recorded conversion,
+        // with the foreign amount beside it, may claim that one.
+        usdRate: input.usdRate,
+        senderBankName: input.senderBankName,
+        senderAccountName: input.senderAccountName,
+        senderAccountNumber: input.senderAccountNumber,
+        senderSwiftCode: input.senderSwiftCode,
+        createdVia: "manual",
+      },
+      actor,
+    );
   }
 
   async update(
@@ -836,6 +884,10 @@ const projection = {
   vendorId: transactions.vendorId,
   vendorName: vendors.name,
   counterparty: transactions.counterparty,
+  senderBankName: transactions.senderBankName,
+  senderAccountName: transactions.senderAccountName,
+  senderAccountNumber: transactions.senderAccountNumber,
+  senderSwiftCode: transactions.senderSwiftCode,
   createdAt: transactions.createdAt,
 };
 
