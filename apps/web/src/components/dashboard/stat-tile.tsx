@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 export function StatTile({
   label,
   value,
+  usd,
   hint,
   change,
   risingIsGood = true,
@@ -27,6 +28,12 @@ export function StatTile({
 }: {
   label: string;
   value: string;
+  /**
+   * The same figure in dollars, approximate. Rendered smaller and prefixed
+   * with a tilde: it is a translation of the taka at one rate, not a second
+   * recorded amount, and it must never read as one.
+   */
+  usd?: string | null;
   hint?: string;
   change?: number | null;
   risingIsGood?: boolean;
@@ -67,6 +74,16 @@ export function StatTile({
         tone={tone === "neutral" ? "auto" : tone}
         className="mt-3 block text-xl font-semibold tracking-tight sm:text-2xl"
       />
+
+      {usd ? (
+        <Amount
+          value={usd}
+          currency="USD"
+          tone="neutral"
+          className="mt-0.5 block text-xs text-muted-foreground"
+          approximate
+        />
+      ) : null}
 
       <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs">
         {change !== undefined && change !== null ? (
