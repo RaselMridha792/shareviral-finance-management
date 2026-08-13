@@ -94,6 +94,13 @@ export const AI_MODEL_LABELS: Record<AiModel, string> = {
   "claude-haiku-4-5-20251001": "Haiku 4.5 — fastest and cheapest",
 };
 
+/** For the picker in the composer, where there is room for a name and no more. */
+export const AI_MODEL_SHORT: Record<AiModel, string> = {
+  "claude-sonnet-5": "Sonnet 5",
+  "claude-opus-5": "Opus 5",
+  "claude-haiku-4-5-20251001": "Haiku 4.5",
+};
+
 export const AI_MODEL_DETAIL: Record<AiModel, string> = {
   "claude-sonnet-5":
     "Ample for filling in a form and answering a question about the books.",
@@ -122,11 +129,50 @@ export const aiIntakeRequestSchema = z.strictObject({
   /** Carried between turns so the model does not have to re-derive it. */
   target: aiTargetSchema.optional(),
   draft: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Which conversation this belongs to. Omitted on the first message, when the
+   * server starts one and returns its id.
+   */
+  chatId: z.string().uuid().optional(),
 });
 export type AiIntakeRequest = z.infer<typeof aiIntakeRequestSchema>;
 
+/* -------------------------------------------------------------------------- */
+/*  Saved conversations                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A conversation belongs to the person who had it — nobody else, Super Admin
+ * included, can open it.
+ *
+ * A transcript can hold real figures, so it is not shared reading material.
+ * That is also why it is stored on the server rather than in the browser: it
+ * follows the person to another machine, and it disappears the moment they
+ * delete it rather than sitting in a local store nobody remembers.
+ */
+export type AiChatSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+};
+
+export type AiChat = AiChatSummary & {
+  messages: AiMessage[];
+  /** The last draft, so reopening a conversation resumes where it stopped. */
+  reply: AiIntakeReply | null;
+};
+
+/** The first thing said, trimmed to something readable in a list. */
+export function chatTitleFrom(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= 48) return line || "New chat";
+  return line.slice(0, 47).trimEnd() + "…";
+}
+
 /** What one turn produces. Data only — nothing here causes a write. */
 export type AiIntakeReply = {
+  /** The conversation this turn was filed under, new or continuing. */
+  chatId?: string;
   target: AiTarget | null;
   /** Understood so far, in the shape the real endpoint expects. */
   draft: Record<string, unknown>;
