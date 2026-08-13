@@ -25,7 +25,7 @@ export class SettingsController {
   @Get()
   @RequirePermission("settings.read")
   get() {
-    return this.settings.get();
+    return this.settings.publicView();
   }
 
   @Patch()

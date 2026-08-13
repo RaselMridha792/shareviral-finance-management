@@ -11,6 +11,17 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import { DbService } from "../../db/db.service";
 import { appSettings, type AppSettings } from "../../db/schema";
 
+/** Columns that must never reach a browser, whatever else is added here. */
+const SECRET_COLUMNS = [
+  "anthropicApiKey",
+  // Not secret, but nothing reads them here — the assistant panel asks
+  // /ai/availability, which returns them alongside the masked hint. A payload
+  // carrying fields nobody consumes is a payload nobody audits.
+  "anthropicKeySetAt",
+  "anthropicKeySetBy",
+] as const;
+type SecretColumn = (typeof SECRET_COLUMNS)[number];
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -25,6 +36,25 @@ export class SettingsService {
    * restored from a dump taken before the row existed would otherwise 500 on
    * every request.
    */
+  /**
+   * The settings a browser may see.
+   *
+   * Built by removing rather than by listing, so a secret added later is
+   * excluded by default: a projection you have to remember to update is a
+   * projection that leaks the next column somebody adds.
+   *
+   * The stored API key is encrypted, but ciphertext still has no business
+   * being sent to a browser — and the panel that manages it asks
+   * /ai/availability, which returns only whether one is set and its last four
+   * characters.
+   */
+  async publicView(): Promise<Omit<AppSettings, SecretColumn>> {
+    const row = await this.get();
+    const visible = { ...row } as Record<string, unknown>;
+    for (const column of SECRET_COLUMNS) delete visible[column];
+    return visible as Omit<AppSettings, SecretColumn>;
+  }
+
   async get(): Promise<AppSettings> {
     const [existing] = await this.db.client
       .select()

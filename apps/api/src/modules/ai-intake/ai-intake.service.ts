@@ -12,12 +12,22 @@ import {
   type AiAvailability,
   type AiIntakeReply,
   type AiIntakeRequest,
+  type AiKeyResult,
   type AiTarget,
 } from "@finance/shared";
 import { and, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
+import { AuditService } from "../../common/audit/audit.service";
+import { hint, open, seal } from "../../common/crypto/secret-box";
+import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { accounts, categories, vendors } from "../../db/schema";
+import {
+  accounts,
+  appSettings,
+  categories,
+  users,
+  vendors,
+} from "../../db/schema";
 
 /** Small, fast, and entirely adequate for filling in a form. */
 const MODEL = "claude-sonnet-5";
@@ -25,19 +35,164 @@ const MODEL = "claude-sonnet-5";
 @Injectable()
 export class AiIntakeService {
   private readonly log = new Logger(AiIntakeService.name);
-  private client: Anthropic | null = null;
 
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly audit: AuditService,
+  ) {}
 
-  availability(): AiAvailability {
-    if (!process.env.ANTHROPIC_API_KEY) {
+  /**
+   * The key: from Settings if a Super Admin has entered one, otherwise from
+   * the environment.
+   *
+   * Settings wins on purpose — the point of storing it is that switching the
+   * assistant on does not need a redeploy. The environment stays as a fallback
+   * for an operator who would rather keep credentials out of the database.
+   */
+  private async storedKey(): Promise<{
+    key: string | null;
+    fromEnvironment: boolean;
+    setAt: Date | null;
+    setBy: string | null;
+  }> {
+    const [row] = await this.db.client
+      .select({
+        sealed: appSettings.anthropicApiKey,
+        setAt: appSettings.anthropicKeySetAt,
+        setBy: users.fullName,
+      })
+      .from(appSettings)
+      .leftJoin(users, eq(appSettings.anthropicKeySetBy, users.id))
+      .where(eq(appSettings.id, 1))
+      .limit(1);
+
+    const fromSettings = open(row?.sealed);
+    if (fromSettings) {
+      return {
+        key: fromSettings,
+        fromEnvironment: false,
+        setAt: row?.setAt ?? null,
+        setBy: row?.setBy ?? null,
+      };
+    }
+
+    return {
+      key: process.env.ANTHROPIC_API_KEY ?? null,
+      fromEnvironment: Boolean(process.env.ANTHROPIC_API_KEY),
+      setAt: null,
+      setBy: null,
+    };
+  }
+
+  async availability(): Promise<AiAvailability> {
+    const stored = await this.storedKey();
+
+    if (!stored.key) {
       return {
         configured: false,
         reason:
-          "No ANTHROPIC_API_KEY is set on the API, so the assistant cannot run. Everything it would do can be done on the ordinary forms.",
+          "No API key has been set, so the assistant cannot run. A Super Admin can add one under Settings. Everything the assistant would do can be done on the ordinary forms.",
+        keyHint: null,
+        setAt: null,
+        setBy: null,
+        fromEnvironment: false,
       };
     }
-    return { configured: true, reason: null };
+
+    return {
+      configured: true,
+      reason: null,
+      keyHint: hint(stored.key),
+      setAt: stored.setAt ? stored.setAt.toISOString() : null,
+      setBy: stored.setBy,
+      fromEnvironment: stored.fromEnvironment,
+    };
+  }
+
+  /**
+   * Saves the key — after checking that it works.
+   *
+   * One cheap request now beats discovering a typo the first time somebody
+   * tries to use the assistant, which reads as the feature being broken rather
+   * than the key being wrong.
+   */
+  async setKey(apiKey: string, actor: AuthenticatedUser): Promise<AiKeyResult> {
+    try {
+      await new Anthropic({ apiKey }).messages.create({
+        model: MODEL,
+        max_tokens: 1,
+        messages: [{ role: "user", content: "hi" }],
+      });
+    } catch (error) {
+      const message =
+        error instanceof Anthropic.APIError
+          ? error.status === 401
+            ? "Anthropic rejected that key. Check it was copied whole, with no space at either end."
+            : error.status === 429
+              ? "That key is over its rate limit, or the account has no credit left."
+              : "Anthropic said: " + error.message
+          : "Could not reach Anthropic to check the key. Try again in a moment.";
+
+      // Deliberately not saved. A key that does not work is worse than none:
+      // the screen would say the assistant is on and every turn would fail.
+      return { saved: false, keyHint: null, message };
+    }
+
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary:
+        "Set the Anthropic API key for the assistant (" + hint(apiKey) + ")",
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({ setAt: appSettings.anthropicKeySetAt })
+          .from(appSettings)
+          .where(eq(appSettings.id, 1))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(appSettings)
+          .set({
+            anthropicApiKey: seal(apiKey),
+            anthropicKeySetAt: new Date(),
+            anthropicKeySetBy: actor.id,
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(appSettings.id, 1));
+      },
+    });
+
+    return { saved: true, keyHint: hint(apiKey), message: null };
+  }
+
+  async clearKey(actor: AuthenticatedUser): Promise<AiKeyResult> {
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary: "Removed the Anthropic API key — the assistant is switched off",
+      module: "settings",
+      read: () => Promise.resolve(undefined),
+      run: async (tx) => {
+        await tx
+          .update(appSettings)
+          .set({
+            anthropicApiKey: null,
+            anthropicKeySetAt: null,
+            anthropicKeySetBy: null,
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(appSettings.id, 1));
+      },
+    });
+
+    return { saved: true, keyHint: null, message: null };
   }
 
   /**
@@ -50,7 +205,7 @@ export class AiIntakeService {
    * it returns JSON. Everything after that is the app's own code.
    */
   async turn(input: AiIntakeRequest): Promise<AiIntakeReply> {
-    const client = this.anthropic();
+    const client = await this.anthropic();
     const context = await this.context();
 
     const response = await client.messages.create({
@@ -84,14 +239,18 @@ export class AiIntakeService {
 
   /* ---------------------------------------------------------------------- */
 
-  private anthropic(): Anthropic {
-    if (!process.env.ANTHROPIC_API_KEY) {
+  /**
+   * Built per call rather than cached: the key can change from Settings at any
+   * moment, and a cached client would go on using the old one until a restart.
+   */
+  private async anthropic(): Promise<Anthropic> {
+    const { key } = await this.storedKey();
+    if (!key) {
       throw new ServiceUnavailableException(
-        "The assistant is not configured. Ask a Super Admin to add an ANTHROPIC_API_KEY, or use the ordinary form.",
+        "The assistant is not switched on. A Super Admin can add an API key under Settings, or use the ordinary form.",
       );
     }
-    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    return this.client;
+    return new Anthropic({ apiKey: key });
   }
 
   /**

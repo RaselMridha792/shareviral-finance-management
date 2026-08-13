@@ -1,16 +1,29 @@
-import { Body, Controller, Get, HttpCode, Post } from "@nestjs/common";
-import { aiIntakeRequestSchema, type AiIntakeRequest } from "@finance/shared";
+import { Body, Controller, Delete, Get, HttpCode, Post } from "@nestjs/common";
+import {
+  aiIntakeRequestSchema,
+  setAiKeySchema,
+  type AiIntakeRequest,
+  type SetAiKeyInput,
+} from "@finance/shared";
 
-import { RequirePermission } from "../../common/decorators/auth.decorators";
+import {
+  CurrentUser,
+  RequirePermission,
+  type AuthenticatedUser,
+} from "../../common/decorators/auth.decorators";
 import { ZodBody } from "../../common/pipes/zod-validation.pipe";
 import { AiIntakeService } from "./ai-intake.service";
 
 /**
- * Two read-only endpoints and one that resolves names to ids.
+ * Nothing here writes to the books.
  *
- * None of them write. Saving happens when the person presses Save on the
- * filled-in form, which posts to the ordinary endpoint for that record — so
- * the assistant cannot reach anything their role could not reach by typing.
+ * The assistant produces values; saving them is an ordinary create against the
+ * record's own endpoint, so permissions, validation and the audit trail apply
+ * exactly as they would have if somebody typed it.
+ *
+ * The key endpoints are Super Admin only, and the key travels one way: in. No
+ * response from this API ever contains it — only whether one is set and its
+ * last four characters.
  */
 @Controller("ai")
 export class AiIntakeController {
@@ -35,5 +48,26 @@ export class AiIntakeController {
   @RequirePermission("ai.use")
   resolve(@Body("draft") draft: Record<string, unknown>) {
     return this.ai.resolve(draft ?? {});
+  }
+
+  /**
+   * `settings.write` is Super Admin alone. This spends the company's money on
+   * somebody else's platform, so it belongs with the other decisions only they
+   * can make.
+   */
+  @Post("key")
+  @HttpCode(200)
+  @RequirePermission("settings.write")
+  setKey(
+    @ZodBody(setAiKeySchema) body: SetAiKeyInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.ai.setKey(body.apiKey, actor);
+  }
+
+  @Delete("key")
+  @RequirePermission("settings.write")
+  clearKey(@CurrentUser() actor: AuthenticatedUser) {
+    return this.ai.clearKey(actor);
   }
 }
