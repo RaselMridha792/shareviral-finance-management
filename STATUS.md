@@ -1,6 +1,8 @@
 # SFM — where things stand
 
-ShareViral Finance Management. Last updated at the end of **Phase 9** (2026-08-13). All phases built.
+ShareViral Finance Management. All phases built and deployed; last updated
+**2026-08-14**, after the first round of changes asked for from using the live
+app.
 
 ## Running it
 
@@ -120,6 +122,54 @@ key and the screen becomes available, with no redeploy. The key is checked
 against Anthropic before it is saved, sealed with AES-256-GCM before it is
 stored, kept out of the audit trail, and never returned to a browser — the
 panel shows only its last four characters.
+
+**After Phase 9 — what the owner asked for once it was in their hands.** The
+things below came from using the app, not from the plan.
+
+The **dashboard** is three blocks: what the bank holds, what the card holds,
+what was spent — opening, in, out, closing, and the four read as a sentence
+that ties. It had a trend chart, a category donut, a deadline card, a vendor
+ranking, an account list and a recent-entries feed under those; each restated
+something a dedicated screen already showed properly, and they were cut. The
+period is picked as a month and a year, opening on the latest month. Every taka
+figure carries an approximate dollar beneath it, at the rate that month's
+funding arrived at.
+
+**Income tax left the interface.** TDS is where this company's tax work
+actually happens and a second tax screen beside it was noise. The records and
+the `/api/income-tax/*` endpoints are untouched — instalments already assessed
+are real payments against a real liability. See the note at the top of
+`income-tax.service.ts` before assuming that module is dead.
+
+**Cash-In** records money arriving, and asks what was sent in dollars. Given,
+the row reaches the funding report with the rate it really achieved; left
+blank, it is an ordinary local receipt. The form shows the division back as it
+is typed, because a digit too many is obvious there and nearly invisible in a
+report next quarter.
+
+**The month's rate has one implementation.** The Cash-In screen used to
+recompute it from the rows it had loaded; it asks the API now. One rule decides
+every dollar figure in the app.
+
+**The employee profile is the company's own sheet** and nothing more —
+nineteen columns, with age worked out from date of birth rather than stored.
+The bank, e-TIN and PSR fields stay on top of it because payroll and
+withholding cannot run without them. Thirteen fields this app had invented are
+rejected by the schema, not merely hidden. The columns remain in the database:
+rows written before that decision keep their values. The Team download returns
+that whole sheet, joining salary included.
+
+**Payslips are reachable from the person**, newest first, drafts excluded —
+not only by remembering which run a month belonged to.
+
+**PDFs print ৳.** PDFKit's built-in faces are Latin-1, so reports had been
+going out with no currency symbol and a hyphen for a minus. Noto Sans Bengali
+is embedded, subset to 73KB, under the SIL OFL. If the font is ever missing the
+service logs and falls back rather than printing mojibake.
+
+**Two N+1s are gone.** The funding report asked for an exchange rate once per
+remittance and TDS liability ran thirty-six queries to render a year; both are
+flat at three now, with the output proved identical beforehand and after.
 
 ## Verified
 
