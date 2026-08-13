@@ -112,11 +112,7 @@ export function ExpensesScreen({
                 variant="secondary"
                 size="md"
                 onClick={() => {
-                  window.location.href = exportUrl("transactions", {
-                    ...filters,
-                    page: 1,
-                    pageSize: 20000,
-                  });
+                  window.location.href = exportUrl("transactions", filters);
                 }}
               >
                 <Download className="size-4" />

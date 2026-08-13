@@ -76,8 +76,6 @@ export function CategoryDetailScreen({
                     to: range.to,
                     direction: "out",
                     categorySlug: heading.slug,
-                    page: 1,
-                    pageSize: 20000,
                   });
                 }}
               >

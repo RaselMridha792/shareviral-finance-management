@@ -102,11 +102,9 @@ export function TransactionsScreen({
                 variant="secondary"
                 size="md"
                 onClick={() => {
-                  window.location.href = exportUrl("transactions", {
-                    ...filters,
-                    page: 1,
-                    pageSize: 20000,
-                  });
+                  // The filter only. The sheet is every matching row, not the
+                  // page being looked at.
+                  window.location.href = exportUrl("transactions", filters);
                 }}
               >
                 <Download className="size-4" />

@@ -150,10 +150,20 @@ export const ledgerApi = {
  * Excel downloads go straight to the browser rather than through `apiFetch`,
  * so the file is streamed and named by the server. The URL carries the same
  * filter the screen is showing.
+ *
+ * An export is not a page, so `page` and `pageSize` are dropped here rather
+ * than left to each caller. The screen shows 25 rows and the sheet must hold
+ * every matching row; passing the screen's paging through was how a download
+ * came back as "pageSize: Too big" instead of a file — a list endpoint caps
+ * pageSize at 200 so a slow query cannot be asked for by URL, and the export
+ * controller sets its own limit internally anyway.
  */
 export function exportUrl(
   target: string,
   query: Record<string, string | number | boolean | undefined | null>,
 ): string {
-  return `${API_BASE_URL}/exports/${target}?${toSearchParams(query)}`;
+  const filter = { ...query };
+  delete filter.page;
+  delete filter.pageSize;
+  return `${API_BASE_URL}/exports/${target}?${toSearchParams(filter)}`;
 }
