@@ -22,12 +22,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
-import { DraftCard } from "@/components/assistant/draft-card";
+import { DraftCard, FIELD_LABELS } from "@/components/assistant/draft-card";
 import { Welcome } from "@/components/assistant/welcome";
 import { useCan, useSession } from "@/components/auth/session-provider";
 import { Card } from "@/components/ui/card";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
+
+/**
+ * What actually went wrong, rather than that something did.
+ *
+ * The API answers a rejected save with `Validation failed` and a map of which
+ * fields it objected to. Showing only the first half is how a save that was
+ * being refused for one nameable reason read as the assistant being broken —
+ * the reason was in the response the whole time.
+ */
+function explain(caught: unknown, fallback: string): string {
+  if (!(caught instanceof ApiError)) return fallback;
+  const fields = Object.entries(caught.fieldErrors ?? {});
+  if (!fields.length) return caught.message;
+
+  const detail = fields
+    // "_" is the whole object, not a field — an unexpected key, or a rule
+    // about two fields together.
+    .map(([field, messages]) =>
+      field === "_"
+        ? messages[0]
+        : `${FIELD_LABELS[field] ?? field} — ${messages[0]}`,
+    )
+    .join("; ");
+
+  return `${caught.message}: ${detail}`;
+}
 
 /**
  * The assistant, as a room rather than a page.
@@ -177,9 +203,10 @@ export function AssistantScreen({
       void loadChats();
     } catch (caught) {
       setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "The assistant could not answer. The ordinary forms all still work.",
+        explain(
+          caught,
+          "The assistant could not answer. The ordinary forms all still work.",
+        ),
       );
     } finally {
       setThinking(false);
@@ -206,11 +233,7 @@ export function AssistantScreen({
       setReply(null);
       router.refresh();
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not save that. Try the ordinary form.",
-      );
+      setError(explain(caught, "Could not save that. Try the ordinary form."));
     } finally {
       setSaving(false);
     }

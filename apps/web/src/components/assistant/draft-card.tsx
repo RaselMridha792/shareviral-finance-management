@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 
 /** Fields the person should not have to read as a database column name. */
-const FIELD_LABELS: Record<string, string> = {
+export const FIELD_LABELS: Record<string, string> = {
   txnDate: "Date",
   amount: "Amount",
   description: "What it was for",
