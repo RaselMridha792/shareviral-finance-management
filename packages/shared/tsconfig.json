@@ -2,6 +2,14 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
+    // No ambient type packages. This package is imported by a Node server and
+    // a browser bundle, so it must not quietly depend on the globals of either
+    // — and on a developer machine @types/node is hoisted into one node_modules
+    // and silently satisfies references that the build server cannot resolve.
+    // That produced a build which passed locally and failed in CI on a line
+    // nobody had touched. Empty means the compiler here sees what both
+    // consumers see.
+    "types": [],
     // "nodenext", matching apps/api. The old "Node" (node10) resolution was
     // removed in TypeScript 6, so a build machine with a newer compiler than
     // the one pinned here fails outright rather than warning.
