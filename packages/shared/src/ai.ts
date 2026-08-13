@@ -84,4 +84,41 @@ export type AiAvailability = {
   configured: boolean;
   /** Why it is unavailable, in words a person can act on. */
   reason: string | null;
+  /**
+   * "sk-ant-…LTa4" when a key is stored — enough to recognise which key it is,
+   * never enough to use. The key itself never leaves the server.
+   */
+  keyHint?: string | null;
+  /** When it was set, and by whom, so a shared credential has an owner. */
+  setAt?: string | null;
+  setBy?: string | null;
+  /** True when it came from the environment rather than Settings. */
+  fromEnvironment?: boolean;
+};
+
+/**
+ * Setting the key.
+ *
+ * Checked against Anthropic before it is saved: a typo that is only discovered
+ * the first time somebody tries to use the assistant is a bad trade for one
+ * cheap request now.
+ */
+export const setAiKeySchema = z.strictObject({
+  apiKey: z
+    .string()
+    .trim()
+    .min(20, "That is too short to be an API key")
+    .max(200)
+    .refine(
+      (v) => v.startsWith("sk-ant-"),
+      "An Anthropic key starts with sk-ant-",
+    ),
+});
+export type SetAiKeyInput = z.infer<typeof setAiKeySchema>;
+
+export type AiKeyResult = {
+  saved: boolean;
+  keyHint: string | null;
+  /** What Anthropic said, when it refused. */
+  message: string | null;
 };

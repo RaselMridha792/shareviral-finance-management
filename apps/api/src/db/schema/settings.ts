@@ -69,6 +69,23 @@ export const appSettings = pgTable(
     /** Days of warning before a statutory deadline shows on the dashboard. */
     tdsReminderDays: integer("tds_reminder_days").notNull().default(7),
 
+    /**
+     * The Anthropic key for the assistant, sealed with AES-256-GCM.
+     *
+     * Stored rather than kept in the environment so a Super Admin can switch
+     * the assistant on from Settings without a redeploy. Encrypted because it
+     * is the first value here that is worth money to somebody else on its own
+     * — a database dump would otherwise hand over a working billing credential.
+     *
+     * Never leaves the server. The API returns only whether it is set and the
+     * last four characters.
+     */
+    anthropicApiKey: text("anthropic_api_key"),
+    anthropicKeySetAt: timestamp("anthropic_key_set_at", {
+      withTimezone: true,
+    }),
+    anthropicKeySetBy: uuid("anthropic_key_set_by"),
+
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -67,6 +67,10 @@ const SECRET_FIELDS = new Set([
   "tokenHash",
   "refreshToken",
   "accessToken",
+  // Sealed in the column, but the audit row would otherwise carry the
+  // ciphertext — and a before/after diff of a key change is not information
+  // anybody needs.
+  "anthropicApiKey",
 ]);
 
 export function redact(value: unknown): unknown {
