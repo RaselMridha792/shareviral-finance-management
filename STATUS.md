@@ -329,7 +329,16 @@ before transactions are filed under the wrong headings.
 - **One ledger, not two.** Expenses and bank entries are the same table viewed
   differently. Separate tables drift the first time someone edits one.
 - **Salary lives in its own table.** HR endpoints never join it, so there is no
-  code path from an HR request to a salary figure.
+  code path from an HR request to *current* pay — no raise, no payroll figure,
+  no history.
+- **The one exception, confirmed on 14 Aug 2026: HR sees the joining salary.**
+  It is the figure from the offer letter, frozen on the day somebody joined,
+  and it is HR's own paperwork. It appears on the team record, on the team
+  screen and in the team export, deliberately. An earlier note in this file
+  said the HR export carries no salary column at all; that was the plan before
+  the exception was decided, and this is the version that holds. Anything about
+  what a person is paid *now* stays behind `team.compensation.read`, which HR
+  does not have.
 - **Money is `numeric(14,2)` and moves as strings.** Never a float; sums happen
   in SQL.
 - **Records are voided, never deleted.** A voided row stays visible, struck

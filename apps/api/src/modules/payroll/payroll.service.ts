@@ -415,12 +415,35 @@ export class PayrollService {
   async reopen(runId: string, actor: AuthenticatedUser) {
     const { run } = await this.getRun(runId);
 
-    if (run.status === "paid" || run.status === "partially_paid") {
+    /**
+     * The question is whether money is still out, not what the run is called.
+     *
+     * This used to refuse on `status === "paid"` while telling the person to
+     * "void those ledger entries first" — and doing exactly that did not help,
+     * because voiding a transaction does not change the run's status. The
+     * instruction was sound and the check did not implement it: somebody who
+     * followed the message to the letter got the same refusal back.
+     *
+     * So the check now asks the ledger. Every entry voided means nothing has
+     * left the bank, and reopening is safe; one live entry and it is not.
+     */
+    const [{ live }] = await this.db.client
+      .select({ live: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.payrollRunId, runId),
+          isNull(transactions.voidedAt),
+        ),
+      );
+
+    if (live > 0) {
       throw new ForbiddenException(
-        "Money has already gone out for this run. Void those ledger entries first.",
+        `Money has already gone out for this run — ${live} ledger ${live === 1 ? "entry is" : "entries are"} still live. Void ${live === 1 ? "it" : "them"} on the transaction list, then reopen.`,
       );
     }
-    if (run.status !== "finalized") {
+
+    if (run.status !== "finalized" && run.status !== "paid") {
       throw new BadRequestException("This run is not finalised.");
     }
 
