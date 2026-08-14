@@ -1,10 +1,15 @@
 "use client";
 
 import { hasPermission, type Role } from "@finance/shared";
-import { ChevronRight, X } from "lucide-react";
+import {
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
 import {
@@ -135,11 +140,22 @@ function visibleFor(role: Role | undefined, item: NavItem): NavItem | null {
 
 function rowClass(
   accent: NavAccent,
-  { active, depth }: { active: boolean; depth: number },
+  {
+    active,
+    depth,
+    collapsed,
+  }: { active: boolean; depth: number; collapsed?: boolean },
 ) {
   return cn(
-    "group relative flex w-full items-center rounded-lg px-3 transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
-    depth === 0 ? "gap-3 py-2 text-sm" : "gap-2.5 py-1.5 text-[13px]",
+    "group relative flex w-full items-center rounded-lg transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
+    // Narrow: the icon is the whole row, so it is centred and the padding
+    // that made room for a label goes away.
+    collapsed ? "justify-center px-0 py-2" : "px-3",
+    collapsed
+      ? null
+      : depth === 0
+        ? "gap-3 py-2 text-sm"
+        : "gap-2.5 py-1.5 text-[13px]",
     active
       ? // A filled pill, a hairline of the same colour, a left bar and a
         // heavier weight. Hover below is deliberately a step quieter.
@@ -185,18 +201,20 @@ function NavLink({
   accent,
   active,
   depth = 0,
+  collapsed,
   onNavigate,
 }: {
   item: NavItem;
   accent: NavAccent;
   active: boolean;
   depth?: number;
+  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   const { href, label, comingSoon } = item;
 
   const className = cn(
-    rowClass(accent, { active, depth }),
+    rowClass(accent, { active, depth, collapsed }),
     comingSoon &&
       "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground",
   );
@@ -205,8 +223,15 @@ function NavLink({
     <>
       {active ? <ActiveBar accent={accent} /> : null}
       <NavIcon item={item} accent={accent} lit={active} />
-      <span className="truncate">{label}</span>
-      {comingSoon ? (
+      {/* Narrow: the name is gone from the screen, so it has to still be
+          available to a screen reader and on hover — an unlabelled row of
+          icons is a guessing game. */}
+      {collapsed ? (
+        <span className="sr-only">{label}</span>
+      ) : (
+        <span className="truncate">{label}</span>
+      )}
+      {comingSoon && !collapsed ? (
         <span className="ml-auto text-[10px] tracking-wide text-muted-foreground uppercase">
           soon
         </span>
@@ -219,7 +244,9 @@ function NavLink({
       <span
         className={className}
         aria-disabled="true"
-        title={comingSoon ? "Not built yet" : undefined}
+        title={
+          comingSoon ? `${label} — not built yet` : collapsed ? label : undefined
+        }
       >
         {body}
       </span>
@@ -231,6 +258,7 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
       className={className}
     >
       {body}
@@ -289,6 +317,7 @@ function NavSection({
   onToggle,
   holdsCurrentPage,
   activeHref,
+  collapsed,
   onNavigate,
 }: {
   item: NavItem;
@@ -298,6 +327,7 @@ function NavSection({
   onToggle: () => void;
   holdsCurrentPage: boolean;
   activeHref: string | null;
+  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   // Closed but holding the page you are on: the parent takes the pill so the
@@ -311,32 +341,45 @@ function NavSection({
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={panelId}
+        title={collapsed ? item.label : undefined}
         className={cn(
-          rowClass(accent, { active: wearsActive, depth: 0 }),
+          rowClass(accent, { active: wearsActive, depth: 0, collapsed }),
           "cursor-pointer text-left",
           holdsCurrentPage && "font-semibold text-foreground",
         )}
       >
         {wearsActive ? <ActiveBar accent={accent} /> : null}
         <NavIcon item={item} accent={accent} lit={holdsCurrentPage} />
-        <span className="truncate">{item.label}</span>
-        <ChevronRight
-          aria-hidden="true"
-          className={cn(
-            "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-            open && "rotate-90",
-          )}
-        />
+        {collapsed ? (
+          <span className="sr-only">{item.label}</span>
+        ) : (
+          <>
+            <span className="truncate">{item.label}</span>
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                open && "rotate-90",
+              )}
+            />
+          </>
+        )}
       </button>
 
-      <NavChildren
-        id={panelId}
-        item={item}
-        accent={accent}
-        activeHref={activeHref}
-        hidden={!open}
-        onNavigate={onNavigate}
-      />
+      {/* There is nowhere to put an indented list sixteen pixels wide, so in
+          the narrow rail pressing the parent widens the rail and opens it.
+          The alternative — a flyout — is a second navigation to build and
+          keep working, for a case that is one click from the real one. */}
+      {collapsed ? null : (
+        <NavChildren
+          id={panelId}
+          item={item}
+          accent={accent}
+          activeHref={activeHref}
+          hidden={!open}
+          onNavigate={onNavigate}
+        />
+      )}
     </div>
   );
 }
@@ -345,7 +388,15 @@ function NavSection({
 /*  The rail                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarContent({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapsed,
+}: {
+  onNavigate?: () => void;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+}) {
   const pathname = usePathname();
   const user = useSession();
   // Two copies of this component exist at once (rail + drawer), so the panel
@@ -386,12 +437,20 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           accent={accent}
           panelId={`${uid}-${item.key}`}
           open={toggled[item.key] ?? holds}
-          onToggle={() =>
+          collapsed={collapsed}
+          onToggle={() => {
+            // Narrow: widen first, then open the section — otherwise the
+            // press appears to do nothing at all.
+            if (collapsed) {
+              onToggleCollapsed?.();
+              setToggled((current) => ({ ...current, [item.key]: true }));
+              return;
+            }
             setToggled((current) => ({
               ...current,
               [item.key]: !(current[item.key] ?? holds),
-            }))
-          }
+            }));
+          }}
           holdsCurrentPage={holds}
           activeHref={activeHref}
           onNavigate={onNavigate}
@@ -408,15 +467,18 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             item={item}
             accent={accent}
             active={item.href === activeHref}
+            collapsed={collapsed}
             onNavigate={onNavigate}
           />
-          <NavChildren
-            id={`${uid}-${item.key}`}
-            item={item}
-            accent={accent}
-            activeHref={activeHref}
-            onNavigate={onNavigate}
-          />
+          {collapsed ? null : (
+            <NavChildren
+              id={`${uid}-${item.key}`}
+              item={item}
+              accent={accent}
+              activeHref={activeHref}
+              onNavigate={onNavigate}
+            />
+          )}
         </div>
       );
     }
@@ -427,6 +489,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         item={item}
         accent={accent}
         active={item.href === activeHref}
+        collapsed={collapsed}
         onNavigate={onNavigate}
       />
     );
@@ -434,21 +497,55 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-[11px] font-semibold text-primary-foreground">
+      <div
+        className={cn(
+          "flex h-16 shrink-0 items-center gap-2.5",
+          collapsed ? "justify-center px-2" : "px-5",
+        )}
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-[11px] font-semibold text-primary-foreground">
           SFM
         </span>
-        <span className="truncate text-[15px] font-semibold tracking-tight">
-          ShareViral Finance
-        </span>
+        {collapsed ? null : (
+          <>
+            <span className="truncate text-[15px] font-semibold tracking-tight">
+              ShareViral Finance
+            </span>
+            {onToggleCollapsed ? (
+              <CollapseButton collapsed={false} onClick={onToggleCollapsed} />
+            ) : null}
+          </>
+        )}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-4">
+      {/* Narrow, the button moves below the mark: there is no room beside it,
+          and it has to stay on screen or the rail cannot be widened again. */}
+      {collapsed && onToggleCollapsed ? (
+        <div className="flex justify-center pb-2">
+          <CollapseButton collapsed onClick={onToggleCollapsed} />
+        </div>
+      ) : null}
+
+      <nav
+        className={cn(
+          "flex flex-1 flex-col gap-1 overflow-y-auto pb-4",
+          collapsed ? "px-2" : "px-3",
+        )}
+      >
         {groups.map((group) => (
           <div key={group.title} className="flex flex-col gap-1">
-            <p className="px-3 pt-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-              {group.title}
-            </p>
+            {/* A heading has nowhere to go at this width. A rule keeps the
+                grouping visible without pretending to be readable text. */}
+            {collapsed ? (
+              <div
+                aria-hidden="true"
+                className="mx-2 mt-3 mb-1.5 border-t border-border"
+              />
+            ) : (
+              <p className="px-3 pt-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                {group.title}
+              </p>
+            )}
             {group.items.map((item) => renderItem(item, group.accent))}
           </div>
         ))}
@@ -461,11 +558,76 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function Sidebar() {
+/** The one control that narrows and widens the rail. */
+function CollapseButton({
+  collapsed,
+  onClick,
+}: {
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  const label = collapsed ? "Widen the sidebar" : "Narrow the sidebar";
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-surface lg:block">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={collapsed}
+      title={label}
+      className={cn(
+        "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none",
+        collapsed ? null : "ml-auto",
+      )}
+    >
+      <Icon className="size-4" />
+    </button>
+  );
+}
+
+/** Remembered, so the choice survives a reload rather than being made daily. */
+const COLLAPSED_KEY = "sfm.sidebar.collapsed";
+
+export function Sidebar() {
+  /**
+   * Starts wide, then corrects itself on mount.
+   *
+   * The server has no way to know what this browser last chose, so rendering
+   * the remembered width straight away would mean the server and the client
+   * disagreeing about the markup — which React treats as an error and which
+   * shows up as the whole shell being thrown away and rebuilt. Reading the
+   * preference in an effect costs one frame at the old width and is correct.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(window.localStorage.getItem(COLLAPSED_KEY) === "1");
+  }, []);
+
+  const toggle = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Private browsing, or storage full. The rail still works for this
+        // visit; only the remembering is lost.
+      }
+      return next;
+    });
+  };
+
+  return (
+    <aside
+      className={cn(
+        "hidden shrink-0 border-r border-border bg-surface transition-[width] duration-200 lg:block motion-reduce:transition-none",
+        collapsed ? "w-16" : "w-64",
+      )}
+    >
       <div className="sticky top-0 h-dvh">
-        <SidebarContent />
+        <SidebarContent collapsed={collapsed} onToggleCollapsed={toggle} />
       </div>
     </aside>
   );
