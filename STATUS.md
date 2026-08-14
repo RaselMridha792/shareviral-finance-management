@@ -1,7 +1,7 @@
 # SFM — where things stand
 
-ShareViral Finance Management. All phases built and deployed; last updated
-**2026-08-14**, after the first round of changes asked for from using the live
+ShareViral Finance Management. All phases built, deployed and audited end to end; last updated
+**2026-08-14**, after a full end-to-end audit and the changes asked for from using the live
 app.
 
 ## Running it
@@ -171,11 +171,60 @@ service logs and falls back rather than printing mojibake.
 remittance and TDS liability ran thirty-six queries to render a year; both are
 flat at three now, with the output proved identical beforehand and after.
 
+## The end-to-end audit (2026-08-14)
+
+Five independent sweeps, each required to show its evidence and to say
+UNTESTED rather than claim a pass it had not observed.
+
+```
+Endpoints        119 routes · 661 requests · 5 roles
+                 no missing 401, no missing 403, no 500s
+                 token forgery held on all six vectors — the guard reads the
+                 role from the database and ignores the claim
+Calculations     the books never broke: ~90 tie assertions after 21 money
+                 mutations, all green — register, balances, dashboard groups,
+                 TDS liability
+CRUD             every entity created, read, updated, voided, archived,
+                 restored; concurrency repeats all refused cleanly
+Exports          14 exports · amounts are numeric cells · dates carry no
+                 off-by-one · PDFs render ৳ from the built output
+AI intake        no write tools · 5 of 5 intents land in the right table ·
+                 nothing saves without confirmation · chats are private
+Screens          every route in 3 roles · 223 of 226 money strings on screen
+                 exactly derivable from that screen's API payload
+```
+
+**Twenty-one defects were found and fixed.** The ones worth remembering:
+
+- **A PATCH wrote fields nobody sent.** `createSchema.partial()` keeps its
+  defaults, so an absent key arrived with a value. Renaming an account zeroed
+  its opening balance; marking a contractor resigned turned them into an
+  employee; editing a vendor reset a USD subscription to BDT. `patchOf()`
+  strips the defaults.
+- **`?includeVoided=false` meant true.** `Boolean("false")` is `true`, so
+  voided money re-entered the totals — and the same schema drives the Excel
+  export.
+- **The statement PDF dropped accounts.** It printed the first ledger plus one
+  card, so with three accounts the main bank account — and eight of the
+  period's nine entries — never appeared in the document that goes to an
+  auditor.
+- **HR could read the company's position**, payroll total included, through
+  Reports. `reports.view` is no longer HR's.
+- **One taka figure had four different dollar answers** across the dashboard,
+  Reports and the statement. All three resolve through `governingRateFor` now
+  and name which rate won.
+- **Dollars were grouped in lakhs** — `$1,87,083`, which is not a dollar
+  amount in any locale.
+- **Two screens double-counted ৳39,975**, and the first attempt to fix it made
+  things worse: `NOT (UNKNOWN)` is `UNKNOWN`, so every row without a vendor
+  silently vanished. Only an assertion that refused to pass on an empty set
+  caught it.
+
 ## Verified
 
 ```
 typecheck / lint / build     clean across all three workspaces
-unit tests                   80 pass
+unit tests                   83 pass
 Phase 1 acceptance           15/15  roles, HR 403 from curl, token reuse
 Phase 2 acceptance           21/21  category depth, permissions, book lock
 Phase 3 acceptance           balance matches to the paisa, voids excluded
@@ -210,6 +259,27 @@ Every phase is built and deployed. What is left is not code:
    against the bank statement to the paisa.
 
 Then, when you want off Vercel and Render, `DEPLOYMENT.md` has the VPS move.
+
+## Four decisions the audit surfaced
+
+1. **`mustChangePassword` does nothing.** It is stored, selected and echoed by
+   `/auth/me`, and no guard consults it. All five seeded accounts carry it and
+   can use every endpoint their role permits. Enforcing it would bounce
+   everyone — the CEO included — to a change-password screen on their next
+   request, so it is left as it is until you say otherwise. The alternative is
+   to drop the flag, so it stops implying a protection that is not there.
+2. **`admin` does not hold `audit.read`.** Only Super Admin and CEO can read
+   the audit log, while admin is otherwise the full operational role. It
+   matches the matrix as written; flagged in case it was not intended.
+3. **A vendor named `150000.00` is live**, created before the free-text box was
+   removed, from an amount typed into the wrong field. It is offered to the
+   assistant as a real supplier in every prompt. You said you would clear it
+   yourself once testing was done.
+4. **The stored Anthropic key cannot be decrypted.** `SECRET_ENCRYPTION_KEY` is
+   unset, so `secret-box` fell back to `JWT_REFRESH_SECRET`, which has since
+   changed — the ciphertext is orphaned and the app reports "no key has been
+   set". Re-entering it in Settings fixes it. Set `SECRET_ENCRYPTION_KEY` so
+   rotating a JWT secret cannot orphan it again.
 
 ## Still waiting on answers
 
