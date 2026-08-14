@@ -15,6 +15,7 @@ import {
   CircleCheck,
   CircleDashed,
   Plus,
+  Receipt,
   Search,
   SquarePen,
   Store,
@@ -30,24 +31,38 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import { vendorsApi, type VendorDto } from "@/lib/masters";
+import {
+  vendorsApi,
+  type AccountDto,
+  type CategoryNode,
+  type VendorDto,
+} from "@/lib/masters";
+import { SubscriptionPaymentForm } from "./subscription-payment-form";
 import { cn, formatDate } from "@/lib/utils";
 import { VendorForm } from "./vendor-form";
 
 export function VendorsScreen({
   initialPage,
   summary,
+  accounts,
+  categories,
 }: {
   initialPage: Paginated<VendorDto>;
   summary: SubscriptionSummary;
+  accounts: AccountDto[];
+  categories: CategoryNode[];
 }) {
   const router = useRouter();
   const canWrite = useCan("vendors.write");
+  // Recording a payment writes to the ledger, so it is gated on that rather
+  // than on the permission to edit the tool itself.
+  const canRecordPayment = useCan("transactions.write");
 
   const [page, setPage] = useState(initialPage);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<VendorDto | null>(null);
+  const [paying, setPaying] = useState<VendorDto | null>(null);
 
   async function refresh(q = query) {
     setPage(
@@ -194,16 +209,28 @@ export function VendorsScreen({
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {canWrite ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditing(vendor)}
-                          >
-                            <SquarePen className="size-3.5" />
-                            Edit
-                          </Button>
-                        ) : null}
+                        <span className="inline-flex items-center justify-end gap-1">
+                          {canRecordPayment && isRecurringType(vendor.type) ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPaying(vendor)}
+                            >
+                              <Receipt className="size-3.5" />
+                              Record payment
+                            </Button>
+                          ) : null}
+                          {canWrite ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditing(vendor)}
+                            >
+                              <SquarePen className="size-3.5" />
+                              Edit
+                            </Button>
+                          ) : null}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -224,6 +251,14 @@ export function VendorsScreen({
         open={Boolean(editing)}
         vendor={editing ?? undefined}
         onClose={() => setEditing(null)}
+        onSaved={() => refresh()}
+      />
+      <SubscriptionPaymentForm
+        key={paying?.id}
+        vendor={paying}
+        accounts={accounts}
+        categories={categories}
+        onClose={() => setPaying(null)}
         onSaved={() => refresh()}
       />
     </>

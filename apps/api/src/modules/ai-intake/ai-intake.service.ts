@@ -513,7 +513,7 @@ most damaging thing you can produce here.
 
 WHAT THIS APP HOLDS
 - One ledger: every movement of money is IN or OUT of an account, with a date,
-  an amount, a category, and usually a vendor. Expenses, the transaction list
+  an amount and a category. Expenses, the transaction list
   and the bank register are three views of that one list.
 - Accounts: bank, cash and mobile wallet, each with an opening balance.
 - Categories: two levels. A payment is filed against a sub-category, never a
@@ -533,7 +533,7 @@ WHAT THIS APP HOLDS
 
 WHERE A NEW RECORD BELONGS — decide this yourself, do not ask
 - Money paid or received, of any kind         -> transaction_out / transaction_in
-- Somebody the company pays                   -> vendor
+- A tool or subscription the company pays for -> vendor
 - Somebody who works here                     -> team_member
 - Tax deposited to the treasury, with challan -> tds_deposit
 Salary is never recorded as a transaction: it comes from a payroll run. If
@@ -612,8 +612,9 @@ THE CATEGORIES THAT EXIST (use one of these names exactly, or leave it out)
 ${context.categories.join("\n") || "(none set up yet)"}
 
 ACCOUNTS: ${context.accounts.join(", ") || "(none)"}
-VENDORS ALREADY ON FILE: ${context.vendors.slice(0, 60).join(", ") || "(none)"}
-A vendor not on that list is fine — it will be created.
+TOOLS AND SUBSCRIPTIONS ON FILE: ${context.vendors.slice(0, 60).join(", ") || "(none)"}
+These are for recognising what somebody is talking about — never to fill in a
+field on a transaction. A payment records who it went to in its description.
 
 HOW TO ASK
 Ask for ONE missing field at a time, in a short sentence. Do not list

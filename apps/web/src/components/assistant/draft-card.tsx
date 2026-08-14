@@ -16,7 +16,6 @@ export const FIELD_LABELS: Record<string, string> = {
   categoryName: "Category",
   accountName: "Account",
   accountId: "Account",
-  vendorName: "Paid to",
   billAmount: "Gross bill",
   withheldTaxAmount: "Tax withheld",
   fullName: "Name",

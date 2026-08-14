@@ -524,11 +524,10 @@ export class TransactionsService {
         module: "transactions",
         read: () => Promise.resolve(undefined),
         run: async (tx) => {
-          const vendorId = await this.vendorsService.resolveOrCreate(
-            tx,
-            { vendorId: input.vendorId, vendorName: input.vendorName },
-            actor,
-          );
+          // By id, and only by id. Creating a vendor from free text as a
+          // side effect of writing a transaction wrote master data with no
+          // audit row and under the wrong permission.
+          const vendorId = input.vendorId ?? null;
 
           const [created] = await tx
             .insert(transactions)
@@ -674,14 +673,7 @@ export class TransactionsService {
         return row;
       },
       run: async (tx) => {
-        const vendorId =
-          input.vendorId !== undefined || input.vendorName !== undefined
-            ? await this.vendorsService.resolveOrCreate(
-                tx,
-                { vendorId: input.vendorId, vendorName: input.vendorName },
-                actor,
-              )
-            : undefined;
+        const vendorId = input.vendorId;
 
         const nextDate = input.txnDate ?? existing.txnDate;
         const nextAmount = input.amount ?? existing.amount;

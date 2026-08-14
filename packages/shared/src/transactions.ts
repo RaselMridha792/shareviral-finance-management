@@ -107,9 +107,22 @@ export const createTransactionSchema = z
     }),
     categoryId: z.string().uuid("Choose a category"),
 
-    /** Pick an existing vendor, or type a new name and it gets created. */
+    /**
+     * An existing vendor, by id. Never by name.
+     *
+     * `vendorName` used to be accepted here and free text created a vendor as
+     * a side effect of writing a transaction — unaudited, and behind
+     * `transactions.write` rather than `vendors.write`. That is how a supplier
+     * called "150000.00" came to exist, from an amount typed into the wrong
+     * box. The form that offered it is gone; taking the field out of the
+     * contract is what stops the same thing arriving through the API or the
+     * assistant.
+     *
+     * Subscriptions still need the link, and Record payment on the AI tools
+     * screen supplies it — by id, against a vendor somebody deliberately
+     * created.
+     */
     vendorId: z.string().uuid().nullish(),
-    vendorName: optionalText(120),
     counterparty: optionalText(160),
 
     paymentMethod: paymentMethodSchema.default("bank_transfer"),
@@ -290,8 +303,8 @@ export const updateTransactionSchema = z
     txnDate: isoDateSchema.optional(),
     amount: amountSchema.optional(),
     categoryId: z.string().uuid().optional(),
+    /** By id only — see `createTransactionSchema`. */
     vendorId: z.string().uuid().nullish(),
-    vendorName: optionalText(120),
     counterparty: optionalText(160),
     paymentMethod: paymentMethodSchema.optional(),
     reference: optionalText(120),
