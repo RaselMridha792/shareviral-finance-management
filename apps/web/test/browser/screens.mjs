@@ -492,10 +492,34 @@ consoleErrors.length === 0
   ? ok("no console errors across the whole pass", "")
   : bad("console errors", `${consoleErrors.length} — first: ${consoleErrors[0].text}`);
 
-const realFailures = failedRequests.filter((r) => !/favicon|\.map\b|hot-update/.test(r.url));
+const noise = failedRequests.filter((r) => /favicon|\.map\b|hot-update/.test(r.url));
+/**
+ * A cancelled prefetch is not a failure.
+ *
+ * Next prefetches the route behind every visible link; walking fourteen screens
+ * in a row cancels most of them mid-flight and the browser reports each as
+ * ERR_ABORTED. On localhost they mostly complete before the next navigation, so
+ * this never showed up — against the deployed site there were 390 of them and
+ * the check failed on noise.
+ *
+ * Worth filtering, but only narrowly: an aborted `?_rsc=` prefetch to this
+ * app's own origin, and nothing else. A 500, a failed API call, or an abort on
+ * anything that is not a prefetch still fails the run.
+ */
+const prefetchAborts = failedRequests.filter(
+  (r) => /[?&]_rsc=/.test(r.url) && r.why === "net::ERR_ABORTED" && r.url.startsWith(WEB),
+);
+const realFailures = failedRequests.filter(
+  (r) => !noise.includes(r) && !prefetchAborts.includes(r),
+);
+
 realFailures.length === 0
-  ? ok("no failed requests", "")
-  : bad("failed requests", `${realFailures.length} — first: ${realFailures[0].url} (${realFailures[0].why})`);
+  ? ok("no failed requests", `${prefetchAborts.length} cancelled prefetch(es) ignored`)
+  : bad(
+      "failed requests",
+      `${realFailures.length} real — ` +
+        realFailures.slice(0, 3).map((r) => `${r.url} (${r.why})`).join(" | "),
+    );
 
 /* --------------------------------------------------------------- report */
 

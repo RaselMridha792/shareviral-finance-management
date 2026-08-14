@@ -1,8 +1,8 @@
 # SFM — where things stand
 
 ShareViral Finance Management. All phases built, deployed and audited end to end; last updated
-**2026-08-14**, after a full end-to-end audit and the changes asked for from using the live
-app.
+**2026-08-15**, after a full end-to-end audit, a test suite that runs on command, and a deploy
+verified against the live site rather than a local build.
 
 ## Running it
 
@@ -336,6 +336,11 @@ history, and into the access log of anything in front of the app. It now posts.
 
 ## One deployment step, if production is a different database
 
+> **Settled on 2026-08-15: it is not a different database.** Live reads the same
+> Neon instance, and `ai_corrections` is there. Nothing below needs doing today.
+> It stays written down because it comes back the moment production moves — to
+> the VPS, or to a second Neon branch.
+
 `ai_corrections` — the table the assistant learns from — was created by hand on
 the Neon database this repo's `.env` points at, not by a migration. If the
 Render deployment reads a *different* database, run this once against it:
@@ -358,6 +363,43 @@ create index if not exists ai_corrections_target_idx
 Nothing breaks without it: the read is wrapped so a missing table logs a
 warning and the assistant carries on with no past examples. It simply will not
 learn until the table exists.
+
+## Live (2026-08-15)
+
+| | |
+|---|---|
+| Web | https://shareviral-finance-management-web.vercel.app |
+| API | https://sfm-api-o0iu.onrender.com |
+
+Both build from `main` automatically, so a push is a deploy. The browser only
+ever talks to the Vercel URL: `/api/*` is rewritten to Render, which keeps the
+session cookie same-origin. **Render's free plan sleeps** — the first request
+after a quiet spell takes about a minute while the API wakes.
+
+**Live reads the same Neon database this repository's `.env` points at.** That
+was established rather than assumed: a sign-in attempt for an address that does
+not exist wrote its "no such account" line into *this* database. So anything
+changed here is already changed live — the demo people were removed once, not
+twice — and the `ai_corrections` step below is already done.
+
+Render generates its own `JWT_ACCESS_SECRET`, so a token minted from this
+repo's `.env` is refused by the live API. That is correct and worth knowing
+before debugging a puzzling 401: to reach live you sign in, you do not mint.
+
+Verified after the 2026-08-15 deploy, against the deployed site rather than a
+local build:
+
+```
+sign-in through the live web app        the Vercel rewrite reaches Render and
+                                        the cookie comes back
+the API is the new build                quarter 9 refused, with its reason
+                                        the over-deposit figure is present
+the team                                18 — the seven demo people are gone
+payroll                                 empty, waiting for the first real run
+balances                                match this database to the paisa
+a write without the custom header       403 — the CSRF guard is on
+every screen, 4 widths, both themes     112 renders, nothing flagged
+```
 
 ## The restore has been done (2026-08-14)
 
