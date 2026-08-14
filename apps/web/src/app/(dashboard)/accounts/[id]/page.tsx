@@ -15,7 +15,11 @@ export default async function RegisterPage({
   const to = typeof search.to === "string" ? search.to : undefined;
 
   const [register, accounts, categories] = await Promise.all([
-    ledgerApi.register(id, { from, to }),
+    // Voided rows included, struck through and out of every total. This is the
+    // page an auditor reads, and a correction that leaves no trace on it is
+    // exactly what an audit is looking for. They do not touch the running
+    // balance — the window sum skips them.
+    ledgerApi.register(id, { from, to, includeVoided: true }),
     accountsApi.list(),
     categoriesApi.tree(),
   ]);

@@ -377,6 +377,15 @@ export type ListTransactionsQuery = z.infer<typeof listTransactionsQuerySchema>;
 export const registerQuerySchema = z.object({
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
+  /**
+   * Show voided rows too, struck through and out of every total.
+   *
+   * Off by default so the statement — which builds its ledgers from this same
+   * call — keeps counting only live money. The register screen turns it on,
+   * because "a voided row stays visible" is the rule everywhere else in the
+   * app and the register was the one place it did not hold.
+   */
+  includeVoided: z.coerce.boolean().optional(),
 });
 export type RegisterQuery = z.infer<typeof registerQuerySchema>;
 

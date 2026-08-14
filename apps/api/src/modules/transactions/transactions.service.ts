@@ -285,7 +285,10 @@ export class TransactionsService {
    * `signed_amount` — a single window function rather than a loop, so a page of
    * 500 rows costs one query.
    */
-  async register(accountId: string, range: { from?: string; to?: string }) {
+  async register(
+    accountId: string,
+    range: { from?: string; to?: string; includeVoided?: boolean },
+  ) {
     const [account] = await this.db.client
       .select({
         id: accounts.id,
@@ -332,17 +335,26 @@ export class TransactionsService {
       Number(account.openingBalance) + Number(carriedForward)
     ).toFixed(2);
 
-    const clauses: SQL[] = [
-      eq(transactions.accountId, accountId),
-      isNull(transactions.voidedAt),
-    ];
+    const clauses: SQL[] = [eq(transactions.accountId, accountId)];
+    // A voided row stays visible and struck through, but it is not money.
+    if (!range.includeVoided) clauses.push(isNull(transactions.voidedAt));
     if (range.from) clauses.push(gte(transactions.txnDate, range.from));
     if (range.to) clauses.push(lte(transactions.txnDate, range.to));
 
     const rows = await this.db.client
       .select({
         ...projection,
-        runningBalance: sql<string>`(${openingBalance}::numeric + sum(${transactions.signedAmount}) over (order by ${transactions.txnDate}, ${transactions.createdAt}, ${transactions.id}))::text`,
+        /**
+         * The running balance skips voided rows even when they are shown.
+         *
+         * This summed `signed_amount` outright, which was safe only because
+         * voided rows were filtered out of the query entirely — and that is
+         * why the register showed nothing at all after a void, contradicting
+         * the rule the rest of the app follows. Now that they can appear, the
+         * window has to ignore them explicitly: a voided row must leave the
+         * balance exactly where the row above it left it.
+         */
+        runningBalance: sql<string>`(${openingBalance}::numeric + sum(case when ${transactions.voidedAt} is null then ${transactions.signedAmount} else 0 end) over (order by ${transactions.txnDate}, ${transactions.createdAt}, ${transactions.id}))::text`,
       })
       .from(transactions)
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
@@ -355,10 +367,13 @@ export class TransactionsService {
         asc(transactions.id),
       );
 
-    const totalIn = rows
+    // Voided rows are listed but never counted — the same rule the running
+    // balance above follows.
+    const live = rows.filter((r) => !r.voidedAt);
+    const totalIn = live
       .filter((r) => r.direction === "in")
       .reduce((sum, r) => sum + Number(r.amount), 0);
-    const totalOut = rows
+    const totalOut = live
       .filter((r) => r.direction === "out")
       .reduce((sum, r) => sum + Number(r.amount), 0);
 

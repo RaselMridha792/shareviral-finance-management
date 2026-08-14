@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import ExcelJS from "exceljs";
 
+import { SettingsService } from "../settings/settings.service";
+
 export type ColumnKind = "text" | "money" | "date" | "number";
 
 export type SheetColumn<T> = {
@@ -32,11 +34,39 @@ export type SheetSpec<T> = {
 @Injectable()
 export class ExcelService {
   private static readonly MONEY_FORMAT = "#,##0.00";
+  /**
+   * Lakh–crore grouping, the way the rest of the app writes taka.
+   *
+   * Excel's repeat rule: the comma nearest the decimal point sets the last
+   * group, and the one before it repeats leftwards — so `#,##,##0.00` gives
+   * 12,50,000.00 rather than 1,250,000.00. Without this every sheet
+   * contradicted its own subtitle, which is written by `formatMoney` and does
+   * group in lakhs.
+   */
+  private static readonly MONEY_FORMAT_BD = "#,##,##0.00";
   private static readonly DATE_FORMAT = "dd mmm yyyy";
+  /**
+   * Rates and percentages: still a real number, but one that keeps the digits
+   * it was given. Under the general format Excel drops trailing zeros, so a
+   * realised rate of 118.3000 displayed as `118.3` and 118.0000 as plain
+   * `118` — the figure looked rounded when it was not.
+   */
+  private static readonly NUMBER_FORMAT = "#,##0.0000";
   /** Above this, the browser and Excel both start to struggle. */
   static readonly MAX_ROWS = 20_000;
 
+  constructor(private readonly settings: SettingsService) {}
+
+  /** The money format this company reads, from Settings. */
+  private async moneyFormat(): Promise<string> {
+    const settings = await this.settings.get();
+    return settings.numberFormat === "bangladeshi"
+      ? ExcelService.MONEY_FORMAT_BD
+      : ExcelService.MONEY_FORMAT;
+  }
+
   async build<T>(spec: SheetSpec<T>): Promise<Buffer> {
+    const money = await this.moneyFormat();
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "ShareViral Finance Management";
     workbook.created = new Date();
@@ -95,11 +125,14 @@ export class ExcelService {
         switch (column.kind) {
           case "money":
             cell.value = Number(value);
-            cell.numFmt = ExcelService.MONEY_FORMAT;
+            cell.numFmt = money;
             cell.alignment = { horizontal: "right" };
             break;
           case "number":
             cell.value = Number(value);
+            // Keeps the digits it was given: a rate of 118.3000 must not
+            // display as 118.3, which reads as a different, rounder figure.
+            cell.numFmt = ExcelService.NUMBER_FORMAT;
             cell.alignment = { horizontal: "right" };
             break;
           case "date":
@@ -134,7 +167,7 @@ export class ExcelService {
         cell.value = {
           formula: `SUM(${letter}${headerAt + 1}:${letter}${cursor - 1})`,
         };
-        cell.numFmt = ExcelService.MONEY_FORMAT;
+        cell.numFmt = money;
         cell.font = { bold: true };
         cell.border = { top: { style: "thin", color: { argb: "FFC9D2E0" } } };
       });

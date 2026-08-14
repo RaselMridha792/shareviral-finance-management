@@ -12,6 +12,7 @@ import {
   type OverviewReport,
   type OverviewVendor,
   type PeriodRange,
+  GOVERNING_RATE_LABELS,
 } from "@finance/shared";
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
@@ -122,12 +123,33 @@ export class OverviewService {
      * known rate, and everything spent afterwards is spending that money. The
      * settings rate is reached only when nothing was funded in the period.
      */
-    const fx = await this.fx.contextFor(range);
+    const tableFx = await this.fx.contextFor(range);
     // One resolver, not a rule reimplemented here: funded rate, then the rate
     // set in Settings, then the table. `FxService.governingRateFor` is the
     // only place that order is written down.
     const governing = await this.fx.governingRateFor(range);
     const usdRate = governing?.rate ?? null;
+
+    /**
+     * The context reported to the caller, describing the rate actually used.
+     *
+     * `contextFor` only knows what the rate *table* holds, so on a month
+     * funded from abroad — or one falling back to the Settings rate — it can
+     * come back `unavailable: true` with the caption "no exchange rate on
+     * record for this period". Returned unchanged beside a populated `usdRate`
+     * and a full set of dollar figures, that is a response arguing with
+     * itself, and any screen rendering `fx.caption` would print "not
+     * converted" over converted numbers.
+     */
+    const fx =
+      governing && tableFx.unavailable
+        ? {
+            ...tableFx,
+            rate: governing.rate,
+            unavailable: false,
+            caption: `translated at ${governing.rate} — ${GOVERNING_RATE_LABELS[governing.source]}`,
+          }
+        : tableFx;
 
     const currency = "BDT" as const;
     const convert = (value: string) => value;

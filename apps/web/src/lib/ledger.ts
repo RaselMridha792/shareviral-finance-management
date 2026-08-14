@@ -120,7 +120,10 @@ export const ledgerApi = {
       cache: "no-store",
     }),
 
-  register: (accountId: string, range: { from?: string; to?: string } = {}) =>
+  register: (
+    accountId: string,
+    range: { from?: string; to?: string; includeVoided?: boolean } = {},
+  ) =>
     apiFetch<RegisterResult>(
       `/accounts/${accountId}/register?${toSearchParams(range)}`,
       { cache: "no-store" },
@@ -136,7 +139,10 @@ export const ledgerApi = {
     }),
 
   create: (input: CreateTransactionInput) =>
-    apiFetch<TransactionDto>("/transactions", { method: "POST", ...json(input) }),
+    apiFetch<TransactionDto>("/transactions", {
+      method: "POST",
+      ...json(input),
+    }),
 
   /**
    * Money arriving from abroad, read off the remittance advice.
