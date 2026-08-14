@@ -79,6 +79,18 @@ export function WithholdingScreen({
 
   const today = todayInDhaka();
   const outstanding = Number(liability.totals.outstanding);
+  /**
+   * More deposited than was ever withheld.
+   *
+   * Worth its own figure because "still held" is clamped at zero: without this
+   * an over-deposit reads as a settled month, and the card underneath said
+   * "everything deducted has been deposited" — true, and the wrong thing to be
+   * told when a challan carries a digit too many or names the wrong month.
+   */
+  const overDeposited = Number(liability.totals.overDeposited ?? 0);
+  const overDepositedMonths = liability.months.filter(
+    (m) => Number(m.overDeposited ?? 0) > 0,
+  );
 
   return (
     <>
@@ -112,14 +124,47 @@ export function WithholdingScreen({
         <SummaryCard
           label="Still held"
           value={liability.totals.outstanding}
-          tone={outstanding > 0 ? "warning" : "positive"}
+          tone={
+            outstanding > 0
+              ? "warning"
+              : overDeposited > 0
+                ? "neutral"
+                : "positive"
+          }
           note={
             outstanding > 0
               ? "Money withheld from someone else that has not reached the treasury"
-              : "Everything deducted has been deposited"
+              : overDeposited > 0
+                ? "Nothing is owed — but more has been deposited than was withheld"
+                : "Everything deducted has been deposited"
           }
         />
       </div>
+
+      {/*
+        Shown only when it happens, because a figure that is nearly always zero
+        earns no permanent place on the screen. When it is not zero it is money
+        already with the treasury that nobody is looking for — a challan typed
+        with an extra digit, or filed against the wrong month.
+      */}
+      {overDeposited > 0 ? (
+        <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/8 px-4 py-3">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <div className="text-sm">
+            <p className="font-medium">
+              <Amount value={liability.totals.overDeposited} tone="neutral" />{" "}
+              deposited beyond what was withheld
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              {overDepositedMonths.length === 1
+                ? `${overDepositedMonths[0].label} has a challan larger than that month's deductions.`
+                : `${overDepositedMonths.map((m) => m.label).join(", ")} each have a challan larger than that month's deductions.`}{" "}
+              Check the amount on the challan and the month it names — this is
+              money already with the treasury.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <Card className="overflow-hidden">
         <CardHeader
@@ -158,6 +203,7 @@ export function WithholdingScreen({
               ) : (
                 liability.months.map((row) => {
                   const held = Number(row.outstanding);
+                  const over = Number(row.overDeposited ?? 0);
                   const late = held > 0 && row.dueOn < today;
                   return (
                     <tr
@@ -179,7 +225,25 @@ export function WithholdingScreen({
                         />
                       </td>
                       <td className="px-4 py-2.5">
-                        <Amount value={row.deposited} tone="neutral" className="block" />
+                        <Amount
+                          value={row.deposited}
+                          tone="neutral"
+                          className={
+                            over > 0 ? "block font-medium text-warning" : "block"
+                          }
+                        />
+                        {/* Marked on the deposit, not on "still held", because
+                            the deposit is the figure that is wrong. */}
+                        {over > 0 ? (
+                          <span className="mt-0.5 block text-xs text-warning">
+                            <Amount
+                              value={row.overDeposited}
+                              tone="neutral"
+                              className="inline"
+                            />{" "}
+                            more than was withheld
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2.5">
                         <Amount

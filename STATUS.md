@@ -50,6 +50,18 @@ August's left as a draft, one TDS challan, and two assessed tax instalments.
 **Wipe it before the first real transaction goes in.** It is scaffolding for
 looking around, not a foundation.
 
+> **The demo people were removed on 2026-08-14**, at the owner's request, once
+> the seventeen real employees were in. Everything that existed only because of
+> them went with them: both payroll runs, all twelve lines, six salary records,
+> six TDS allocations, July's ৳3,76,300 salary payment and the ৳18,700 challan
+> that covered it. Standard Chartered rose by ৳3,95,000, none of which was ever
+> real money. The demo accounts, vendors and transactions are still there.
+>
+> So the payroll screen is empty until the first real run. That is correct, and
+> it is also why the payroll test suites build their own run now — they used to
+> borrow the demo's draft, and with it gone they reported "no draft run to take
+> through" and *passed*.
+
 ## Done
 
 **Phase 0 — foundation.** Drizzle on the standard `pg` driver (works against
@@ -252,8 +264,9 @@ now live in the repo and run on command:
 ```
 npm test                 154 unit tests — money, periods, deadlines, dates,
                          permissions, subscriptions
-npm run test:integration 262 checks across 9 suites, against the real database
-npm run test:browser     20 checks — 14 screens × 4 widths × 2 themes
+npm run test:integration 278 checks across 11 suites, against the real database
+npm run test:browser     32 checks — 14 screens × 4 widths × 2 themes, plus
+                         the batch review table
 npm run test:all         all three, in that order
 ```
 
@@ -271,6 +284,8 @@ free, signs in as each of the five roles, and runs:
 | 07 auth | rotation, reuse detection, role change, lockout |
 | 08 payroll, tax, import | paying a run, TDS arithmetic, import and revert |
 | 09 reopen | voiding a payment lets the run be paid again |
+| 10 batch of drafts | many records saved one at a time, one bad row stranding none |
+| 11 TDS over-deposit | a challan larger than the month it covers is reported |
 
 Between suites the runner puts the demo books back and **fails the run if a
 suite changed them**. That is not politeness: suite 08 once left August's run

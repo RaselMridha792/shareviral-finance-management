@@ -913,6 +913,16 @@ export class ExportsController {
           value: (r) => r.outstanding,
         },
         {
+          // "Still held" is clamped at zero, so on its own the sheet cannot
+          // show a month where the challan was larger than the deductions.
+          // The download is meant to be what the screen shows, and the screen
+          // says it.
+          header: "Over-deposited",
+          key: "overDeposited",
+          kind: "money",
+          value: (r) => r.overDeposited,
+        },
+        {
           header: "Deposit by",
           key: "dueOn",
           kind: "date",
@@ -933,6 +943,7 @@ export class ExportsController {
         "deducted",
         "deposited",
         "outstanding",
+        "overDeposited",
       ],
     });
 

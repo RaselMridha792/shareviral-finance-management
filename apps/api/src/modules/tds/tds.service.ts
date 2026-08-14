@@ -220,6 +220,20 @@ export class TdsService {
         totalDeducted: deducted.toFixed(2),
         deposited: paid.toFixed(2),
         outstanding: Math.max(0, deducted - paid).toFixed(2),
+        /**
+         * Deposited beyond what was ever withheld.
+         *
+         * `outstanding` is clamped at zero, and rightly — nobody owes negative
+         * tax. But the clamp was the only thing said about the difference, so a
+         * month where ৳18,700 was deposited against ৳6,300 withheld read
+         * "outstanding ৳0" and looked settled. A challan typed with a digit too
+         * many, or entered against the wrong month, is money sitting with the
+         * treasury that nobody is looking for. It is the same class of mistake
+         * the plan warned about for the withheld figures themselves: the app
+         * does not calculate these, so a typo saves silently unless something
+         * says so.
+         */
+        overDeposited: Math.max(0, paid - deducted).toFixed(2),
         dueOn: deadline.dueOn,
         deadlineLabel: deadline.label,
       };
@@ -238,6 +252,11 @@ export class TdsService {
         deducted: sumOf(active.map((r) => r.totalDeducted)),
         deposited: sumOf(active.map((r) => r.deposited)),
         outstanding: sumOf(active.map((r) => r.outstanding)),
+        // Summed per month, not taken from the year's two totals: a year that
+        // is short in July and over in August owes July's tax and has money
+        // stranded against August, and one subtraction across the year would
+        // net them off and show neither.
+        overDeposited: sumOf(active.map((r) => r.overDeposited)),
       },
     };
   }

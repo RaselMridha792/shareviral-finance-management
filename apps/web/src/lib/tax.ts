@@ -28,6 +28,12 @@ export type TdsMonthDto = {
   totalDeducted: string;
   deposited: string;
   outstanding: string;
+  /**
+   * Deposited beyond what was withheld. `outstanding` is clamped at zero, so
+   * without this a month that was over-deposited is indistinguishable from one
+   * that was settled exactly.
+   */
+  overDeposited: string;
   dueOn: string;
   deadlineLabel: string;
 };
@@ -35,7 +41,12 @@ export type TdsMonthDto = {
 export type TdsLiabilityDto = {
   year: number;
   months: TdsMonthDto[];
-  totals: { deducted: string; deposited: string; outstanding: string };
+  totals: {
+    deducted: string;
+    deposited: string;
+    outstanding: string;
+    overDeposited: string;
+  };
 };
 
 export type TdsDepositDto = {
