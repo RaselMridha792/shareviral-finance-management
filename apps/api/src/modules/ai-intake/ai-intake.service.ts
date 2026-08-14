@@ -485,9 +485,21 @@ export class AiIntakeService {
     return {
       // Only leaf categories — a payment filed against a heading rather than a
       // sub-category is the thing the two-level tree exists to prevent.
+      /**
+       * The name on its own, then what it is for — not "Electricity (out)".
+       *
+       * That form was read as the name itself. The model copied it whole,
+       * `resolve()` looked for a category literally called "Electricity (out)"
+       * and found none, and a conversation that had reached a complete draft
+       * could not be saved at all. The separator makes the boundary obvious:
+       * everything before the dash is the name to send back.
+       */
       categories: categoryRows
         .filter((c) => c.parentId !== null)
-        .map((c) => `${c.name} (${c.kind})`),
+        .map(
+          (c) =>
+            `${c.name}  —  ${c.kind === "in" ? "money in" : c.kind === "out" ? "money out" : "either"}`,
+        ),
       accounts: accountRows.map((a) => a.name),
       vendors: vendorRows.map((v) => v.name),
     };
@@ -634,7 +646,9 @@ A FEW THINGS THE SCHEMA CANNOT SAY
     somewhere you cannot reach. If somebody offers a figure, say it belongs on
     the team form and leave it out of the draft.
 
-THE CATEGORIES THAT EXIST (use one of these names exactly, or leave it out)
+THE CATEGORIES THAT EXIST
+Send back ONLY the name — the part before the dash. "Electricity", never
+"Electricity  —  money out". If none fits, leave categoryName out.
 ${context.categories.join("\n") || "(none set up yet)"}
 
 ACCOUNTS: ${context.accounts.join(", ") || "(none)"}
@@ -721,8 +735,9 @@ null, and write a one-sentence summary for them to check.`;
   async resolve(draft: Record<string, unknown>) {
     const out: Record<string, unknown> = { ...draft };
 
-    const categoryName =
-      takeString(out, "categoryId") ?? takeString(out, "categoryName");
+    const categoryName = bareName(
+      takeString(out, "categoryId") ?? takeString(out, "categoryName"),
+    );
     if (categoryName) {
       const [row] = await this.db.client
         .select({ id: categories.id })
@@ -746,7 +761,7 @@ null, and write a one-sentence summary for them to check.`;
       }
     }
 
-    const accountName = takeString(out, "accountName");
+    const accountName = bareName(takeString(out, "accountName"));
     if (accountName) {
       const [row] = await this.db.client
         .select({ id: accounts.id })
@@ -835,5 +850,27 @@ function isPlaceholder(value: unknown): boolean {
 
   return ["unknown", "n/a", "na", "none", "null", "tbd", "-", "?"].includes(
     text.toLowerCase(),
+  );
+}
+
+/**
+ * The name, with any annotation the model copied along with it removed.
+ *
+ * The prompt lists a category as "Electricity  —  money out" and an account by
+ * its plain name, and a model asked for "the name" sometimes returns the whole
+ * line. Refusing that is technically correct and useless: the conversation had
+ * reached a complete draft and simply could not be saved. Trimming what the
+ * prompt itself added is not guesswork — it is undoing our own formatting.
+ *
+ * A dash inside a real name survives, because only a spaced em-dash separator
+ * and a trailing parenthetical are removed.
+ */
+function bareName(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return (
+    value
+      .split(/\s+—\s+/)[0]
+      .replace(/\s*\((?:in|out|both|money in|money out|either)\)\s*$/i, "")
+      .trim() || undefined
   );
 }
