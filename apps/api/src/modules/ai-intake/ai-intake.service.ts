@@ -910,6 +910,18 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     );
     if (!allowed.length) return "";
 
+    /**
+     * This runs on every single turn, and what it fetches is a nicety.
+     *
+     * `ai_corrections` is newer than the deployments that may be running, and
+     * a table that is not there yet must not be the reason the assistant stops
+     * answering. Without this the first turn after a deploy — on any database
+     * where the table has not been created — is a 500 on a feature nobody was
+     * using yet, and the whole assistant reads as broken.
+     *
+     * Anything else that goes wrong here deserves the same treatment for the
+     * same reason: no past example is worth a failed conversation.
+     */
     const rows = await this.db.client
       .select({
         said: aiCorrections.said,
@@ -920,7 +932,20 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       .from(aiCorrections)
       .where(inArray(aiCorrections.target, allowed))
       .orderBy(desc(aiCorrections.createdAt))
-      .limit(60);
+      .limit(60)
+      .catch((error: unknown) => {
+        this.log.warn(
+          `Past corrections could not be read, carrying on without them: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return [] as Array<{
+          said: string;
+          field: string;
+          drafted: string | null;
+          corrected: string | null;
+        }>;
+      });
 
     const seen = new Set<string>();
     const distinct = rows.filter((row) => {

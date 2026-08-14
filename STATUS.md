@@ -245,6 +245,31 @@ Page render sweep            every route, as Super Admin, CEO and HR
 The scripts live in the session scratchpad, not the repo — they are throwaway
 checks, not a test suite.
 
+## One deployment step, if production is a different database
+
+`ai_corrections` — the table the assistant learns from — was created by hand on
+the Neon database this repo's `.env` points at, not by a migration. If the
+Render deployment reads a *different* database, run this once against it:
+
+```sql
+create table if not exists ai_corrections (
+  id uuid primary key default gen_random_uuid(),
+  target varchar(32) not null,
+  said text not null,
+  field varchar(64) not null,
+  drafted text,
+  corrected text,
+  user_id uuid references users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_corrections_target_idx
+  on ai_corrections (target, created_at);
+```
+
+Nothing breaks without it: the read is wrapped so a missing table logs a
+warning and the assistant carries on with no past examples. It simply will not
+learn until the table exists.
+
 ## Next: your data
 
 Every phase is built and deployed. What is left is not code:
