@@ -30,7 +30,7 @@ import {
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
-import { allFieldReferences } from "./field-reference";
+import { allFieldReferences, pairedFields } from "./field-reference";
 import { hint, open, seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -610,6 +610,11 @@ exactly what will be accepted. Two rules follow from that, and both matter:
 
 ${allFieldReferences()}
 
+FIELDS THAT COME IN PAIRS
+The list above shows each field on its own, so it cannot show these. Each one
+below is refused at save time even though both fields read as optional.
+${pairedFields()}
+
 NEVER INVENT A VALUE
 If you do not know something, leave the key OUT of 'draft' entirely and name it
 in 'missingFields'. Do not guess, do not pick the likeliest account, and never
@@ -630,7 +635,8 @@ MONEY IS ALWAYS TAKA
 says "10000 dollar ashche", the amount is NOT 10000: that is dollars, and
 booking it as taka understates the entry more than a hundredfold. Ask what
 landed in taka, put the dollars in 'originalAmount' with 'originalCurrency'
-"USD", and the rate in 'usdRate' if they know it.
+"USD", and ask for the rate the bank gave — it goes in 'fxRate' and the entry
+is refused without it.
 
 DATES
 "aaj" is today, "kal" is yesterday for a past payment. Never guess a date

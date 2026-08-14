@@ -94,6 +94,38 @@ export function allFieldReferences(): string {
     .join("\n\n");
 }
 
+/**
+ * The rules that hold *between* fields, which the generated list cannot show.
+ *
+ * `fieldReferenceFor` walks `schema.shape`, and a `.refine()` is not in the
+ * shape — it sits outside it, on the object. So every field below reads as
+ * "optional" on its own line while the pair of them is mandatory together, and
+ * the model has no way to know.
+ *
+ * That gap was not theoretical. Told "CEO theke 10000 dollar ashche", the
+ * assistant filled `originalAmount` and `originalCurrency`, was told the taka
+ * that landed, declared the draft complete — and the save came back
+ * **400: "A foreign amount needs the rate that converted it"**. Every USD
+ * remittance, the one entry where getting the rate right matters most, could be
+ * drafted to completion and never filed. A larger model does not fix this; it
+ * makes the same draft faster, because the requirement was never written down.
+ *
+ * Kept beside the generator so a new `.refine()` is at least added in the file
+ * whose job is telling the model what the endpoint accepts.
+ */
+export function pairedFields(): string {
+  return `  * originalAmount and fxRate travel together. Give one and you must give
+    the other — "A foreign amount needs the rate that converted it". fxRate is
+    what the bank actually converted at: taka landed ÷ foreign sent. Ask for it
+    rather than working it out, because the rate somebody was given at cash-in
+    governs the whole month's reporting. (usdRate is a different, optional
+    field — a reference rate for reading taka in dollars, not a conversion that
+    happened.)
+  * withheldTaxAmount needs billAmount beside it — the gross bill the tax came
+    out of — and the bill must cover the amount paid plus that tax.
+  * withheldTaxAmount belongs only on money going out.`;
+}
+
 /* -------------------------------------------------------------------------- */
 
 type Def = {
