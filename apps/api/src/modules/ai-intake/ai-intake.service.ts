@@ -9,6 +9,7 @@ import {
   AI_MODELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
+  hasPermission,
   todayInDhaka,
   type AiAvailability,
   type AiIntakeReply,
@@ -21,7 +22,7 @@ import {
   type AiTarget,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
-import { and, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import {
@@ -32,6 +33,12 @@ import {
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
 import { allFieldReferences, pairedFields } from "./field-reference";
+import {
+  CORRECTION_PERMISSION,
+  diffDraft,
+  maskDigits,
+  renderCorrections,
+} from "./corrections";
 import { readPdfStatement } from "./pdf-statement";
 import {
   TRANSACTION_FIELDS,
@@ -43,6 +50,7 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import { DbService } from "../../db/db.service";
 import {
   accounts,
+  aiCorrections,
   appSettings,
   categories,
   users,
@@ -344,6 +352,9 @@ export class AiIntakeService {
     const client = await this.anthropic();
     const { model, dataAccess } = await this.storedKey();
     const context = await this.context();
+    // After the cache breakpoint, deliberately: a new correction landing must
+    // not throw away a 6,000-token prefix that has not changed.
+    const corrections = await this.recentCorrections(actor);
 
     const lookupTools =
       dataAccess === "full" ? this.tools.definitionsFor(actor) : [];
@@ -378,14 +389,37 @@ export class AiIntakeService {
       const response = await client.messages.create({
         model,
         max_tokens: 1500,
-        system: this.systemPrompt(
-          context,
-          dataAccess,
-          actor,
-          input.target,
-          input.draft,
-          attachment ? this.attachments.describe(attachment) : null,
-        ),
+        /**
+         * Two blocks, and the breakpoint between them is the point.
+         *
+         * Everything up to the mark is identical on every turn of every
+         * conversation, so after the first request it is read from cache at
+         * about a tenth of the price. Tools are rendered before `system`, so
+         * one mark on the last stable block covers those too. What follows it
+         * — today, who is asking, the file, the draft so far — is cheap and
+         * changes constantly, which is exactly why it is after.
+         *
+         * Note this pays for itself inside a single conversation: the write
+         * costs a quarter more than a plain request, and the second turn
+         * already reads it back.
+         */
+        system: [
+          {
+            type: "text",
+            text: this.stablePrompt(context, dataAccess),
+            cache_control: { type: "ephemeral" },
+          },
+          {
+            type: "text",
+            text: this.turnPrompt(
+              actor,
+              corrections,
+              input.target,
+              input.draft,
+              attachment ? this.attachments.describe(attachment) : null,
+            ),
+          },
+        ],
         messages,
         tools,
         // On the last round it must stop looking and answer.
@@ -530,13 +564,29 @@ export class AiIntakeService {
     };
   }
 
-  private systemPrompt(
+  /**
+   * The half of the prompt that is the same on every turn — and therefore the
+   * half worth paying for once.
+   *
+   * It is much the larger half: the field reference for all five targets, the
+   * rules, the category list, the accounts. Roughly nine tenths of what is
+   * sent, re-sent and re-charged in full on every message of every
+   * conversation, byte for byte identical each time.
+   *
+   * Splitting it out is not tidying. Caching is a *prefix* match, so one
+   * changing byte early spoils everything after it — and the four things that
+   * do change each turn (today's date, who is asking, what is being recorded,
+   * the draft so far) were scattered through the middle of it. The draft in
+   * particular changes on literally every turn, and sat above the field
+   * reference. So there was nothing stable to cache, however the request was
+   * marked up.
+   *
+   * Everything that varies now lives in `turnPrompt`, after the breakpoint.
+   * The order changed; not one word of what it is told did.
+   */
+  private stablePrompt(
     context: { categories: string[]; accounts: string[]; vendors: string[] },
     dataAccess: AiDataAccess,
-    actor: AuthenticatedUser,
-    target?: AiTarget,
-    draft?: Record<string, unknown>,
-    attachment?: string | null,
   ): string {
     return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: record what somebody describes, and answer questions about what is already recorded. You save nothing yourself.
 
@@ -580,7 +630,7 @@ Tax withheld belongs only on money going OUT. If a client deducted tax when
 paying us, that is an advance-tax credit and belongs under Income tax, not on
 the receipt.
 
-Today in Dhaka is ${todayInDhaka()}. The currency is BDT unless the person says otherwise. The person asking is signed in as ${actor.fullName} (${actor.role}).
+The currency is BDT unless the person says otherwise.
 
 ${
   dataAccess === "full"
@@ -595,52 +645,10 @@ null and missingFields empty.`
 in one line that lookups are switched off in Settings, and answer nothing else.`
 }
 
-${
-  attachment
-    ? `${attachment}
-
-WORKING FROM A FILE
-Answer from the summary and the two file tools. The totals were computed from
-the file in code — quote them, never re-add them, and never estimate a figure
-you could group_attachment for.
-If they want the rows entered in the books, do NOT draft them one at a time.
-Drafting a hundred entries through this conversation would put a hundred
-figures past review. Build an importPlan instead:
-
-  1. You need to know which account the whole file belongs to. If they have not
-     said, ask — that is the one thing you must never assume, exactly as with a
-     single entry.
-  2. Work out columnMap from the headings: which of the file's columns is the
-     date, the description, the amount. A file with separate credit and debit
-     columns maps them to amountIn and amountOut; a single signed column is
-     amount. If there is one amount column and nothing anywhere says which way
-     the money went, ask, and put the answer in assumeDirection.
-  3. If the file carries no category of its own, ask what these should be filed
-     as and put it in categoryName. If it has a category column, map it and
-     leave categoryName out.
-  4. Look at how the dates are actually written in the rows before choosing
-     dateFormat. 05/08/2026 in a Bangladeshi export is 5 August — dmy.
-
-Send the plan only when there is nothing left to ask — a plan in the same turn
-as a question puts a button beside it that stages a batch you already know is
-incomplete. Ask first, plan on the turn after they answer.
-
-Send it with a one-line note saying what is about to be staged. They
-press the button; you never stage anything yourself. They then see every row
-with what it would become, the duplicates flagged, and can undo the whole batch
-afterwards.
-One row, or a handful they read out to you, is different — draft that as usual.
-`
-    : ""
-}
 They write in Bangla, in English, or in both in one sentence. Answer in whichever they used. Bangla numerals and words for amounts are common: "pnach hajar" and "৫০০০" both mean 5000; "lakh" is 100,000; "crore" is 10,000,000.
 
 WHAT YOU CAN RECORD
 ${AI_TARGETS.map((t) => `- ${t}: ${AI_TARGET_LABELS[t]}`).join("\n")}
-
-${target ? `They are recording: ${target}. Stay on it unless they clearly change subject.` : "Work out which one they mean. If it is genuinely ambiguous, set clarification and ask."}
-
-${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(draft, null, 2)}\nKeep these unless they correct one.` : ""}
 
 EVERY FIELD, AND NOTHING ELSE
 
@@ -717,6 +725,65 @@ When nothing is required is missing, set missingFields to [], nextQuestion to
 null, and write a one-sentence summary for them to check.`;
   }
 
+  /**
+   * The handful of things that are different this turn.
+   *
+   * Sent after the cached block, so changing any of it costs only itself.
+   */
+  private turnPrompt(
+    actor: AuthenticatedUser,
+    corrections: string,
+    target?: AiTarget,
+    draft?: Record<string, unknown>,
+    attachment?: string | null,
+  ): string {
+    return `Today in Dhaka is ${todayInDhaka()}. The person asking is signed in as ${actor.fullName} (${actor.role}).
+
+${corrections}
+
+${
+  attachment
+    ? `${attachment}
+
+WORKING FROM A FILE
+Answer from the summary and the two file tools. The totals were computed from
+the file in code — quote them, never re-add them, and never estimate a figure
+you could group_attachment for.
+If they want the rows entered in the books, do NOT draft them one at a time.
+Drafting a hundred entries through this conversation would put a hundred
+figures past review. Build an importPlan instead:
+
+  1. You need to know which account the whole file belongs to. If they have not
+     said, ask — that is the one thing you must never assume, exactly as with a
+     single entry.
+  2. Work out columnMap from the headings: which of the file's columns is the
+     date, the description, the amount. A file with separate credit and debit
+     columns maps them to amountIn and amountOut; a single signed column is
+     amount. If there is one amount column and nothing anywhere says which way
+     the money went, ask, and put the answer in assumeDirection.
+  3. If the file carries no category of its own, ask what these should be filed
+     as and put it in categoryName. If it has a category column, map it and
+     leave categoryName out.
+  4. Look at how the dates are actually written in the rows before choosing
+     dateFormat. 05/08/2026 in a Bangladeshi export is 5 August — dmy.
+
+Send the plan only when there is nothing left to ask — a plan in the same turn
+as a question puts a button beside it that stages a batch you already know is
+incomplete. Ask first, plan on the turn after they answer.
+
+Send it with a one-line note saying what is about to be staged. They
+press the button; you never stage anything yourself. They then see every row
+with what it would become, the duplicates flagged, and can undo the whole batch
+afterwards.
+One row, or a handful they read out to you, is different — draft that as usual.
+`
+    : ""
+}
+${target ? `They are recording: ${target}. Stay on it unless they clearly change subject.` : "Work out which one they mean. If it is genuinely ambiguous, set clarification and ask."}
+
+${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(draft, null, 2)}\nKeep these unless they correct one.` : ""}`;
+  }
+
   /** Trust nothing from the model: shape it, or drop it. */
   private normalise(raw: Record<string, unknown>): AiIntakeReply {
     const target =
@@ -777,6 +844,93 @@ null, and write a one-sentence summary for them to check.`;
           : null,
       importPlan: importPlanOf(raw.importPlan),
     };
+  }
+
+  /**
+   * Records what somebody changed on a draft before saving it.
+   *
+   * Called after the save, never before, and its failure is swallowed by the
+   * caller: a lesson not learnt is a shame, a save undone because the lesson
+   * could not be filed would be indefensible.
+   *
+   * The two halves come from different places on purpose. The confirmed values
+   * are passed in, because they are what the person actually pressed the
+   * button on. What the assistant had drafted is read from the conversation
+   * here rather than accepted from the browser — otherwise "what the model got
+   * wrong" would be whatever the caller said it was.
+   */
+  async learn(
+    chatId: string,
+    target: AiTarget,
+    confirmed: Record<string, unknown>,
+    actor: AuthenticatedUser,
+  ): Promise<{ recorded: number }> {
+    const chat = await this.chats.get(chatId, actor);
+
+    const drafted =
+      chat.reply && typeof chat.reply === "object"
+        ? ((chat.reply as { draft?: Record<string, unknown> }).draft ?? {})
+        : {};
+
+    const changes = diffDraft(drafted, confirmed);
+    if (!changes.length) return { recorded: 0 };
+
+    // What they typed, not what the assistant said back — the lesson is the
+    // mapping from their words to the right value.
+    const said = [...chat.messages]
+      .reverse()
+      .find((m) => m.role === "user")?.content;
+    if (!said) return { recorded: 0 };
+
+    await this.db.client.insert(aiCorrections).values(
+      changes.map((change) => ({
+        target,
+        said: maskDigits(said).slice(0, 400),
+        field: change.field,
+        drafted: change.drafted,
+        corrected: change.corrected,
+        userId: actor.id,
+      })),
+    );
+
+    return { recorded: changes.length };
+  }
+
+  /**
+   * The recent lessons this person is allowed to be shown.
+   *
+   * Gated by the permission for the record type, because this is the one place
+   * where what one person did is put in front of another. Deduplicated on the
+   * lesson itself: somebody filing the same correction every month should not
+   * crowd out the other nine.
+   */
+  private async recentCorrections(actor: AuthenticatedUser): Promise<string> {
+    const allowed = (AI_TARGETS as readonly AiTarget[]).filter((target) =>
+      hasPermission(actor.role, CORRECTION_PERMISSION[target]),
+    );
+    if (!allowed.length) return "";
+
+    const rows = await this.db.client
+      .select({
+        said: aiCorrections.said,
+        field: aiCorrections.field,
+        drafted: aiCorrections.drafted,
+        corrected: aiCorrections.corrected,
+      })
+      .from(aiCorrections)
+      .where(inArray(aiCorrections.target, allowed))
+      .orderBy(desc(aiCorrections.createdAt))
+      .limit(60);
+
+    const seen = new Set<string>();
+    const distinct = rows.filter((row) => {
+      const key = `${row.field}|${row.drafted ?? ""}|${row.corrected ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return renderCorrections(distinct.slice(0, 12));
   }
 
   /**

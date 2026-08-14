@@ -269,6 +269,15 @@ export function AssistantScreen({
 
     try {
       const created = await aiApi.save(reply.target, edited);
+
+      /**
+       * After the save, never before, and never awaited in a way that could
+       * hold up the confirmation. What they corrected on the card is the only
+       * honest signal of how this company actually files things, and it was
+       * being thrown away every time.
+       */
+      if (chatId) void aiApi.learn(chatId, reply.target, edited);
+
       const label = AI_TARGET_LABELS[reply.target];
       setMessages((current) => [
         ...current,

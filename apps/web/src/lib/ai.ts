@@ -105,6 +105,20 @@ export const aiApi = {
     ),
 
   /**
+   * Tells the server what was changed before saving, so it reads better next
+   * time.
+   *
+   * Deliberately fire-and-forget: the save has already succeeded by the time
+   * this is called, and nothing about it should be able to fail, block, or
+   * appear to fail because a lesson could not be filed.
+   */
+  learn: (chatId: string, target: AiTarget, confirmed: Record<string, unknown>) =>
+    apiFetch<{ recorded: number }>("/ai/learn", {
+      method: "POST",
+      ...json({ chatId, target, confirmed }),
+    }).catch(() => ({ recorded: 0 })),
+
+  /**
    * Saving goes to the record's own endpoint, not to anything AI-specific.
    *
    * That is the whole safety argument: the assistant produced some values, and

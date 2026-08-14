@@ -15,11 +15,13 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
   AI_ATTACHMENT_MAX_BYTES,
+  AI_TARGETS,
   aiIntakeRequestSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
   type AiImportPlan,
   type AiIntakeRequest,
+  type AiTarget,
   type SetAiKeyInput,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
@@ -205,6 +207,29 @@ export class AiIntakeController {
     }
 
     return { batchId: batch.id, alreadyStaged: false, mapped: false };
+  }
+
+  /**
+   * What somebody changed before saving, kept as an example for next time.
+   *
+   * Called after the save has succeeded, and its own failure is not the
+   * caller's problem — the browser sends this and ignores the answer. A save
+   * that went through must never be undone, or reported as failed, because a
+   * lesson could not be filed.
+   */
+  @Post("learn")
+  @HttpCode(200)
+  @RequirePermission("ai.use")
+  learn(
+    @Body("chatId", ParseUUIDPipe) chatId: string,
+    @Body("target") target: AiTarget,
+    @Body("confirmed") confirmed: Record<string, unknown>,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!(AI_TARGETS as readonly string[]).includes(target)) {
+      throw new BadRequestException("Not a kind of record this app keeps.");
+    }
+    return this.ai.learn(chatId, target, confirmed ?? {}, actor);
   }
 
   /** Category and account names to ids, checked against what exists. */
