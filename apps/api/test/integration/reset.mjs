@@ -72,48 +72,77 @@ export async function resetDemoBooks(db) {
   );
   if (unvoided.rowCount) undone.push(`${unvoided.rowCount} voided demo row(s)`);
 
-  // 3. July is paid, August is a draft. That is the demo's whole point: one
-  //    month closed, one month waiting.
-  const [july] = (
+  /**
+   * 3. Payroll the suites created.
+   *
+   * The demo used to leave a paid July and a draft August, and the payroll
+   * suites leaned on that draft. The demo people were removed on 2026-08-14
+   * and both runs went with them, so the suites make their own run now and
+   * this clears whatever they leave behind. A run whose lines all belong to a
+   * team member tagged for testing is a test's; anything else is left alone,
+   * because a real payroll run is not this script's to delete.
+   */
+  const testRuns = (
     await db.query(
-      "select id from payroll_runs where period_year = 2026 and period_month = 7",
-    )
-  ).rows;
-  const [august] = (
-    await db.query(
-      "select id from payroll_runs where period_year = 2026 and period_month = 8",
+      `select r.id, r.period_year, r.period_month from payroll_runs r
+        where exists (
+          select 1 from payroll_lines l
+            join team_members m on m.id = l.team_member_id
+           where l.payroll_run_id = r.id and m.notes like '%[test]%')
+          and not exists (
+          select 1 from payroll_lines l
+            join team_members m on m.id = l.team_member_id
+           where l.payroll_run_id = r.id and (m.notes is null or m.notes not like '%[test]%'))`,
     )
   ).rows;
 
-  if (august) {
-    const [{ status }] = (
-      await db.query("select status from payroll_runs where id = $1", [
-        august.id,
-      ])
-    ).rows;
-    if (status !== "draft") {
+  if (testRuns.length) {
+    const runIds = testRuns.map((r) => r.id);
+    const lineIds = (
       await db.query(
-        "update payroll_lines set is_paid = false, paid_on = null where payroll_run_id = $1",
-        [august.id],
-      );
+        "select id from payroll_lines where payroll_run_id = any($1::uuid[])",
+        [runIds],
+      )
+    ).rows.map((r) => r.id);
+    if (lineIds.length) {
       await db.query(
-        `update payroll_runs set status = 'draft', finalized_at = null, finalized_by = null,
-           payment_date = null, account_id = null where id = $1`,
-        [august.id],
+        "delete from tds_allocations where payroll_line_id = any($1::uuid[])",
+        [lineIds],
       );
-      undone.push(`August's run (was ${status})`);
     }
+    await db.query(
+      "delete from transactions where payroll_run_id = any($1::uuid[])",
+      [runIds],
+    );
+    await db.query(
+      "delete from payroll_lines where payroll_run_id = any($1::uuid[])",
+      [runIds],
+    );
+    await db.query("delete from payroll_runs where id = any($1::uuid[])", [
+      runIds,
+    ]);
+    undone.push(`${testRuns.length} test payroll run(s)`);
   }
-  if (july) {
-    const [{ status }] = (
-      await db.query("select status from payroll_runs where id = $1", [july.id])
-    ).rows;
-    if (status !== "paid") {
-      await db.query("update payroll_runs set status = 'paid' where id = $1", [
-        july.id,
-      ]);
-      undone.push(`July's run (was ${status})`);
-    }
+
+  // The people those runs were for, and their salary records.
+  const testPeople = (
+    await db.query("select id from team_members where notes like '%[test]%'")
+  ).rows.map((r) => r.id);
+  if (testPeople.length) {
+    await db.query(
+      "delete from compensation_history where team_member_id = any($1::uuid[])",
+      [testPeople],
+    );
+    await db.query("delete from payroll_lines where team_member_id = any($1::uuid[])", [
+      testPeople,
+    ]);
+    await db.query("delete from audit_logs where entity_id = any($1::text[])", [
+      testPeople,
+    ]);
+    await db.query("delete from team_members where id = any($1::uuid[])", [
+      testPeople,
+    ]);
+    undone.push(`${testPeople.length} test team member(s)`);
   }
 
   // 4. Import batches a test committed.

@@ -8,6 +8,8 @@
  * Every state this changes is put back at the end and the books are counted.
  */
 import fs from "node:fs";
+
+import { dropPayrollRun, makePayrollRun } from "./payroll-fixture.mjs";
 import pg from "pg";
 
 const API = process.env.API;
@@ -44,7 +46,10 @@ console.log("\nT4b — A PAYROLL RUN, ALL THE WAY TO PAID\n");
 
 const runs = (await api("/payroll/runs")).body;
 const runList = runs?.items ?? runs ?? [];
-const draft = runList.find((r) => r.status === "draft");
+// The demo used to leave a draft run to borrow. It does not any more, so
+// the suite builds its own rather than skipping and calling that a pass.
+const fixture = await makePayrollRun(send, api);
+const draft = { id: fixture.runId, periodYear: 2026, periodMonth: 9 };
 const accounts = (await api("/accounts")).body ?? [];
 const payFrom = accounts[0];
 
@@ -218,47 +223,22 @@ else {
 /* ============================================================== cleanup */
 console.log("\nPutting everything back\n");
 
+// The run and the two people it was for were made by this suite.
+const droppedPeople = await dropPayrollRun(db, fixture?.runId);
+if (droppedPeople) ok("removed the run and the people it was for", `${droppedPeople} fixture person/people`);
+
+/**
+ * The void-then-reopen sequence that used to run here is suite 09's subject,
+ * asserted there properly. Dropping the fixture outright is the honest thing
+ * for a cleanup to do — it removes what this suite made and claims nothing
+ * about behaviour it is not testing.
+ */
 if (paidRun) {
-  /**
-   * Void the payment, then reopen — in that order.
-   *
-   * This used to call reopen straight away, which worked only while reopen
-   * was wrong: it read the run's status and let a paid run reopen with its
-   * money still sitting in the ledger. Now the guard asks the ledger, so the
-   * money has to come back out first. Suite 09 proves that sequence is the
-   * one the refusal message tells a person to follow; this is the same
-   * sequence, which is why it belongs here rather than a DELETE behind the
-   * app's back.
-   */
-  const live = await db.query(
-    "select id from transactions where payroll_run_id = $1 and voided_at is null",
-    [paidRun],
-  );
-  for (const row of live.rows) {
-    await send(`/transactions/${row.id}/void`, "POST", {
-      reason: "Undoing the payment this test made",
-    });
-  }
-
-  const reopened = await send(`/payroll/runs/${paidRun}/reopen`, "POST");
-  reopened.status === 200 || reopened.status === 201
-    ? ok("voiding the payment lets the run reopen", `${live.rows.length} entr(y/ies) voided, then HTTP ${reopened.status}`)
-    : bad("reopen after voiding", `HTTP ${reopened.status} "${reopened.body?.message}" — the run is left paid`);
-
-  // The voided rows were this test's, so they go rather than linger struck
-  // through in a register nobody asked to see them in.
-  if (live.rows.length) {
-    const ids = live.rows.map((r) => r.id);
-    await db.query("delete from audit_logs where entity_id = any($1::text[])", [ids]);
-    await db.query("delete from transactions where id = any($1::uuid[])", [ids]);
-  }
-
   const stillOut = (await db.query(
-    "select count(*)::int n from transactions where payroll_run_id = $1 and voided_at is null",
-    [paidRun])).rows[0].n;
+    "select count(*)::int n from transactions where payroll_run_id = $1", [paidRun])).rows[0].n;
   stillOut === 0
-    ? ok("no money is left out for the run", "")
-    : bad("money left out", `${stillOut} live row(s) remain`);
+    ? ok("the run and its payment are gone", "nothing of this suite's is left in the ledger")
+    : bad("cleanup left the payment behind", `${stillOut} row(s) still reference the run`);
 }
 
 for (const id of [batchId, secondBatch].filter(Boolean)) {

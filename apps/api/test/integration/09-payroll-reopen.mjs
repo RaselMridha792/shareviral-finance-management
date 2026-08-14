@@ -10,6 +10,8 @@
  * deleted "everything carrying a payroll_run_id" and took a demo row with it.
  */
 import fs from "node:fs";
+
+import { dropPayrollRun, makePayrollRun } from "./payroll-fixture.mjs";
 import pg from "pg";
 
 const API = process.env.API;
@@ -42,7 +44,10 @@ const baseline = (await db.query("select count(*)::int n from transactions")).ro
 console.log("\nT4c — REOPEN AFTER VOIDING\n");
 
 const runs = (await api("/payroll/runs")).body;
-const draft = (runs?.items ?? runs ?? []).find((r) => r.status === "draft");
+// The demo used to leave a draft run to borrow. It does not any more, so
+// the suite builds its own rather than skipping and calling that a pass.
+const fixture = await makePayrollRun(send, api);
+const draft = { id: fixture.runId, periodYear: 2026, periodMonth: 9 };
 const account = ((await api("/accounts")).body ?? [])[0];
 
 // Remember exactly which ledger rows existed before, so cleanup can tell
@@ -138,11 +143,9 @@ if (mine.length) {
   const gone = await db.query("delete from transactions where id = any($1::uuid[])", [mine]);
   ok("removed only what this script made", `${gone.rowCount} row(s)`);
 }
-if (draft) {
-  await db.query(
-    "update payroll_runs set status='draft', finalized_at=null, finalized_by=null, payment_date=null, account_id=null where id=$1",
-    [draft.id]);
-}
+// The run and its two people were made by this suite; they go with it.
+const dropped = await dropPayrollRun(db, draft?.id);
+ok("removed the run and the people it was for", `${dropped} fixture person/people`);
 
 const after = (await db.query("select count(*)::int n from transactions")).rows[0].n;
 after === baseline ? ok("transaction count back to baseline", `${after}`) : bad("transaction count", `was ${baseline}, now ${after}`);
