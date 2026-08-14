@@ -165,7 +165,11 @@ export function CashInForm({
       title="Record cash in"
       description="Money received from abroad, as the remittance advice states it."
     >
-      <form id="cash-in-form" onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        id="cash-in-form"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date" required error={fieldErrors.txnDate}>
             <DateInput name="txnDate" required defaultValue={todayInDhaka()} />
@@ -305,7 +309,7 @@ export function CashInForm({
             error={fieldErrors.usdRate}
             hint={
               latestRate
-                ? `Last recorded: ৳${latestRate}. It governs the whole month.`
+                ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
                 : "What a dollar was worth on the day. It governs the whole month."
             }
           >
@@ -432,4 +436,10 @@ function fundingCategoryId(groups: CategoryNode[]): string {
   const first = groups[0];
   if (!first) return "";
   return first.children.find((child) => child.isActive)?.id ?? first.id;
+}
+
+/** The stored column is "118.750000"; a person reads "118.75". */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }

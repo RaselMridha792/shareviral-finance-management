@@ -3,7 +3,7 @@
 import { fromMinorUnits, toMinorUnits } from "@finance/shared";
 import { LoaderCircle, Plus, ShoppingBag } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { TransactionForm } from "@/components/ledger/transaction-form";
@@ -27,21 +27,21 @@ const PAGE_SIZE = 200;
 /**
  * Everything the company spent in a month except what renews.
  *
- * The list endpoint filters by one `vendorId`, not by "every vendor except
- * these types", and the API is another stream's to change — so the recurring
- * payees (`ai_tool`, `subscription`, `hosting`) are resolved to ids on the
- * server and the rows they own are dropped here, client-side.
+ * The exclusion is the server's, through `excludeToolSpend`, which negates the
+ * very predicate the AI tools screen counts *with*. It used to be done here by
+ * dropping rows that carried a recurring vendor — a near-miss, because the
+ * tools screen also counts anything paid from a non-taka account whether or not
+ * a vendor was named. A ৳39,975 card payment fell into both screens, and their
+ * two totals came to ৳2,72,750 against a month that spent ৳2,32,775.
  */
 export function OtherExpensesScreen({
   initialRange,
   accounts,
   categories,
-  recurringVendorIds,
 }: {
   initialRange: Range;
   accounts: AccountDto[];
   categories: CategoryNode[];
-  recurringVendorIds: string[];
 }) {
   const canWrite = useCan("transactions.write");
 
@@ -56,29 +56,35 @@ export function OtherExpensesScreen({
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
-  const recurring = useMemo(
-    () => new Set(recurringVendorIds),
-    [recurringVendorIds],
-  );
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const list = await ledgerApi.list({
-        from: range.from,
-        to: range.to,
-        direction: "out",
-        page: 1,
-        pageSize: PAGE_SIZE,
-      });
-      const kept = list.items.filter(
-        (row) => !row.vendorId || !recurring.has(row.vendorId),
-      );
-      setRows(kept);
-      setRecurringRows(list.items.length - kept.length);
+      // Two calls: the month as a whole, and the month without tooling. The
+      // difference is what the tools screen owns, and asking the server for
+      // both means the two screens cannot disagree about where the line is.
+      const [all, list] = await Promise.all([
+        ledgerApi.list({
+          from: range.from,
+          to: range.to,
+          direction: "out",
+          page: 1,
+          pageSize: 1,
+        }),
+        ledgerApi.list({
+          from: range.from,
+          to: range.to,
+          direction: "out",
+          excludeToolSpend: true,
+          page: 1,
+          pageSize: PAGE_SIZE,
+        }),
+      ]);
+
+      setRows(list.items);
+      setRecurringRows(all.total - list.total);
       setFetched(list.items.length);
-      setMonthTotal(list.total);
+      setMonthTotal(all.total);
     } catch (caught) {
       // Without this the screen sits on "Loading…" for ever and never says why.
       setError(
@@ -89,7 +95,7 @@ export function OtherExpensesScreen({
     } finally {
       setLoading(false);
     }
-  }, [range, recurring]);
+  }, [range]);
 
   useEffect(() => {
     // Fetching from the API when the period changes — the rule's own

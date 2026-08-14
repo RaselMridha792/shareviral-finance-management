@@ -28,6 +28,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  not,
   or,
   sql,
   type SQL,
@@ -40,6 +41,7 @@ import { DbService } from "../../db/db.service";
 import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { VendorsService } from "../vendors/vendors.service";
+import { isToolSpend } from "../vendors/tool-spend";
 import { nextRefNo } from "./ref-no";
 
 /**
@@ -123,6 +125,10 @@ export class TransactionsService {
     const clauses: SQL[] = [];
 
     if (!filter.includeVoided) clauses.push(isNull(transactions.voidedAt));
+    // The same predicate the AI tools screen counts *with*, negated — so
+    // "other expenses" is exactly the complement of "tooling" rather than an
+    // approximation of it.
+    if (filter.excludeToolSpend) clauses.push(not(isToolSpend()));
     if (filter.from) clauses.push(gte(transactions.txnDate, filter.from));
     if (filter.to) clauses.push(lte(transactions.txnDate, filter.to));
     if (filter.accountId)
@@ -248,7 +254,16 @@ export class TransactionsService {
         .orderBy(direction(column), desc(transactions.id))
         .limit(query.pageSize)
         .offset(offset),
-      this.db.client.select({ total: count() }).from(transactions).where(where),
+      // The same joins as the page above: `excludeToolSpend` reads
+      // `accounts.currency` and `vendors.type`, and a count that does not join
+      // them would fail on that filter — and, worse, silently disagree with
+      // the rows beside it if it ever stopped.
+      this.db.client
+        .select({ total: count() })
+        .from(transactions)
+        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+        .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
+        .where(where),
     ]);
 
     return {

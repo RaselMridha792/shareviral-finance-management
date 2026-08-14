@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { useMoney } from "@/components/settings-provider";
 import { Amount } from "@/components/money/amount";
 import { StatementView } from "@/components/reports/statement-view";
 import { Badge } from "@/components/ui/badge";
@@ -140,9 +141,9 @@ export function ReportsScreen({
     let cancelled = false;
     void reportsApi.periods(granularity).then((next) => {
       if (cancelled) return;
-       
+
       setPeriods(next);
-       
+
       setIndex((current) => Math.min(current, next.periods.length || 1));
     });
     return () => {
@@ -251,9 +252,7 @@ export function ReportsScreen({
                "2026", so the same choice showed two different windows with
                nothing on screen to say so. The label now names which. */
             <Select
-              aria-label={
-                tab === "bank" ? "Calendar year" : "Financial year"
-              }
+              aria-label={tab === "bank" ? "Calendar year" : "Financial year"}
               title={
                 tab === "bank"
                   ? "January to December"
@@ -364,7 +363,13 @@ function FxCaption({ report }: { report: { currency: string; fx: unknown } }) {
   );
 }
 
-function Delta({ value, invert = false }: { value: number | null; invert?: boolean }) {
+function Delta({
+  value,
+  invert = false,
+}: {
+  value: number | null;
+  invert?: boolean;
+}) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   const up = value >= 0;
   const good = invert ? !up : up;
@@ -396,7 +401,11 @@ function PeriodView({ report }: { report: PeriodReport }) {
       <FxCaption report={report} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label="Opening balance" value={report.openingBalance} currency={ccy} />
+        <Tile
+          label="Opening balance"
+          value={report.openingBalance}
+          currency={ccy}
+        />
         <Tile
           label="In"
           value={report.moneyIn}
@@ -467,7 +476,9 @@ function CategoryCard({
                   <span className="flex min-w-0 items-center gap-2 text-sm">
                     <span
                       className="size-2.5 shrink-0 rounded-full"
-                      style={{ background: line.color ?? "var(--color-border)" }}
+                      style={{
+                        background: line.color ?? "var(--color-border)",
+                      }}
                     />
                     <span className="truncate font-medium">{line.name}</span>
                   </span>
@@ -629,6 +640,10 @@ function BankView({ stats }: { stats: BankStats }) {
 }
 
 function FundingView({ report }: { report: FundingReport }) {
+  // The spread is money and was printed as bare digits — "cost ৳45000" — while
+  // every other figure on the page carries the company's own grouping.
+  const money = useMoney();
+
   return (
     <div className="flex flex-col gap-4">
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -718,10 +733,10 @@ function FundingView({ report }: { report: FundingReport }) {
                       {row.realisedRate}
                     </td>
                     <td className="num px-4 py-2.5 text-right text-muted-foreground">
-                      {row.marketRate ?? "—"}
+                      {row.marketRate ? trimRate(row.marketRate) : "—"}
                       {row.spread && Number(row.spread) > 0 ? (
                         <Badge tone="neutral" className="ml-2">
-                          cost ৳{Number(row.spread).toFixed(0)}
+                          cost {money(row.spread, { hideDecimals: true })}
                         </Badge>
                       ) : null}
                     </td>
@@ -765,9 +780,17 @@ function Tile({
         className="mt-3 block text-2xl font-semibold tracking-tight"
       />
       <div className="mt-2 flex items-center gap-2 text-xs">
-        {delta !== undefined ? <Delta value={delta} invert={invertDelta} /> : null}
+        {delta !== undefined ? (
+          <Delta value={delta} invert={invertDelta} />
+        ) : null}
         {hint ? <span className="text-muted-foreground">{hint}</span> : null}
       </div>
     </Card>
   );
+}
+
+/** "122.500000" is a database column; "122.50" is a rate somebody reads. */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }

@@ -1,5 +1,5 @@
 import { RECURRING_VENDOR_TYPES } from "@finance/shared";
-import { inArray, or, sql, type SQL } from "drizzle-orm";
+import { inArray, sql, type SQL } from "drizzle-orm";
 
 import { accounts, vendors } from "../../db/schema";
 
@@ -23,7 +23,12 @@ import { accounts, vendors } from "../../db/schema";
  * of tool changes one array and not three SQL strings.
  */
 export function isToolVendor(): SQL {
-  return inArray(vendors.type, [...RECURRING_VENDOR_TYPES]);
+  // `coalesce(…, false)` because this is reached through a LEFT JOIN: a row
+  // with no vendor gives `NULL in (…)`, which is UNKNOWN rather than false.
+  // Read positively that behaves like false and nothing goes wrong; negated,
+  // `NOT UNKNOWN` is still UNKNOWN, and the row silently disappears. See
+  // `isToolSpend`.
+  return sql`coalesce(${inArray(vendors.type, [...RECURRING_VENDOR_TYPES])}, false)`;
 }
 
 /**
@@ -36,7 +41,18 @@ export function isToolVendor(): SQL {
  * whether or not anybody named the vendor on the row.
  */
 export function isToolSpend(): SQL {
-  // `or` is only undefined when given nothing; two conditions always produce
-  // one, and the cast keeps callers from having to prove that.
-  return or(isToolVendor(), sql`${accounts.currency} <> 'BDT'`) as SQL;
+  /**
+   * Definitely true or definitely false — never UNKNOWN.
+   *
+   * Both halves come through LEFT JOINs, so both can be NULL, and this used to
+   * evaluate to UNKNOWN for a row with neither a vendor nor a joined account.
+   * That was harmless while the predicate was only ever read positively: a
+   * WHERE clause treats UNKNOWN as "no". The moment it was negated for
+   * "everything except tooling", UNKNOWN stayed UNKNOWN through the NOT and
+   * every vendor-less row vanished from the answer — a TDS deposit, the
+   * electricity bill, an ad spend and the office pantry, ৳72,700 of expenses
+   * that are not tooling by any reading, missing from the screen that exists
+   * to list them.
+   */
+  return sql`(${isToolVendor()} or coalesce(${accounts.currency} <> 'BDT', false))`;
 }

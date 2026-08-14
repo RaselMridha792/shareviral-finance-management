@@ -370,6 +370,20 @@ export const transactionFilterSchema = z.object({
   hasReceipt: boolish.optional(),
   q: z.string().trim().max(160).optional(),
   includeVoided: boolish.default(false),
+  /**
+   * Drop everything that counts as tooling.
+   *
+   * "Other expenses" means everything except what renews, and it used to
+   * subtract only rows carrying a recurring vendor — while the AI tools screen
+   * counts a payment as tooling if it went to a tool vendor **or** left a
+   * non-taka account. A ৳39,975 card payment with no vendor named on it
+   * therefore appeared on both screens, and the two totals summed to ৳2,72,750
+   * against a month that really spent ৳2,32,775.
+   *
+   * Server-side so both screens ask the same question of the same definition —
+   * `isToolSpend()` — rather than one of them approximating it client-side.
+   */
+  excludeToolSpend: boolish.optional(),
 });
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>;
 
