@@ -93,9 +93,15 @@ export function TeamScreen({
       />
 
       {!canSeePay ? (
+        // This used to say "your role cannot see what they are paid", full
+        // stop — written before joining salary was deliberately made visible
+        // here. With that column beside it the sentence was simply untrue, and
+        // a promise about pay that the same screen breaks is worse than no
+        // promise. It now says which figure this is and which one it is not.
         <p className="rounded-lg bg-surface-muted px-4 py-3 text-sm text-muted-foreground">
-          Your role can manage people but not see what they are paid. Pay lives
-          on a separate screen behind its own permission.
+          Joining Salary is what was agreed at hire — part of the employment
+          record your role keeps. What anybody earns now, and every change
+          since, is held separately behind its own permission.
         </p>
       ) : null}
 

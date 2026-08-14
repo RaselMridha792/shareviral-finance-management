@@ -147,7 +147,7 @@ export class OverviewService {
             ...tableFx,
             rate: governing.rate,
             unavailable: false,
-            caption: `translated at ${governing.rate} — ${GOVERNING_RATE_LABELS[governing.source]}`,
+            caption: `translated at ${trimRate(governing.rate)} — ${GOVERNING_RATE_LABELS[governing.source]}`,
           }
         : tableFx;
 
@@ -820,4 +820,10 @@ function inPeriod(range: PeriodRange) {
 function change(previous: number | null, current: number): number | null {
   if (previous === null || previous === 0) return null;
   return ((current - previous) / previous) * 100;
+}
+
+/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }

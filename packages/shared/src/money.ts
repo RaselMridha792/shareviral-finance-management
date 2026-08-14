@@ -121,8 +121,23 @@ export function formatMoney(
   const whole = String(magnitude / 100n);
   const paisa = String(magnitude % 100n).padStart(2, "0");
 
+  /**
+   * Lakh–crore grouping belongs to the taka, not to whatever is being shown.
+   *
+   * The number format is a company preference for how *its own* money reads,
+   * and it was applied to every currency: a prepaid card holding $187,083
+   * rendered as **$1,87,083.00**, which is not a dollar amount in any locale
+   * and reads as a different figure entirely. Every USD value at or above a
+   * lakh was affected, and the dollar line now sits under every taka figure on
+   * the dashboard.
+   *
+   * So the setting governs the base currency and nothing else. Anything
+   * foreign is grouped the way that currency is written.
+   */
   const grouped =
-    format === "western" ? groupWestern(whole) : groupBangladeshi(whole);
+    format === "western" || currency !== BDT
+      ? groupWestern(whole)
+      : groupBangladeshi(whole);
   const body = hideDecimals ? grouped : `${grouped}.${paisa}`;
 
   const symbol = hideSymbol

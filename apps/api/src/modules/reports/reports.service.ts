@@ -14,6 +14,7 @@ import {
   type PeriodRange,
   type PeriodReport,
   type Remittance,
+  GOVERNING_RATE_LABELS,
 } from "@finance/shared";
 import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
@@ -61,8 +62,18 @@ export class ReportsService {
 
     // USD is a translation of these figures, never a second set of books, so
     // the rate is resolved once for the period and carried with the answer.
-    const fx =
-      query.currency === "USD" ? await this.fx.contextFor(range) : null;
+    /**
+     * The same rate the dashboard uses, not a second opinion.
+     *
+     * This asked `contextFor` directly, which knows only what the rate table
+     * holds — so one taka figure got different dollar answers depending on
+     * which screen you opened. August's ৳11,83,000 was $10,000 on the
+     * dashboard (the rate the month was funded at, 118.30) and $9,657.14 here
+     * (the fixed rate in Settings, 122.50). Both screens matched their own
+     * endpoint; the endpoints disagreed. `governingRateFor` is the one place
+     * the order is written down.
+     */
+    const fx = query.currency === "USD" ? await this.fxForPeriod(range) : null;
 
     // If the translation could not happen, the answer is taka and says so.
     // Returning unconverted figures still labelled USD is how a screen ends up
@@ -221,6 +232,28 @@ export class ReportsService {
    * Summed in SQL against the generated `signed_amount` column, so the arithmetic
    * that produces a balance is the same arithmetic the register uses.
    */
+  /**
+   * The period's FX context, resolved by the app's one rule.
+   *
+   * `governingRateFor` decides *which* rate governs — the month's funding,
+   * then Settings, then the table. `contextFor` still supplies the shape and
+   * the sentence that explains it, so the caption keeps naming the source.
+   */
+  private async fxForPeriod(period: { start: string; end: string }) {
+    const context = await this.fx.contextFor(period);
+    const governing = await this.fx.governingRateFor(period);
+
+    if (!governing) return context;
+    if (!context.unavailable && context.rate === governing.rate) return context;
+
+    return {
+      ...context,
+      rate: governing.rate,
+      unavailable: false,
+      caption: `translated at ${trimRate(governing.rate)} — ${GOVERNING_RATE_LABELS[governing.source]}`,
+    };
+  }
+
   private async balanceAsOf(date: string, accountId?: string): Promise<string> {
     /**
      * Scoped to the same account as the movements it is rolled forward with.
@@ -303,7 +336,7 @@ export class ReportsService {
 
     const fx =
       query.currency === "USD"
-        ? await this.fx.contextFor({
+        ? await this.fxForPeriod({
             start: `${query.year}-01-01`,
             end: `${query.year}-12-31`,
           })
@@ -573,4 +606,10 @@ function idList(ids: string[]) {
     ids.map((id) => sql`${id}::uuid`),
     sql`, `,
   )})`;
+}
+
+/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }

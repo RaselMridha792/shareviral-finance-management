@@ -1,8 +1,10 @@
+import { hasPermission, type Permission, type Role } from "@finance/shared";
 import { NextResponse, type NextRequest } from "next/server";
 
 const ACCESS_COOKIE = "sfm_access";
 const REFRESH_COOKIE = "sfm_refresh";
 const LOGIN_PATH = "/login";
+const NO_ACCESS_PATH = "/no-access";
 
 const API_URL =
   process.env.API_URL ??
@@ -34,6 +36,8 @@ export async function proxy(request: NextRequest) {
   const access = request.cookies.get(ACCESS_COOKIE)?.value;
   const hasRefresh = request.cookies.has(REFRESH_COOKIE);
 
+  if (pathname === NO_ACCESS_PATH) return NextResponse.next();
+
   if (pathname === LOGIN_PATH) {
     if (access && !isExpired(access)) {
       return NextResponse.redirect(new URL("/", request.url));
@@ -52,7 +56,68 @@ export async function proxy(request: NextRequest) {
 
   if (!usable) return toLogin(request, pathname, search);
 
+  const denied = deniedBy(pathname, roleOf(access));
+  if (denied) {
+    const url = new URL(NO_ACCESS_PATH, request.url);
+    url.searchParams.set("from", pathname);
+    url.searchParams.set("needs", denied);
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
+}
+
+/**
+ * Which permission a page needs, for routing only.
+ *
+ * **This is not the gate.** The token is not verified here — the signing secret
+ * belongs to the API, and the API's guard is what actually refuses. This exists
+ * because without it a role that opens a page it cannot read got the fetch's
+ * 403 as an unhandled render error: "This page couldn't load — a server error
+ * occurred", with an error id. Thirteen routes did that to HR, including one
+ * its own sidebar linked to. A permission boundary should read as a boundary,
+ * not as a fault.
+ *
+ * Longest prefix wins, so `/accounts/cash-in` is covered by `/accounts`.
+ */
+const ROUTE_PERMISSIONS: Array<[string, Permission]> = [
+  ["/accounts", "accounts.read"],
+  ["/transactions", "transactions.read"],
+  ["/expenses", "transactions.read"],
+  ["/vendors", "vendors.read"],
+  ["/team", "team.read"],
+  ["/payroll", "payroll.read"],
+  ["/tax/withholding", "tds.read"],
+  ["/reports", "reports.view"],
+  ["/import", "imports.run"],
+  ["/assistant", "ai.use"],
+  ["/settings", "settings.read"],
+];
+
+function deniedBy(pathname: string, role: Role | null): Permission | null {
+  if (!role) return null;
+
+  const match = ROUTE_PERMISSIONS.filter(
+    ([prefix]) => pathname === prefix || pathname.startsWith(prefix + "/"),
+  ).sort((a, b) => b[0].length - a[0].length)[0];
+
+  if (!match) return null;
+  return hasPermission(role, match[1]) ? null : match[1];
+}
+
+/** The role claim, unverified — see `deniedBy`. */
+function roleOf(token: string | undefined): Role | null {
+  if (!token) return null;
+  const [, payload] = token.split(".");
+  if (!payload) return null;
+  try {
+    const json = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
+    ) as { role?: Role };
+    return json.role ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -87,11 +152,15 @@ async function renew(request: NextRequest): Promise<NextResponse | null> {
   const fresh = valueOf(setCookies, ACCESS_COOKIE);
   const headers = new Headers(request.headers);
   if (fresh) {
-    headers.set("cookie", replaceCookie(headers.get("cookie"), ACCESS_COOKIE, fresh));
+    headers.set(
+      "cookie",
+      replaceCookie(headers.get("cookie"), ACCESS_COOKIE, fresh),
+    );
   }
 
   const response = NextResponse.next({ request: { headers } });
-  for (const cookie of setCookies) response.headers.append("set-cookie", cookie);
+  for (const cookie of setCookies)
+    response.headers.append("set-cookie", cookie);
   return response;
 }
 

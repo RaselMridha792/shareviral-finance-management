@@ -16,6 +16,7 @@ import {
   type StatementLine,
   type StatementQuery,
   type WaterfallStep,
+  GOVERNING_RATE_LABELS,
 } from "@finance/shared";
 import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
@@ -125,7 +126,7 @@ export class StatementService {
     const [saved, fx, groups, accountIds, restrictedBdt, payrollDetail] =
       await Promise.all([
         this.savedFor(range),
-        this.fx.contextFor(range),
+        this.fxForPeriod(range),
         this.categoryGroups(),
         this.liveAccountIds(),
         this.taxOutstanding(),
@@ -359,6 +360,30 @@ export class StatementService {
     }
 
     return groups;
+  }
+
+  /**
+   * The period's FX context under the app's one rule.
+   *
+   * The statement's own note used to read "translated at 118.75, as of
+   * 2026-08-12 (the period-end rate)" while the dashboard said 118.30 for the
+   * same month — the caption came straight from the rate table while the
+   * figures came from `governingRateFor`. The document now says the rate it
+   * actually used, and where it came from.
+   */
+  private async fxForPeriod(period: { start: string; end: string }) {
+    const context = await this.fx.contextFor(period);
+    const governing = await this.fx.governingRateFor(period);
+
+    if (!governing) return context;
+    if (!context.unavailable && context.rate === governing.rate) return context;
+
+    return {
+      ...context,
+      rate: governing.rate,
+      unavailable: false,
+      caption: `translated at ${trimRate(governing.rate)} — ${GOVERNING_RATE_LABELS[governing.source]}`,
+    };
   }
 
   /**
@@ -1005,4 +1030,10 @@ function ordinalFor(
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return count === 1 ? one : many;
+}
+
+/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
+function trimRate(rate: string): string {
+  const value = Number(rate);
+  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }

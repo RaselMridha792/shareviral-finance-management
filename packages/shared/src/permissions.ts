@@ -155,7 +155,21 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "team.write",
     "vendors.read",
     "categories.read",
-    "reports.view",
+    /**
+     * `reports.view` is deliberately absent.
+     *
+     * It was here, and it undid the boundary this whole matrix exists for. HR
+     * cannot open payroll, cannot read a compensation record and cannot see a
+     * salary sheet — and then Reports rendered the company's position in full:
+     * opening ৳20,77,083, in ৳11,80,000, out ৳7,09,646, and a spend breakdown
+     * whose largest line was **"People 56% ৳3,94,300"** — that month's payroll,
+     * total, on the screen of a role whose own dashboard says "balances,
+     * payroll and pay are held elsewhere".
+     *
+     * Withholding the individual figures while publishing their sum is not a
+     * boundary. `reports.view` also carries the funding report and the bank
+     * statistics, neither of which is an HR question.
+     */
     "exports.run",
     "settings.read",
     "ai.use",
