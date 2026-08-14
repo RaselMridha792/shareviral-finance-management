@@ -23,6 +23,8 @@
   /* Brand blue is for ACTIONS only — never for balances or amounts. */
   --primary: #4f46e5;
   --primary-foreground: #ffffff;
+  /* Light mode reads the same either way: 5.66:1 at worst. */
+  --primary-text: #4f46e5;
   --accent: #0ea5e9;
 
   --positive: #047857;
@@ -55,8 +57,25 @@
   --border: #232c3b;
   --border-strong: #384558;
 
-  --primary: #6d64f7;
+  /**
+   * One purple could not do both jobs on a dark ground.
+   *
+   * #6d64f7 carried white at 4.36:1 and stood as type at 4.08:1 on a card —
+   * both under the 4.5:1 that ordinary text needs, so every primary button and
+   * every purple label in dark mode sat just below legible. Fixing it with a
+   * single value is impossible: type on a dark ground wants a lighter purple,
+   * white on a filled button wants a darker one.
+   *
+   * So the fill goes slightly deeper and the type slightly lighter. Same hue,
+   * imperceptibly different, and every pairing now clears AA:
+   *   white on --primary            4.77:1
+   *   --primary-text on background   6.24:1
+   *   --primary-text on a card       5.74:1
+   *   --primary-text on muted        5.20:1
+   */
+  --primary: #655cf5;
   --primary-foreground: #ffffff;
+  --primary-text: #8b84fa;
   --accent: #38bdf8;
 
   --positive: #34d399;
@@ -113,6 +132,7 @@
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-accent: var(--accent);
 
   --color-positive: var(--positive);
@@ -291,4 +311,21 @@ tr.row-finance > th {
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
+}
+
+/* --------------------------------------------------------------------------
+   Purple as type, everywhere it is used as type.
+   --------------------------------------------------------------------------
+   `text-primary` and `bg-primary` both resolve to --color-primary, so one
+   value had to carry white on a filled button *and* stand as a label on a dark
+   card. It could not do both above 4.5:1 — see the dark block above.
+
+   Redirecting the utility here means the split is enforced in one place rather
+   than remembered at thirty-six call sites, and `text-primary` keeps reading
+   as "the brand colour" wherever it appears. Unlayered, so it wins over the
+   utility Tailwind generates; in light mode both tokens are the same value and
+   this rule changes nothing.
+   -------------------------------------------------------------------------- */
+.text-primary {
+  color: var(--primary-text);
 }
