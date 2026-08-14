@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { isoDateSchema } from "./masters.ts";
-import { granularitySchema } from "./periods.ts";
+import { checkPeriodIndex, granularitySchema } from "./periods.ts";
 
 /**
  * The financial statement — the document this company was producing by hand
@@ -28,11 +28,13 @@ import { granularitySchema } from "./periods.ts";
  * amount, is the only time the right answer is actually known.
  */
 
-export const statementQuerySchema = z.strictObject({
-  granularity: granularitySchema.default("month"),
-  fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
-  index: z.coerce.number().int().min(1).max(12).optional(),
-});
+export const statementQuerySchema = z
+  .strictObject({
+    granularity: granularitySchema.default("month"),
+    fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
+    index: z.coerce.number().int().min(1).max(12).optional(),
+  })
+  .superRefine(checkPeriodIndex);
 export type StatementQuery = z.infer<typeof statementQuerySchema>;
 
 /**

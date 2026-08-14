@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import { isoDateSchema, type FxReportBasis } from "./masters.ts";
-import { granularitySchema, type Granularity } from "./periods.ts";
+import {
+  checkPeriodIndex,
+  granularitySchema,
+  type Granularity,
+} from "./periods.ts";
 
 /* -------------------------------------------------------------------------- */
 /*  Exchange rates                                                             */
@@ -65,14 +69,16 @@ export const CURRENCY_VIEWS = ["BDT", "USD"] as const;
 export const currencyViewSchema = z.enum(CURRENCY_VIEWS);
 export type CurrencyView = z.infer<typeof currencyViewSchema>;
 
-export const periodQuerySchema = z.strictObject({
-  granularity: granularitySchema.default("month"),
-  /** The fiscal year's starting calendar year. */
-  fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
-  /** Which period within that year: 1-12 for months, 1-4 quarters, 1-2 halves. */
-  index: z.coerce.number().int().min(1).max(12).optional(),
-  currency: currencyViewSchema.default("BDT"),
-});
+export const periodQuerySchema = z
+  .strictObject({
+    granularity: granularitySchema.default("month"),
+    /** The fiscal year's starting calendar year. */
+    fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
+    /** Which period within that year: 1-12 for months, 1-4 quarters, 1-2 halves. */
+    index: z.coerce.number().int().min(1).max(12).optional(),
+    currency: currencyViewSchema.default("BDT"),
+  })
+  .superRefine(checkPeriodIndex);
 export type PeriodQuery = z.infer<typeof periodQuerySchema>;
 
 export const bankStatsQuerySchema = z.strictObject({
@@ -99,12 +105,14 @@ export type FundingQuery = z.infer<typeof fundingQuerySchema>;
  * register in turn, which is one query per account before a single figure
  * appears; this is a fixed number of queries whatever the company grows into.
  */
-export const overviewQuerySchema = z.strictObject({
-  granularity: granularitySchema.default("month"),
-  fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
-  index: z.coerce.number().int().min(1).max(12).optional(),
-  currency: currencyViewSchema.default("BDT"),
-});
+export const overviewQuerySchema = z
+  .strictObject({
+    granularity: granularitySchema.default("month"),
+    fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
+    index: z.coerce.number().int().min(1).max(12).optional(),
+    currency: currencyViewSchema.default("BDT"),
+  })
+  .superRefine(checkPeriodIndex);
 export type OverviewQuery = z.infer<typeof overviewQuerySchema>;
 
 /**

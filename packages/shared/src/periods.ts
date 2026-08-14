@@ -196,6 +196,65 @@ export function monthsInFiscalYear(
   });
 }
 
+/**
+ * How many periods of this size fit in a fiscal year.
+ *
+ * A single `index` field has to carry 1-12 for months and 1-4 for quarters, so
+ * its own `max` cannot tell a valid quarter from an invalid one. This is what
+ * the query schemas check `index` against.
+ */
+export function periodsPerFiscalYear(granularity: Granularity): number {
+  switch (granularity) {
+    case "month":
+      return 12;
+    case "quarter":
+      return 4;
+    case "half":
+      return 2;
+    case "year":
+      return 1;
+  }
+}
+
+/** Plural noun for a granularity, for messages people read. */
+const GRANULARITY_PLURAL: Record<Granularity, string> = {
+  month: "months",
+  quarter: "quarters",
+  half: "halves",
+  year: "year",
+};
+
+/**
+ * Why this `index` cannot be asked for, or null when it can.
+ *
+ * Report requests used to clamp instead: asking for quarter 9 quietly answered
+ * with quarter 4. The label was honest, but a figure nobody asked for is not
+ * something a finance report should hand back without saying so.
+ */
+export function periodIndexIssue(
+  granularity: Granularity,
+  index: number | undefined,
+): string | null {
+  if (index === undefined) return null;
+  const available = periodsPerFiscalYear(granularity);
+  if (index <= available) return null;
+  return granularity === "year"
+    ? "A financial year has only one yearly period, so index must be 1."
+    : `A financial year has ${available} ${GRANULARITY_PLURAL[granularity]} — there is no ${granularity} ${index}.`;
+}
+
+/**
+ * The cross-field half of validating a report request, shared by every query
+ * that carries a `granularity` and an `index`.
+ */
+export function checkPeriodIndex(
+  value: { granularity: Granularity; index?: number },
+  ctx: z.RefinementCtx,
+): void {
+  const issue = periodIndexIssue(value.granularity, value.index);
+  if (issue) ctx.addIssue({ code: "custom", message: issue, path: ["index"] });
+}
+
 /** Every sub-period of a fiscal year at the given granularity. */
 export function periodsInFiscalYear(
   fiscalYear: number,

@@ -9,6 +9,8 @@ import {
   halfRange,
   monthIndexInFiscalYear,
   monthsInFiscalYear,
+  periodIndexIssue,
+  periodsPerFiscalYear,
   quarterOf,
   quarterRange,
 } from "./periods.ts";
@@ -156,5 +158,51 @@ describe("currentFiscalYear", () => {
   it("accepts an explicit today for determinism", () => {
     assert.equal(currentFiscalYear("bd_july_june", "2026-08-12"), 2026);
     assert.equal(currentFiscalYear("bd_july_june", "2026-06-30"), 2025);
+  });
+});
+
+describe("periodsPerFiscalYear", () => {
+  it("knows how many of each size fit in a year", () => {
+    assert.equal(periodsPerFiscalYear("month"), 12);
+    assert.equal(periodsPerFiscalYear("quarter"), 4);
+    assert.equal(periodsPerFiscalYear("half"), 2);
+    assert.equal(periodsPerFiscalYear("year"), 1);
+  });
+});
+
+/**
+ * A report request used to be clamped rather than refused: asking for quarter 9
+ * quietly answered with quarter 4. One `index` field serves four period sizes,
+ * so its own max of 12 cannot catch it — this is the cross-field half.
+ */
+describe("periodIndexIssue", () => {
+  it("allows every real period", () => {
+    assert.equal(periodIndexIssue("month", 12), null);
+    assert.equal(periodIndexIssue("quarter", 4), null);
+    assert.equal(periodIndexIssue("half", 2), null);
+    assert.equal(periodIndexIssue("year", 1), null);
+  });
+
+  it("refuses a quarter beyond the fourth", () => {
+    assert.match(
+      periodIndexIssue("quarter", 9) ?? "",
+      /4 quarters — there is no quarter 9/,
+    );
+  });
+
+  it("refuses a second half-year that does not exist", () => {
+    assert.match(periodIndexIssue("half", 3) ?? "", /2 halves/);
+  });
+
+  it("refuses a thirteenth month", () => {
+    assert.match(periodIndexIssue("month", 13) ?? "", /12 months/);
+  });
+
+  it("says something useful for the yearly period", () => {
+    assert.match(periodIndexIssue("year", 2) ?? "", /must be 1/);
+  });
+
+  it("passes an absent index through — it defaults to the first", () => {
+    assert.equal(periodIndexIssue("quarter", undefined), null);
   });
 });
