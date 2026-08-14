@@ -120,7 +120,7 @@ export function TeamScreen({
           id="team-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, code, or designation"
+          placeholder="Search by name, designation or phone"
           className={cn(controlClass, "pl-9")}
         />
       </form>
