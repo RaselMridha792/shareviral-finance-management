@@ -3,7 +3,7 @@
 import { AI_TARGET_LABELS, type AiBatch } from "@finance/shared";
 import { CircleAlert, CircleCheck, LoaderCircle, X } from "lucide-react";
 
-import { FIELD_LABELS } from "@/components/assistant/draft-card";
+import { labelFor } from "@/components/assistant/draft-card";
 import { Button } from "@/components/ui/button";
 
 export type RowResult = { ok: true; refNo?: string } | { ok: false; error: string };
@@ -84,7 +84,7 @@ export function BatchCard({
                   key={key}
                   className="px-3 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground"
                 >
-                  {FIELD_LABELS[key] ?? key}
+                  {labelFor(key)}
                 </th>
               ))}
               {results ? (

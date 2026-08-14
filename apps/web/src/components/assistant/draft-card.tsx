@@ -29,7 +29,60 @@ export const FIELD_LABELS: Record<string, string> = {
   etin: "e-TIN",
   bin: "BIN",
   type: "Type",
+
+  // People. The batch table shows whatever the file had, so these come up
+  // together far more often than they do one at a time on a form.
+  engagementType: "Employee or contractor",
+  designation: "Designation",
+  department: "Department",
+  personalEmail: "Personal email",
+  workEmail: "Work email",
+  phone: "Phone",
+  nid: "NID",
+  endedOn: "Left on",
+  bankName: "Bank",
+  bankAccountNumber: "Account number",
+  bankRouting: "Routing number",
+  walletProvider: "Wallet",
+  walletNumber: "Wallet number",
+  dateOfBirth: "Date of birth",
+  psrStatus: "PSR",
+  psrAssessmentYear: "PSR year",
+
+  // Money and vendors.
+  paymentMethod: "Paid by",
+  vendorName: "Vendor",
+  receiptUrl: "Receipt link",
+  originalAmount: "Amount sent",
+  originalCurrency: "Currency sent",
+  fxRate: "Rate",
+  direction: "In or out",
+  billingCurrency: "Bills in",
+  contactName: "Contact",
+  address: "Address",
+  notes: "Notes",
 };
+
+/**
+ * A heading for a field, whether or not anyone has named it.
+ *
+ * The batch table builds its columns from whatever the rows contain, so a
+ * field nobody thought to add above appeared as `engagementType` — a column
+ * heading in the shape of a database column, above a table a finance person is
+ * being asked to check before it is written. Splitting the camel case is not
+ * as good as a chosen word, which is why the map still wins, but it is a great
+ * deal better than the raw key and it cannot fall behind a new field.
+ */
+export function labelFor(key: string): string {
+  const named = FIELD_LABELS[key];
+  if (named) return named;
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 /**
  * The amount, read back — or the raw text if it cannot be parsed.
@@ -101,7 +154,7 @@ export function DraftCard({
           {entries.map(([key, value]) => (
             <Field
               key={key}
-              label={FIELD_LABELS[key] ?? key}
+              label={labelFor(key)}
               className={
                 String(value).length > 60 ? "sm:col-span-2" : undefined
               }

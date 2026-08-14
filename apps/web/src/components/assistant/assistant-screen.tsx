@@ -28,7 +28,7 @@ import {
 } from "@/components/assistant/batch-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
-import { DraftCard, FIELD_LABELS } from "@/components/assistant/draft-card";
+import { DraftCard, labelFor } from "@/components/assistant/draft-card";
 import { Welcome } from "@/components/assistant/welcome";
 import { useCan, useSession } from "@/components/auth/session-provider";
 import { Card } from "@/components/ui/card";
@@ -54,7 +54,7 @@ function explain(caught: unknown, fallback: string): string {
     .map(([field, messages]) =>
       field === "_"
         ? messages[0]
-        : `${FIELD_LABELS[field] ?? field} — ${messages[0]}`,
+        : `${labelFor(field)} — ${messages[0]}`,
     )
     .join("; ");
 

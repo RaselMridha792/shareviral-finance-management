@@ -143,14 +143,19 @@ fs.writeFileSync(
 
 /* ----------------------------------------------------------------- the run */
 
-const code = await new Promise((resolve) => {
-  const child = spawn(process.execPath, [path.join(HERE, "screens.mjs")], {
-    cwd: HERE,
-    env: { ...process.env, API, WEB },
-    stdio: "inherit",
+const suites = ["screens.mjs", "batch.mjs"];
+let code = 0;
+for (const suite of suites) {
+  const result = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(HERE, suite)], {
+      cwd: HERE,
+      env: { ...process.env, API, WEB },
+      stdio: "inherit",
+    });
+    child.on("close", resolve);
   });
-  child.on("close", resolve);
-});
+  if (result) code = result;
+}
 
 fs.rmSync(rolesFile, { force: true });
 stopAll();
