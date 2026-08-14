@@ -236,7 +236,14 @@ export class AiAttachmentsService {
           `total ${column.total}, from ${column.min} to ${column.max}`,
         );
       } else if (column.kind === "date") {
-        parts.push(`${column.min} to ${column.max}`);
+        parts.push(
+          `${column.min} to ${column.max}` +
+            (column.dateOrder === "mdy"
+              ? " (written month-first, e.g. 5/17/2026 is 17 May)"
+              : column.dateOrder === "dmy"
+                ? " (written day-first, e.g. 17/5/2026 is 17 May)"
+                : " — CAREFUL: nothing in this column says whether it is day-first or month-first, so it was read day-first and may be wrong. Check a value against the raw examples and ask if it matters."),
+        );
       } else if (column.distinct !== undefined) {
         parts.push(
           `${column.distinct} distinct: ${column.examples.join(", ")}`,
@@ -433,10 +440,11 @@ function summarise(name: string, rows: RawRow[]): AiAttachmentColumn {
     };
   }
 
-  const dates = values.filter((v) => asDate(v) !== null);
+  const order = detectDateOrder(values);
+  const dates = values.filter((v) => asDate(v, order) !== null);
   if (dates.length >= values.length * 0.8) {
     const sorted = dates
-      .map(asDate)
+      .map((v) => asDate(v, order))
       .filter((d): d is string => d !== null)
       .sort();
     return {
@@ -445,7 +453,13 @@ function summarise(name: string, rows: RawRow[]): AiAttachmentColumn {
       kind: "date",
       min: sorted[0],
       max: sorted[sorted.length - 1],
+      /**
+       * The raw values go alongside the range on purpose. When nothing in the
+       * column settles the order, the model sees both what was written and
+       * what it was read as, and can ask rather than assume.
+       */
       examples: values.slice(0, 3),
+      dateOrder: order,
     };
   }
 
@@ -479,16 +493,59 @@ function asNumber(raw: string | number | null | undefined): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** ISO, or the day-first forms a Bangladeshi export tends to use. */
-function asDate(raw: string): string | null {
+/**
+ * Which way round a column of slashed dates is written.
+ *
+ * Decided from the whole column, never from one value, because one value
+ * usually cannot say. 05/08/2026 is 5 August to a Bangladeshi bank and 8 May
+ * to an American payroll sheet, and nothing in those eight characters settles
+ * it — but a column almost always contains one value that does: a 17 or a 23
+ * can only be the day.
+ *
+ * This used to assume day-first for everything, which is right for a local
+ * bank export and wrong for the staff sheet whose own heading says
+ * MM/DD/YYYY. The visible damage was impossible dates — "7/17/2002" read as
+ * month seventeen — which the assistant then reported to the person as errors
+ * in their file. The quiet damage was worse: 1/2/1996 came back as 2 January
+ * with nothing to show it had been swapped.
+ */
+type DateOrder = "dmy" | "mdy" | "unknown";
+
+function detectDateOrder(values: string[]): DateOrder {
+  let dayFirst = false;
+  let monthFirst = false;
+
+  for (const value of values) {
+    const parts = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(value.trim());
+    if (!parts) continue;
+    const first = Number(parts[1]);
+    const second = Number(parts[2]);
+    // Only a day can be past twelve.
+    if (first > 12) dayFirst = true;
+    if (second > 12) monthFirst = true;
+  }
+
+  // Both would mean the column disagrees with itself — trust neither.
+  if (dayFirst && monthFirst) return "unknown";
+  if (dayFirst) return "dmy";
+  if (monthFirst) return "mdy";
+  return "unknown";
+}
+
+/** ISO, or a slashed date read the way the column says to read it. */
+function asDate(raw: string, order: DateOrder = "dmy"): string | null {
   const text = raw.trim();
 
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  const dayFirst = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
-  if (dayFirst) {
-    const [, day, month, year] = dayFirst;
+  const slashed = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
+  if (slashed) {
+    const [, first, second, year] = slashed;
+    // "unknown" falls back to day-first, which is what a Bangladeshi export
+    // is; the column description says so out loud when it is a guess.
+    const [day, month] = order === "mdy" ? [second, first] : [first, second];
+    if (Number(month) > 12 || Number(day) > 31) return null;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 

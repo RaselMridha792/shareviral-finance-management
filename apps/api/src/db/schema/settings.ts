@@ -90,14 +90,15 @@ export const appSettings = pgTable(
     aiModel: text("ai_model").notNull().default("claude-opus-5"),
 
     /**
-     * How much of the books the assistant may read.
+     * Whether the assistant may read the books at all.
      *
-     * Defaults to names_only: it can fill in a form, which is what it was
-     * asked for, without any figure from the ledger leaving the building.
-     * Widening that is a deliberate act by a Super Admin who has read what it
-     * means.
+     * "full" or "off", and it defaults to full. The middle setting that used
+     * to sit here withheld every lookup while still letting the assistant
+     * answer, which is the worst of both: it could not check anything and said
+     * so with complete confidence. Reading is still done as the person asking,
+     * so this widens what the assistant knows, never what they may see.
      */
-    aiDataAccess: text("ai_data_access").notNull().default("names_only"),
+    aiDataAccess: text("ai_data_access").notNull().default("full"),
 
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

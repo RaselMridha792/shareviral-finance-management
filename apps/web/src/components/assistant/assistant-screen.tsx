@@ -92,7 +92,7 @@ export function AssistantScreen({
   const dataAccess: AiDataAccess =
     availability.dataAccess && availability.dataAccess !== "off"
       ? availability.dataAccess
-      : "names_only";
+      : "full";
 
   const scroller = useRef<HTMLDivElement>(null);
   const configured = availability.configured;

@@ -52,7 +52,7 @@ export function AssistantPanel() {
   const access: AiDataAccess =
     status?.dataAccess && status.dataAccess !== "off"
       ? status.dataAccess
-      : "names_only";
+      : "full";
 
   async function changeSettings(input: {
     model?: AiModel;

@@ -63,11 +63,28 @@ const DEFAULT_MODEL = "claude-opus-5";
 /**
  * How many times the model may look something up before it has to answer.
  *
- * Four is enough for "what did we pay Grameenphone this year, and is the tax on
- * it deposited" — two lookups and a comparison. It is also low enough that a
- * confused loop costs pennies and ends.
+ * Was four, chosen when a lookup was a rarity. Four is two facts and a
+ * comparison, and a real question is often more than that — "which of these
+ * seventeen people are already on the team, and has anybody been paid twice
+ * this month" is a dozen before it is an answer. Running out mid-thought does
+ * not produce "I could not check"; it produces an answer written from what it
+ * managed to see, which is the failure this whole file keeps trying to prevent.
+ *
+ * Still bounded, because a confused loop must end. Twelve, and the last round
+ * forces an answer.
  */
-const MAX_LOOKUPS = 4;
+const MAX_LOOKUPS = 12;
+
+/**
+ * Room to answer in.
+ *
+ * Was 1,500, which is fine for one drafted payment and far too small for
+ * anything else — and on this model `max_tokens` caps thinking *and* the reply
+ * together, so a hard question could spend its budget reasoning and get cut
+ * off mid-sentence. It is a ceiling, not a bill: a short answer still costs
+ * what a short answer costs.
+ */
+const MAX_ANSWER_TOKENS = 8_000;
 
 @Injectable()
 export class AiIntakeService {
@@ -113,7 +130,7 @@ export class AiIntakeService {
     const model = (AI_MODELS as readonly string[]).includes(row?.model ?? "")
       ? (row.model as AiModel)
       : DEFAULT_MODEL;
-    const dataAccess = (row?.dataAccess ?? "names_only") as AiDataAccess;
+    const dataAccess = (row?.dataAccess ?? "full") as AiDataAccess;
 
     const fromSettings = open(row?.sealed);
     if (fromSettings) {
@@ -388,7 +405,7 @@ export class AiIntakeService {
     for (let round = 0; round <= MAX_LOOKUPS; round++) {
       const response = await client.messages.create({
         model,
-        max_tokens: 1500,
+        max_tokens: MAX_ANSWER_TOKENS,
         /**
          * Two blocks, and the breakpoint between them is the point.
          *
@@ -619,6 +636,33 @@ WHAT THIS APP HOLDS
 - Reports: a period, month-by-month bank statistics, and funding from the CEO
   in USD.
 
+WHAT THIS APP CANNOT DO
+Know these as well as you know what it can do. Saying "yes" to something the
+app does not have does not fail politely — the person acts on it, and finds out
+at the point where it costs them work.
+- The import screen takes TRANSACTIONS ONLY. A file of people, of vendors, of
+  anything that is not money moving in or out of an account cannot go through
+  it. If somebody wants a file of staff entered, say plainly that the import
+  route is for transactions and work through it with them instead.
+- You cannot press anything. You have no button, no screen and no save. Never
+  tell somebody to press a control unless it is one of these two, which are
+  the only ones that exist: **Save** on the draft card you produced, and **Send
+  to Import** on the file card. If what they want needs a control that is not
+  one of those, the honest answer is that it is not there.
+- You cannot edit or delete anything that is already recorded, and you cannot
+  void a transaction. Those are done on the screens.
+- You cannot see or record what anybody is paid now. There is no tool for it
+  at any setting.
+- You have no memory between conversations beyond what somebody corrected on a
+  draft.
+
+WHEN YOU ARE NOT SURE, ASK — that is not a failure, it is the job
+This app is somebody's books. A wrong answer given confidently costs more than
+a question. If a file does not obviously match one of the records below, if a
+column could be two things, if a name might be a person already on the team —
+say what you see, say what you are unsure of, and ask. Do not guess a route
+through the app and describe it as though you had checked.
+
 WHERE A NEW RECORD BELONGS — decide this yourself, do not ask
 - Money paid or received, of any kind         -> transaction_out / transaction_in
 - A tool or subscription the company pays for -> vendor
@@ -635,10 +679,20 @@ The currency is BDT unless the person says otherwise.
 ${
   dataAccess === "full"
     ? `LOOKING THINGS UP
-You have read-only tools. Use them whenever a question is about what is already
-recorded rather than about something new — do not guess or say you cannot see
-the data. Every tool runs as this person: if one refuses, say plainly that their
-role cannot see that, and do not try another route to the same answer.
+You have read-only tools. Use them freely and use them first. Checking costs a
+second; being wrong about somebody's books costs a great deal more.
+
+Look before you answer, and look before you draft:
+- Is this person already on the team? Has this bill already been entered? Is
+  this the account they meant? Check rather than assume.
+- Working from a file, check what is already recorded before proposing to add
+  it. Somebody handing over a spreadsheet usually does not know what is in
+  there twice.
+- If you find something that does not add up, say so. That is worth more than
+  the answer they asked for.
+
+Every tool runs as this person: if one refuses, say plainly that their role
+cannot see that, and do not try another route to the same answer.
 When you have the answer, call \`answer\` with it in the summary field, target
 null and missingFields empty.`
     : `You have no way to look anything up. If asked about existing records, say

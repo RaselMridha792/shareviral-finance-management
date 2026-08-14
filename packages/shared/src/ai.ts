@@ -63,21 +63,36 @@ export const AI_TARGET_ENDPOINT: Record<AiTarget, string> = {
  * Anthropic to be turned into a sentence. That may be entirely fine, and it may
  * not be; it is not a decision to make silently on somebody's behalf.
  */
-export const AI_DATA_ACCESS = ["off", "names_only", "full"] as const;
+/**
+ * On, or off. There is no half.
+ *
+ * There was a middle setting — "names only" — which handed over the names of
+ * accounts and categories and withheld every lookup tool. The idea was
+ * caution. What it actually produced was an assistant that could see the
+ * labels on the doors and nothing behind them: it could not check whether a
+ * person was already on the team, whether a bill had been paid twice, or what
+ * a balance was. Half a picture is where confident wrong answers come from,
+ * and every one of them lands on somebody's screen looking like the truth.
+ *
+ * So the choice is now honest: either it can read the books or it is off.
+ *
+ * "Can read" still means *as the person asking*. Every lookup runs under their
+ * permissions — an HR user asking about the ledger is refused exactly as they
+ * would be by clicking — and pay has no tool at all, at any setting. That is
+ * not a limit on the assistant's understanding; it is who is at the keyboard.
+ */
+export const AI_DATA_ACCESS = ["off", "full"] as const;
 export const aiDataAccessSchema = z.enum(AI_DATA_ACCESS);
 export type AiDataAccess = z.infer<typeof aiDataAccessSchema>;
 
 export const AI_DATA_ACCESS_LABELS: Record<AiDataAccess, string> = {
-  off: "Nothing — the assistant is switched off",
-  names_only: "Names only — it can fill in forms, not answer questions",
-  full: "Full — it can also look up figures and answer questions",
+  off: "Off — the assistant is switched off",
+  full: "On — it can read the books and answer questions",
 };
 
 export const AI_DATA_ACCESS_DETAIL: Record<AiDataAccess, string> = {
   off: "No request is made and no data leaves.",
-  names_only:
-    "What is sent: the message typed, and the names of your categories, accounts and vendors so it can pick a real one. No amounts, no balances, no salaries, nothing from the ledger.",
-  full: "As above, plus the results of any lookup it makes — real dates, amounts, descriptions and balances from your books. It can only reach what the person asking could reach by clicking; it can never reach pay.",
+  full: "What is sent: the message typed, the names of your accounts, categories and tools, and the results of any lookup it makes — real dates, amounts, descriptions and balances. It can only reach what the person asking could reach by clicking, and it can never reach pay.",
 };
 
 /**
@@ -185,6 +200,15 @@ export type AiAttachmentColumn = {
   /** Set for a text column with few enough values to be worth listing. */
   distinct?: number;
   examples: string[];
+  /**
+   * Which way a date column was read, worked out from the whole column.
+   *
+   * "unknown" means nothing in it settled the question — every value's first
+   * part was twelve or under — so it was read day-first and could be wrong.
+   * That is worth saying rather than hiding: 05/08 is 5 August or 8 May, and
+   * the difference is a transaction in the wrong month.
+   */
+  dateOrder?: "dmy" | "mdy" | "unknown";
 };
 
 export type AiAttachment = {
