@@ -22,6 +22,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AttachmentCard } from "@/components/assistant/attachment-card";
+import {
+  BatchCard,
+  type RowResult,
+} from "@/components/assistant/batch-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
 import { DraftCard, FIELD_LABELS } from "@/components/assistant/draft-card";
@@ -86,6 +90,10 @@ export function AssistantScreen({
   const [attachment, setAttachment] = useState<AiAttachment | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [staging, setStaging] = useState(false);
+  /** Rows the person struck out before saving, by index. */
+  const [dropped, setDropped] = useState<Set<number>>(new Set());
+  const [batchResults, setBatchResults] = useState<RowResult[] | null>(null);
+  const [savedCount, setSavedCount] = useState(0);
   const [model, setModel] = useState<AiModel>(
     availability.model ?? "claude-opus-5",
   );
@@ -157,6 +165,8 @@ export function AssistantScreen({
     setError(null);
     setDrawer(false);
     setAttachment(null);
+    setDropped(new Set());
+    setBatchResults(null);
   }
 
   async function open(id: string) {
@@ -244,6 +254,11 @@ export function AssistantScreen({
       });
 
       setReply(result);
+      // A new answer means a new set of rows. Carrying the last batch's
+      // struck-out lines or its results onto it would strike out whichever
+      // rows happened to share those positions.
+      setDropped(new Set());
+      setBatchResults(null);
       const said =
         result.nextQuestion ?? result.clarification ?? result.summary;
       if (said) setMessages([...next, { role: "assistant", content: said }]);
@@ -259,6 +274,56 @@ export function AssistantScreen({
       );
     } finally {
       setThinking(false);
+    }
+  }
+
+  /**
+   * Saves the batch, one row at a time, and leaves the outcome on screen.
+   *
+   * The table is not cleared when it finishes. With seventeen records the
+   * interesting part is usually the two that were refused, and a card that
+   * congratulates itself and vanishes takes that with it.
+   */
+  async function confirmBatch() {
+    const batch = reply?.batch;
+    if (!batch) return;
+
+    const keeping = batch.rows.filter((_, index) => !dropped.has(index));
+    if (!keeping.length) return;
+
+    setSaving(true);
+    setSavedCount(0);
+    setError(null);
+
+    try {
+      const outcomes = await aiApi.saveMany(batch.target, keeping, setSavedCount);
+
+      // Back onto the full-length row list, so a dropped row keeps its place
+      // in the table rather than shifting every result up by one.
+      const byRow: RowResult[] = [];
+      let taken = 0;
+      batch.rows.forEach((_, index) => {
+        byRow[index] = dropped.has(index)
+          ? { ok: false, error: "Left out" }
+          : outcomes[taken++];
+      });
+
+      setBatchResults(byRow);
+      const saved = outcomes.filter((o) => o.ok).length;
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: `Saved ${saved} of ${keeping.length}${
+            saved === keeping.length ? "." : " — the rest are marked above."
+          }`,
+        },
+      ]);
+      router.refresh();
+    } catch (caught) {
+      setError(explain(caught, "Those could not be saved."));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -409,7 +474,28 @@ export function AssistantScreen({
                 </div>
               ) : null}
 
-              {reply?.target ? (
+              {/* A batch and a single draft are never both on offer: the
+                  batch answers "add all of these", the draft answers "add
+                  this one", and showing two Save buttons at once is asking
+                  somebody to pick between things they have not read yet. */}
+              {reply?.batch ? (
+                <BatchCard
+                  batch={reply.batch}
+                  results={batchResults}
+                  saving={saving}
+                  savedCount={savedCount}
+                  dropped={dropped}
+                  onDrop={(index) =>
+                    setDropped((current) => {
+                      const next = new Set(current);
+                      if (next.has(index)) next.delete(index);
+                      else next.add(index);
+                      return next;
+                    })
+                  }
+                  onConfirm={() => void confirmBatch()}
+                />
+              ) : reply?.target ? (
                 <DraftCard
                   key={JSON.stringify(reply.draft)}
                   reply={reply}

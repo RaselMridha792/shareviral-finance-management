@@ -305,6 +305,35 @@ export type AiImportPlan = {
   note: string | null;
 };
 
+/**
+ * Many records of the same kind, proposed together.
+ *
+ * The reply carried exactly one draft, and that shape was the reason a
+ * perfectly reasonable request failed: handed a sheet of seventeen staff and
+ * asked to add them, the assistant had no way to answer. It could describe
+ * them, and it could draft one. Seventeen conversations is not an answer, so it
+ * reached for the import screen instead — which only takes transactions — and
+ * the whole thing ended in seventeen errors.
+ *
+ * The rows are ordinary drafts, the same shape the single draft has and
+ * validated by the same rules. What is deliberately NOT here is a save: the
+ * batch is reviewed as a table, any row can be dropped, and confirming it
+ * posts each row to the record's own endpoint one at a time. Seventeen
+ * ordinary creates, seventeen permission checks, seventeen audit rows — no
+ * bulk path into the database, because a bulk path is a second way in that has
+ * to be secured all over again.
+ */
+export type AiBatch = {
+  target: AiTarget;
+  /** One draft per record, in the order the file had them. */
+  rows: Array<Record<string, unknown>>;
+  /** One line naming what this is, for the heading above the table. */
+  note: string | null;
+};
+
+/** More than this in one go belongs on the import screen, not in a chat. */
+export const AI_BATCH_MAX_ROWS = 100;
+
 /** What one turn produces. Data only — nothing here causes a write. */
 export type AiIntakeReply = {
   /** The conversation this turn was filed under, new or continuing. */
@@ -322,6 +351,8 @@ export type AiIntakeReply = {
   clarification: string | null;
   /** Set only when a whole attached file is ready to be staged. */
   importPlan?: AiImportPlan | null;
+  /** Set when many records of one kind were understood at once. */
+  batch?: AiBatch | null;
 };
 
 export type AiAvailability = {

@@ -105,6 +105,49 @@ export const aiApi = {
     ),
 
   /**
+   * A batch, saved one record at a time through `save` above.
+   *
+   * Deliberately a loop over the ordinary create, not a bulk endpoint. Every
+   * row gets the same permission check, the same Zod schema and its own audit
+   * row, and there is no second way into the database that would have to be
+   * secured all over again. It costs seventeen requests, which nobody notices.
+   *
+   * It does not stop at the first failure. One row with a malformed email
+   * should not strand the sixteen behind it — each result comes back on its
+   * own, and the table says which row said what.
+   */
+  saveMany: async (
+    target: AiTarget,
+    rows: Array<Record<string, unknown>>,
+    onProgress?: (done: number) => void,
+  ): Promise<Array<{ ok: true; refNo?: string } | { ok: false; error: string }>> => {
+    const results: Array<{ ok: true; refNo?: string } | { ok: false; error: string }> = [];
+
+    for (const [index, row] of rows.entries()) {
+      try {
+        const created = await aiApi.save(target, row);
+        results.push({ ok: true, refNo: created.refNo });
+      } catch (caught) {
+        results.push({
+          ok: false,
+          error:
+            caught instanceof ApiError
+              ? [
+                  caught.message,
+                  ...Object.entries(caught.fieldErrors ?? {}).map(
+                    ([field, messages]) => `${field}: ${messages[0]}`,
+                  ),
+                ].join(" — ")
+              : "Could not save that one.",
+        });
+      }
+      onProgress?.(index + 1);
+    }
+
+    return results;
+  },
+
+  /**
    * Tells the server what was changed before saving, so it reads better next
    * time.
    *

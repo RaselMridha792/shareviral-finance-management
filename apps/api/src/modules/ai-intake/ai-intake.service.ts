@@ -6,12 +6,14 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import {
+  AI_BATCH_MAX_ROWS,
   AI_MODELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
   hasPermission,
   todayInDhaka,
   type AiAvailability,
+  type AiBatch,
   type AiIntakeReply,
   type AiImportPlan,
   type AiIntakeRequest,
@@ -687,8 +689,8 @@ app does not have does not fail politely — the person acts on it, and finds ou
 at the point where it costs them work.
 - The import screen takes TRANSACTIONS ONLY. A file of people, of vendors, of
   anything that is not money moving in or out of an account cannot go through
-  it. If somebody wants a file of staff entered, say plainly that the import
-  route is for transactions and work through it with them instead.
+  it. For those, read the file and propose the records yourself in 'batch' —
+  see MANY RECORDS AT ONCE below.
 - You cannot press anything. You have no button, no screen and no save. Never
   tell somebody to press a control unless it is one of these two, which are
   the only ones that exist: **Save** on the draft card you produced, and **Send
@@ -767,6 +769,28 @@ FIELDS THAT COME IN PAIRS
 The list above shows each field on its own, so it cannot show these. Each one
 below is refused at save time even though both fields read as optional.
 ${pairedFields()}
+
+MANY RECORDS AT ONCE
+When somebody has a file — or a message — holding several records of the SAME
+kind, put them all in 'batch' rather than drafting one and asking about the
+next. Seventeen people is one answer, not seventeen conversations.
+
+  * Every row goes in the same shape 'draft' would take for that target, under
+    the same rules: nothing invented, no field that is not on the list.
+  * Read the whole file before proposing. Use read_attachment to see the rows
+    rather than working from the summary alone.
+  * Look first. Check whether these are already recorded — a file somebody
+    hands over has often been handed over once before. Say what you found.
+  * Settle the ambiguities BEFORE you propose, in one message, not one question
+    at a time: which column is the joining date, whether a blank means unknown
+    or nil, what to do with the two rows whose email is malformed. A batch is
+    reviewed as a table, and a wrong assumption repeated seventeen times is
+    much harder to spot than a wrong single draft.
+  * A row you cannot complete is still worth proposing with what you have —
+    say which rows are short of what, and let them fix it in the table.
+  * Transactions are the exception: for a file of money moving, use importPlan,
+    because the import screen checks each row against the ledger for
+    duplicates and can be undone as a batch afterwards.
 
 NEVER INVENT A VALUE
 If you do not know something, leave the key OUT of 'draft' entirely and name it
@@ -942,6 +966,56 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
           ? raw.clarification.trim()
           : null,
       importPlan: importPlanOf(raw.importPlan),
+      batch: this.batchOf(raw.batch),
+    };
+  }
+
+  /**
+   * The proposed rows, put through the same sieve a single draft goes through.
+   *
+   * Not a formality. A batch is the one place where one careless value becomes
+   * seventeen: a placeholder in a column the model was unsure about is a
+   * plausible wrong value on every row, and nobody reads the seventeenth as
+   * carefully as the first. So each row loses its placeholders exactly as a
+   * draft does, and a row left with nothing is dropped rather than shown as an
+   * empty line somebody has to notice.
+   */
+  private batchOf(value: unknown): AiBatch | null {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return null;
+
+    const raw = value as { target?: unknown; rows?: unknown; note?: unknown };
+    if (
+      typeof raw.target !== "string" ||
+      !(AI_TARGETS as readonly string[]).includes(raw.target)
+    ) {
+      return null;
+    }
+    if (!Array.isArray(raw.rows)) return null;
+
+    const rows: Array<Record<string, unknown>> = [];
+    for (const entry of raw.rows.slice(0, AI_BATCH_MAX_ROWS)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+
+      const row: Record<string, unknown> = {};
+      for (const [key, cell] of Object.entries(
+        entry as Record<string, unknown>,
+      )) {
+        if (isPlaceholder(cell)) continue;
+        row[key] = cell;
+      }
+      if (Object.keys(row).length) rows.push(row);
+    }
+
+    if (!rows.length) return null;
+
+    return {
+      target: raw.target as AiTarget,
+      rows,
+      note:
+        typeof raw.note === "string" && raw.note.trim()
+          ? raw.note.trim()
+          : null,
     };
   }
 
@@ -1273,6 +1347,30 @@ const REPLY_SCHEMA = {
     clarification: {
       type: "string",
       description: "Ask this when you cannot tell what they are recording.",
+    },
+    batch: {
+      type: "object",
+      description:
+        "Many records of the SAME kind, understood at once — a sheet of staff, a list of vendors. Use this instead of 'draft' when there is more than one. They are reviewed as a table and saved one at a time; you save nothing.",
+      properties: {
+        target: {
+          type: "string",
+          enum: [...AI_TARGETS],
+          description: "What kind of record every row is. All rows are this.",
+        },
+        rows: {
+          type: "array",
+          description:
+            "One object per record, each in exactly the shape 'draft' would take for this target. Same rules: no invented values, no field that is not in the list for this target.",
+          items: { type: "object", additionalProperties: true },
+        },
+        note: {
+          type: "string",
+          description:
+            "One line naming what these are, e.g. '17 staff from the sheet'.",
+        },
+      },
+      required: ["target", "rows"],
     },
     importPlan: {
       type: "object",
