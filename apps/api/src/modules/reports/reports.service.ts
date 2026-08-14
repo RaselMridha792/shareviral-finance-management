@@ -221,20 +221,43 @@ export class ReportsService {
    * Summed in SQL against the generated `signed_amount` column, so the arithmetic
    * that produces a balance is the same arithmetic the register uses.
    */
-  private async balanceAsOf(date: string): Promise<string> {
+  private async balanceAsOf(date: string, accountId?: string): Promise<string> {
+    /**
+     * Scoped to the same account as the movements it is rolled forward with.
+     *
+     * This took no account id: filtered to one account, the opening was still
+     * the sum of *every* account's opening while the monthly in/out figures
+     * below were account-scoped. The running balance therefore started too
+     * high and stayed too high for the whole year — Standard Chartered's
+     * "balance after July" read 26,72,983 against a register that closes the
+     * same month at 24,45,900, out by exactly the other two accounts'
+     * openings. Opening and movement have to describe the same account or the
+     * column is not a balance at all.
+     */
     const [row] = await this.db.client
       .select({
         opening: sql<string>`coalesce(sum(${accounts.openingBalance}), 0)::text`,
       })
       .from(accounts)
-      .where(isNull(accounts.deletedAt));
+      .where(
+        and(
+          isNull(accounts.deletedAt),
+          accountId ? eq(accounts.id, accountId) : undefined,
+        ),
+      );
 
     const [moved] = await this.db.client
       .select({
         net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
       })
       .from(transactions)
-      .where(and(sql`${transactions.txnDate} < ${date}`, LIVE));
+      .where(
+        and(
+          sql`${transactions.txnDate} < ${date}`,
+          LIVE,
+          accountId ? eq(transactions.accountId, accountId) : undefined,
+        ),
+      );
 
     return (Number(row.opening) + Number(moved.net)).toFixed(2);
   }
@@ -292,7 +315,9 @@ export class ReportsService {
 
     // Opening balance at the start of the year, then rolled forward month by
     // month — one query rather than twelve.
-    let running = Number(await this.balanceAsOf(`${query.year}-01-01`));
+    let running = Number(
+      await this.balanceAsOf(`${query.year}-01-01`, query.accountId),
+    );
 
     const months: MonthStat[] = [];
     let previous: { moneyIn: string; moneyOut: string } | null = null;

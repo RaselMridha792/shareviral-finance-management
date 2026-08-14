@@ -190,9 +190,15 @@ export class FxService {
     const settings = await this.settings.get();
     const fixed = settings.fxFixedUsdBdt;
 
-    // In `fixed` mode this is the only answer there is, so it is taken before
-    // the table is consulted at all.
-    if (settings.fxMode === "fixed" && fixed && Number(fixed) > 0) {
+    // Second in *both* modes, which is the whole point.
+    //
+    // This used to be taken only when `fxMode === "fixed"`, leaving `live` mode
+    // ordered funding → table → settings. That inverts the rule and reproduces
+    // the original complaint exactly: with any row at all in the rate table,
+    // editing the Settings rate changed nothing. Whether the number is read
+    // from a table is a mechanism; which number a person typed by hand is an
+    // instruction, and the instruction outranks it.
+    if (fixed && Number(fixed) > 0) {
       return { rate: fixed, source: "settings" };
     }
 
@@ -200,11 +206,6 @@ export class FxService {
     if (!context.unavailable && Number(context.rate) > 0) {
       return { rate: context.rate, source: "table" };
     }
-
-    // `live` mode with an empty table still falls back to the hand-set number
-    // rather than showing nothing, because a stale rate somebody chose beats
-    // no dollar figures at all — and the caption says where it came from.
-    if (fixed && Number(fixed) > 0) return { rate: fixed, source: "settings" };
 
     return null;
   }

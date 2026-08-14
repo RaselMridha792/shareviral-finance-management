@@ -15,7 +15,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { accounts, type Account } from "../../db/schema";
+import { accounts, transactions, type Account } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 
 export type AccountDto = Omit<Account, "deletedAt" | "entityId">;
@@ -51,28 +51,69 @@ export class AccountsService {
   }
 
   /**
-   * Current balance per account.
+   * Current balance per account: where it started, plus everything that moved.
    *
-   * Phase 2 has no ledger yet, so this is the opening balance. Phase 3 adds
-   * `+ sum(signed_amount)` over the transactions — the shape of the response
-   * stays the same so the dashboard does not change.
+   * This was a Phase 2 stub that returned the *opening* balance under the name
+   * `balance`, with a comment promising Phase 3 would add the movement. Phase 3
+   * came and went. It was reporting ৳40,000 for a petty cash tin holding
+   * ৳26,400, and understating the bank by ৳15.9 lakh — wrong money, from a
+   * live permissioned endpoint, presented as current.
+   *
+   * Three things were wrong and all three are fixed:
+   *
+   *  - the movement is added, voided rows excluded, matching the register and
+   *    the dashboard exactly;
+   *  - archived accounts are included, because money in a closed account is
+   *    still money and dropping it silently understates the total;
+   *  - the total sums only accounts held in the base currency. It used to add
+   *    a dollar-denominated card into a figure labelled BDT, which is wrong by
+   *    the exchange rate and reads as perfectly normal. Anything in another
+   *    currency is listed with its own, and left out of the total.
    */
   async balances() {
-    const rows = await this.list({ includeInactive: false });
-    const total = rows.reduce(
-      (sum, row) => sum + Number(row.openingBalance),
-      0,
-    );
+    const rows = await this.db.client
+      .select({
+        id: accounts.id,
+        name: accounts.name,
+        type: accounts.type,
+        currency: accounts.currency,
+        isActive: accounts.isActive,
+        opening: accounts.openingBalance,
+        moved: sql<string>`coalesce(sum(${transactions.signedAmount}) filter (where ${transactions.voidedAt} is null), 0)::text`,
+      })
+      .from(accounts)
+      .leftJoin(transactions, eq(transactions.accountId, accounts.id))
+      .where(isNull(accounts.deletedAt))
+      .groupBy(
+        accounts.id,
+        accounts.name,
+        accounts.type,
+        accounts.currency,
+        accounts.isActive,
+        accounts.openingBalance,
+      )
+      .orderBy(accounts.name);
+
+    const settings = await this.settings.get();
+    const base = settings.baseCurrency;
+
+    const balances = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      currency: row.currency,
+      isActive: row.isActive,
+      balance: (Number(row.opening) + Number(row.moved)).toFixed(2),
+    }));
+
+    const total = balances
+      .filter((row) => row.currency === base)
+      .reduce((sum, row) => sum + Number(row.balance), 0);
+
     return {
-      accounts: rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        type: row.type,
-        currency: row.currency,
-        balance: row.openingBalance,
-      })),
+      accounts: balances,
       total: total.toFixed(2),
-      currency: "BDT",
+      currency: base,
     };
   }
 

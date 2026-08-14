@@ -1391,15 +1391,28 @@ export class PdfService {
 
     header();
 
-    for (const row of block.rows) {
+    block.rows.forEach((row, index) => {
       const height = this.stackRowHeight(row);
-      // A row split across a page break is a row nobody can read.
-      if (doc.y + height > BODY_BOTTOM) {
+      /**
+       * A row split across a page break is a row nobody can read.
+       *
+       * The last row also reserves room for the total beneath it. The total
+       * breaks to a fresh sheet on its own if it does not fit, and a ledger
+       * ending near the foot of a page therefore put its closing balance
+       * alone on the next page — one figure above an otherwise empty sheet,
+       * which reads as a fault in the document rather than as pagination.
+       * Carrying the last entry over with it costs one row and keeps the
+       * balance attached to the line that produced it.
+       */
+      const isLast = index === block.rows.length - 1;
+      const needed = height + (isLast && block.total ? TOTAL_ROW : 0);
+
+      if (doc.y + needed > BODY_BOTTOM) {
         flow.next();
         header();
       }
       this.drawStackRow(doc, row, block.columns, offsets, widths, p, height);
-    }
+    });
 
     if (block.total) {
       if (doc.y + TOTAL_ROW > BODY_BOTTOM) {
@@ -2190,10 +2203,21 @@ export class PdfService {
     this.keepTogether(doc, rowHeight * 3);
     header();
 
-    for (const row of block.rows) {
-      // A row split across a page break is a row nobody can read. Start the
-      // next page and repeat the headings instead.
-      if (doc.y + rowHeight > doc.page.height - PAGE.margin - 14) {
+    block.rows.forEach((row, index) => {
+      /**
+       * A row split across a page break is a row nobody can read. Start the
+       * next page and repeat the headings instead.
+       *
+       * The last row reserves room for the total beneath it as well. The total
+       * is drawn after this loop with no fit check of its own, so without this
+       * a table ending near the foot of a page pushed its closing balance onto
+       * a sheet by itself — a page holding one figure and nothing else, which
+       * reads as a fault in the document rather than as pagination.
+       */
+      const isLast = index === block.rows.length - 1;
+      const needed = rowHeight + (isLast && block.total ? rowHeight + 5 : 0);
+
+      if (doc.y + needed > doc.page.height - PAGE.margin - 14) {
         doc.addPage();
         header();
       }
@@ -2218,7 +2242,7 @@ export class PdfService {
         x += widths[i];
       });
       doc.y = top + rowHeight;
-    }
+    });
 
     if (block.total) {
       const top = doc.y;

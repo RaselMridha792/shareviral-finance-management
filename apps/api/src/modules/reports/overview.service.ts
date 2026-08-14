@@ -27,6 +27,7 @@ import {
 import { FxService } from "../fx/fx.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
+import { TdsService } from "../tds/tds.service";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
@@ -49,6 +50,7 @@ export class OverviewService {
     private readonly db: DbService,
     private readonly settings: SettingsService,
     private readonly fx: FxService,
+    private readonly tds: TdsService,
   ) {}
 
   async build(query: OverviewQuery): Promise<OverviewReport> {
@@ -206,15 +208,40 @@ export class OverviewService {
         ...entry,
         amount: convert(entry.amount),
       })),
-      groups: groups.map((group) => ({
-        ...group,
-        usd: {
-          opening: usd(group.opening),
-          moneyIn: usd(group.moneyIn),
-          moneyOut: usd(group.moneyOut),
-          closing: usd(group.closing),
-        },
-      })),
+      groups: groups.map((group) => {
+        const opening = usd(group.opening);
+        const moneyIn = usd(group.moneyIn);
+        const moneyOut = usd(group.moneyOut);
+
+        return {
+          ...group,
+          usd: {
+            opening,
+            moneyIn,
+            moneyOut,
+            /**
+             * Derived from the other three, not converted on its own.
+             *
+             * Each conversion rounds to the paisa independently, so four
+             * separate divisions are not obliged to satisfy
+             * `opening + in − out = closing` — and at some rates they do not:
+             * 23,120.67 + 5,185.19 − 2,222.22 comes to 26,083.64 while
+             * dividing the taka closing gives 26,083.63. One paisa, on the
+             * four figures whose whole job is to read as a sentence that adds
+             * up. The taka closing is exact and stays exact; only its dollar
+             * translation is made to agree with the dollars above it.
+             */
+            closing:
+              opening !== null && moneyIn !== null && moneyOut !== null
+                ? (
+                    Number(opening) +
+                    Number(moneyIn) -
+                    Number(moneyOut)
+                  ).toFixed(2)
+                : usd(group.closing),
+          },
+        };
+      }),
       expense: {
         salaryPaid,
         toolsAndSubscriptions: toolsSpend,
@@ -348,26 +375,14 @@ export class OverviewService {
   /**
    * Held back and not yet handed to the treasury, all time.
    *
-   * Deliberately not scoped to the period. An unpaid obligation from March is
-   * still owed in August, and a figure that resets every month is one nobody
-   * chases.
+   * Delegated to `TdsService`, which is where the TDS screen's own figure comes
+   * from. This used to be a local copy that counted only vendor withholding
+   * against every challan including the salary ones, so it reported 0.00 while
+   * the TDS screen reported the real ৳10,800 — two screens disagreeing about
+   * one obligation. There is one implementation now.
    */
-  private async taxOutstanding(): Promise<string> {
-    const [withheld] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
-      })
-      .from(transactions)
-      .where(and(LIVE, eq(transactions.direction, "out")));
-
-    const [deposited] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
-      })
-      .from(tdsDeposits);
-
-    const owed = Number(withheld.total) - Number(deposited.total);
-    return (owed > 0 ? owed : 0).toFixed(2);
+  private taxOutstanding(): Promise<string> {
+    return this.tds.outstandingAllTime();
   }
 
   /**

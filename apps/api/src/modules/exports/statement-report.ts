@@ -153,6 +153,30 @@ export function buildStatementReport(
     statement.ledgers[1] ??
     null;
 
+  /**
+   * Every account, split by currency — not one of each.
+   *
+   * `bankLedger` and `cardLedger` above pick a single ledger each, which is
+   * fine for naming the two figures on the cover and nowhere else. The ledger
+   * pages used them directly, so with three accounts the third was simply
+   * never printed: Standard Chartered — the main account, holding ৳34,41,700
+   * and eight of the period's nine entries — was missing from the document,
+   * and page 4 showed the petty-cash tin's two rows with the rest of the page
+   * blank. A statement that silently omits an account is worse than no
+   * statement, because it looks complete.
+   *
+   * Ordinals run across both lists so the section numbers stay sequential
+   * however many accounts there are.
+   */
+  const bankLedgers = statement.ledgers.filter(
+    (ledger) => ledger.currency === base,
+  );
+  const otherLedgers = statement.ledgers.filter(
+    (ledger) => ledger.currency !== base,
+  );
+  const ordinalOf = (ledger: (typeof statement.ledgers)[number]) =>
+    String(statement.ledgers.indexOf(ledger) + 4).padStart(2, "0");
+
   return {
     title: `${company.name} — Financial Report — ${period.label}`,
     pages: [
@@ -285,7 +309,13 @@ export function buildStatementReport(
         { kind: "gap", height: 9 },
         {
           kind: "periodMark",
-          ordinal: period.ordinal,
+          // The mark draws the ordinal beside the label, and on a yearly
+          // statement the ordinal is literally "FY" while the label is
+          // "FY 2026-27" — printed together they read "FY  FY 2026-27".
+          // Dropped where the label already opens with it.
+          ordinal: period.label.startsWith(period.ordinal)
+            ? ""
+            : period.ordinal,
           label: period.label,
           right: `${reconciled ? "Reconciled" : "Draft"} · ${statement.lineItems} line items`,
         },
@@ -526,11 +556,14 @@ export function buildStatementReport(
   function ledgerPages(): PdfPage[] {
     const pages: PdfPage[] = [];
 
-    if (bankLedger) {
+    if (bankLedgers.length) {
       pages.push({
         ...sheet("Line by line", "Account ledgers · 01 / 01"),
         footer: {
-          left: `Account ledgers — ${bankLedger.name}`,
+          left:
+            bankLedgers.length === 1
+              ? `Account ledgers — ${bankLedgers[0].name}`
+              : "Account ledgers",
         },
         blocks: [
           { kind: "gap", height: 8 },
@@ -539,33 +572,38 @@ export function buildStatementReport(
           {
             kind: "lede",
             text:
-              `Line-by-line reconciliation of ${statement.ledgers.length === 1 ? "the bank account" : "both accounts"} ` +
+              `Line-by-line reconciliation of ${describeAccountCount(statement.ledgers.length)} ` +
               `for ${period.label}, from opening balance carried forward to closing position.`,
           },
           { kind: "gap", height: 12 },
-          {
-            kind: "sectionHead",
-            ordinal: "04",
-            title: bankLedger.name,
-            right: bankLedger.subtitle ?? "",
-          },
-          ledgerTable(bankLedger),
+          // Every taka account, not just the first. The paged engine flows
+          // these onto continuation sheets when they do not fit.
+          ...bankLedgers.flatMap((ledger): PdfPagedBlock[] => [
+            {
+              kind: "sectionHead",
+              ordinal: ordinalOf(ledger),
+              title: ledger.name,
+              right: ledger.subtitle ?? "",
+            },
+            ledgerTable(ledger),
+            { kind: "gap", height: 18 },
+          ]),
         ],
       });
     }
 
-    const cardBlocks: PdfPagedBlock[] = cardLedger
-      ? [
-          {
-            kind: "sectionHead",
-            ordinal: "05",
-            title: cardLedger.name,
-            right: cardLedger.subtitle ?? "",
-          },
-          ledgerTable(cardLedger),
-          { kind: "gap", height: 22 },
-        ]
-      : [];
+    const cardBlocks: PdfPagedBlock[] = otherLedgers.flatMap(
+      (ledger): PdfPagedBlock[] => [
+        {
+          kind: "sectionHead",
+          ordinal: ordinalOf(ledger),
+          title: ledger.name,
+          right: ledger.subtitle ?? "",
+        },
+        ledgerTable(ledger),
+        { kind: "gap", height: 22 },
+      ],
+    );
 
     const secondPageTitle = cardLedger
       ? `${isCard(cardLedger) ? "Card" : "Second"} ledger & notes`
@@ -899,4 +937,17 @@ function previousDay(isoDate: string): string {
     timeZone: "UTC",
   });
   return `${day} ${month} ${date.getUTCFullYear()}`;
+}
+
+/**
+ * "the bank account" · "both accounts" · "all three accounts".
+ *
+ * The lede said "both accounts" whenever there was more than one, so a
+ * three-account statement announced two and then printed three.
+ */
+function describeAccountCount(count: number): string {
+  if (count <= 1) return "the bank account";
+  if (count === 2) return "both accounts";
+  const words = ["", "", "two", "three", "four", "five", "six", "seven"];
+  return `all ${words[count] ?? String(count)} accounts`;
 }

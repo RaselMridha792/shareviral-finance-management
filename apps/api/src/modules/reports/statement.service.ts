@@ -27,12 +27,12 @@ import {
   categories,
   payrollLines,
   statements,
-  tdsDeposits,
   transactions,
   type Statement,
 } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
+import { TdsService } from "../tds/tds.service";
 import { TransactionsService } from "../transactions/transactions.service";
 
 /** Never count a voided row. It stays visible; it is not money. */
@@ -93,6 +93,7 @@ export class StatementService {
     private readonly fx: FxService,
     private readonly transactionsService: TransactionsService,
     private readonly audit: AuditService,
+    private readonly tds: TdsService,
   ) {}
 
   /* ---------------------------------------------------------------------- */
@@ -363,27 +364,15 @@ export class StatementService {
   /**
    * Withheld and not yet handed to the treasury, all time.
    *
-   * Deliberately not scoped to the period, and deliberately the same
-   * arithmetic as the overview's `taxOutstanding`: an unpaid obligation from
-   * March is still owed in August, and two screens quoting different figures
-   * for one liability is worse than either being wrong on its own.
+   * The comment here used to say "deliberately the same arithmetic as the
+   * overview's taxOutstanding", and it was — the same *wrong* arithmetic,
+   * copied. Both counted only vendor withholding while subtracting salary
+   * challans too, so both reported 0.00 against the TDS screen's real figure.
+   * Two identical copies of a rule is how they agree right up until one is
+   * fixed. It is one call now.
    */
-  private async taxOutstanding(): Promise<string> {
-    const [withheld] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
-      })
-      .from(transactions)
-      .where(and(LIVE, eq(transactions.direction, "out")));
-
-    const [deposited] = await this.db.client
-      .select({
-        total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
-      })
-      .from(tdsDeposits);
-
-    const owed = Number(withheld.total) - Number(deposited.total);
-    return (owed > 0 ? owed : 0).toFixed(2);
+  private taxOutstanding(): Promise<string> {
+    return this.tds.outstandingAllTime();
   }
 
   /**
@@ -491,20 +480,28 @@ function negate(value: Money2): Money2 {
 /**
  * The rate an entry's dollars come from.
  *
- * `usd_rate` first: the reference rate captured on the day the entry was made,
- * which is the only moment the right answer is actually known. A remittance
- * also carries `fx_rate` — what the bank truly converted at, and the very
- * arithmetic that produced the taka now sitting in the account — so on those
- * rows it is a recorded fact rather than a translation, and it is used before
- * the period is asked. Everything else falls back to the period's rate and is
- * marked estimated so the page can say which is which.
+ * `fx_rate` first, and the order matters. `fx_rate` is what the bank actually
+ * converted at — the very arithmetic that produced the taka now sitting in the
+ * account. `usd_rate` is the reference rate somebody noted on the day: useful
+ * where nothing was converted, but on a remittance it is a second opinion
+ * about a fact already settled.
+ *
+ * This read them the other way round, and it was the lone dissenter: the
+ * dashboard, the Cash-In screen and `FxService.fundingRateFor` all take
+ * `fxRate ?? usdRate`. On the July transfer, which carries both (118.00
+ * realised, 122.77 reference), the statement valued a $10,000 receipt at
+ * $9,611.47 while the dashboard called it $10,000 — the same money, on the
+ * headline line of the month, $388.53 apart.
+ *
+ * Everything else falls back to the period's rate and is marked estimated, so
+ * the page can say which figures are recorded and which are translated.
  */
 function moneyForEntry(row: RegisterRow, periodRate: string | null): Money2 {
+  if (row.fxRate && Number(row.fxRate) > 0) {
+    return money(row.amount, row.fxRate, false);
+  }
   if (row.usdRate && Number(row.usdRate) > 0) {
     return money(row.amount, row.usdRate, false);
-  }
-  if (row.originalCurrency === "USD" && row.fxRate && Number(row.fxRate) > 0) {
-    return money(row.amount, row.fxRate, false);
   }
   return money(row.amount, periodRate, true);
 }

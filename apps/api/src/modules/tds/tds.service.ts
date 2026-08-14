@@ -57,6 +57,65 @@ export class TdsService {
   /* ---------------------------------------------------------------------- */
 
   /**
+   * Withheld and not yet handed to the treasury, all time, in one figure.
+   *
+   * Both sides must be counted the same way, and that is what went wrong
+   * before this existed: the dashboard and the statement each kept their own
+   * copy which summed **only** `transactions.withheld_tax_amount` — vendor tax
+   * — and then subtracted **all** of `tds_deposits`, salary challans included.
+   * Deducting salary tax from the deposited side while never adding it to the
+   * withheld side made the figure negative, and the `max(0, …)` clamp turned
+   * that into a confident `0.00`. The dashboard read "nothing owed" while the
+   * TDS screen read ৳10,800 on the same data.
+   *
+   * Deliberately not scoped to a period: an unpaid obligation from March is
+   * still owed in August, and a figure that resets every month is one nobody
+   * chases.
+   *
+   * One method, called by both screens, so the two cannot drift again.
+   */
+  async outstandingAllTime(): Promise<string> {
+    const [salary] = await this.db.client
+      .select({
+        total: sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::text`,
+      })
+      .from(payrollLines)
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .where(FINALISED_OR_LATER);
+
+    const [vendor] = await this.db.client
+      .select({
+        total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.direction, "out"),
+          sql`${transactions.voidedAt} is null`,
+        ),
+      );
+
+    const [deposited] = await this.db.client
+      .select({
+        total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
+      })
+      .from(tdsDeposits)
+      .where(
+        // A challan whose ledger row was voided did not happen — the same rule
+        // the monthly figures use.
+        sql`not exists (
+          select 1 from ${transactions}
+          where ${transactions.id} = ${tdsDeposits.transactionId}
+            and ${transactions.voidedAt} is not null
+        )`,
+      );
+
+    const owed =
+      Number(salary.total) + Number(vendor.total) - Number(deposited.total);
+    return (owed > 0 ? owed : 0).toFixed(2);
+  }
+
+  /**
    * Salary tax comes from the payroll lines; vendor tax from the withheld
    * amounts on ledger rows. Deposits come from the challans. The gap is money
    * the company is holding on the treasury's behalf — the number that matters.
