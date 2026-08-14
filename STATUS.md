@@ -233,6 +233,8 @@ Phase 5 acceptance           HR payload has zero pay fields, net-only payout
 Phase 6 acceptance           44/44  June cliff, challan→ledger, quarterly dates
 Phase 7 acceptance           period/bank/funding figures, USD never mislabelled
 Phase 8 acceptance           audit redaction, book lock, restore refuses live db
+Restore drill                9/9  dump restored into a fresh database, the app
+                             started against it and signed in to
 User management              17/17  HR cannot self-promote, reset kills sessions
 Live site                    24/24  cookies, roles, CSRF, token renewal
 Assistant key                15/15  Super-Admin-only, sealed, never returned
@@ -341,6 +343,60 @@ create index if not exists ai_corrections_target_idx
 Nothing breaks without it: the read is wrapped so a missing table logs a
 warning and the assistant carries on with no past examples. It simply will not
 learn until the table exists.
+
+## The restore has been done (2026-08-14)
+
+Phase 8 said a documented restore must actually be performed before the phase
+closed. It has been, against the live database's own dump:
+
+```
+pg_dump the live database              672 KB, 23 tables, all 21 transactions
+restore into a fresh Postgres          0 errors
+start the app against the restored copy
+sign in to it                          superadmin@shareviral.cash
+read the figures back through the app  every balance to the paisa,
+                                       July paid / August draft,
+                                       1,024 audit entries, 25 people,
+                                       signed_amount still generated,
+                                       265 constraints
+```
+
+Nothing on Neon was touched. The dump is read-only; the restore went into a
+throwaway Postgres created for the drill on a spare port and deleted after,
+along with the dump — a dump is a full copy of everybody's password hashes and
+the sealed assistant key, and it does not belong in a temp folder afterwards.
+
+Two things the drill establishes that a green backup log cannot. **The generated
+column survived**: `signed_amount` is what every balance in the app is computed
+from, and a dump that flattened it to ordinary data would restore figures that
+look right and stop updating. And **somebody can get in**: a restored database
+whose passwords nobody remembers is not usable, so the drill sets a password on
+the restored copy — which is what a real recovery has to do — and signs in.
+
+### Repeating it
+
+`deploy/restore.sh` is written for the VPS, where the database is a container
+it can reach through `docker compose`. Today the database is Neon, so the drill
+runs by hand:
+
+```bash
+# 1. Dump. Read-only; safe against the live database at any time.
+pg_dump --dbname="$DATABASE_URL_UNPOOLED" --clean --if-exists --no-owner \
+        --no-privileges -f sfm.sql
+
+# 2. Restore somewhere that is NOT production. A scratch server, a Neon branch,
+#    anything but the database you are trying to protect.
+createdb -h localhost -p 5599 -U postgres sfm_restore
+psql -h localhost -p 5599 -U postgres -d sfm_restore -v ON_ERROR_STOP=on -f sfm.sql
+
+# 3. Point the API at it and sign in. Steps 1 and 2 passing prove nothing on
+#    their own — a restore nobody has signed in to is not verified.
+DATABASE_URL=postgres://…/sfm_restore PORT=4188 npm run start -w @finance/api
+
+# 4. Delete the copy and the dump.
+```
+
+Do this again after any schema change, and delete the dump when finished.
 
 ## Next: your data
 
