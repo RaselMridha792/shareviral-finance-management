@@ -24,6 +24,25 @@ const envSchema = z.object({
     .default("dev-refresh-secret-change-me"),
   JWT_ACCESS_TTL: z.string().default("15m"),
   JWT_REFRESH_TTL: z.string().default("7d"),
+
+  /**
+   * Seals the stored Anthropic key. Declared here or it is thrown away.
+   *
+   * This schema is not just a check — ConfigModule writes what it returns back
+   * into `process.env`, and `z.object` drops keys it does not know. So
+   * `SECRET_ENCRYPTION_KEY` set in a `.env` file never reached the code that
+   * reads it: `secret-box` fell back to `JWT_REFRESH_SECRET` and sealed the key
+   * with that instead, silently. Rotating the JWT secret then orphaned it.
+   *
+   * A real environment variable — Render, Docker, the shell — survives,
+   * because it is already in `process.env` before this runs. That is why the
+   * same deployment worked in production and not locally, and why the symptom
+   * was "no API key has been set" when one plainly had been.
+   */
+  SECRET_ENCRYPTION_KEY: z.string().min(16).optional(),
+
+  /** The fallback the assistant uses when Settings holds no key. */
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

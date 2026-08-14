@@ -30,6 +30,7 @@ import {
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
+import { allFieldReferences } from "./field-reference";
 import { hint, open, seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -583,30 +584,55 @@ ${target ? `They are recording: ${target}. Stay on it unless they clearly change
 
 ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(draft, null, 2)}\nKeep these unless they correct one.` : ""}
 
-REQUIRED FIELDS
+EVERY FIELD, AND NOTHING ELSE
 
-transaction_out / transaction_in
-  txnDate       YYYY-MM-DD. "aaj" is today, "kal" is yesterday for a past
-                payment. Never guess a date they have not implied.
-  amount        digits only, two decimals, no separators: "8500.00"
-  description   what it was for, in their words
-  categoryId    the exact category NAME from the list below; the app resolves it
-  accountName   which account it moved through, if they said
+This list is generated from the same schemas the API validates with, so it is
+exactly what will be accepted. Two rules follow from that, and both matter:
 
-transaction_out may also have: billAmount, withheldTaxAmount
-  (tax withheld only applies to money going out — never to money coming in)
-  Never ask who was paid as a separate field. The company keeps no supplier
-  list and the form no longer collects one — who it went to belongs in the
-  description, in their own words.
+  * Put a key in 'draft' ONLY if it appears below for this target. A field that
+    is not here is rejected outright when the entry is saved — there is no
+    'currencyCode', no 'vendorName', no 'paidTo'. If you have information with
+    nowhere to go, put it in 'description' or 'notes'.
+  * Ask for every REQUIRED field before you finish. List the ones you still
+    need in 'missingFields'.
 
-vendor: name. May also have: type, etin, bin
-team_member: fullName, employeeCode, joinedOn. Do not ask about pay. A joining
-  salary is on the record but HR types it on the form themselves, and what
-  anybody is paid now lives somewhere you cannot reach at all. If somebody
-  offers a figure, say it belongs on the team form and leave it out of the
-  draft.
-tds_deposit: challanNumber, challanDate, depositDate, amount, periodYear,
-  periodMonth
+${allFieldReferences()}
+
+NEVER INVENT A VALUE
+If you do not know something, leave the key OUT of 'draft' entirely and name it
+in 'missingFields'. Do not guess, do not pick the likeliest account, and never
+write a placeholder like "<UNKNOWN>" or "N/A" — a guessed account name resolves
+to a real account and files the money in the wrong place, which reads as
+perfectly normal afterwards. A key you have omitted is a question you will ask;
+a key you have guessed is an error nobody will catch.
+
+Never list a field in 'missingFields' and also give it a value. If it has a
+value it is not missing.
+
+EVERY VALUE IS A STRING
+Amounts, dates and rates go in as text — "10000.00", not 10000. A bare number
+is rejected when the entry is saved.
+
+MONEY IS ALWAYS TAKA
+'amount' is the taka that moved, always — never a foreign figure. If somebody
+says "10000 dollar ashche", the amount is NOT 10000: that is dollars, and
+booking it as taka understates the entry more than a hundredfold. Ask what
+landed in taka, put the dollars in 'originalAmount' with 'originalCurrency'
+"USD", and the rate in 'usdRate' if they know it.
+
+DATES
+"aaj" is today, "kal" is yesterday for a past payment. Never guess a date
+nobody implied — ask.
+
+A FEW THINGS THE SCHEMA CANNOT SAY
+  * Tax withheld applies only to money going out, never to money coming in.
+  * Never ask who was paid as a separate field. The company keeps no supplier
+    list and the form does not collect one — who it went to belongs in the
+    description, in their own words.
+  * Do not ask about pay on a team member. A joining salary is on the record
+    but HR types it on the form themselves, and what anybody is paid now lives
+    somewhere you cannot reach. If somebody offers a figure, say it belongs on
+    the team form and leave it out of the draft.
 
 THE CATEGORIES THAT EXIST (use one of these names exactly, or leave it out)
 ${context.categories.join("\n") || "(none set up yet)"}
@@ -633,14 +659,39 @@ null, and write a one-sentence summary for them to check.`;
         ? (raw.target as AiTarget)
         : null;
 
-    const draft =
+    const missingFields = Array.isArray(raw.missingFields)
+      ? raw.missingFields.filter((f): f is string => typeof f === "string")
+      : [];
+
+    /**
+     * The draft, with everything the model did not actually know taken out.
+     *
+     * The prompt tells it to omit what it does not know and never to write a
+     * placeholder. It mostly obeys and sometimes does not — it has produced
+     * `"<UNKNOWN>"` as an account name, and listed a field in `missingFields`
+     * while also giving it a value. Neither is harmless: `resolve()` turns an
+     * account *name* into an id, so a plausible guess files real money in the
+     * wrong account and reads as normal ever afterwards.
+     *
+     * So the rule is enforced here rather than requested. A model that ignores
+     * the instruction now produces an empty field and a question, which is the
+     * behaviour the instruction was asking for.
+     */
+    const rawDraft =
       raw.draft && typeof raw.draft === "object" && !Array.isArray(raw.draft)
         ? (raw.draft as Record<string, unknown>)
         : {};
 
-    const missingFields = Array.isArray(raw.missingFields)
-      ? raw.missingFields.filter((f): f is string => typeof f === "string")
-      : [];
+    const stillMissing = new Set(missingFields);
+    const draft: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(rawDraft)) {
+      // It cannot be both answered and outstanding. The question wins: a value
+      // it is unsure enough to also list as missing is a value it invented.
+      if (stillMissing.has(key)) continue;
+      if (isPlaceholder(value)) continue;
+      draft[key] = value;
+    }
 
     return {
       target,
@@ -766,3 +817,23 @@ const REPLY_SCHEMA = {
   },
   required: ["draft", "missingFields"],
 };
+
+/**
+ * A value that says "I do not know" while looking like an answer.
+ *
+ * Angle-bracket placeholders are what a model reaches for when a schema says a
+ * field is required and it has nothing to put there. Blank strings are the
+ * same thing, quieter.
+ */
+function isPlaceholder(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== "string") return false;
+
+  const text = value.trim();
+  if (!text) return true;
+  if (text.startsWith("<") && text.endsWith(">")) return true;
+
+  return ["unknown", "n/a", "na", "none", "null", "tbd", "-", "?"].includes(
+    text.toLowerCase(),
+  );
+}
