@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -14,6 +14,8 @@ const inputClass =
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  /** Typing a password nobody can read is how a typo becomes "wrong password". */
+  const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
@@ -68,14 +70,39 @@ export function LoginForm({ next }: { next: string }) {
 
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Password</span>
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            className={inputClass}
-            aria-invalid={Boolean(fieldErrors.password)}
-          />
+          {/*
+            The eye sits inside the field rather than beside it, so the box
+            keeps its full width and the control is where the typing is.
+            Padding on the right leaves room for it — without that the last
+            characters of a long password disappear under the button.
+          */}
+          <div className="relative">
+            <input
+              name="password"
+              type={visible ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              className={`${inputClass} pr-11`}
+              aria-invalid={Boolean(fieldErrors.password)}
+            />
+            <button
+              type="button"
+              onClick={() => setVisible(!visible)}
+              // Not in the tab order: tabbing from the password box should
+              // reach Sign in, which is what somebody typing expects.
+              tabIndex={-1}
+              aria-label={visible ? "Hide the password" : "Show the password"}
+              aria-pressed={visible}
+              title={visible ? "Hide the password" : "Show the password"}
+              className="absolute inset-y-0 right-0 flex cursor-pointer items-center rounded-r-lg px-3 text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {visible ? (
+                <EyeOff className="size-4" />
+              ) : (
+                <Eye className="size-4" />
+              )}
+            </button>
+          </div>
           <FieldError messages={fieldErrors.password} />
         </label>
 
