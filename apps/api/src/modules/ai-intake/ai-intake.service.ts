@@ -332,7 +332,38 @@ export class AiIntakeService {
     input: AiIntakeRequest,
     actor: AuthenticatedUser,
   ): Promise<AiIntakeReply> {
-    const reply = await this.think(input, actor);
+    /**
+     * Anything Anthropic refuses, said in words rather than as a 500.
+     *
+     * `setKey` has translated these since the beginning; the turn itself never
+     * did, so every refusal from their end — an unverified account, a spent
+     * balance, a rate limit — reached the person as "Internal server error".
+     * That reads as *this app is broken*, and sends them looking in exactly
+     * the wrong place. The cause is nearly always something they can fix in a
+     * couple of minutes, and only if they are told what it is.
+     */
+    const reply = await this.think(input, actor).catch((error: unknown) => {
+      if (!(error instanceof Anthropic.APIError)) throw error;
+
+      const detail =
+        error.status === 401
+          ? "Anthropic rejected the API key. A Super Admin can replace it under Settings."
+          : error.status === 403 ||
+              /identity verification/i.test(error.message ?? "")
+            ? "Anthropic needs the account verified before it will answer. Whoever owns the key can do that at console.anthropic.com; nothing needs changing here."
+            : error.status === 429
+              ? "The Anthropic account is over its rate limit, or has no credit left."
+              : error.status >= 500
+                ? "Anthropic is not answering at the moment. Try again shortly."
+                : `Anthropic said: ${error.message}`;
+
+      this.log.warn(
+        `Anthropic refused a turn (${error.status}): ${error.message}`,
+      );
+      throw new ServiceUnavailableException(
+        `${detail} The ordinary forms all still work.`,
+      );
+    });
 
     // Written after the answer, not before: a turn that failed leaves no
     // half-conversation in the history, and a question that was never answered
@@ -386,7 +417,21 @@ export class AiIntakeService {
       ? await this.attachments.dto(input.attachmentId, actor).catch(() => null)
       : null;
 
-    const messages: Anthropic.MessageParam[] = input.messages.map((m) => ({
+    /**
+     * The recent part of the conversation, oldest dropped rather than refused.
+     *
+     * The schema allows two hundred; this keeps the last sixty in the request
+     * itself. A long conversation stays useful without growing the bill every
+     * turn, and — the point — it never stops working. It has to start on a
+     * `user` message: the API rejects a history that opens on `assistant`,
+     * which is exactly what a naive slice produces half the time.
+     */
+    const recent = input.messages.slice(-60);
+    while (recent.length && recent[0].role !== "user") recent.shift();
+
+    const messages: Anthropic.MessageParam[] = (
+      recent.length ? recent : input.messages.slice(-1)
+    ).map((m) => ({
       role: m.role,
       content: m.content,
     }));
@@ -766,7 +811,7 @@ Send back ONLY the name — the part before the dash. "Electricity", never
 ${context.categories.join("\n") || "(none set up yet)"}
 
 ACCOUNTS: ${context.accounts.join(", ") || "(none)"}
-TOOLS AND SUBSCRIPTIONS ON FILE: ${context.vendors.slice(0, 60).join(", ") || "(none)"}
+TOOLS AND SUBSCRIPTIONS ON FILE: ${context.vendors.join(", ") || "(none)"}
 These are for recognising what somebody is talking about — never to fill in a
 field on a transaction. A payment records who it went to in its description.
 

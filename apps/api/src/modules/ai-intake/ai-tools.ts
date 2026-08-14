@@ -55,7 +55,7 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "find_transactions",
     description:
-      "Search the ledger. Use for any question about what was spent, received, or paid to someone. Returns up to 25 entries, newest first.",
+      "Search the ledger. Use for any question about what was spent, received, or paid to someone. Returns up to 100 entries, newest first.",
     requires: ["transactions.read"],
     input_schema: {
       type: "object",
@@ -232,7 +232,7 @@ export class AiToolsService {
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .where(and(...where))
       .orderBy(desc(transactions.txnDate), desc(transactions.createdAt))
-      .limit(25);
+      .limit(100);
 
     if (!rows.length) return { ok: true, text: "No entries match that." };
 
@@ -329,7 +329,7 @@ export class AiToolsService {
       )
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
-      .limit(6);
+      .limit(24);
 
     const net = Number(totals.moneyIn) - Number(totals.moneyOut);
 
@@ -421,7 +421,7 @@ export class AiToolsService {
         })
         .from(incomeTaxRecords)
         .orderBy(incomeTaxRecords.dueDate)
-        .limit(10);
+        .limit(24);
 
       if (records.length) {
         lines.push("", "Company income tax:");
@@ -460,7 +460,7 @@ export class AiToolsService {
         })
         .from(vendors)
         .where(and(ilike(vendors.name, term), isNull(vendors.deletedAt)))
-        .limit(5);
+        .limit(25);
       for (const r of rows) {
         found.push(
           `Vendor: ${r.name} (${r.type})${r.etin ? `, e-TIN ${r.etin}` : ""}`,
@@ -484,7 +484,7 @@ export class AiToolsService {
         .where(
           and(ilike(teamMembers.fullName, term), isNull(teamMembers.deletedAt)),
         )
-        .limit(5);
+        .limit(25);
       for (const r of rows) {
         found.push(
           `Person: ${r.name} — ${r.designation ?? "no designation"}${r.department ? `, ${r.department}` : ""}, ${r.engagement}, joined ${r.joined}, ${r.status}`,

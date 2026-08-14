@@ -136,12 +136,29 @@ export type UpdateAiSettingsInput = z.infer<typeof updateAiSettingsSchema>;
 
 export const aiMessageSchema = z.strictObject({
   role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(4000),
+  /**
+   * Was 4,000 characters, which is about a page. People paste more than a page
+   * — a block of statement lines, a list of names, a mail from the accountant
+   * — and got "Validation failed" for doing the obvious thing.
+   */
+  content: z.string().trim().min(1).max(40_000),
 });
 export type AiMessage = z.infer<typeof aiMessageSchema>;
 
 export const aiIntakeRequestSchema = z.strictObject({
-  messages: z.array(aiMessageSchema).min(1).max(40),
+  /**
+   * The whole conversation, resent each turn.
+   *
+   * Was capped at forty, and the cap was a wall rather than a limit: the
+   * forty-first message did not trim the oldest or warn anybody, it failed the
+   * request outright, so a conversation that was going well simply stopped
+   * working and the person could not tell why. Twenty exchanges is not a long
+   * conversation about a set of books.
+   *
+   * Two hundred, and the server drops the oldest beyond that rather than
+   * refusing — a trimmed opening is a smaller loss than a dead conversation.
+   */
+  messages: z.array(aiMessageSchema).min(1).max(200),
   /** Carried between turns so the model does not have to re-derive it. */
   target: aiTargetSchema.optional(),
   draft: z.record(z.string(), z.unknown()).optional(),
