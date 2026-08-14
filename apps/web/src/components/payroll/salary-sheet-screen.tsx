@@ -200,7 +200,6 @@ export function SalarySheetScreen({
             <table className="table-data min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
-                  <Th className="w-20">Code</Th>
                   <Th>Name</Th>
                   <Th className="w-28 text-right">Gross</Th>
                   <Th className="w-28 text-right">Bonus</Th>
@@ -287,7 +286,6 @@ function LineRow({
 
   return (
     <tr className={cn("row-finance", line.isPaid && "bg-positive/5")}>
-      <td className="num px-4 py-2 text-muted-foreground">{line.employeeCode}</td>
       <td className="px-4 py-2">
         <span className="font-medium">{line.fullName}</span>
         <span className="block text-xs text-muted-foreground">

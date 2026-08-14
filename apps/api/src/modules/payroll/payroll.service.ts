@@ -107,7 +107,6 @@ export class PayrollService {
       .select({
         id: payrollLines.id,
         teamMemberId: payrollLines.teamMemberId,
-        employeeCode: teamMembers.employeeCode,
         fullName: teamMembers.fullName,
         engagementType: teamMembers.engagementType,
         grossAmount: payrollLines.grossAmount,
@@ -130,7 +129,7 @@ export class PayrollService {
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
       .where(eq(payrollLines.payrollRunId, id))
-      .orderBy(asc(teamMembers.employeeCode));
+      .orderBy(asc(teamMembers.fullName));
 
     return { run, lines };
   }
@@ -625,7 +624,6 @@ export class PayrollService {
         snapshotBankAccount: payrollLines.snapshotBankAccount,
         snapshotEtin: payrollLines.snapshotEtin,
         remarks: payrollLines.remarks,
-        employeeCode: teamMembers.employeeCode,
         fullName: teamMembers.fullName,
         runId: payrollRuns.id,
         runLabel: payrollRuns.label,

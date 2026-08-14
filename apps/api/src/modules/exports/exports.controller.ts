@@ -455,13 +455,6 @@ export class ExportsController {
       ],
       columns: [
         {
-          header: "Code",
-          key: "code",
-          kind: "text",
-          width: 12,
-          value: (r) => r.employeeCode,
-        },
-        {
           header: "Name",
           key: "name",
           kind: "text",
@@ -638,13 +631,6 @@ export class ExportsController {
         `${page.total} people · exported ${today}`,
       ],
       columns: [
-        {
-          header: "Code",
-          key: "code",
-          kind: "text",
-          width: 12,
-          value: (r) => r.employeeCode,
-        },
         {
           header: "Name",
           key: "name",

@@ -64,7 +64,6 @@ export const teamMembers = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     entityId: uuid("entity_id"),
 
-    employeeCode: text("employee_code").notNull(),
     fullName: text("full_name").notNull(),
     engagementType: engagementTypeEnum("engagement_type")
       .notNull()
@@ -184,10 +183,14 @@ export const teamMembers = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("team_members_code_idx").on(
-      entityKey(t.entityId),
-      sql`lower(${t.employeeCode})`,
-    ),
+    /**
+     * No uniqueness rule here any more.
+     *
+     * The one that was here was on the employee code, which no longer exists.
+     * Nothing else on a person is safely unique: two people can share a name,
+     * and phone, NID and email are all optional because HR does not have them
+     * on the day somebody joins.
+     */
     index("team_members_status_idx").on(t.status, t.engagementType),
     index("team_members_name_idx").on(t.fullName),
   ],

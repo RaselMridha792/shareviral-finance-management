@@ -30,7 +30,6 @@ import { apiFetch } from "./api-client";
  */
 export type TeamMemberDto = {
   id: string;
-  employeeCode: string;
   fullName: string;
   engagementType: EngagementType;
   department: string | null;
@@ -114,7 +113,6 @@ export type PayrollRunDto = {
 export type PayrollLineDto = {
   id: string;
   teamMemberId: string;
-  employeeCode: string;
   fullName: string;
   engagementType: EngagementType;
   grossAmount: string;

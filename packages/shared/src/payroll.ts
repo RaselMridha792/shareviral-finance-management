@@ -149,8 +149,19 @@ export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
  * not silently ignored here, it is rejected. `strictObject` is what makes
  * "we removed that" true rather than a claim about the form.
  */
+/**
+ * No employee code.
+ *
+ * There was one, required and unique, and the company does not have such a
+ * thing: the staff sheet has nineteen columns and none of them is a code. So
+ * every import and every new joiner needed a code invented on the spot —
+ * SV-001, SV-002 — which is a made-up identifier that then looks official on a
+ * payslip and in an export, and which nobody could reconcile against anything.
+ *
+ * A required field nobody has an answer for is a field people invent an answer
+ * for. People are identified here by name, and by the row itself.
+ */
 export const createTeamMemberSchema = z.strictObject({
-  employeeCode: z.string().trim().min(1, "Give them a code").max(20),
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
   engagementType: engagementTypeSchema.default("employee"),
   department: optionalText(60),

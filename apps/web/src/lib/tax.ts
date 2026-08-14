@@ -77,7 +77,6 @@ export type UnallocatedDto = {
   salaryLines: Array<{
     id: string;
     fullName: string;
-    employeeCode: string;
     tdsAmount: string;
   }>;
   vendorPayments: Array<{

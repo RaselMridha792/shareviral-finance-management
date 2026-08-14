@@ -473,7 +473,6 @@ export class AiToolsService {
       // from this tool to a salary figure, whatever the model asks for.
       const rows = await this.db.client
         .select({
-          code: teamMembers.employeeCode,
           name: teamMembers.fullName,
           designation: teamMembers.designation,
           department: teamMembers.department,
@@ -488,7 +487,7 @@ export class AiToolsService {
         .limit(5);
       for (const r of rows) {
         found.push(
-          `Person: ${r.name} (${r.code}) — ${r.designation ?? "no designation"}${r.department ? `, ${r.department}` : ""}, ${r.engagement}, joined ${r.joined}, ${r.status}`,
+          `Person: ${r.name} — ${r.designation ?? "no designation"}${r.department ? `, ${r.department}` : ""}, ${r.engagement}, joined ${r.joined}, ${r.status}`,
         );
       }
     }

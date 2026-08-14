@@ -123,9 +123,6 @@ export function TeamMemberScreen({
               .join(" · ") || ENGAGEMENT_LABELS[member.engagementType]}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="num text-xs text-muted-foreground">
-              {member.employeeCode}
-            </span>
             <Badge tone={member.status === "active" ? "positive" : "neutral"}>
               {EMPLOYMENT_STATUS_LABELS[member.status]}
             </Badge>
@@ -223,7 +220,6 @@ export function TeamMemberScreen({
         <Card>
           <CardHeader title="Record" />
           <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="Employee code" mono value={member.employeeCode} />
             <Row
               label="Engaged as"
               value={ENGAGEMENT_LABELS[member.engagementType]}

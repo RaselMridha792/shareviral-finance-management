@@ -189,7 +189,6 @@ function Section({
           <table className="table-data min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <Th className="w-24">Code</Th>
                 <Th>Name</Th>
                 <Th className="w-40">Designation</Th>
                 <Th className="w-32">Department</Th>
@@ -205,9 +204,6 @@ function Section({
                   key={member.id}
                   className="row-finance hover:bg-surface-muted/50"
                 >
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {member.employeeCode}
-                  </td>
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/team/${member.id}`}

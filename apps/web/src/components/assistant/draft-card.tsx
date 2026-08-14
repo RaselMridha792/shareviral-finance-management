@@ -19,7 +19,6 @@ export const FIELD_LABELS: Record<string, string> = {
   billAmount: "Gross bill",
   withheldTaxAmount: "Tax withheld",
   fullName: "Name",
-  employeeCode: "Employee code",
   joinedOn: "Joined on",
   challanNumber: "Challan number",
   challanDate: "Challan date",

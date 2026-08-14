@@ -386,7 +386,6 @@ async function load() {
     const [member] = await db
       .insert(teamMembers)
       .values({
-        employeeCode: code,
         fullName: name,
         engagementType: "employee",
         department: dept,
@@ -420,7 +419,6 @@ async function load() {
   await db
     .insert(teamMembers)
     .values({
-      employeeCode: "SV-C01",
       fullName: "Arif Chowdhury",
       engagementType: "contractor",
       designation: "Video Editor",

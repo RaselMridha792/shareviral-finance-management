@@ -67,7 +67,6 @@ export function TeamMemberForm({
     // an update is partial, so whatever was typed in before this change stays
     // where it is rather than being blanked on the next save.
     const payload = {
-      employeeCode: text("employeeCode"),
       fullName: text("fullName"),
       engagementType: text("engagementType"),
       department: text("department"),
@@ -132,15 +131,6 @@ export function TeamMemberForm({
     >
       <form id="member-form" onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Code" required error={fieldErrors.employeeCode}>
-            <Input
-              name="employeeCode"
-              required
-              className="num"
-              placeholder="SV-001"
-              defaultValue={member?.employeeCode}
-            />
-          </Field>
           <Field label="Type" required>
             <Select
               name="engagementType"

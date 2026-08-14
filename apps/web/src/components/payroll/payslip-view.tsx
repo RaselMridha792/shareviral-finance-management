@@ -83,7 +83,6 @@ export function PayslipView({
 
         <section className="grid gap-x-8 gap-y-2 border-b border-border py-5 text-sm sm:grid-cols-2">
           <Line label="Name" value={payslip.fullName} />
-          <Line label="Employee code" value={payslip.employeeCode} mono />
           <Line label="Designation" value={payslip.snapshotDesignation ?? "—"} />
           <Line label="Department" value={payslip.snapshotDepartment ?? "—"} />
           <Line label="e-TIN" value={payslip.snapshotEtin ?? "—"} mono />

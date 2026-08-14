@@ -32,7 +32,6 @@ import { compensationHistory, teamMembers } from "../../db/schema";
  */
 export type TeamMemberDto = {
   id: string;
-  employeeCode: string;
   fullName: string;
   engagementType: "employee" | "contractor";
   department: string | null;
@@ -117,7 +116,6 @@ export class TeamMembersService {
       const term = `%${query.q}%`;
       const match = or(
         ilike(teamMembers.fullName, term),
-        ilike(teamMembers.employeeCode, term),
         ilike(teamMembers.designation, term),
         ilike(teamMembers.phone, term),
       );
@@ -132,7 +130,7 @@ export class TeamMembersService {
         .select(projection)
         .from(teamMembers)
         .where(where)
-        .orderBy(asc(teamMembers.employeeCode))
+        .orderBy(asc(teamMembers.fullName))
         .limit(query.pageSize)
         .offset(offset),
       this.db.client.select({ total: count() }).from(teamMembers).where(where),
@@ -166,12 +164,10 @@ export class TeamMembersService {
   }
 
   async create(input: CreateTeamMemberInput, actor: AuthenticatedUser) {
-    await this.assertCodeFree(input.employeeCode);
-
     return this.audit.mutate({
       action: "create",
       entityTable: "team_members",
-      summary: `Added ${input.fullName} (${input.employeeCode}) as ${input.engagementType}`,
+      summary: `Added ${input.fullName} as ${input.engagementType}`,
       module: "team",
       read: () => Promise.resolve(undefined),
       run: async (tx) => {
@@ -190,13 +186,6 @@ export class TeamMembersService {
     actor: AuthenticatedUser,
   ) {
     const existing = await this.findOne(id);
-
-    if (
-      input.employeeCode &&
-      input.employeeCode.toLowerCase() !== existing.employeeCode.toLowerCase()
-    ) {
-      await this.assertCodeFree(input.employeeCode, id);
-    }
 
     return this.audit.mutate({
       action: "update",
@@ -335,31 +324,10 @@ export class TeamMembersService {
       throw new NotFoundException("No such resource");
     }
   }
-
-  private async assertCodeFree(code: string, exceptId?: string) {
-    const [clash] = await this.db.client
-      .select({ id: teamMembers.id })
-      .from(teamMembers)
-      .where(
-        and(
-          sql`lower(${teamMembers.employeeCode}) = ${code.toLowerCase()}`,
-          isNull(teamMembers.deletedAt),
-        ),
-      )
-      .limit(1);
-
-    if (clash && clash.id !== exceptId) {
-      throw new BadRequestException({
-        message: "Validation failed",
-        errors: { employeeCode: ["That code is already used"] },
-      });
-    }
-  }
 }
 
 const projection = {
   id: teamMembers.id,
-  employeeCode: teamMembers.employeeCode,
   fullName: teamMembers.fullName,
   engagementType: teamMembers.engagementType,
   department: teamMembers.department,
@@ -442,5 +410,5 @@ function describeUpdate(
     parts.push(`designation → ${input.designation}`);
   }
   const detail = parts.length ? parts.join(", ") : "details updated";
-  return `${existing.fullName} (${existing.employeeCode}): ${detail}`;
+  return `${existing.fullName}: ${detail}`;
 }

@@ -544,7 +544,6 @@ export class TdsService {
       .select({
         id: payrollLines.id,
         fullName: teamMembers.fullName,
-        employeeCode: teamMembers.employeeCode,
         tdsAmount: payrollLines.tdsAmount,
       })
       .from(payrollLines)
