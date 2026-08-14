@@ -468,9 +468,32 @@ export class PayrollService {
             status: "draft",
             finalizedAt: null,
             finalizedBy: null,
+            paymentDate: null,
+            accountId: null,
             updatedBy: actor.id,
           })
           .where(eq(payrollRuns.id, runId));
+
+        /**
+         * The lines have to forget the payment too.
+         *
+         * Reopening only moved the run's status and left every line flagged
+         * `is_paid`, so the run came back as a draft that could never be paid
+         * again: `pay` counts the unpaid lines, found none, and answered
+         * "Everyone on this run has been paid." Correct a salary, finalise,
+         * and the money simply would not go out — with no way forward from
+         * the screen.
+         *
+         * It is safe to clear here precisely because of the guard above: the
+         * run reaches this point only when no live ledger entry is left, which
+         * means the payment has been taken back. Saying so on the lines is
+         * recording what is already true, and the same reasoning covers the
+         * run's own payment date and account.
+         */
+        await tx
+          .update(payrollLines)
+          .set({ isPaid: false, paidOn: null })
+          .where(eq(payrollLines.payrollRunId, runId));
       },
     });
 

@@ -24,7 +24,9 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:check": "tsx src/db/check.ts",
     "db:seed-categories": "tsx src/db/seed-categories.ts",
-    "db:demo": "tsx src/db/seed-demo.ts"
+    "db:demo": "tsx src/db/seed-demo.ts",
+    "test:integration": "node test/integration/run.mjs",
+    "test:reset": "node test/integration/reset.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

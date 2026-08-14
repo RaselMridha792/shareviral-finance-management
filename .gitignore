@@ -41,3 +41,11 @@ Thumbs.db
 deploy/.env
 deploy/nginx/certs/
 deploy/backups/
+
+# Test artefacts: minted role tokens and browser screenshots.
+# Tokens are written at the start of a run and deleted at the end; if a run is
+# interrupted they can linger, and a signed-in token does not belong in git.
+apps/api/test/integration/roles.env
+apps/web/test/browser/roles.env
+apps/web/test/browser/shots/
+apps/api/test/integration/*.xlsx

@@ -224,7 +224,7 @@ Screens          every route in 3 roles · 223 of 226 money strings on screen
 
 ```
 typecheck / lint / build     clean across all three workspaces
-unit tests                   83 pass
+unit tests                   154 pass
 Phase 1 acceptance           15/15  roles, HR 403 from curl, token reuse
 Phase 2 acceptance           21/21  category depth, permissions, book lock
 Phase 3 acceptance           balance matches to the paisa, voids excluded
@@ -242,8 +242,80 @@ Production audit             71 claims across 5 lenses, 25 confirmed, all fixed
 Page render sweep            every route, as Super Admin, CEO and HR
 ```
 
-The scripts live in the session scratchpad, not the repo — they are throwaway
-checks, not a test suite.
+## The test suite (2026-08-14)
+
+The checks above were throwaway scripts in a scratchpad. The ones worth keeping
+now live in the repo and run on command:
+
+```
+npm test                 154 unit tests — money, periods, deadlines, dates,
+                         permissions, subscriptions
+npm run test:integration 262 checks across 9 suites, against the real database
+npm run test:browser     20 checks — 14 screens × 4 widths × 2 themes
+npm run test:all         all three, in that order
+```
+
+`test:integration` boots the API itself on a port the operating system says is
+free, signs in as each of the five roles, and runs:
+
+| suite | what it holds the app to |
+|---|---|
+| 01 money tie | the register equals the bank to the paisa |
+| 02 ledger, payroll, audit | before/after on every money write |
+| 03 permissions | 113 checks — every role against every endpoint |
+| 04 exports | a download is exactly the filtered view |
+| 05 FX | one rate governs every screen |
+| 06 periods | both financial years, and 30 June / 1 July between them |
+| 07 auth | rotation, reuse detection, role change, lockout |
+| 08 payroll, tax, import | paying a run, TDS arithmetic, import and revert |
+| 09 reopen | voiding a payment lets the run be paid again |
+
+Between suites the runner puts the demo books back and **fails the run if a
+suite changed them**. That is not politeness: suite 08 once left August's run
+paid and its ৳3,95,000 out of petty cash, and the next suite quietly reported
+nothing instead of failing, because it could no longer find a draft run. A
+suite that leaves money moved will lie to the one after it.
+
+`test:browser` needs a Chrome or Edge on the machine (`CHROME_PATH` if it is
+somewhere unusual). It boots the API and the web app, signs in through the real
+login form, and looks for the specific ways a finance screen goes wrong: a
+table that escapes its container, text that cannot be read against what is
+behind it, taka grouped in thousands, a hyphen where a minus belongs, a
+translated dollar figure with no rate beside it.
+
+Neither suite writes anything permanent. Both make their own throwaway accounts
+rather than touching the demo logins, and remove them in a `finally` so an
+interrupted run leaves nothing behind.
+
+### Five bugs the suites found
+
+1. **Reopen told you to do something that did not work.** A paid payroll run
+   refused to reopen and said "void those ledger entries first" — and voiding
+   them changed nothing, because the guard read the run's status, not the
+   ledger. Anyone following the instruction to the letter had no way forward
+   but the database.
+2. **A reopened run could never be paid again.** Reopening moved the status
+   back to draft and left every line flagged paid, so `pay` counted the unpaid
+   lines, found none, and refused. Correcting a mistaken payment was impossible
+   from the screen. The sibling of the first, found because a test's cleanup
+   stopped working once the first was fixed.
+3. **A report for quarter 9 answered with quarter 4.** One `index` field serves
+   months and quarters, so its own maximum could not tell them apart, and the
+   service closed the gap by clamping. The label was honest, but a finance
+   report should not hand back a figure nobody asked for.
+4. **An axis label with no number took the chart down.** `formatCompactMoney`
+   guarded against a value it could not read and then handed that value to
+   `formatMoney`, which throws on exactly those values.
+5. **Dark mode's purple was below the contrast floor both ways.** White on it
+   4.36:1, and it as type on a card 4.08:1 — every primary button and every
+   purple label just under legible. One value could not fix both, so the fill
+   went deeper and the type lighter.
+
+And one found while writing the tests rather than by running them: the **login
+form had no `method`**, which makes it a GET form. Submitted before React
+hydrates — a slow connection, Enter pressed early — the browser navigated to
+`/login?email=…&password=…`, writing the password into the address bar, into
+history, and into the access log of anything in front of the app. It now posts.
 
 ## One deployment step, if production is a different database
 

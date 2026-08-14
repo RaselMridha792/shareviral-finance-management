@@ -53,7 +53,27 @@ export function LoginForm({ next }: { next: string }) {
         Use the account your administrator gave you.
       </p>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+      {/*
+        method="post" matters even though this form is submitted by JavaScript.
+
+        A form with no method is a GET form. Submit it before React has
+        hydrated — a slow connection, a stalled bundle, Enter pressed the
+        moment the fields appear — and the browser navigates to
+        `/login?email=…&password=…`, writing the password into the address bar,
+        into browser history, and into the access log of anything in front of
+        the app. Nobody would see it happen; the page just reloads looking
+        empty.
+
+        With post, that same early submit sends a request the page does not
+        answer and goes nowhere. The password stays out of the URL either way,
+        which is the whole point.
+      */}
+      <form
+        method="post"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+        noValidate
+      >
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Email</span>
           <input
