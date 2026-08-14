@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { patchOf } from "./patch.ts";
 
 import {
   amountSchema,
@@ -230,8 +231,7 @@ export const createTeamMemberSchema = z.strictObject({
 });
 export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
 
-export const updateTeamMemberSchema = createTeamMemberSchema
-  .partial()
+export const updateTeamMemberSchema = patchOf(createTeamMemberSchema)
   .extend({
     status: employmentStatusSchema.optional(),
     /**

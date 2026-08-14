@@ -38,7 +38,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message = "Internal server error";
     let errors: Record<string, string[]> | undefined;
 
-    if (exception instanceof HttpException) {
+    /**
+     * A bare `ZodError` is a bad request, not a server fault.
+     *
+     * Controllers validate path parameters by calling `uuidSchema.parse(id)`
+     * directly — 38 places — and a `ZodError` is not an `HttpException`, so
+     * every one of them fell through to a 500. `GET /transactions/not-a-uuid`
+     * answered "Internal server error" and logged a stack trace for what is
+     * simply a malformed URL. Mapping it here fixes all of them at once, and
+     * keeps working for any validation done outside the pipe.
+     */
+    if (isZodError(exception)) {
+      status = HttpStatus.BAD_REQUEST;
+      message = "Validation failed";
+      errors = groupIssues(exception.issues);
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const payload = exception.getResponse();
 
@@ -75,4 +89,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json(body);
   }
+}
+
+/** Structural, not `instanceof`: the API and the pipe may load separate Zods. */
+function isZodError(
+  error: unknown,
+): error is { issues: Array<{ path: PropertyKey[]; message: string }> } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: string }).name === "ZodError" &&
+    Array.isArray((error as { issues?: unknown }).issues)
+  );
+}
+
+/** The same `{ field: [message] }` shape the validation pipe produces. */
+function groupIssues(
+  issues: Array<{ path: PropertyKey[]; message: string }>,
+): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+  for (const issue of issues) {
+    const key = issue.path.length ? issue.path.map(String).join(".") : "_";
+    (grouped[key] ??= []).push(issue.message);
+  }
+  return grouped;
 }

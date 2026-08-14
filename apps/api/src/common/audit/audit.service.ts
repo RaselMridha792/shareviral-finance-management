@@ -80,8 +80,26 @@ export class AuditService {
           ? undefined
           : await read(tx);
 
+      /**
+       * On a create, the id only exists once `run` has returned it.
+       *
+       * Callers cannot pass `entityId` for a create — the row is not there yet
+       * — and nothing back-filled it, so every create row in the log carried
+       * `entity_id = null`. The row itself was fine, with a readable summary;
+       * it was simply unreachable from the record it described, and
+       * `GET /audit/accounts/:id` answered with the updates and no sign of who
+       * created the account or with what opening balance. That is the first
+       * question anybody asks of an audit trail.
+       */
+      const entityId =
+        rest.entityId ??
+        (isCreate && result && typeof result === "object" && "id" in result
+          ? String((result as { id: unknown }).id)
+          : undefined);
+
       await this.record(tx, {
         ...rest,
+        entityId,
         before,
         after,
         summary: describe ? describe(result, before, after) : rest.summary,

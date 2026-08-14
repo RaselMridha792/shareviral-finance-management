@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boolish } from "./patch.ts";
 
 import { amountSchema, isoDateSchema } from "./masters.ts";
 import { paginationQuerySchema } from "./pagination.ts";
@@ -366,9 +367,9 @@ export const transactionFilterSchema = z.object({
   createdVia: txnOriginSchema.optional(),
   minAmount: amountSchema.optional(),
   maxAmount: amountSchema.optional(),
-  hasReceipt: z.coerce.boolean().optional(),
+  hasReceipt: boolish.optional(),
   q: z.string().trim().max(160).optional(),
-  includeVoided: z.coerce.boolean().default(false),
+  includeVoided: boolish.default(false),
 });
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>;
 
@@ -398,7 +399,7 @@ export const registerQuerySchema = z.object({
    * because "a voided row stays visible" is the rule everywhere else in the
    * app and the register was the one place it did not hold.
    */
-  includeVoided: z.coerce.boolean().optional(),
+  includeVoided: boolish.optional(),
 });
 export type RegisterQuery = z.infer<typeof registerQuerySchema>;
 

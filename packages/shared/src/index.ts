@@ -10,6 +10,7 @@
  * manual form requires — one definition, no drift.
  */
 
+export * from "./patch.ts";
 export * from "./roles.ts";
 export * from "./users.ts";
 export * from "./audit.ts";

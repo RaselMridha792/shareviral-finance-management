@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boolish, patchOf } from "./patch.ts";
 
 import { paginationQuerySchema } from "./pagination.ts";
 
@@ -15,14 +16,45 @@ import { paginationQuerySchema } from "./pagination.ts";
 /* -------------------------------------------------------------------------- */
 
 /** A positive money string Postgres will accept as numeric(14,2). */
+/**
+ * A money figure: digits, at most two decimals, never negative.
+ *
+ * The minus used to be allowed here — `/^-?\d…/` — and only
+ * `createTransactionSchema` refused it, with its own `.refine(> 0)` on top.
+ * Everywhere else a negative passed validation and reached Postgres, which
+ * refused it with a check-constraint violation that escaped as a **500**:
+ * `POST /tds/deposits {"amount":"-1.00"}` and a negative gross on a
+ * compensation record both did exactly that, and the server logged the whole
+ * failing statement with its parameter values. An account would open at
+ * -5.00 with no complaint at all.
+ *
+ * Direction is what makes money negative in this app — `signed_amount` is
+ * generated from it. A magnitude that carries its own sign is a second, silent
+ * way to say the same thing, and the two disagree the moment somebody types a
+ * minus into a box labelled "amount".
+ */
 export const amountSchema = z
   .string()
   .trim()
-  .regex(/^-?\d{1,12}(\.\d{1,2})?$/, "Enter an amount like 4500 or 4500.50");
+  .regex(/^\d{1,12}(\.\d{1,2})?$/, "Enter an amount like 4500 or 4500.50");
 
+/**
+ * A calendar date that actually exists.
+ *
+ * The shape check alone accepted `2026-13-45`, which then reached Postgres and
+ * came back as a **500**. Checked against the calendar here so it is a field
+ * error on the form instead — and compared as strings, never through a local
+ * `Date`, which in Dhaka would shift the day.
+ */
 export const isoDateSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date");
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (month < 1 || month > 12 || day < 1) return false;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return day <= daysInMonth;
+  }, "That date does not exist");
 
 /** Bangladesh e-TIN: exactly 12 digits. */
 export const etinSchema = z
@@ -102,14 +134,13 @@ export const createAccountSchema = z.strictObject({
 });
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 
-export const updateAccountSchema = createAccountSchema
-  .partial()
+export const updateAccountSchema = patchOf(createAccountSchema)
   .extend({ isActive: z.boolean().optional() })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 
 export const listAccountsQuerySchema = z.strictObject({
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: boolish.default(false),
 });
 export type ListAccountsQuery = z.infer<typeof listAccountsQuerySchema>;
 
@@ -151,7 +182,7 @@ export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 
 export const listCategoriesQuerySchema = z.strictObject({
   kind: categoryKindSchema.optional(),
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: boolish.default(false),
 });
 export type ListCategoriesQuery = z.infer<typeof listCategoriesQuerySchema>;
 
@@ -275,8 +306,7 @@ export const createVendorSchema = z.strictObject({
 });
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 
-export const updateVendorSchema = createVendorSchema
-  .partial()
+export const updateVendorSchema = patchOf(createVendorSchema)
   .extend({ isActive: z.boolean().optional() })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
@@ -284,7 +314,7 @@ export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 export const listVendorsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().max(120).optional(),
   type: vendorTypeSchema.optional(),
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: boolish.default(false),
 });
 export type ListVendorsQuery = z.infer<typeof listVendorsQuerySchema>;
 

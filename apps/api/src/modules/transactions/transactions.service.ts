@@ -507,6 +507,7 @@ export class TransactionsService {
 
   async create(input: CreateTransactionInput, actor: AuthenticatedUser) {
     await this.settings.assertPeriodOpen(input.txnDate);
+    await this.assertAccountExists(input.accountId);
     await this.assertCategoryMatchesDirection(
       input.categoryId,
       input.direction,
@@ -791,6 +792,9 @@ export class TransactionsService {
   /** Moving money between our own accounts: one out row and one in row. */
   async transfer(input: TransferInput, actor: AuthenticatedUser) {
     await this.settings.assertPeriodOpen(input.txnDate);
+    // Both sides, before either row is written.
+    await this.assertAccountExists(input.fromAccountId);
+    await this.assertAccountExists(input.toAccountId);
 
     const year = Number(input.txnDate.slice(0, 4));
     const groupId = crypto.randomUUID();
@@ -842,6 +846,30 @@ export class TransactionsService {
     });
 
     return this.findOne(created.id);
+  }
+
+  /**
+   * An account that does not exist is a bad request, not a server fault.
+   *
+   * Without this the id went straight to the insert and Postgres refused it
+   * with a foreign-key violation, which escaped as a **500** — an error page
+   * where the form wanted a field message, and the whole failing statement in
+   * the log. `categoryId` has been guarded like this all along; `accountId`
+   * simply never was.
+   */
+  private async assertAccountExists(accountId: string) {
+    const [account] = await this.db.client
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.id, accountId), isNull(accounts.deletedAt)))
+      .limit(1);
+
+    if (!account) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { accountId: ["No such account"] },
+      });
+    }
   }
 
   /**
