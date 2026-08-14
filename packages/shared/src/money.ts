@@ -170,12 +170,21 @@ export function formatCompactMoney(
     hideSymbol = false,
   } = options;
 
-  const amount = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(amount)) return formatMoney(value, options);
-
   const symbol = hideSymbol
     ? ""
     : (CURRENCY_SYMBOLS[currency] ?? `${currency} `);
+
+  /**
+   * A missing figure shows as a dash, not as a thrown error.
+   *
+   * This used to hand the value to `formatMoney`, which throws on anything it
+   * cannot read — so the one branch written to survive a bad value was the one
+   * that crashed on it, and an axis tick with no number took the whole chart
+   * down. `formatMoney` is right to throw: a ledger figure that cannot be read
+   * must not be guessed at. An axis label is not a ledger figure.
+   */
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return `${symbol}—`;
   const negative = amount < 0;
   const magnitude = Math.abs(amount);
 
