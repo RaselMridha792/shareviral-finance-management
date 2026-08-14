@@ -5,12 +5,7 @@ export type ImportBatch = {
   target: "transactions" | "team_members";
   filename: string;
   status:
-    | "uploaded"
-    | "mapped"
-    | "previewed"
-    | "committed"
-    | "reverted"
-    | "failed";
+    "uploaded" | "mapped" | "previewed" | "committed" | "reverted" | "failed";
   columnMap: Record<string, string | null> | null;
   defaults: Record<string, string> | null;
   totalRows: number;
@@ -86,7 +81,17 @@ export const importsApi = {
         assumeDirection?: "in" | "out";
       };
     },
-  ) => apiFetch<ImportBatch>(`/imports/${id}/mapping`, { method: "POST", ...json(input) }),
+  ) =>
+    apiFetch<ImportBatch>(`/imports/${id}/mapping`, {
+      method: "POST",
+      ...json(input),
+    }),
+
+  /** Everything the wizard needs to pick up a batch it did not upload itself. */
+  resume: (id: string) =>
+    apiFetch<
+      UploadResult & { columnMap: Record<string, string | null> | null }
+    >(`/imports/${id}`, { cache: "no-store" }),
 
   preview: (id: string, page = 1, status?: string) => {
     const params = new URLSearchParams({ page: String(page), pageSize: "50" });

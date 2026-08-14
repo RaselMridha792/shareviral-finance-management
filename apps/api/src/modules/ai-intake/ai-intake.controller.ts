@@ -18,6 +18,7 @@ import {
   aiIntakeRequestSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
+  type AiImportPlan,
   type AiIntakeRequest,
   type SetAiKeyInput,
   type UpdateAiSettingsInput,
@@ -115,10 +116,13 @@ export class AiIntakeController {
   /* --- attached files ---------------------------------------------------- */
 
   /**
-   * A spreadsheet for the assistant to read.
+   * A spreadsheet or a PDF statement for the assistant to read.
    *
-   * Parsed here and kept as rows, never as bytes. It belongs to whoever
-   * attached it, like the conversation it sits in.
+   * Parsed here and kept as rows, never as bytes. A spreadsheet is parsed in
+   * code; a PDF is transcribed by the model, which is why the reader is handed
+   * down from here — this is the one place that holds both services.
+   *
+   * It belongs to whoever attached it, like the conversation it sits in.
    */
   @Post("attachments")
   @HttpCode(200)
@@ -131,7 +135,9 @@ export class AiIntakeController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     if (!file) throw new BadRequestException("Choose a file to attach");
-    return this.attachments.upload(file, actor);
+    return this.attachments.upload(file, actor, (buffer) =>
+      this.ai.readPdf(buffer),
+    );
   }
 
   @Delete("attachments/:id")
@@ -158,6 +164,7 @@ export class AiIntakeController {
   async sendToImport(
     @Param("id", ParseUUIDPipe) id: string,
     @CurrentUser() actor: AuthenticatedUser,
+    @Body("plan") plan?: AiImportPlan | null,
   ) {
     const attachment = await this.attachments.get(id, actor);
 
@@ -173,7 +180,31 @@ export class AiIntakeController {
     );
 
     await this.attachments.markImported(id, batch.id, actor);
-    return { batchId: batch.id, alreadyStaged: false };
+
+    /**
+     * The plan is applied here, not trusted here.
+     *
+     * `resolve` turns the account and category *names* into ids the same way a
+     * single draft's do, so a name that does not exist is refused rather than
+     * quietly dropped. And applying a mapping computes the preview — it writes
+     * nothing to the ledger. The person still lands on a screen showing every
+     * row and has to press Import.
+     *
+     * A plan that fails to apply is not fatal: the rows are staged either way,
+     * and they can map the columns themselves. Losing the batch because the
+     * shortcut did not work would be the worse outcome.
+     */
+    if (plan) {
+      try {
+        const mapping = await this.ai.importMapping(plan);
+        await this.imports.applyMapping(batch.id, mapping, actor);
+        return { batchId: batch.id, alreadyStaged: false, mapped: true };
+      } catch {
+        return { batchId: batch.id, alreadyStaged: false, mapped: false };
+      }
+    }
+
+    return { batchId: batch.id, alreadyStaged: false, mapped: false };
   }
 
   /** Category and account names to ids, checked against what exists. */

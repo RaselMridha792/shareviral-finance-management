@@ -77,6 +77,12 @@ export class ImportsController {
     return this.imports.preview(uuidSchema.parse(id), query);
   }
 
+  /** Declared after `:id/preview` so that route is not swallowed by this one. */
+  @Get(":id")
+  resume(@Param("id") id: string) {
+    return this.imports.resume(uuidSchema.parse(id));
+  }
+
   @Post(":id/commit")
   @HttpCode(200)
   commit(

@@ -1,6 +1,6 @@
 "use client";
 
-import type { AiAttachment } from "@finance/shared";
+import type { AiAttachment, AiImportPlan } from "@finance/shared";
 import {
   ArrowRight,
   FileSpreadsheet,
@@ -24,11 +24,14 @@ import { Button } from "@/components/ui/button";
  */
 export function AttachmentCard({
   attachment,
+  plan,
   staging,
   onSendToImport,
   onRemove,
 }: {
   attachment: AiAttachment;
+  /** Where the assistant worked out these rows should go, if it got that far. */
+  plan?: AiImportPlan | null;
   staging: boolean;
   onSendToImport: () => void;
   onRemove?: () => void;
@@ -106,7 +109,7 @@ export function AttachmentCard({
               These rows are waiting on the import screen.
             </p>
             <Link
-              href="/import"
+              href={`/import?batch=${attachment.importBatchId}`}
               className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
               Open Import
@@ -114,25 +117,49 @@ export function AttachmentCard({
             </Link>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={staging}
-              onClick={onSendToImport}
-            >
-              {staging ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : (
-                <TableProperties className="size-3.5" />
-              )}
-              Send to Import
-            </Button>
-            <span className="text-xs leading-relaxed text-muted-foreground">
-              Map the columns, see every row before it is written, and undo the
-              whole batch afterwards.
-            </span>
+          <div className="flex flex-col gap-2">
+            {/* What it worked out from the conversation, shown before the
+                button rather than after — this is the last point at which
+                "wrong account" is one word to say instead of a revert. */}
+            {plan ? (
+              <div className="rounded-lg bg-surface-muted px-3 py-2.5 text-sm">
+                <p className="font-medium">
+                  {plan.note ?? "Ready to stage these rows."}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Into <span className="font-medium">{plan.accountName}</span>
+                  {plan.categoryName ? (
+                    <>
+                      , filed as{" "}
+                      <span className="font-medium">{plan.categoryName}</span>
+                    </>
+                  ) : null}
+                  . You will see every row before anything is written.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={staging}
+                onClick={onSendToImport}
+              >
+                {staging ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <TableProperties className="size-3.5" />
+                )}
+                Send to Import
+              </Button>
+              <span className="text-xs leading-relaxed text-muted-foreground">
+                {plan
+                  ? "Check every row, then import. The whole batch can be undone afterwards."
+                  : "Map the columns, see every row before it is written, and undo the whole batch afterwards."}
+              </span>
+            </div>
           </div>
         )}
       </div>

@@ -10,7 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
@@ -45,21 +45,34 @@ const FIELD_OPTIONS = [
 
 const STEPS = ["Choose a file", "Match the columns", "Check it", "Import"];
 
+type Resume =
+  (UploadResult & { columnMap: Record<string, string | null> | null }) | null;
+
 export function ImportScreen({
   initialBatches,
   accounts,
   categories,
+  resume = null,
 }: {
   initialBatches: ImportBatch[];
   accounts: AccountDto[];
   categories: CategoryNode[];
+  /** A batch staged elsewhere — the assistant's "Send to Import". */
+  resume?: Resume;
 }) {
   const router = useRouter();
 
-  const [step, setStep] = useState(0);
-  const [upload, setUpload] = useState<UploadResult | null>(null);
-  const [columnMap, setColumnMap] = useState<Record<string, string | null>>({});
-  const [batch, setBatch] = useState<ImportBatch | null>(null);
+  /**
+   * When a batch is handed over, the wizard starts where that batch got to
+   * rather than at the file picker: at "Check it" if a mapping has already
+   * been applied (the assistant worked one out), otherwise at the columns.
+   */
+  const [step, setStep] = useState(resume ? (resume.columnMap ? 2 : 1) : 0);
+  const [upload, setUpload] = useState<UploadResult | null>(resume);
+  const [columnMap, setColumnMap] = useState<Record<string, string | null>>(
+    resume?.columnMap ?? resume?.suggestion ?? {},
+  );
+  const [batch, setBatch] = useState<ImportBatch | null>(resume?.batch ?? null);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [skipRows, setSkipRows] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -80,13 +93,46 @@ export function ImportScreen({
       setStep(1);
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Could not read that file.",
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not read that file.",
       );
     } finally {
       setBusy(false);
       event.target.value = "";
     }
   }
+
+  /**
+   * A handed-over batch that is already mapped arrives at "Check it" with no
+   * rows to check — the mapping was applied on the server, so this screen has
+   * never fetched the preview. Runs once, on arrival.
+   */
+  useEffect(() => {
+    if (!resume?.columnMap) return;
+    let cancelled = false;
+
+    void importsApi
+      .preview(resume.batch.id)
+      .then((preview) => {
+        if (cancelled) return;
+        setRows(preview.rows);
+        setSkipRows(
+          new Set(
+            preview.rows
+              .filter((row) => row.status === "duplicate")
+              .map((row) => row.rowNumber),
+          ),
+        );
+      })
+      .catch(() =>
+        setError("Those rows are staged but could not be shown. Reload."),
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resume]);
 
   async function applyMapping(form: FormData) {
     if (!batch) return;
@@ -237,10 +283,7 @@ export function ImportScreen({
       ) : null}
 
       {step === 1 && upload ? (
-        <form
-          action={applyMapping}
-          className="flex flex-col gap-4"
-        >
+        <form action={applyMapping} className="flex flex-col gap-4">
           <Card>
             <CardHeader
               title="Match the columns"
@@ -306,7 +349,11 @@ export function ImportScreen({
             />
             <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Which account" required>
-                <Select name="accountId" required defaultValue={accounts[0]?.id}>
+                <Select
+                  name="accountId"
+                  required
+                  defaultValue={accounts[0]?.id}
+                >
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
@@ -320,7 +367,9 @@ export function ImportScreen({
                 hint="05/08/2026 is 5 August or 8 May depending on this"
               >
                 <Select name="dateFormat" defaultValue="dmy">
-                  <option value="dmy">Day first — 05/08/2026 is 5 August</option>
+                  <option value="dmy">
+                    Day first — 05/08/2026 is 5 August
+                  </option>
                   <option value="mdy">Month first — 05/08/2026 is 8 May</option>
                   <option value="ymd">Year first — 2026-08-05</option>
                   <option value="auto">Work it out from the file</option>
@@ -385,7 +434,11 @@ export function ImportScreen({
               tone="warning"
               hint="Unticked by default"
             />
-            <Stat label="Have problems" value={batch.errorRows} tone="negative" />
+            <Stat
+              label="Have problems"
+              value={batch.errorRows}
+              tone="negative"
+            />
           </div>
 
           <Card className="overflow-hidden">
@@ -418,9 +471,12 @@ export function ImportScreen({
                 <tbody className="divide-y divide-border">
                   {rows.map((row) => {
                     const bad = row.status === "error";
-                    const mapped = row.mapped as
-                      | { txnDate?: string; description?: string; amount?: string; direction?: "in" | "out" }
-                      | null;
+                    const mapped = row.mapped as {
+                      txnDate?: string;
+                      description?: string;
+                      amount?: string;
+                      direction?: "in" | "out";
+                    } | null;
                     return (
                       <tr
                         key={row.id}
@@ -434,7 +490,8 @@ export function ImportScreen({
                             onChange={(event) => {
                               setSkipRows((prev) => {
                                 const next = new Set(prev);
-                                if (event.target.checked) next.delete(row.rowNumber);
+                                if (event.target.checked)
+                                  next.delete(row.rowNumber);
                                 else next.add(row.rowNumber);
                                 return next;
                               });
@@ -445,7 +502,9 @@ export function ImportScreen({
                         <td className="num px-3 py-2 text-xs text-muted-foreground">
                           {row.rowNumber}
                         </td>
-                        <td className="num px-3 py-2">{mapped?.txnDate ?? "—"}</td>
+                        <td className="num px-3 py-2">
+                          {mapped?.txnDate ?? "—"}
+                        </td>
                         <td className="cell-prose px-3 py-2">
                           {mapped?.description ??
                             Object.values(row.raw).filter(Boolean)[0] ??
@@ -490,9 +549,11 @@ export function ImportScreen({
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               <span className="num">
-                {rows.filter(
-                  (r) => r.status !== "error" && !skipRows.has(r.rowNumber),
-                ).length}
+                {
+                  rows.filter(
+                    (r) => r.status !== "error" && !skipRows.has(r.rowNumber),
+                  ).length
+                }
               </span>{" "}
               will be imported
             </p>

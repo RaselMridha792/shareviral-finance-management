@@ -87,7 +87,7 @@ export const appSettings = pgTable(
     anthropicKeySetBy: uuid("anthropic_key_set_by"),
 
     /** Which model answers. Changeable without a deploy. */
-    aiModel: text("ai_model").notNull().default("claude-sonnet-5"),
+    aiModel: text("ai_model").notNull().default("claude-opus-5"),
 
     /**
      * How much of the books the assistant may read.

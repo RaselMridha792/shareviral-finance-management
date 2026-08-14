@@ -492,6 +492,55 @@ export class ImportsService {
       .limit(25);
   }
 
+  /**
+   * Everything the mapping screen needs to pick up a batch it did not start.
+   *
+   * The screen was written as a wizard that holds its own state from the
+   * upload onwards, which is fine while the upload happens there. It is not
+   * the only way in: the assistant stages a file with "Send to Import" and
+   * sends the person to the same screen, and they arrived at step one — an
+   * empty file picker, with a staged batch sitting in the database that
+   * nothing on the page knew about. The rows were safe and completely
+   * invisible, which is the worst of both.
+   *
+   * Headers come back off the stored rows rather than being kept a second
+   * time. `raw` is written from the parsed file and JSON preserves key order,
+   * so the columns come back in the order the file had them.
+   */
+  async resume(batchId: string) {
+    const batch = await this.findBatch(batchId);
+
+    const rows = await this.db.client
+      .select()
+      .from(importRows)
+      .where(eq(importRows.batchId, batchId))
+      .orderBy(asc(importRows.rowNumber))
+      .limit(5);
+
+    const sample = rows.map((row) => row.raw as RawRow);
+
+    // Union rather than the first row's keys: a bank export can leave a
+    // trailing column off a row it had nothing to put in.
+    const headers: string[] = [];
+    for (const row of sample) {
+      for (const key of Object.keys(row)) {
+        if (!headers.includes(key)) headers.push(key);
+      }
+    }
+
+    return {
+      batch,
+      headers,
+      sample,
+      suggestion: suggestMapping(headers),
+      /** Set once a mapping has been applied, so the screen can skip ahead. */
+      columnMap: (batch.columnMap ?? null) as Record<
+        string,
+        TransactionField | null
+      > | null,
+    };
+  }
+
   private async findBatch(id: string) {
     const [batch] = await this.db.client
       .select()

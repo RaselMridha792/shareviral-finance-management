@@ -12,6 +12,7 @@ import {
   todayInDhaka,
   type AiAvailability,
   type AiIntakeReply,
+  type AiImportPlan,
   type AiIntakeRequest,
   type AiDataAccess,
   type AiKeyResult,
@@ -31,6 +32,12 @@ import {
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
 import { allFieldReferences, pairedFields } from "./field-reference";
+import { readPdfStatement } from "./pdf-statement";
+import {
+  TRANSACTION_FIELDS,
+  type MappingInput,
+} from "../imports/imports.schemas";
+import type { RawRow } from "../imports/row-parser";
 import { hint, open, seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -43,7 +50,7 @@ import {
 } from "../../db/schema";
 
 /** Used to check a key before the settings row is known to be readable. */
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-opus-5";
 
 /**
  * How many times the model may look something up before it has to answer.
@@ -437,6 +444,24 @@ export class AiIntakeService {
   /* ---------------------------------------------------------------------- */
 
   /**
+   * Reads a PDF statement into rows, using the key and model from Settings.
+   *
+   * Public because the upload endpoint needs it and this class owns the key.
+   * It reads a file somebody handed over and writes nothing, so it is not
+   * gated on what the person may see in the books — the same footing as the
+   * two attachment tools.
+   */
+  async readPdf(
+    buffer: Buffer,
+  ): Promise<{ headers: string[]; rows: RawRow[] }> {
+    const [client, { model }] = await Promise.all([
+      this.anthropic(),
+      this.storedKey(),
+    ]);
+    return readPdfStatement(client, model, buffer);
+  }
+
+  /**
    * Built per call rather than cached: the key can change from Settings at any
    * moment, and a cached client would go on using the old one until a restart.
    */
@@ -579,10 +604,31 @@ Answer from the summary and the two file tools. The totals were computed from
 the file in code — quote them, never re-add them, and never estimate a figure
 you could group_attachment for.
 If they want the rows entered in the books, do NOT draft them one at a time.
-Say how many rows it is and what they look like, and tell them to press "Send
-to Import" on the file, where they can map the columns, see every row before
-it is written, and undo the whole batch afterwards. Drafting a hundred entries
-through this conversation would put a hundred figures past review.
+Drafting a hundred entries through this conversation would put a hundred
+figures past review. Build an importPlan instead:
+
+  1. You need to know which account the whole file belongs to. If they have not
+     said, ask — that is the one thing you must never assume, exactly as with a
+     single entry.
+  2. Work out columnMap from the headings: which of the file's columns is the
+     date, the description, the amount. A file with separate credit and debit
+     columns maps them to amountIn and amountOut; a single signed column is
+     amount. If there is one amount column and nothing anywhere says which way
+     the money went, ask, and put the answer in assumeDirection.
+  3. If the file carries no category of its own, ask what these should be filed
+     as and put it in categoryName. If it has a category column, map it and
+     leave categoryName out.
+  4. Look at how the dates are actually written in the rows before choosing
+     dateFormat. 05/08/2026 in a Bangladeshi export is 5 August — dmy.
+
+Send the plan only when there is nothing left to ask — a plan in the same turn
+as a question puts a button beside it that stages a batch you already know is
+incomplete. Ask first, plan on the turn after they answer.
+
+Send it with a one-line note saying what is about to be staged. They
+press the button; you never stage anything yourself. They then see every row
+with what it would become, the duplicates flagged, and can undo the whole batch
+afterwards.
 One row, or a handful they read out to you, is different — draft that as usual.
 `
     : ""
@@ -729,6 +775,44 @@ null, and write a one-sentence summary for them to check.`;
         typeof raw.clarification === "string" && raw.clarification.trim()
           ? raw.clarification.trim()
           : null,
+      importPlan: importPlanOf(raw.importPlan),
+    };
+  }
+
+  /**
+   * A plan for a whole file, turned into the mapping the import screen uses.
+   *
+   * Names become ids through the same `resolve` a single draft goes through,
+   * so "Standard Chartered" has to be an account that exists — the assistant
+   * cannot invent somewhere for a file of money to land any more than it can
+   * for one payment.
+   */
+  async importMapping(plan: AiImportPlan): Promise<MappingInput> {
+    const resolved = await this.resolve({
+      accountName: plan.accountName,
+      ...(plan.categoryName ? { categoryName: plan.categoryName } : {}),
+    });
+
+    const accountId = resolved.accountId;
+    if (typeof accountId !== "string") {
+      throw new BadRequestException(
+        `There is no account called "${plan.accountName}".`,
+      );
+    }
+
+    const fallbackCategoryId =
+      typeof resolved.categoryId === "string" ? resolved.categoryId : undefined;
+
+    return {
+      columnMap: plan.columnMap as MappingInput["columnMap"],
+      defaults: {
+        accountId,
+        dateFormat: plan.dateFormat ?? "dmy",
+        ...(fallbackCategoryId ? { fallbackCategoryId } : {}),
+        ...(plan.assumeDirection
+          ? { assumeDirection: plan.assumeDirection }
+          : {}),
+      },
     };
   }
 
@@ -803,6 +887,83 @@ function takeString(
   return value.trim();
 }
 
+const IMPORT_FIELDS = TRANSACTION_FIELDS;
+
+/**
+ * The plan, with anything the model made up dropped.
+ *
+ * `columnMap` is the part worth guarding: a heading that is not in the file is
+ * harmless, but a *field* we do not have would be rejected deep inside the
+ * import mapping with an error about a column nobody typed. Anything not in
+ * IMPORT_FIELDS becomes "ignore this column", which is the safe reading.
+ *
+ * An account is deliberately NOT defaulted here. It is the one thing that says
+ * where a whole file of money lands, and a plan without one is no plan.
+ */
+function importPlanOf(value: unknown): AiImportPlan | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const raw = value as Record<string, unknown>;
+  const accountName =
+    typeof raw.accountName === "string" ? raw.accountName.trim() : "";
+  if (!accountName || isPlaceholder(accountName)) return null;
+
+  const columnMap: Record<string, string | null> = {};
+  const rawMap =
+    raw.columnMap && typeof raw.columnMap === "object"
+      ? (raw.columnMap as Record<string, unknown>)
+      : {};
+
+  for (const [header, field] of Object.entries(rawMap)) {
+    columnMap[header] =
+      typeof field === "string" &&
+      (IMPORT_FIELDS as readonly string[]).includes(field)
+        ? field
+        : null;
+  }
+
+  if (!Object.values(columnMap).some(Boolean)) return null;
+
+  const categoryName =
+    typeof raw.categoryName === "string" &&
+    raw.categoryName.trim() &&
+    !isPlaceholder(raw.categoryName)
+      ? (bareName(raw.categoryName) ?? null)
+      : null;
+
+  /**
+   * A plan with nowhere to file the rows is not a plan yet.
+   *
+   * Seen in a real conversation: asked where five statement rows belonged, it
+   * answered the account, sensibly objected that "office expense" is not one
+   * of the categories — and attached the plan to the same turn with no
+   * category in it. Staging that put five rows on the import screen, every one
+   * of them an error reading "No category, and no fallback chosen".
+   *
+   * The question it asked was the right question. Offering a button beside it
+   * that stages a batch of nothing but errors is not. So a plan needs a
+   * category the same way a draft needs an amount: either the file carries its
+   * own column, or the person has named one.
+   */
+  const carriesCategory = Object.values(columnMap).includes("categoryName");
+  if (!carriesCategory && !categoryName) return null;
+
+  const oneOf = <T extends string>(v: unknown, allowed: readonly T[]) =>
+    typeof v === "string" && (allowed as readonly string[]).includes(v)
+      ? (v as T)
+      : null;
+
+  return {
+    accountName,
+    categoryName,
+    columnMap,
+    dateFormat: oneOf(raw.dateFormat, ["dmy", "mdy", "ymd", "auto"] as const),
+    assumeDirection: oneOf(raw.assumeDirection, ["in", "out"] as const),
+    note:
+      typeof raw.note === "string" && raw.note.trim() ? raw.note.trim() : null,
+  };
+}
+
 const REPLY_SCHEMA = {
   type: "object" as const,
   properties: {
@@ -834,6 +995,44 @@ const REPLY_SCHEMA = {
     clarification: {
       type: "string",
       description: "Ask this when you cannot tell what they are recording.",
+    },
+    importPlan: {
+      type: "object",
+      description:
+        "Only for an attached file of many rows, once they have said which account it is. Staging it is a button they press, not something you do.",
+      properties: {
+        accountName: {
+          type: "string",
+          description: "The account every row belongs to, exactly as listed.",
+        },
+        categoryName: {
+          type: "string",
+          description:
+            "Category for rows that do not carry their own. Omit if the file has a category column.",
+        },
+        columnMap: {
+          type: "object",
+          additionalProperties: { type: ["string", "null"] },
+          description: `The file's heading → one of: ${IMPORT_FIELDS.join(", ")}. Leave a heading out to ignore that column.`,
+        },
+        dateFormat: {
+          type: "string",
+          enum: ["dmy", "mdy", "ymd", "auto"],
+          description:
+            "How this file writes dates. 05/08/2026 in a Bangladeshi export is 5 August — dmy.",
+        },
+        assumeDirection: {
+          type: "string",
+          enum: ["in", "out"],
+          description:
+            "Only when there is one amount column and nothing says which way the money went.",
+        },
+        note: {
+          type: "string",
+          description: "One line naming what is about to be staged.",
+        },
+      },
+      required: ["accountName", "columnMap"],
     },
   },
   required: ["draft", "missingFields"],

@@ -48,7 +48,7 @@ export function AssistantPanel() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const model: AiModel = status?.model ?? "claude-sonnet-5";
+  const model: AiModel = status?.model ?? "claude-opus-5";
   const access: AiDataAccess =
     status?.dataAccess && status.dataAccess !== "off"
       ? status.dataAccess
@@ -301,19 +301,23 @@ export function AssistantPanel() {
           ) : null}
 
           <Field label="Which model answers" hint={AI_MODEL_DETAIL[model]}>
-            <Select
-              value={model}
-              disabled={saving}
-              onChange={(event) =>
-                void changeSettings({ model: event.target.value as AiModel })
-              }
-            >
-              {AI_MODELS.map((option) => (
-                <option key={option} value={option}>
-                  {AI_MODEL_LABELS[option]}
-                </option>
-              ))}
-            </Select>
+            {AI_MODELS.length > 1 ? (
+              <Select
+                value={model}
+                disabled={saving}
+                onChange={(event) =>
+                  void changeSettings({ model: event.target.value as AiModel })
+                }
+              >
+                {AI_MODELS.map((option) => (
+                  <option key={option} value={option}>
+                    {AI_MODEL_LABELS[option]}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <p className="text-sm font-medium">{AI_MODEL_LABELS[model]}</p>
+            )}
           </Field>
         </CardBody>
       </Card>

@@ -7,6 +7,7 @@ import {
   AI_ATTACHMENT_EXTENSIONS,
   type AiAttachment,
   type AiAttachmentColumn,
+  isPdfAttachment,
 } from "@finance/shared";
 import { and, desc, eq } from "drizzle-orm";
 
@@ -78,9 +79,21 @@ export const AI_ATTACHMENT_TOOL_NAMES = AI_ATTACHMENT_TOOLS.map((t) => t.name);
 export class AiAttachmentsService {
   constructor(private readonly db: DbService) {}
 
+  /**
+   * `readPdf` is handed in rather than reached for.
+   *
+   * Reading a PDF needs the Anthropic client, which is built from the key in
+   * Settings by AiIntakeService — and AiIntakeService already depends on this
+   * service for `describe` and `runTool`. Injecting it back would close the
+   * circle. The caller has both, so the caller supplies the one function this
+   * needs, and a spreadsheet upload never touches the assistant at all.
+   */
   async upload(
     file: { originalname: string; buffer: Buffer },
     actor: AuthenticatedUser,
+    readPdf?: (
+      buffer: Buffer,
+    ) => Promise<{ headers: string[]; rows: RawRow[] }>,
   ): Promise<AiAttachment> {
     const extension = file.originalname
       .slice(file.originalname.lastIndexOf("."))
@@ -88,11 +101,20 @@ export class AiAttachmentsService {
 
     if (!(AI_ATTACHMENT_EXTENSIONS as readonly string[]).includes(extension)) {
       throw new BadRequestException(
-        `The assistant can read ${AI_ATTACHMENT_EXTENSIONS.join(", ")}. A PDF statement has to be entered by hand for now.`,
+        `The assistant can read ${AI_ATTACHMENT_EXTENSIONS.join(", ")}.`,
       );
     }
 
-    const { headers, rows } = await readSpreadsheet(file.buffer);
+    const pdf = isPdfAttachment(file.originalname);
+    if (pdf && !readPdf) {
+      throw new BadRequestException(
+        "Reading a PDF needs the assistant switched on. A Super Admin can add an API key under Settings.",
+      );
+    }
+
+    const { headers, rows } = pdf
+      ? await readPdf!(file.buffer)
+      : await readSpreadsheet(file.buffer);
 
     if (!headers.length) {
       throw new BadRequestException(

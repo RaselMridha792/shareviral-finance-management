@@ -4,6 +4,7 @@ import {
   type AiAvailability,
   type AiChat,
   type AiChatSummary,
+  type AiImportPlan,
   type AiKeyResult,
   type UpdateAiSettingsInput,
   type AiIntakeReply,
@@ -89,11 +90,18 @@ export const aiApi = {
   detach: (id: string) =>
     apiFetch<void>(`/ai/attachments/${id}`, { method: "DELETE" }),
 
-  /** Stages the file's rows on the import screen, where they can be reviewed. */
-  sendToImport: (id: string) =>
-    apiFetch<{ batchId: string; alreadyStaged: boolean }>(
+  /**
+   * Stages the file's rows on the import screen, where they can be reviewed.
+   *
+   * With a plan, the columns and the account arrive already chosen, so the
+   * person lands on the row-by-row check rather than a mapping form. Without
+   * one, exactly as before. Either way nothing is in the books until they
+   * press Import on that screen.
+   */
+  sendToImport: (id: string, plan?: AiImportPlan | null) =>
+    apiFetch<{ batchId: string; alreadyStaged: boolean; mapped?: boolean }>(
       `/ai/attachments/${id}/to-import`,
-      { method: "POST" },
+      { method: "POST", ...json({ plan: plan ?? null }) },
     ),
 
   /**
@@ -116,9 +124,12 @@ export const aiApi = {
       body.createdVia = "ai_intake";
     }
 
-    return apiFetch<{ refNo?: string; id: string }>(AI_TARGET_ENDPOINT[target], {
-      method: "POST",
-      ...json(body),
-    });
+    return apiFetch<{ refNo?: string; id: string }>(
+      AI_TARGET_ENDPOINT[target],
+      {
+        method: "POST",
+        ...json(body),
+      },
+    );
   },
 };

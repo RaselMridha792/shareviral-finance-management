@@ -347,7 +347,9 @@ export function Composer({
               </>
             ) : null}
 
-            {canChangeModel ? (
+            {/* A picker with one option is a control that does nothing. It
+                comes back on its own if a second model is ever offered. */}
+            {canChangeModel && AI_MODELS.length > 1 ? (
               <div className="relative">
                 <label className="sr-only" htmlFor="assistant-model">
                   Which model answers

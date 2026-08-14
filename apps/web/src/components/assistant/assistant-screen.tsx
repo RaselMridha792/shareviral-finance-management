@@ -87,7 +87,7 @@ export function AssistantScreen({
   const [attaching, setAttaching] = useState(false);
   const [staging, setStaging] = useState(false);
   const [model, setModel] = useState<AiModel>(
-    availability.model ?? "claude-sonnet-5",
+    availability.model ?? "claude-opus-5",
   );
   const dataAccess: AiDataAccess =
     availability.dataAccess && availability.dataAccess !== "off"
@@ -199,9 +199,14 @@ export function AssistantScreen({
     setStaging(true);
     setError(null);
     try {
-      const { batchId } = await aiApi.sendToImport(attachment.id);
+      // The plan the assistant proposed, if it got as far as one. Without it
+      // the person maps the columns themselves, exactly as before.
+      const { batchId } = await aiApi.sendToImport(
+        attachment.id,
+        reply?.importPlan ?? null,
+      );
       setAttachment({ ...attachment, importBatchId: batchId });
-      router.push("/import");
+      router.push(`/import?batch=${batchId}`);
     } catch (caught) {
       setError(explain(caught, "Those rows could not be staged for import."));
     } finally {
@@ -358,6 +363,7 @@ export function AssistantScreen({
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
               {attachment ? (
                 <AttachmentCard
+                  plan={reply?.importPlan ?? null}
                   attachment={attachment}
                   staging={staging}
                   onSendToImport={() => void sendToImport()}

@@ -80,34 +80,35 @@ export const AI_DATA_ACCESS_DETAIL: Record<AiDataAccess, string> = {
   full: "As above, plus the results of any lookup it makes — real dates, amounts, descriptions and balances from your books. It can only reach what the person asking could reach by clicking; it can never reach pay.",
 };
 
-export const AI_MODELS = [
-  "claude-sonnet-5",
-  "claude-opus-5",
-  "claude-haiku-4-5-20251001",
-] as const;
+/**
+ * One model, deliberately.
+ *
+ * The three were run against the same conversations before this was narrowed.
+ * The difference that mattered was not phrasing, it was invention: asked to
+ * record a payment where nobody named an account, Haiku filled one in on two of
+ * six — `Petty cash (demo)` once, `Standard Chartered Bank` once. Opus asked,
+ * every time. A guessed account resolves to a real account and files real money
+ * in the wrong place, and the entry looks perfectly ordinary afterwards.
+ *
+ * That is the one failure the code cannot catch, so the cheaper models are not
+ * offered. A picker whose wrong option quietly misfiles money is not a saving.
+ */
+export const AI_MODELS = ["claude-opus-5"] as const;
 export const aiModelSchema = z.enum(AI_MODELS);
 export type AiModel = z.infer<typeof aiModelSchema>;
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
-  "claude-sonnet-5": "Sonnet 5 — the sensible default",
-  "claude-opus-5": "Opus 5 — the most capable, and the most expensive",
-  "claude-haiku-4-5-20251001": "Haiku 4.5 — fastest and cheapest",
+  "claude-opus-5": "Opus 5",
 };
 
-/** For the picker in the composer, where there is room for a name and no more. */
+/** For the composer, where there is room for a name and no more. */
 export const AI_MODEL_SHORT: Record<AiModel, string> = {
-  "claude-sonnet-5": "Sonnet 5",
   "claude-opus-5": "Opus 5",
-  "claude-haiku-4-5-20251001": "Haiku 4.5",
 };
 
 export const AI_MODEL_DETAIL: Record<AiModel, string> = {
-  "claude-sonnet-5":
-    "Ample for filling in a form and answering a question about the books.",
   "claude-opus-5":
-    "Worth it only if you find Sonnet is misreading how people here actually write.",
-  "claude-haiku-4-5-20251001":
-    "Noticeably quicker and cheaper. Fine for straightforward entries; less reliable on a long, rambling one.",
+    "The only model offered here. On the same test conversations the cheaper ones invented an account nobody had named; this one asked instead.",
 };
 
 export const updateAiSettingsSchema = z
@@ -159,7 +160,18 @@ export const AI_ATTACHMENT_EXTENSIONS = [
   ".txt",
   ".xlsx",
   ".xls",
+  /**
+   * A PDF is read by the model, not by a parser, and is transcribed into rows
+   * on arrival — see `pdf-statement.ts`. From that point it is the same as a
+   * spreadsheet: the same summary, the same tools, the same import screen.
+   */
+  ".pdf",
 ] as const;
+
+/** True for a file whose table has to be read out rather than parsed. */
+export function isPdfAttachment(filename: string): boolean {
+  return filename.toLowerCase().endsWith(".pdf");
+}
 
 export type AiAttachmentColumn = {
   name: string;
@@ -223,6 +235,35 @@ export function chatTitleFrom(text: string): string {
   return line.slice(0, 47).trimEnd() + "…";
 }
 
+/**
+ * Where a whole file's rows should go, worked out from the conversation.
+ *
+ * This is the answer to "these are all Standard Chartered, file them as office
+ * expenses" for a file of two hundred rows. Drafting them one at a time
+ * through the conversation would put two hundred figures past review; refusing
+ * outright means the person maps every column by hand for something they have
+ * already said in one sentence.
+ *
+ * So the assistant proposes and the import screen disposes. Nothing here
+ * writes: it is staged, the mapping is applied, and the person lands on the
+ * preview with every row shown, the duplicates flagged, and the batch
+ * revertable after the fact. The plan only saves them the typing.
+ */
+export type AiImportPlan = {
+  /** Which account every row in this file belongs to. */
+  accountName: string;
+  /** Used for rows whose own category is blank or unrecognised. */
+  categoryName: string | null;
+  /** The file's own heading → a field of ours. Anything left out is ignored. */
+  columnMap: Record<string, string | null>;
+  /** How this file writes dates, when the rows make it plain. */
+  dateFormat: "dmy" | "mdy" | "ymd" | "auto" | null;
+  /** For a file with one amount column and nothing to say which way it went. */
+  assumeDirection: "in" | "out" | null;
+  /** One line naming what is about to be staged, for the button beside it. */
+  note: string | null;
+};
+
 /** What one turn produces. Data only — nothing here causes a write. */
 export type AiIntakeReply = {
   /** The conversation this turn was filed under, new or continuing. */
@@ -238,6 +279,8 @@ export type AiIntakeReply = {
   summary: string | null;
   /** Shown when the model could not tell what is being recorded. */
   clarification: string | null;
+  /** Set only when a whole attached file is ready to be staged. */
+  importPlan?: AiImportPlan | null;
 };
 
 export type AiAvailability = {
