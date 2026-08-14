@@ -80,6 +80,20 @@ const READ_ONLY_EVERYTHING: Permission[] = [
 const OPERATIONAL_FULL: Permission[] = [
   "dashboard.view",
   "dashboard.money",
+  /**
+   * Admin reads the audit log too.
+   *
+   * It held every operational permission and not this one, so the role that
+   * does the day-to-day work could not see who had changed what — and the two
+   * roles who could, Super Admin and the CEO, are the two least likely to be
+   * the ones checking. Reading it is not a privilege over the money; it is how
+   * somebody notices a wrong figure was entered on Tuesday.
+   *
+   * Pay stays hidden inside it regardless: `audit_logs.is_sensitive` rows are
+   * filtered for anybody without `team.compensation.read`, so an admin sees
+   * that a compensation record changed without seeing the figure.
+   */
+  "audit.read",
   "transactions.read",
   "transactions.write",
   "transactions.void",
