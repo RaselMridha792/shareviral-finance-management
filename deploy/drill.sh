@@ -63,10 +63,14 @@ psql_in postgres -c "create database ${DRILL_DB};" >/dev/null
 
 # The dump opens with DROP … IF EXISTS against an empty database, so without
 # this the useful output is buried under a page of skipping notices.
+#
+# --output=/dev/null on top of that: restoring the sequences runs a setval per
+# table and psql prints each result, so the verdict at the bottom arrives after
+# a screen of noise. Errors still go to stderr, and ON_ERROR_STOP still stops.
 gzip -dc "${DUMP}" | docker compose exec -T \
   -e PGOPTIONS='-c client_min_messages=warning' \
   db psql --username "${POSTGRES_USER}" --dbname "${DRILL_DB}" \
-  --set ON_ERROR_STOP=on --quiet
+  --set ON_ERROR_STOP=on --quiet --output=/dev/null
 
 # --------------------------------------------------------------------------
 fail=0
