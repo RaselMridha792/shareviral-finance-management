@@ -134,13 +134,37 @@ function readCookie(request: Request, name: string): string | undefined {
  * `sameSite: "lax"` works because the web app and API are served from one
  * origin behind nginx in production, and from localhost in development.
  */
+/**
+ * Where the auth cookies are allowed to travel.
+ *
+ * Empty means host-only, which is right when the browser sees a single origin.
+ * Set to `.example.com` when the web app and the API sit on different
+ * subdomains: the cookie is written by api.example.com but app.example.com
+ * server-renders the pages and needs it too, and a host-only cookie never
+ * reaches it — sign-in succeeds and every page still says signed out.
+ */
+function cookieDomain(): string | undefined {
+  const domain = process.env.COOKIE_DOMAIN?.trim();
+  return domain ? domain : undefined;
+}
+
 function cookieOptions(maxAgeMs: number, path: string) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
+    /**
+     * Stays `lax` across subdomains, and deliberately.
+     *
+     * SameSite is judged on the registrable domain, not the origin, so
+     * app.example.com calling api.example.com is *same-site* — cross-origin,
+     * but same-site — and a Lax cookie is sent. The reflex here is to reach
+     * for `none`, which would also send it to genuinely foreign sites and
+     * throw away the protection for nothing.
+     */
     sameSite: "lax" as const,
     path,
     maxAge: maxAgeMs,
+    ...(cookieDomain() ? { domain: cookieDomain() } : {}),
   };
 }
 
@@ -163,8 +187,25 @@ function setAuthCookies(response: Response, tokens: IssuedTokens) {
   );
 }
 
+/**
+ * Clearing has to name the same domain the cookie was written with.
+ *
+ * A cookie set for `.example.com` and cleared without it is not cleared — the
+ * browser treats them as different cookies and quietly keeps the first. Signing
+ * out would appear to work and leave the session cookie in place, which is the
+ * worst possible way for this to fail.
+ */
 function clearAuthCookies(response: Response) {
-  response.clearCookie(ACCESS_COOKIE, { path: "/" });
-  response.clearCookie(REFRESH_COOKIE, { path: REFRESH_PATH });
-  response.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_PATH });
+  const domain = cookieDomain();
+  const scope = domain ? { domain } : {};
+  response.clearCookie(ACCESS_COOKIE, { path: "/", ...scope });
+  response.clearCookie(REFRESH_COOKIE, { path: REFRESH_PATH, ...scope });
+  response.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_PATH, ...scope });
+  // Also clear any host-only cookie left from before a COOKIE_DOMAIN was set,
+  // so switching to subdomains does not strand an old cookie that the browser
+  // keeps sending alongside the new one.
+  if (domain) {
+    response.clearCookie(ACCESS_COOKIE, { path: "/" });
+    response.clearCookie(REFRESH_COOKIE, { path: REFRESH_PATH });
+  }
 }

@@ -14,6 +14,20 @@ COPY apps/web apps/web
 # decided at build time — so this has to be present now, not just at run time.
 ARG API_URL
 ENV API_URL=$API_URL
+
+# Where the *browser* sends its requests, which is a different answer from the
+# one above: API_URL is how this container reaches the API over the internal
+# network, NEXT_PUBLIC_API_URL is the public hostname the user's browser can
+# resolve.
+#
+# It has to be a build argument, not just a runtime variable. Next inlines
+# every NEXT_PUBLIC_* value into the JavaScript at build time, so setting it
+# only in docker-compose leaves the browser bundle pointing wherever it pointed
+# when the image was built — and the failure is silent: the server-rendered
+# page is correct and every click afterwards goes to the wrong host.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build --workspace @finance/shared \

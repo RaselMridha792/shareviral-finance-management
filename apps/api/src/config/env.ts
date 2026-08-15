@@ -13,6 +13,27 @@ const envSchema = z.object({
   // Comma-separated list of origins allowed to call this API.
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
 
+  /**
+   * The domain to scope the auth cookies to. Leave empty for host-only.
+   *
+   * Host-only is right whenever the browser sees one origin — behind a single
+   * nginx, or on Vercel where `/api` is rewritten to the API. The cookie is
+   * then set by, and returned to, exactly one hostname.
+   *
+   * It is wrong the moment the web app and the API are on different
+   * hostnames. The browser signs in against api.example.com, the cookie
+   * becomes host-only for api.example.com, and app.example.com — which
+   * server-renders every page and needs that cookie to do it — never receives
+   * it. Sign-in succeeds and the app still bounces you to the login screen.
+   *
+   * Set to `.example.com` there, and both hosts receive it.
+   *
+   * Empty by default so nothing already deployed changes behaviour. Note the
+   * cost when it is set: every subdomain of that domain receives the session
+   * cookie, so nothing untrusted belongs on one.
+   */
+  COOKIE_DOMAIN: z.string().trim().default(""),
+
   // Neon. Optional for now so the skeleton boots before the database exists.
   DATABASE_URL: z.string().optional(),
   DATABASE_URL_UNPOOLED: z.string().optional(),
