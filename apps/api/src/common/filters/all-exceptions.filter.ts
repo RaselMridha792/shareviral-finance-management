@@ -75,7 +75,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
         `${request.method} ${request.originalUrl} [${requestId ?? "-"}]`,
-        exception instanceof Error ? exception.stack : String(exception),
+        exception instanceof Error ? withCauses(exception) : String(exception),
       );
     }
 
@@ -113,4 +113,34 @@ function groupIssues(
     (grouped[key] ??= []).push(issue.message);
   }
   return grouped;
+}
+
+/**
+ * The stack, and then every `cause` beneath it.
+ *
+ * An ORM wraps the driver's error and keeps the original as `cause`. Logging
+ * only the outer one prints `Failed query: select "id", "email", …` and hides
+ * the single line that says why — the constraint that was violated, the column
+ * that is missing, the connection that was refused.
+ *
+ * That cost an evening once: the process knew exactly what was wrong and the
+ * log did not repeat it, so the fault was hunted from the outside for an hour.
+ * Depth is capped because a cause chain can be circular, and a logger that
+ * hangs is worse than one that is terse.
+ */
+function withCauses(error: Error): string {
+  const parts = [error.stack ?? `${error.name}: ${error.message}`];
+
+  let cause: unknown = (error as { cause?: unknown }).cause;
+  for (let depth = 0; cause instanceof Error && depth < 5; depth += 1) {
+    const { code, detail } = cause as { code?: string; detail?: string };
+    parts.push(
+      `caused by: ${cause.name}: ${cause.message}` +
+        (code ? ` [${code}]` : "") +
+        (detail ? `\n  detail: ${detail}` : ""),
+    );
+    cause = (cause as { cause?: unknown }).cause;
+  }
+
+  return parts.join("\n");
 }
