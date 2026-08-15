@@ -293,9 +293,15 @@ cd /opt/sfm/deploy
 mkdir -p nginx/secrets
 PASS="$(openssl rand -base64 18)"
 printf 'sfm:%s\n' "$(openssl passwd -apr1 "$PASS")" > nginx/secrets/db.htpasswd
-chmod 600 nginx/secrets/db.htpasswd
+chmod 644 nginx/secrets/db.htpasswd
 echo "username: sfm"; echo "password: $PASS"
 ```
+
+`644`, not `600`. nginx starts as root and immediately drops its worker
+processes to the `nginx` user, and it is a worker that opens this file on each
+request — so `600` root-owned gives a 401 prompt that turns into a 500 the
+moment anyone answers it. The file holds a hash rather than a password, and
+this server has one administrator.
 
 Put that password in your password manager and clear the terminal. It is
 git-ignored and lives only on this server; losing it costs one re-run.
