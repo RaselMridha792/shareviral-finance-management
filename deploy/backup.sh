@@ -36,10 +36,33 @@ if ! gzip -t "${OUT}"; then
 fi
 
 SIZE=$(du -h "${OUT}" | cut -f1)
-LINES=$(gzip -dc "${OUT}" | head -50 | grep -c "CREATE TABLE" || true)
-if [ "${LINES}" -eq 0 ]; then
-  echo "WARNING: no CREATE TABLE in the first 50 lines of ${OUT}" >&2
+
+# Does the dump actually carry the schema and the rows?
+#
+# This used to look for CREATE TABLE in the first fifty lines and warn when it
+# found none — which it never does, because a --clean dump opens with DROP and
+# SET statements and reaches the first table far below line fifty. So every
+# healthy backup printed a warning, and a warning that is always wrong teaches
+# people to ignore warnings. The one night it means something, nobody reads it.
+#
+# Counting across the whole file is both correct and a stronger check, and a
+# dump missing its schema is worthless rather than merely suspect — so this
+# fails the run instead of muttering about it.
+TABLES=$(gzip -dc "${OUT}" | grep -c '^CREATE TABLE' || true)
+ROWS=$(gzip -dc "${OUT}" | grep -c '^COPY public\.' || true)
+
+if [ "${TABLES}" -lt 10 ]; then
+  echo "FAILED: ${OUT} defines only ${TABLES} tables — the schema has far more" >&2
+  echo "        Keeping the file so it can be examined, but do not rely on it." >&2
+  exit 1
 fi
+
+if [ "${ROWS}" -lt 5 ]; then
+  echo "FAILED: ${OUT} carries only ${ROWS} data section(s) — the tables look empty" >&2
+  exit 1
+fi
+
+echo "         ${TABLES} tables, ${ROWS} data sections"
 
 echo "[$(TZ=Asia/Dhaka date)] wrote ${OUT} (${SIZE})"
 

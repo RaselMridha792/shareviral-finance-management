@@ -364,12 +364,71 @@ Nothing breaks without it: the read is wrapped so a missing table logs a
 warning and the assistant carries on with no past examples. It simply will not
 learn until the table exists.
 
-## Live (2026-08-15)
+## Live (2026-08-15) — moved to a VPS
 
 | | |
 |---|---|
-| Web | https://shareviral-finance-management-web.vercel.app |
-| API | https://sfm-api-o0iu.onrender.com |
+| Web | https://app.hellonizam.com |
+| API | https://api.hellonizam.com |
+| Host | Hostinger KVM 1 · 1 vCPU · 4 GB · 50 GB · Ubuntu 24.04 LTS |
+| Database | Postgres 17 in a container **on the same box** — Neon is retired |
+
+Everything runs behind one nginx: `db`, `api`, `web` and `nginx` as four
+containers under `/opt/sfm/deploy`. Push to `main` and GitHub Actions tests,
+builds both images, pushes them to GHCR and tells the server to pull. **The
+server never compiles anything** — one vCPU cannot afford `next build`, and a
+deploy that makes the site slow for the people using it is not a deploy.
+
+Rolling back is `IMAGE_TAG=<sha>` in `deploy/.env` and `docker compose up -d`;
+every image is tagged with the commit it came from.
+
+### Two subdomains, and what that changed
+
+The app was built for a single origin, when the plan was a VPS with no domain.
+It now has one, and the browser talks to both hosts, so:
+
+- The auth cookies carry `Domain=.hellonizam.com` (`COOKIE_DOMAIN`). Without
+  it the cookie is host-only to `api.*`, and `app.*` — which server-renders
+  every page and needs it — never sees it. Sign-in would succeed and every page
+  would still say signed out.
+- `SameSite` stays **Lax**. The two hosts are the same *site*, and reaching for
+  `None` here is a reflex that gives the cookie away to genuinely foreign sites
+  for nothing.
+- CORS names the app's origin exactly, with credentials.
+- The CSRF header check is unchanged and is now *stronger*: cross-origin, a
+  custom header forces a preflight, and only an allowed origin survives one.
+
+Verified against the deployed site, not a local build — 15 checks covering the
+cookie's scope and flags, both hosts receiving it, server-rendered pages being
+authenticated, the browser bundle pointing at the right host, CORS, CSRF, and
+sign-out actually clearing a domain-scoped cookie.
+
+### Certificates
+
+One Let's Encrypt certificate covers both names, filed under
+`app.hellonizam.com`. Renewal uses **webroot**, not standalone: nginx holds
+port 80, so a standalone renewal cannot bind and fails — silently, months
+later, on a morning when the site suddenly looks untrusted. Proved with
+`certbot renew --dry-run` while nginx was running.
+
+### Backups
+
+`deploy/backup.sh` runs at 02:00 Dhaka from root's crontab and keeps 30 days.
+The dump has been restored once, into a scratch database beside the live one,
+and the figures matched to the paisa. A backup that has never been restored is
+a hope.
+
+### Notes for whoever is next
+
+- `DATABASE_URL` must end in `?sslmode=disable` for the containerised Postgres.
+  The app treats any non-localhost host as remote and demands TLS, which is the
+  right default and wrong for a private Docker network. Leave it off and the
+  pool cannot connect; the error says "Failed query" and names the SQL.
+- Render generates its own JWT secret, so tokens minted from this repo's `.env`
+  are refused by anything deployed. To reach a deployment you sign in.
+
+Retired: the Vercel and Render deployment. It is still described in
+`DEPLOYMENT.md` should it ever be wanted again.
 
 Both build from `main` automatically, so a push is a deploy. The browser only
 ever talks to the Vercel URL: `/api/*` is rewritten to Render, which keeps the
