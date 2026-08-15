@@ -105,7 +105,9 @@ snapshot() {
 LIVE="$(snapshot "${POSTGRES_DB}")"
 BACK="$(snapshot "${DRILL_DB}")"
 
-printf '\n  live      %s\n  from Drive %s\n\n' "${LIVE}" "${BACK}"
+# Aligned, because the whole point of these two lines is reading them down the
+# column rather than across.
+printf '\n  live       %s\n  from Drive %s\n\n' "${LIVE}" "${BACK}"
 
 if [ "${LIVE}" != "${BACK}" ]; then
   # Not automatically a failure: rows written after the dump was taken belong
