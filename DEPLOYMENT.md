@@ -147,8 +147,9 @@ deploy/
   api.Dockerfile       built from the repo root, because of @finance/shared
   web.Dockerfile       API_URL is a build arg — the rewrite is baked in
   nginx/sfm.conf       one origin: / to the app, /api to the API
-  backup.sh            a dump a day, verified, kept a month
-  restore.sh           refuses to overwrite a live database by accident
+  backup.sh            a dump a day, verified, kept a month, copied to Drive
+  restore.sh           takes a local or a Drive path; refuses to overwrite a
+                       live database by accident
   .env.example         copy to .env and fill in
 ```
 
@@ -204,16 +205,65 @@ crontab -e
 0 2 * * * /opt/sfm/deploy/backup.sh >> /var/log/sfm-backup.log 2>&1
 ```
 
-Then **do a restore now, while nothing is wrong**:
+Each run dumps, checks the dump can be read back and carries both the schema
+and the rows, keeps it for `KEEP_DAYS`, then sends a copy to Google Drive and
+**asks Drive to confirm the size** before believing the upload. Anything that
+fails exits non-zero, because an off-site backup that stopped months ago looks
+exactly like one that is working.
+
+### The Drive remote, once
+
+Install rclone on the server, then make **your own** Google OAuth client —
+Console → new project → enable the Drive API → *Clients* → **Desktop app**:
+
+```bash
+curl -s https://rclone.org/install.sh | bash
+rclone config create gdrive drive scope=drive.file
+rclone config update gdrive client_id "…" client_secret "…"
+rclone config reconnect gdrive:
+```
+
+Two things here are easy to get wrong and both fail silently:
+
+- **Set the consent screen to "In production".** While it says *Testing*,
+  Google revokes the refresh token after seven days and the uploads simply
+  stop. `drive.file` is a non-sensitive scope, so publishing needs no review.
+- **Use `scope=drive.file`**, which lets rclone see only what it created. The
+  token on this server can then never read the rest of your Drive.
+
+The consent step needs a browser, and the server has none. Forward the port
+from a machine that does:
+
+```bash
+ssh -L 53682:127.0.0.1:53682 root@THE_SERVER    # leave this window open
+rclone config reconnect gdrive:                 # answer y, then open the link it prints
+```
+
+### Then do a restore now, while nothing is wrong
 
 ```bash
 ./deploy/backup.sh
-./deploy/restore.sh backups/sfm_*.sql.gz     # into a scratch database first
+./deploy/restore.sh backups/sfm_*.sql.gz            # into a scratch database first
 ```
+
+and once, from the copy that would actually be left if this server were gone:
+
+```bash
+./deploy/restore.sh gdrive:sfm-backups/sfm_2026-08-16_0200.sql.gz
+```
+
+Run with no argument to list what exists on both sides.
 
 Sign in against the restored copy. Until you have done that once, you have
 backups but you do not have a recovery plan — and the difference only shows up
 on the day it matters.
+
+### If this server is gone
+
+The Drive token lived here and is gone with it. You do not need it back: the
+OAuth client is still in Google Cloud Console, so on the new machine install
+rclone, run the three `rclone config` lines above with the same client ID and
+secret, and the backups are readable again.
 
 ## Browser warning
 

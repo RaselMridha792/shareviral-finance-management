@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# A dump a day, kept for a month, and a restore that has actually been tried.
+# A dump a day, kept for a month, sent off the server, and a restore that has
+# actually been tried.
 #
 #   crontab -e
 #   0 2 * * * /opt/sfm/deploy/backup.sh >> /var/log/sfm-backup.log 2>&1
 #
 # Runs on the host, against the db container. Dumps land in deploy/backups,
 # which is bind-mounted — a backup inside a volume that dies with the container
-# is not a backup.
+# is not a backup. Then a copy goes to Google Drive, because a backup on the
+# same disk as the database survives a bad migration and nothing else.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -67,3 +69,68 @@ echo "         ${TABLES} tables, ${ROWS} data sections"
 echo "[$(TZ=Asia/Dhaka date)] wrote ${OUT} (${SIZE})"
 
 find backups -name 'sfm_*.sql.gz' -mtime "+${KEEP_DAYS}" -print -delete
+
+# --------------------------------------------------------------------------
+# The copy that outlives the server
+# --------------------------------------------------------------------------
+# Everything above protects against a bad migration, a wrong DELETE, a broken
+# deploy. None of it survives losing the machine. This part does.
+#
+# Set GDRIVE_REMOTE= (empty) in .env to switch it off deliberately. What is
+# worth avoiding is the middle case: still switched on, failing every night,
+# and saying so only in a log nobody opens. So every failure below exits
+# non-zero and names what is missing.
+GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive:sfm-backups}"
+
+if [ -z "${GDRIVE_REMOTE}" ]; then
+  echo "         off-site copy switched off (GDRIVE_REMOTE is empty)"
+  exit 0
+fi
+
+# cron hands a script almost no environment. rclone finds its config through
+# HOME, and cron does set HOME — but this is not the file to leave that to.
+export RCLONE_CONFIG="${RCLONE_CONFIG:-${HOME:-/root}/.config/rclone/rclone.conf}"
+
+if ! command -v rclone >/dev/null 2>&1; then
+  echo "FAILED: rclone is not installed, so ${OUT} exists only on this server" >&2
+  exit 1
+fi
+
+BASE="$(basename "${OUT}")"
+echo "[$(TZ=Asia/Dhaka date)] sending ${BASE} to ${GDRIVE_REMOTE}"
+
+if ! rclone copy "${OUT}" "${GDRIVE_REMOTE}/" --retries 3 --timeout 5m; then
+  echo "FAILED: could not send ${BASE} to ${GDRIVE_REMOTE}." >&2
+  echo "        The local dump is fine — there is no off-site copy of tonight." >&2
+  echo "        Check the account first:  rclone about ${GDRIVE_REMOTE%%:*}:" >&2
+  exit 1
+fi
+
+# rclone reporting success is rclone's opinion. Ask the other side instead:
+# the file has to be there, and it has to be the same size.
+LOCAL_BYTES=$(stat -c %s "${OUT}")
+REMOTE_BYTES=$(rclone lsf --format sp --separator ';' --files-only "${GDRIVE_REMOTE}" \
+  | awk -F';' -v want="${BASE}" '$2 == want { print $1 }')
+
+if [ "${REMOTE_BYTES:-0}" != "${LOCAL_BYTES}" ]; then
+  echo "FAILED: ${BASE} is ${LOCAL_BYTES} bytes here, ${REMOTE_BYTES:-absent} on Drive" >&2
+  exit 1
+fi
+
+echo "         off-site copy verified — ${LOCAL_BYTES} bytes on both sides"
+
+# Old copies go for good rather than to the Drive bin, where they would keep
+# taking up the quota for another thirty days while appearing to be gone.
+#
+# Never reach for `rclone cleanup` here. That empties the entire Drive bin,
+# including files this app has never touched.
+#
+# The --include is not decoration either: without it, anything else that ever
+# lands in this folder becomes eligible for deletion.
+rclone delete "${GDRIVE_REMOTE}" \
+  --include 'sfm_*.sql.gz' \
+  --min-age "${KEEP_DAYS}d" \
+  --drive-use-trash=false || true
+
+COPIES=$(rclone lsf --files-only --include 'sfm_*.sql.gz' "${GDRIVE_REMOTE}" 2>/dev/null | wc -l || true)
+echo "         ${COPIES} backup(s) now off this server"

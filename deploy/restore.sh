@@ -12,9 +12,26 @@ cd "$(dirname "$0")"
 [ -f .env ] && set -a && . ./.env && set +a
 
 DUMP="${1:-}"
+GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive:sfm-backups}"
+
+# The day this is needed most is the day this server is gone and the only copy
+# is on Drive. Take a remote path directly, so recovery does not also require
+# remembering rclone's syntax at the worst possible moment.
+if [ -n "${DUMP}" ] && [ ! -f "${DUMP}" ] && [[ "${DUMP}" == *:* ]]; then
+  echo "Fetching ${DUMP}…"
+  mkdir -p backups
+  rclone copy "${DUMP}" backups/ --progress
+  DUMP="backups/$(basename "${DUMP}")"
+fi
+
 if [ -z "${DUMP}" ] || [ ! -f "${DUMP}" ]; then
   echo "Usage: $0 <backups/sfm_YYYY-MM-DD_HHMM.sql.gz>" >&2
+  echo "   or: $0 ${GDRIVE_REMOTE}/sfm_YYYY-MM-DD_HHMM.sql.gz" >&2
+  echo >&2
+  echo "On this server:" >&2
   ls -1t backups/*.sql.gz 2>/dev/null | head -10 >&2 || true
+  echo "Off-site:" >&2
+  rclone lsf --files-only "${GDRIVE_REMOTE}" 2>/dev/null | sort -r | head -10 >&2 || true
   exit 1
 fi
 
