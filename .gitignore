@@ -41,6 +41,8 @@ Thumbs.db
 deploy/.env
 deploy/nginx/certs/
 deploy/backups/
+# The basic-auth password in front of the database window.
+deploy/nginx/secrets/
 
 # Test artefacts: minted role tokens and browser screenshots.
 # Tokens are written at the start of a run and deleted at the end; if a run is

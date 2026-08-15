@@ -275,6 +275,69 @@ OAuth client is still in Google Cloud Console, so on the new machine install
 rclone, run the three `rclone config` lines above with the same client ID and
 secret, and the backups are readable again.
 
+## Looking at the data — db.hellonizam.com
+
+Adminer, for browsing the tables the way Supabase's dashboard did.
+
+It signs in as a role holding `SELECT` and nothing else. That is the point, not
+caution: every figure in this application carries an audit row saying who put it
+there, and a text box that can `UPDATE` a table directly turns that record into
+a polite fiction. Changes go through the app, where they are recorded.
+
+**1. DNS.** A record `db` → the server's address, alongside `app` and `api`.
+
+**2. The basic-auth file.** On the server:
+
+```bash
+cd /opt/sfm/deploy
+mkdir -p nginx/secrets
+PASS="$(openssl rand -base64 18)"
+printf 'sfm:%s\n' "$(openssl passwd -apr1 "$PASS")" > nginx/secrets/db.htpasswd
+chmod 600 nginx/secrets/db.htpasswd
+echo "username: sfm"; echo "password: $PASS"
+```
+
+Put that password in your password manager and clear the terminal. It is
+git-ignored and lives only on this server; losing it costs one re-run.
+
+**3. The read-only role.** Still on the server:
+
+```bash
+VIEWER="$(openssl rand -base64 18)"
+docker compose exec -T db psql -U sfm -d sfm -v ON_ERROR_STOP=1 <<SQL
+create role sfm_viewer with login password '${VIEWER}';
+grant connect on database sfm to sfm_viewer;
+grant usage on schema public to sfm_viewer;
+grant select on all tables in schema public to sfm_viewer;
+alter default privileges in schema public grant select on tables to sfm_viewer;
+SQL
+echo "adminer user: sfm_viewer"; echo "adminer password: $VIEWER"
+```
+
+The `alter default privileges` line is the one that is easy to leave out and
+expensive to notice: without it a table added by a later migration is invisible
+here, and the viewer looks broken rather than out of date.
+
+**4. Start it and extend the certificate.**
+
+```bash
+docker compose --profile local-db up -d adminer
+certbot certonly --webroot -w /opt/sfm/deploy/certbot-www \
+  --cert-name app.hellonizam.com --expand \
+  -d app.hellonizam.com -d api.hellonizam.com -d db.hellonizam.com
+docker compose exec nginx nginx -s reload
+```
+
+Then `certbot renew --dry-run` once more. A certificate that renews for two
+names and not the third fails in eleven weeks, quietly, on the name nobody
+visits daily.
+
+**5. Sign in.** `https://db.hellonizam.com` → the browser asks for the basic-auth
+pair from step 2 → Adminer asks for `sfm_viewer` and the password from step 3.
+Server is pre-filled, database is `sfm`.
+
+If you ever need to write, do it with `psql` deliberately, not here.
+
 ## Browser warning
 
 With a self-signed certificate every browser shows a warning the first time.

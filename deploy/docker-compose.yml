@@ -47,6 +47,32 @@ services:
     expose:
       - "5432"
 
+  # A window on the data, for reading.
+  #
+  # In the same profile as the database, because it is only ever pointed at
+  # that one — starting a viewer for a database that is not running is the same
+  # mistake as backing one up.
+  #
+  # It signs in as a role that holds SELECT and nothing else. That is the point
+  # rather than caution: every figure in this application is accompanied by an
+  # audit row saying who put it there, and a text box that can UPDATE the table
+  # directly makes that record a polite fiction. Reading is what was asked for;
+  # writing has a front door.
+  adminer:
+    profiles: ["local-db"]
+    image: adminer:5-standalone
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      # Pre-fills the Server box, so the only things to type are the read-only
+      # user and its password.
+      ADMINER_DEFAULT_SERVER: db
+      TZ: Asia/Dhaka
+    # Reachable from nginx over the internal network, and from nowhere else.
+    expose:
+      - "8080"
+
   api:
     # Both an image and a build, on purpose.
     #
@@ -127,6 +153,16 @@ services:
       # looks for it. Renewal fails silently without this and the certificate
       # simply expires one day, which is the worst way to find out.
       - ./certbot-www:/var/www/certbot
+      # The basic-auth file in front of db.hellonizam.com, git-ignored and
+      # created on the server.
+      #
+      # The directory is mounted rather than the file, and that is deliberate:
+      # bind-mounting a path that does not exist yet makes Docker create a
+      # *directory* there, and nginx given a directory where it wants a config
+      # file will not start — which would take app. and api. down for the sake
+      # of a page nobody had set up yet. A missing password file inside a
+      # mounted directory is a 500 on that one hostname instead.
+      - ./nginx/secrets:/etc/nginx/secrets:ro
 
 volumes:
   db-data:
