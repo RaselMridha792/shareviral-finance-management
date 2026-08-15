@@ -150,6 +150,8 @@ deploy/
   backup.sh            a dump a day, verified, kept a month, copied to Drive
   restore.sh           takes a local or a Drive path; refuses to overwrite a
                        live database by accident
+  drill.sh             restores the Drive copy into a scratch database and
+                       compares it to the live one; touches nothing
   .env.example         copy to .env and fill in
 ```
 
@@ -239,22 +241,30 @@ ssh -L 53682:127.0.0.1:53682 root@THE_SERVER    # leave this window open
 rclone config reconnect gdrive:                 # answer y, then open the link it prints
 ```
 
-### Then do a restore now, while nothing is wrong
+### Then rehearse it, now, while nothing is wrong
 
 ```bash
-./deploy/backup.sh
-./deploy/restore.sh backups/sfm_*.sql.gz            # into a scratch database first
+./deploy/backup.sh      # take one
+./deploy/drill.sh       # fetch it back from Drive and restore it
 ```
 
-and once, from the copy that would actually be left if this server were gone:
+`drill.sh` pulls the newest copy off Drive — not the one already on this disk,
+which would only prove the server can read its own disk — restores it into a
+scratch database, checks the schema and the password hashes survived, and
+compares the figures against the live database. It never writes to the live
+database, and it drops the scratch one on the way out. Run it after any change
+to the backup path, and once in a while regardless.
+
+For an actual recovery, `restore.sh` takes either side:
 
 ```bash
-./deploy/restore.sh gdrive:sfm-backups/sfm_2026-08-16_0200.sql.gz
+./deploy/restore.sh backups/sfm_2026-08-16_0310.sql.gz
+./deploy/restore.sh gdrive:sfm-backups/sfm_2026-08-16_0310.sql.gz
 ```
 
-Run with no argument to list what exists on both sides.
+Run it with no argument to list what exists locally and on Drive.
 
-Sign in against the restored copy. Until you have done that once, you have
+Then sign in against the restored copy. Until you have done that once, you have
 backups but you do not have a recovery plan — and the difference only shows up
 on the day it matters.
 
