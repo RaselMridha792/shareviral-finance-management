@@ -130,18 +130,36 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The server pulls the images, and a private repository's packages are
+      # private too.
+      packages: read
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # Forwarded into the shell on the server, not written to a file.
+          envs: GHCR_USER,GHCR_TOKEN
           # A pull of two images on a small box is not instant.
           command_timeout: 15m
           script: |
             set -euo pipefail
             cd /opt/sfm
+
+            # Signing in for the length of this pull, rather than leaving a
+            # token on the server. GITHUB_TOKEN dies when this job ends, so
+            # even a copy of it is worthless a minute from now — which is not
+            # true of a personal access token, and the reason not to use one.
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Signed out even if the deploy fails below.
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
             # The compose file, nginx config and Dockerfiles live in git; only
             # .env does not. Pulling keeps the server's copy honest.
