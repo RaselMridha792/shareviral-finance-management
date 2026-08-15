@@ -11,7 +11,17 @@
 name: sfm
 
 services:
+  # Postgres on this box — off unless you ask for it.
+  #
+  #   docker compose up -d                       the database is elsewhere
+  #   docker compose --profile local-db up -d    run it here too
+  #
+  # A profile rather than a comment, because the choice has to be visible: the
+  # api service reads DATABASE_URL and does not care which of the two answered.
+  # Starting a Postgres nobody points at is how you end up backing up an empty
+  # database for a month.
   db:
+    profiles: ["local-db"]
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -48,14 +58,14 @@ services:
       context: ..
       dockerfile: deploy/api.Dockerfile
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 4001
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      DATABASE_URL_UNPOOLED: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # One setting decides where the data lives — a managed Postgres, or the
+      # `db` service above. The API cannot tell the difference and should not
+      # have to.
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_UNPOOLED:-${DATABASE_URL}}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}
