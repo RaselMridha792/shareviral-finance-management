@@ -163,26 +163,48 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "settings.read",
     "ai.use",
   ],
+  /**
+   * HR owns pay at this company, so HR can see and set it.
+   *
+   * This was the opposite for most of the app's life: compensation lived in its
+   * own table precisely so that no HR request could reach a salary, and the
+   * separation was enforced in six places. The owner changed the decision on
+   * 2026-08-15 — their HR runs payroll, and a role that cannot see a salary
+   * cannot do that job.
+   *
+   * The table stayed separate anyway, and that turned out to be worth it: this
+   * change is four lines here rather than a migration, and reversing it is
+   * deleting them. The compensation DTO, the exports and the audit trail all
+   * gate on `team.compensation.read` and pick this up on their own.
+   *
+   * Two things are still withheld, and both are about money leaving rather
+   * than money being decided:
+   */
   hr: [
     "dashboard.view",
     "team.read",
     "team.write",
+    "team.compensation.read",
+    "team.compensation.write",
+    /**
+     * The salary sheet, to read. `payroll.write` and `payroll.pay` are not
+     * here: deciding a salary and moving the bank balance are different acts,
+     * and the second belongs to Finance or Admin. HR prepares the month;
+     * somebody else releases the money.
+     */
+    "payroll.read",
     "vendors.read",
     "categories.read",
     /**
-     * `reports.view` is deliberately absent.
+     * `reports.view` is still deliberately absent, and for a reason that
+     * survives the change above.
      *
-     * It was here, and it undid the boundary this whole matrix exists for. HR
-     * cannot open payroll, cannot read a compensation record and cannot see a
-     * salary sheet — and then Reports rendered the company's position in full:
-     * opening ৳20,77,083, in ৳11,80,000, out ৳7,09,646, and a spend breakdown
-     * whose largest line was **"People 56% ৳3,94,300"** — that month's payroll,
-     * total, on the screen of a role whose own dashboard says "balances,
-     * payroll and pay are held elsewhere".
-     *
-     * Withholding the individual figures while publishing their sum is not a
-     * boundary. `reports.view` also carries the funding report and the bank
-     * statistics, neither of which is an HR question.
+     * It was here once, and it undid the boundary the matrix exists for: it
+     * renders the company's whole position — opening ৳20,77,083, in
+     * ৳11,80,000, out ৳7,09,646 — plus the funding report and the bank
+     * statistics. HR now sees what each person earns, which is HR's business.
+     * What the company holds in the bank and what the CEO sent from abroad is
+     * not the same question, and letting one through does not open the other.
      */
     "exports.run",
     "settings.read",

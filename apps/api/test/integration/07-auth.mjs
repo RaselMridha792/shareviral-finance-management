@@ -243,11 +243,28 @@ payrollWithOldToken.status === 401
   ? ok("the old token cannot reach what its old role could", "HTTP 401 on /payroll/runs")
   : bad("old token still has reach", `HTTP ${payrollWithOldToken.status}`);
 
+/**
+ * Signing in again must produce the new role's reach, not the old one.
+ *
+ * This used to check that HR is refused the payroll list. HR reads the salary
+ * sheet now, so that proved nothing about the role change — it had to become a
+ * thing HR still cannot do. The ledger is the clean one: finance could open it,
+ * HR cannot, and it has nothing to do with pay.
+ */
 const asHr = await login(EMAIL, PASSWORD);
-const hrPayroll = await fetch(`${API}/payroll/runs`, { headers: { authorization: `Bearer ${asHr.jar.sfm_access}`, "x-requested-with": "finance-web" } });
-hrPayroll.status === 403
-  ? ok("signing in again gives the new role, with the new limits", "HR gets 403 on payroll, not 200")
-  : bad("the new role applies", `HTTP ${hrPayroll.status}`);
+const hrHeaders = { authorization: `Bearer ${asHr.jar.sfm_access}`, "x-requested-with": "finance-web" };
+
+const hrLedger = await fetch(`${API}/transactions?page=1&pageSize=1`, { headers: hrHeaders });
+hrLedger.status === 403
+  ? ok("signing in again gives the new role, with the new limits", "the ledger was open to finance and is 403 to HR")
+  : bad("the new role applies", `expected 403 on the ledger, got ${hrLedger.status}`);
+
+// And the half of the new role that should work, so this is not just a
+// demotion that broke everything.
+const hrPayroll = await fetch(`${API}/payroll/runs`, { headers: hrHeaders });
+hrPayroll.status === 200
+  ? ok("and the new role's own reach works", "HR can read the salary sheet")
+  : bad("the new role's reach", `expected 200 on payroll, got ${hrPayroll.status}`);
 
 /* ------------------------------------------------- a password reset does too */
 

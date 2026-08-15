@@ -91,9 +91,16 @@ for (const [method, path, needs, body] of ROUTES) {
 }
 
 /* ------------------------------------------------------------------ */
-console.log("\nThe boundary this whole matrix exists for");
+console.log("\nWhere HR's line is now drawn");
 
-// HR must not be able to reach a pay figure by any route it can open.
+/**
+ * The line moved on 2026-08-15 and did not disappear.
+ *
+ * HR used to be refused every pay figure. The owner decided otherwise — their
+ * HR runs pay — so HR now reads and sets compensation and reads the salary
+ * sheet. What HR still cannot do is release the money, or see what the company
+ * itself holds. Those are the checks worth keeping.
+ */
 const hr = { authorization: `Bearer ${TOK.HR}`, "x-requested-with": "finance-web" };
 const team = await fetch(`${API}/team-members?page=1&pageSize=100`, { headers: hr });
 const json = await team.json();
@@ -103,14 +110,38 @@ const first = people[0];
 if (!first) { note++; console.log("  ????  HR team read — no people to inspect"); }
 else {
   const compensation = await fetch(`${API}/team-members/${first.id}/compensation`, { headers: hr });
-  compensation.status === 403
-    ? ok("HR compensation", "403") || console.log("  PASS  HR is refused a compensation record — 403")
-    : bad("HR compensation", `expected 403, got ${compensation.status}`);
+  compensation.status === 200
+    ? console.log("  PASS  HR can read a compensation record — 200, as decided") || pass++
+    : bad("HR compensation", `expected 200, got ${compensation.status}`);
+}
 
-  const current = Object.keys(first).filter((k) => /^(grossSalary|currentSalary|netSalary|compensation|tdsAmount|payroll)/i.test(k));
-  current.length
-    ? bad("HR team payload", `carries current pay: ${current.join(", ")}`)
-    : console.log("  PASS  HR team payload carries no current pay — joiningSalary only, which is the documented exception") || pass++;
+// Reading the sheet: allowed. Building one or paying it: not.
+{
+  const read = await fetch(`${API}/payroll/runs`, { headers: hr });
+  read.status === 200
+    ? console.log("  PASS  HR can open the salary sheet — 200") || pass++
+    : bad("HR payroll read", `expected 200, got ${read.status}`);
+
+  const build = await fetch(`${API}/payroll/runs`, {
+    method: "POST", headers: { "content-type": "application/json", ...hr },
+    body: JSON.stringify({ periodYear: 2026, periodMonth: 12 }),
+  });
+  build.status === 403
+    ? console.log("  PASS  HR cannot create a payroll run — 403") || pass++
+    : bad("HR payroll write", `expected 403, got ${build.status}`);
+}
+
+// The company's own position stays off HR's screens: knowing every salary is
+// not the same as knowing the bank balance or what the CEO sent.
+for (const [label, path] of [
+  ["the reports", "/reports/period?granularity=month"],
+  ["the ledger", "/transactions?page=1&pageSize=1"],
+  ["the bank statistics", "/reports/bank-stats?year=2026"],
+]) {
+  const r = await fetch(`${API}${path}`, { headers: hr });
+  r.status === 403
+    ? console.log(`  PASS  HR cannot open ${label} — 403`) || pass++
+    : bad(`HR and ${label}`, `expected 403, got ${r.status}`);
 }
 
 // And the export it IS allowed to run must not carry one either.

@@ -158,37 +158,32 @@ console.log("\nThe sheet holds what the screen was holding");
 }
 
 /* ---------------------------------------------------------------- */
-console.log("\nHR's copy carries no pay");
+console.log("\nHR's copy, now that HR owns pay");
 {
   const res = await grab("/exports/team-members", "HR");
   if (res.status !== 200) bad("HR team export", `HTTP ${res.status}`);
   else {
-    const { headers, body } = await inspect(res.buf);
-    const payColumns = headers.filter((h) => /salary|pay|compensation|gross|net|tds/i.test(h));
+    const { headers } = await inspect(res.buf);
+    ok("HR can run the team export", `${headers.length} columns`);
+  }
 
-    // Assert against a figure that really is in the books, so this cannot pass
-    // by looking for something that was never there.
-    const people = await fetch(`${API}/team-members?page=1&pageSize=100`, { headers: H() }).then((r) => r.json());
-    const withPay = (people.items ?? people.data ?? []).find((p) => p.joiningSalary);
-    const secret = withPay ? String(Math.round(Number(withPay.joiningSalary))) : null;
-
-    let leaked = false;
-    if (secret) {
-      for (const row of body) {
-        row.eachCell((c) => { if (String(c.value ?? "").replace(/[,\s]/g, "").includes(secret)) leaked = true; });
-      }
-    }
-
-    /**
-     * "Joining salary" is the documented exception: the figure from the offer
-     * letter, which is HR's own paperwork and never changes. What must not
-     * appear is anything about what somebody is paid NOW.
-     */
-    const beyondTheException = payColumns.filter((h) => !/^joining salary$/i.test(h));
-    if (beyondTheException.length) bad("HR export", `carries current pay: ${beyondTheException.join(", ")}`);
-    else if (payColumns.length) ok("HR export", `${headers.length} columns; the only pay column is "${payColumns.join(", ")}", the documented exception`);
-    else ok("HR export", `${headers.length} columns, no pay column at all`);
-    if (secret && !leaked) note++, console.log(`  ????  HR export — ${secret} was not found in any cell, so the leak check proved nothing`);
+  /**
+   * The export that must still refuse.
+   *
+   * HR reads salaries now, so the old check — "HR's spreadsheet carries no
+   * pay" — no longer describes anything. What has not changed is that HR does
+   * not run the payroll or see the company's own position, and an export is
+   * where a permission boundary is most often forgotten: the endpoint is
+   * guarded and the download beside it quietly is not.
+   */
+  for (const [label, target] of [
+    ["the ledger", "/exports/transactions"],
+    ["the monthly report", "/exports/reports/period?granularity=month"],
+  ]) {
+    const denied = await grab(target, "HR");
+    denied.status === 403
+      ? ok(`HR cannot download ${label}`, "403")
+      : bad(`HR and ${label}`, `expected 403, got ${denied.status}`);
   }
 }
 

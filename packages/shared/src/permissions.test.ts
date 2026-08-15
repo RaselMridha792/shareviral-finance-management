@@ -11,33 +11,60 @@ import {
 } from "./permissions.ts";
 
 describe("the HR boundary", () => {
-  // The single most important rule in the app: HR manages people but must
-  // never see what they are paid.
-  it("denies HR every compensation permission", () => {
-    assert.equal(hasPermission("hr", "team.compensation.read"), false);
-    assert.equal(hasPermission("hr", "team.compensation.write"), false);
-    assert.equal(canSeeCompensation("hr"), false);
+  /**
+   * The boundary moved on 2026-08-15; it did not disappear.
+   *
+   * For most of this app's life the rule was that HR must never see a salary,
+   * and it was enforced in six places. The owner changed it: their HR runs
+   * pay, and a role that cannot see a salary cannot do that job.
+   *
+   * So the line is no longer between knowing and not knowing. It is between
+   * deciding what someone earns and moving the money out of the bank — and
+   * between one person's pay, which is HR's business, and what the company
+   * holds, which is not.
+   */
+  it("lets HR see and set what people are paid", () => {
+    assert.equal(hasPermission("hr", "team.compensation.read"), true);
+    assert.equal(hasPermission("hr", "team.compensation.write"), true);
+    assert.equal(canSeeCompensation("hr"), true);
   });
 
-  it("denies HR every payroll permission", () => {
-    assert.equal(hasPermission("hr", "payroll.read"), false);
+  it("lets HR read the salary sheet but not run it or pay it", () => {
+    assert.equal(hasPermission("hr", "payroll.read"), true);
     assert.equal(hasPermission("hr", "payroll.write"), false);
     assert.equal(hasPermission("hr", "payroll.pay"), false);
   });
 
-  it("still lets HR do its actual job", () => {
+  it("still lets HR do the rest of its job", () => {
     assert.equal(hasPermission("hr", "team.read"), true);
     assert.equal(hasPermission("hr", "team.write"), true);
   });
 
-  it("keeps money off HR's dashboard", () => {
+  it("keeps the company's own money off HR's screens", () => {
+    // Knowing every salary is not the same as knowing the bank balance, what
+    // the CEO sent from abroad, or the month's totals. Letting the first
+    // through does not open the second.
     assert.equal(hasPermission("hr", "dashboard.view"), true);
     assert.equal(hasPermission("hr", "dashboard.money"), false);
+    assert.equal(hasPermission("hr", "reports.view"), false);
+    assert.equal(hasPermission("hr", "transactions.read"), false);
   });
 
-  it("grants compensation access to exactly the four money roles", () => {
+  it("grants compensation access to the money roles and to HR", () => {
     const allowed = ROLES.filter((role) => canSeeCompensation(role));
-    assert.deepEqual(allowed, ["super_admin", "ceo", "admin", "finance"]);
+    assert.deepEqual(allowed, [
+      "super_admin",
+      "ceo",
+      "admin",
+      "finance",
+      "hr",
+    ]);
+  });
+
+  it("leaves paying the payroll to the roles that hold the bank", () => {
+    // The one that matters most: this is money actually leaving.
+    const canPay = ROLES.filter((role) => hasPermission(role, "payroll.pay"));
+    assert.deepEqual(canPay, ["super_admin", "admin", "finance"]);
   });
 });
 

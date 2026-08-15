@@ -33,12 +33,18 @@ export function HrDashboard({
           <Users className="size-5" />
         </span>
         <div>
+          {/*
+            This said "balances, payroll and pay are held elsewhere", which
+            stopped being true when HR was given compensation and the salary
+            sheet. A dashboard that describes the wrong account is worse than
+            an empty one: the person believes it and stops looking.
+          */}
           <p className="text-sm font-semibold">
-            The company&apos;s figures are not on this account
+            The company&apos;s own figures are not on this account
           </p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            Balances, payroll and pay are held elsewhere. Everything you do need
-            is in the sidebar.
+            Bank balances and the monthly reports sit with Finance. People, pay
+            and the salary sheet are yours — they are in the sidebar.
           </p>
         </div>
         <Link
