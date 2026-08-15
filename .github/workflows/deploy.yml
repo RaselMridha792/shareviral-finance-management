@@ -28,8 +28,16 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_API: ghcr.io/${{ github.repository_owner }}/sfm-api
-  IMAGE_WEB: ghcr.io/${{ github.repository_owner }}/sfm-web
+  # Written out rather than built from ${{ github.repository_owner }}, which
+  # gives `RaselMridha792` — and a registry name must be lowercase, so the tag
+  # is rejected outright.
+  #
+  # These two strings must match the defaults in deploy/docker-compose.yml
+  # exactly. If they drift, CI pushes under one name and the server pulls
+  # another: both jobs go green and the old code keeps running, which is a far
+  # worse failure than the one above.
+  IMAGE_API: ghcr.io/raselmridha792/sfm-api
+  IMAGE_WEB: ghcr.io/raselmridha792/sfm-web
 
 jobs:
   # --------------------------------------------------------------------------
