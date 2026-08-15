@@ -478,6 +478,60 @@ await new Promise((r) => setTimeout(r, 600));
   }
 }
 
+/* --------------------- a table of records does not prefetch every record */
+
+/**
+ * Measured, not read off the source.
+ *
+ * A page view of /team used to fire one prefetch per person — eighteen
+ * requests to open at most one page, and the list that grows fastest. Reading
+ * the JSX for `prefetch={false}` would prove only that somebody typed it; this
+ * watches what the browser actually asks for.
+ */
+{
+  const rowRequests = [];
+  const watch = (r) => {
+    if (/[?&]_rsc=/.test(r.url())) rowRequests.push(new URL(r.url()).pathname);
+  };
+  page.on("request", watch);
+
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto(`${WEB}/team`, { waitUntil: "networkidle2", timeout: 45_000 });
+  await new Promise((r) => setTimeout(r, 5000));
+
+  const people = await page.evaluate(
+    () => document.querySelectorAll("table tbody tr").length,
+  );
+  const perRow = rowRequests.filter((p) => /^\/team\/[0-9a-f-]{36}$/i.test(p));
+  page.off("request", watch);
+
+  /**
+   * Next only prefetches in production, so against `next dev` this check sees
+   * nothing and would pass no matter what the code says — the vacuous pass
+   * this whole suite exists to avoid. Requiring some prefetch traffic before
+   * drawing a conclusion is what makes the zero meaningful.
+   */
+  if (rowRequests.length === 0) {
+    meh(
+      "the team table prefetch check",
+      "no prefetch traffic at all — prefetching is production-only, so this " +
+        "proves nothing against `next dev`. Run it against `next build && next start`.",
+    );
+  } else if (people <= 1) {
+    meh("the team table prefetch check", `only ${people} row(s) — too few to prove anything`);
+  } else if (perRow.length === 0) {
+    ok(
+      "the team table does not prefetch a page per person",
+      `${people} people listed, ${rowRequests.length} prefetch(es) fired, none of them a person's page`,
+    );
+  } else {
+    bad(
+      "the team table prefetches every row",
+      `${people} people listed and ${perRow.length} of their pages fetched before anyone asked`,
+    );
+  }
+}
+
 /* ------------------------- the USD rule, proved on both kinds of figure */
 
 translatedSeen.size > 0 && recordedSeen.size > 0

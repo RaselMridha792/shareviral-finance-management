@@ -205,8 +205,23 @@ function Section({
                   className="row-finance hover:bg-surface-muted/50"
                 >
                   <td className="px-4 py-2.5">
+                    {/*
+                      prefetch={false} on every link that repeats per row.
+
+                      Next prefetches each link as it enters the viewport, so
+                      this table asked the server for one route per person —
+                      eighteen requests to open, at most, one page. Measured on
+                      the deployed site: a page view of /team fired 33 prefetch
+                      requests, and the team is the list that grows.
+
+                      Each one is only ~330 bytes of routing information and
+                      never touches the API, so this is not a bug being fixed;
+                      it is work not worth doing. The sidebar keeps its
+                      prefetch, because there the guess is usually right.
+                    */}
                     <Link
                       href={`/team/${member.id}`}
+                      prefetch={false}
                       className="font-medium hover:text-primary hover:underline"
                     >
                       {member.fullName}
@@ -249,6 +264,7 @@ function Section({
                         and stays a real link — middle-click still opens it. */}
                     <Link
                       href={`/team/${member.id}`}
+                      prefetch={false}
                       className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground transition hover:bg-surface-muted"
                     >
                       <Eye className="size-3.5" />

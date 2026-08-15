@@ -165,9 +165,11 @@ export function ExpensesScreen({
           {summary.groups.map((group) => {
             const share = (Number(group.total) / Number(summary.total)) * 100;
             return (
+              // One tile per category — see the note in team-screen.tsx.
               <Link
                 key={group.id}
                 href={`/expenses/${group.slug}?from=${range.from}&to=${range.to}`}
+                prefetch={false}
                 className="rounded-xl border border-border bg-surface p-5 shadow-e1 transition hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <div className="flex items-center gap-2.5">

@@ -106,7 +106,41 @@ async function ensure(name, url, cwd, args, extraEnv = {}) {
 await ensure("API", `${API}/health`, path.join(REPO, "apps/api"), ["run", "start"], {
   PORT: String(API_PORT),
 });
-await ensure("Web", `${WEB}/login`, path.join(REPO, "apps/web"), ["run", "dev"], {
+/**
+ * The web app is served from a production build, not `next dev`.
+ *
+ * Prefetching only runs in production, and the suite checks that a table of
+ * records does not prefetch a page per record. Against `next dev` that check
+ * sees no traffic at all and would pass whatever the code says. It costs a
+ * build at the start of the run and buys a check that means something.
+ *
+ * `next start` also serves the same output Vercel does, so the pass says
+ * something about what is deployed rather than about a dev server.
+ */
+if (!(await alive(`${WEB}/login`))) {
+  console.log("Web: building…");
+  const built = await new Promise((resolve) => {
+    const child = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], {
+      cwd: path.join(REPO, "apps/web"),
+      env: { ...process.env, ...env, API_URL: API },
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: process.platform === "win32",
+    });
+    const log = [];
+    child.stdout.on("data", (d) => log.push(String(d)));
+    child.stderr.on("data", (d) => log.push(String(d)));
+    child.on("close", (code) => {
+      if (code) console.error(log.join("").slice(-2000));
+      resolve(code);
+    });
+  });
+  if (built) {
+    console.error("The web build failed — nothing below would be testable.");
+    process.exit(1);
+  }
+}
+
+await ensure("Web", `${WEB}/login`, path.join(REPO, "apps/web"), ["run", "start"], {
   PORT: String(WEB_PORT),
   API_URL: API,
 });

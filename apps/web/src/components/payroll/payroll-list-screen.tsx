@@ -93,8 +93,10 @@ export function PayrollListScreen({
                 {initialPage.items.map((run) => (
                   <tr key={run.id} className="row-finance hover:bg-surface-muted/50">
                     <td className="px-4 py-2.5">
+                      {/* One link per row — see the note in team-screen.tsx. */}
                       <Link
                         href={`/payroll/${run.id}`}
+                        prefetch={false}
                         className="font-medium hover:text-primary hover:underline"
                       >
                         {run.label}

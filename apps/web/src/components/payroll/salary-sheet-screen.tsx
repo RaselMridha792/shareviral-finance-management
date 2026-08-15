@@ -312,6 +312,7 @@ function LineRow({
         ) : line.isPaid ? (
           <Link
             href={`/payroll/${line.id}/payslip`}
+            prefetch={false}
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
             <Printer className="size-3" />

@@ -484,6 +484,7 @@ export function TeamMemberScreen({
                               */}
                             <Link
                               href={`/payroll/${slip.id}/payslip`}
+                              prefetch={false}
                               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                             >
                               <Printer className="size-3" />
