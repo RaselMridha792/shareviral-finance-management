@@ -37,6 +37,20 @@ jobs:
   # --------------------------------------------------------------------------
   test:
     runs-on: ubuntu-latest
+    env:
+      # next.config.ts refuses to load without this once NODE_ENV is production,
+      # which is deliberate — it is what stops a placeholder API_URL reaching a
+      # deployment. `next typegen` loads the config too, so the guard fires here
+      # as well.
+      #
+      # A developer never sees it, because apps/web/.env.local supplies the
+      # value and that file is git-ignored. CI is the first place the repository
+      # is ever seen without it, which is exactly why the value belongs here in
+      # the open rather than in a file nobody checks in.
+      #
+      # The value is irrelevant to typechecking — only that the rewrite has
+      # somewhere to point. The real one is baked into the image at build time.
+      API_URL: http://localhost:4001/api
     steps:
       - uses: actions/checkout@v4
 
