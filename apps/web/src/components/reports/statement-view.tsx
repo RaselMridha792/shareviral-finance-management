@@ -10,6 +10,7 @@ import {
 } from "@finance/shared";
 import {
   CircleCheck,
+  FileDown,
   FileWarning,
   Info,
   LoaderCircle,
@@ -27,7 +28,9 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/components/settings-provider";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/field";
+import { useCan } from "@/components/auth/session-provider";
 import { ApiError } from "@/lib/api-client";
+import { exportUrl } from "@/lib/ledger";
 import { reportsApi, type AvailablePeriods } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 
@@ -216,6 +219,19 @@ export function StatementView({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  /**
+   * Both, and each read on its own line.
+   *
+   * The PDF is the cash position in two currencies down to the last entry, so
+   * it needs the permission to download *and* the permission to see what is
+   * being downloaded — the same pair the endpoint asks for. Written as
+   * `useCan(a) && useCan(b)` the second call is skipped whenever the first is
+   * false, which is a hook that runs on some renders and not others.
+   */
+  const canRunExports = useCan("exports.run");
+  const canSeeMoney = useCan("dashboard.money");
+  const canExport = canRunExports && canSeeMoney;
 
   const adopt = useCallback((next: FinancialStatement) => {
     setStatement(next);
@@ -458,6 +474,38 @@ export function StatementView({
                   </option>
                 ))}
               </Select>
+            ) : null}
+
+            {/*
+              The document, as a document.
+
+              Here rather than in the page header, where the Excel button for
+              the other three tabs lives: this is a statement, not a table, so
+              a spreadsheet of it would be a different thing — and the period
+              it covers is chosen by the three selects immediately to the left
+              of this button, not by the page.
+
+              Nothing is downloaded on a sample: the endpoint would answer for
+              a period that has no statement, and a PDF of placeholder figures
+              is the one output nobody would notice was fake.
+            */}
+            {canExport && !sample ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-9"
+                disabled={loading}
+                onClick={() => {
+                  window.location.href = exportUrl("statement.pdf", {
+                    granularity,
+                    fiscalYear,
+                    index,
+                  });
+                }}
+              >
+                <FileDown className="size-4" />
+                PDF
+              </Button>
             ) : null}
           </div>
         </div>

@@ -224,6 +224,7 @@ export function OtherExpensesScreen({
         defaultDirection="out"
         accounts={accounts}
         categories={categories}
+        lockDirection
         onClose={() => setCreating(false)}
         onSaved={load}
       />
@@ -233,6 +234,7 @@ export function OtherExpensesScreen({
         transaction={editing ?? undefined}
         accounts={accounts}
         categories={categories}
+        lockDirection
         onClose={() => setEditing(null)}
         onSaved={load}
       />

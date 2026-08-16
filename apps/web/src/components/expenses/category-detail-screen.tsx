@@ -174,6 +174,7 @@ export function CategoryDetailScreen({
         transaction={editing ?? undefined}
         accounts={accounts}
         categories={categories}
+        lockDirection
         onClose={() => setEditing(null)}
         onSaved={refresh}
       />

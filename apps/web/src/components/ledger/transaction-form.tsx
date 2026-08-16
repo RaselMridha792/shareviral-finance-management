@@ -30,6 +30,7 @@ export function TransactionForm({
   open,
   transaction,
   defaultDirection = "out",
+  lockDirection = false,
   defaultAccountId,
   accounts,
   categories,
@@ -39,6 +40,16 @@ export function TransactionForm({
   open: boolean;
   transaction?: TransactionDto;
   defaultDirection?: TxnDirection;
+  /**
+   * Hides the in/out switch and keeps the form on `defaultDirection`.
+   *
+   * Set on every Expenses screen. Money coming in never belongs on a page
+   * about what the company spent, and offering the choice there is offering a
+   * way to file a receipt under Expenses — where nobody would think to look
+   * for it afterwards. Cash-in has its own form, which asks the questions a
+   * remittance actually needs.
+   */
+  lockDirection?: boolean;
   defaultAccountId?: string;
   accounts: AccountDto[];
   categories: CategoryNode[];
@@ -167,7 +178,7 @@ export function TransactionForm({
       }
     >
       <form id="txn-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-        {!editing ? (
+        {!editing && !lockDirection ? (
           <div
             role="radiogroup"
             aria-label="Direction"
