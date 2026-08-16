@@ -188,6 +188,70 @@ console.log("What the bytes say, not what the name says");
 }
 
 /* ------------------------------------------------------------------ */
+console.log("\nReplacing the photograph");
+
+{
+  /**
+   * A second photograph retires the first, and takes its bytes with it.
+   *
+   * The retiring worked from the start; the bytes did not go. Every
+   * replacement left a file on the server that nothing referenced and nothing
+   * could reach, and it only came to light because the backup counts what is
+   * on disk: eleven files against two the database knew about.
+   */
+  const before = await fetch(`${API}/files/team-member/${member.id}`, {
+    headers: auth(),
+  }).then((r) => r.json());
+
+  const second = await upload(`/files/team-member/${member.id}`, {
+    bytes: PNG,
+    filename: "second.png",
+    type: "image/png",
+    kind: "profile_photo",
+  });
+
+  if (second.status !== 200 && second.status !== 201) {
+    bad("replacing a photo", `HTTP ${second.status}`);
+  } else {
+    // The first id is dropped from `created`: it is already gone, and asking
+    // for it again in the cleanup below would report a false failure.
+    const first = created.shift();
+    created.unshift(second.body.id);
+
+    const stale = await fetch(`${API}/files/${first}/content`, {
+      headers: auth(),
+    });
+    stale.status === 404
+      ? ok("the replaced photo is gone", "404 — row retired and bytes removed")
+      : bad(
+          "the replaced photo",
+          `expected 404, got ${stale.status} — the old file is still on the server`,
+        );
+
+    const profile = await fetch(`${API}/team-members/${member.id}`, {
+      headers: auth(),
+    }).then((r) => r.json());
+    profile.photoFileId === second.body.id
+      ? ok("the profile follows the new photo", profile.photoFileId)
+      : bad(
+          "the profile after a replacement",
+          `expected ${second.body.id}, got ${profile.photoFileId ?? "null"}`,
+        );
+
+    // And the documents list is unchanged: a photograph is not a document.
+    const after = await fetch(`${API}/files/team-member/${member.id}`, {
+      headers: auth(),
+    }).then((r) => r.json());
+    after.length === before.length
+      ? ok("a photo never enters the documents list", `${after.length} document(s)`)
+      : bad(
+          "the documents list",
+          `${before.length} before the photo, ${after.length} after`,
+        );
+  }
+}
+
+/* ------------------------------------------------------------------ */
 console.log("\nSize");
 
 {

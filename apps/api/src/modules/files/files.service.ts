@@ -256,6 +256,17 @@ export class FilesService {
 
     const stored = await this.storage.write(upload.buffer, mimeType);
 
+    /**
+     * The keys a replacement retires, so their bytes can go once it commits.
+     *
+     * Without this every new photograph left the old one on disk for good.
+     * Nothing referenced it, nothing could reach it, and nothing said so —
+     * eleven files on the server against two the database knew about, which
+     * only showed up because the backup counts both. It is the leak the
+     * orphan sweep exists to catch, and this stops writing them.
+     */
+    const retired: string[] = [];
+
     try {
       const row = await this.audit.mutate({
         action: "create",
@@ -270,7 +281,7 @@ export class FilesService {
           // in the same transaction that makes the new one current. Doing this
           // afterwards would leave a window with two.
           if (SINGULAR_KINDS.includes(kind)) {
-            await tx
+            const gone = await tx
               .update(files)
               .set({ deletedAt: new Date(), deletedBy: actor.id })
               .where(
@@ -279,7 +290,10 @@ export class FilesService {
                   eq(files.kind, kind),
                   isNull(files.deletedAt),
                 ),
-              );
+              )
+              .returning({ storageKey: files.storageKey });
+
+            retired.push(...gone.map((g) => g.storageKey));
           }
 
           const [inserted] = await tx
@@ -302,6 +316,22 @@ export class FilesService {
           return inserted;
         },
       });
+
+      /**
+       * After the commit, never inside it.
+       *
+       * `unlink` cannot be rolled back. Removing the old photograph inside the
+       * transaction would mean a later failure leaves the record saying the
+       * previous file is current while its bytes are already gone — which is a
+       * broken image with no way back, rather than a file nobody points at.
+       */
+      for (const key of retired) {
+        await this.storage.remove(key).catch((caught: unknown) => {
+          this.logger.error(
+            `Replaced ${key} but could not delete it: ${String(caught)}`,
+          );
+        });
+      }
 
       return this.toDto(row, actor.fullName);
     } catch (error) {
