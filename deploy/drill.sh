@@ -177,8 +177,20 @@ fi
 
 if [ "${fail}" -eq 0 ]; then
   echo
-  echo "PASSED: the copy on Drive restores to the same figures as the live database,"
-  echo "        and every file it refers to is off-site and intact"
+  echo "PASSED: the copy on Drive restores to the same figures as the live database."
+  # Said separately, and only when it is true.
+  #
+  # This used to end "...and every file it refers to is off-site and intact"
+  # unconditionally, which on a database with no files at all is a sentence
+  # about nothing, printed in green. A pass has to say what was actually
+  # checked, or it is the same trap as a warning that is always wrong.
+  if [ "${EXPECTED_COUNT}" -eq 0 ]; then
+    echo "        No uploaded files are recorded yet, so nothing was checked off-site."
+    echo "        Upload one through the app and run this again to test that half."
+  else
+    echo "        All ${EXPECTED_COUNT} file(s) it refers to are off-site, and one was"
+    echo "        fetched back and matched against its recorded checksum."
+  fi
 fi
 
 exit "${fail}"

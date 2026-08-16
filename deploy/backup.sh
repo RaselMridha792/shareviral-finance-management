@@ -174,7 +174,20 @@ if ! rclone check "${UPLOADS_DIR}" "${UPLOADS_REMOTE}/current" --one-way; then
   exit 1
 fi
 
-rclone delete "${UPLOADS_REMOTE}/replaced" \
-  --min-age "${KEEP_DAYS}d" --drive-use-trash=false || true
+# Only if there is something to prune.
+#
+# `rclone delete` on a folder that has never been created fails three times
+# and prints three ERROR lines, and it will do that every night until the
+# first file is ever replaced. A nightly error that means nothing is how
+# people learn to skim past the one that means something — the same reason the
+# always-wrong CREATE TABLE warning came out of this script earlier today.
+if rclone lsf "${UPLOADS_REMOTE}/replaced" >/dev/null 2>&1; then
+  rclone delete "${UPLOADS_REMOTE}/replaced" \
+    --min-age "${KEEP_DAYS}d" --drive-use-trash=false || true
+fi
 
-echo "         uploads verified against ${UPLOADS_REMOTE}/current"
+if [ "${LOCAL_FILES}" -eq 0 ]; then
+  echo "         no uploaded files yet — the folder is in step, with nothing in it"
+else
+  echo "         ${LOCAL_FILES} file(s) verified against ${UPLOADS_REMOTE}/current"
+fi
