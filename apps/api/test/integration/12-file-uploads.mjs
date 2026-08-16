@@ -158,6 +158,30 @@ console.log("What the bytes say, not what the name says");
   if (res.status === 201 || res.status === 200) {
     created.push(res.body.id);
     ok("a real png is accepted", `${res.body.mimeType}, ${res.body.sizeBytes} bytes`);
+
+    /**
+     * And the profile has to be able to find it again.
+     *
+     * This is the assertion that was missing. The photograph uploaded, stored
+     * and downloaded perfectly well; the profile read it with a correlated
+     * subquery whose outer column drizzle rendered unqualified, so the
+     * condition compared a file's owner to its own id, matched nothing, and
+     * returned NULL. Nothing errored — NULL is a fine answer to "which photo"
+     * — and every avatar quietly fell back to initials.
+     *
+     * A round trip, because "it uploaded" and "the page can show it" turned
+     * out to be different questions.
+     */
+    const profile = await fetch(`${API}/team-members/${member.id}`, {
+      headers: auth(),
+    }).then((r) => r.json());
+
+    profile.photoFileId === res.body.id
+      ? ok("the profile reports the photo", profile.photoFileId)
+      : bad(
+          "the profile's photoFileId",
+          `uploaded ${res.body.id}, profile says ${profile.photoFileId ?? "null"} — the avatar falls back to initials`,
+        );
   } else {
     bad("a real png", `expected 200/201, got ${res.status} ${res.body?.message ?? ""}`);
   }

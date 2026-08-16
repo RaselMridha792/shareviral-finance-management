@@ -17,7 +17,7 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { compensationHistory, teamMembers } from "../../db/schema";
+import { compensationHistory, files, teamMembers } from "../../db/schema";
 
 /**
  * What anyone who can read the team may see about a person.
@@ -177,6 +177,7 @@ export class TeamMembersService {
     const [row] = await this.db.client
       .select(readProjection)
       .from(teamMembers)
+      .leftJoin(files, livePhoto)
       .where(and(eq(teamMembers.id, id), isNull(teamMembers.deletedAt)))
       .limit(1);
 
@@ -509,25 +510,35 @@ const projection = {
  *
  * Kept separate from `projection` above because that one is also handed to
  * `returning()` on insert and update, and `returning()` can only name columns
- * of the table being written. A subquery there is a runtime error on the one
- * path that has no photo to report anyway.
+ * of the table being written.
  *
- * A subquery rather than a join: a join would need `distinct` or a `group by`
- * to survive a person ever having two photo rows, and getting that wrong
- * duplicates people in the directory. Uploading a photo already retires the
- * previous one in the same transaction, so `limit 1` is belt on top of braces.
+ * Paired with the left join in `findOne`, and it does not work without it.
+ *
+ * It was a correlated subquery first, and it was broken in the same way the
+ * accounts balance was broken on the same day, written in the same hour:
+ * inside a `sql` template drizzle renders a column as its bare name, so
+ * `where f.team_member_id = ${teamMembers.id}` became
+ * `where f.team_member_id = "id"`, and inside `from files f` that "id" is the
+ * file's own. The condition asked whether a file's owner is its own id, which
+ * is never true, so every person came back with no photograph and the avatar
+ * fell back to initials — with no error anywhere, because NULL is a perfectly
+ * good answer to "which photo".
+ *
+ * The join is written with `eq()` and `and()`, which qualify. At most one row
+ * can match: uploading a photograph retires the previous one in the same
+ * transaction, so there is never a second live `profile_photo` to duplicate
+ * the person.
  */
 const readProjection = {
   ...projection,
-  photoFileId: sql<string | null>`(
-    select f.id from files f
-    where f.team_member_id = ${teamMembers.id}
-      and f.kind = 'profile_photo'
-      and f.deleted_at is null
-    order by f.created_at desc
-    limit 1
-  )`,
+  photoFileId: files.id,
 };
+
+const livePhoto = and(
+  eq(files.teamMemberId, teamMembers.id),
+  eq(files.kind, "profile_photo"),
+  isNull(files.deletedAt),
+);
 
 function describeUpdate(
   existing: TeamMemberDto,
