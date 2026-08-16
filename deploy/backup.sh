@@ -134,3 +134,47 @@ rclone delete "${GDRIVE_REMOTE}" \
 
 COPIES=$(rclone lsf --files-only --include 'sfm_*.sql.gz' "${GDRIVE_REMOTE}" 2>/dev/null | wc -l || true)
 echo "         ${COPIES} backup(s) now off this server"
+
+# --------------------------------------------------------------------------
+# The uploaded files
+# --------------------------------------------------------------------------
+# The dump above holds every row and not one byte of any document. A photograph
+# of an employee and a scanned appointment letter cannot be regenerated from
+# anything, so they need their own copy off this machine.
+#
+# Synced rather than tarred: only what changed is sent, so this stays a few
+# seconds a night as the folder grows into the gigabytes the disk allows.
+UPLOADS_DIR="${UPLOADS_DIR:-./uploads}"
+UPLOADS_REMOTE="${UPLOADS_REMOTE:-${GDRIVE_REMOTE%%:*}:sfm-uploads}"
+
+if [ ! -d "${UPLOADS_DIR}" ]; then
+  echo "         no uploads directory yet — nothing to sync"
+  exit 0
+fi
+
+LOCAL_FILES=$(find "${UPLOADS_DIR}" -type f ! -name '.*' | wc -l)
+echo "[$(TZ=Asia/Dhaka date)] syncing ${LOCAL_FILES} uploaded file(s) to ${UPLOADS_REMOTE}"
+
+# --backup-dir, so `sync` moves anything deleted or replaced aside instead of
+# removing it. Without it this faithfully mirrors a mistake: a file deleted
+# here at 1am is gone from the off-site copy at 2am, and the copy that could
+# have brought it back is the thing that just erased it.
+if ! rclone sync "${UPLOADS_DIR}" "${UPLOADS_REMOTE}/current" \
+  --backup-dir "${UPLOADS_REMOTE}/replaced" \
+  --retries 3 --timeout 10m; then
+  echo "FAILED: could not sync ${UPLOADS_DIR} to ${UPLOADS_REMOTE}" >&2
+  exit 1
+fi
+
+# Ask the other side, exactly as for the dump. --one-way: every local file must
+# be present and identical there; files there and not here are the ones
+# --backup-dir set aside, and are meant to be.
+if ! rclone check "${UPLOADS_DIR}" "${UPLOADS_REMOTE}/current" --one-way; then
+  echo "FAILED: the off-site copy of the uploads does not match this server" >&2
+  exit 1
+fi
+
+rclone delete "${UPLOADS_REMOTE}/replaced" \
+  --min-age "${KEEP_DAYS}d" --drive-use-trash=false || true
+
+echo "         uploads verified against ${UPLOADS_REMOTE}/current"

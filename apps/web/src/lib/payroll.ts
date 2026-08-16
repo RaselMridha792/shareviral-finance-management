@@ -77,9 +77,25 @@ export type TeamMemberDto = {
 
   /* --- papers on file ----------------------------------------------------- */
 
-  /** Links, like `photoUrl`. Nothing is uploaded to this app. */
+  /**
+   * Google Drive links, from before this app held files of its own.
+   *
+   * They still work and are still shown when a record has one. Uploaded
+   * documents are a separate list, fetched from `/files/team-member/:id` —
+   * separate because a document that names a salary needs its own permission,
+   * and that decision belongs on the request rather than in this shape.
+   */
   cvUrl: string | null;
   appointmentLetterUrl: string | null;
+
+  /**
+   * The uploaded photograph, when there is one.
+   *
+   * Optional rather than nullable: the create and update responses do not
+   * report it, because it is read with a subquery the API's `returning()`
+   * cannot run. Every read — the directory and the profile — carries it.
+   */
+  photoFileId?: string | null;
 };
 
 export type CompensationDto = {

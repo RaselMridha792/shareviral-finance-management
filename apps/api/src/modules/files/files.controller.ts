@@ -1,0 +1,173 @@
+import {
+  isImageMime,
+  uploadFileSchema,
+  UPLOAD_HARD_LIMIT_BYTES,
+  type UploadFileInput,
+} from "@finance/shared";
+import {
+  BadRequestException,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
+import { z } from "zod";
+
+import {
+  CurrentUser,
+  RequirePermission,
+  type AuthenticatedUser,
+} from "../../common/decorators/auth.decorators";
+import { ZodBody } from "../../common/pipes/zod-validation.pipe";
+import { FilesService } from "./files.service";
+
+const uuidSchema = z.string().uuid("Not a valid id");
+
+/** One interceptor for every upload route, so the ceiling cannot drift. */
+const upload = () =>
+  UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: UPLOAD_HARD_LIMIT_BYTES } }),
+  );
+
+@Controller("files")
+export class FilesController {
+  constructor(private readonly files: FilesService) {}
+
+  /* --- per owner, so the permission is on the route ---------------------- */
+  /*
+   * Declared before `:id/content` in the same spirit as the note in
+   * VendorsController: a literal first segment read as a parameter is the kind
+   * of routing bug that only shows up for the one id that happens to collide.
+   */
+
+  @Get("team-member/:id")
+  @RequirePermission("team.read")
+  listForTeamMember(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("team_member", uuidSchema.parse(id), actor);
+  }
+
+  @Post("team-member/:id")
+  @RequirePermission("team.write")
+  @upload()
+  uploadForTeamMember(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "team_member",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
+  @Get("transaction/:id")
+  @RequirePermission("transactions.read")
+  listForTransaction(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("transaction", uuidSchema.parse(id), actor);
+  }
+
+  @Post("transaction/:id")
+  @RequirePermission("transactions.write")
+  @upload()
+  uploadForTransaction(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "transaction",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
+  @Get("import-batch/:id")
+  @RequirePermission("imports.run")
+  listForImportBatch(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("import_batch", uuidSchema.parse(id), actor);
+  }
+
+  /* --- the bytes --------------------------------------------------------- */
+
+  /**
+   * No `@RequirePermission` here, and that is not an oversight.
+   *
+   * What this route needs depends on what the file is attached to — a receipt
+   * wants `transactions.read`, a CV wants `team.read`, an appointment letter
+   * wants `team.compensation.read` on top. A decorator is fixed at class-load
+   * time and cannot ask. `FilesService.open` looks the row up and applies the
+   * owner's own permission, which is also the only place that logic exists.
+   *
+   * Authentication still applies: JwtAuthGuard runs on every route that is not
+   * `@Public()`, and this one is not.
+   */
+  @Get(":id/content")
+  async content(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { row, stream } = await this.files.open(uuidSchema.parse(id), actor);
+
+    const inline = isImageMime(row.mimeType);
+
+    res.set({
+      "Content-Type": row.mimeType,
+      "Content-Length": String(row.sizeBytes),
+      /**
+       * Images render in place because that is what a profile photo is for.
+       * Everything else downloads — a PDF opened inline runs in a viewer on
+       * this API's own origin, and there is no reason to hand it that.
+       */
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${row.originalName}"; filename*=UTF-8''${encodeURIComponent(row.originalName)}`,
+      /**
+       * The stored type was decided by reading the bytes, so it is safe to
+       * send — but only if the browser is told to believe it rather than
+       * guessing from content it might read differently.
+       */
+      "X-Content-Type-Options": "nosniff",
+      /**
+       * `private`, so no proxy or shared cache keeps a scan of somebody's
+       * national ID. Short, so a replaced photo does not linger on screen.
+       */
+      "Cache-Control": "private, max-age=300",
+    });
+
+    return new StreamableFile(stream);
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  async remove(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<void> {
+    await this.files.remove(uuidSchema.parse(id), actor);
+  }
+}

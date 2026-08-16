@@ -1,0 +1,360 @@
+import {
+  ALLOWED_MIME_TYPES,
+  COMPENSATION_FILE_KINDS,
+  FILE_KIND_LABELS,
+  hasPermission,
+  isImageMime,
+  KINDS_BY_OWNER,
+  MAX_FILE_BYTES,
+  safeDisplayName,
+  type FileDto,
+  type FileKind,
+  type FileOwner,
+  type Permission,
+  type UploadFileInput,
+} from "@finance/shared";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
+import { and, desc, eq, isNull } from "drizzle-orm";
+
+import { AuditService } from "../../common/audit/audit.service";
+import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
+import { DbService } from "../../db/db.service";
+import { files, users, type FileRow } from "../../db/schema";
+import { sniffMime } from "./sniff";
+import { StorageService } from "./storage.service";
+
+/**
+ * Kinds where a second file replaces the first.
+ *
+ * Only the photo. It is rendered as *the* picture of a person, so two active
+ * ones means the screens have to pick, and "the newest" is a rule invented in
+ * whichever component was written last. Documents are left plural on purpose —
+ * a scanned appointment letter is regularly two files.
+ */
+const SINGULAR_KINDS: readonly FileKind[] = ["profile_photo"];
+
+/** Which permission a file's owner demands, to read it and to change it. */
+const OWNER_PERMISSIONS: Record<
+  FileOwner,
+  { read: Permission; write: Permission }
+> = {
+  team_member: { read: "team.read", write: "team.write" },
+  transaction: { read: "transactions.read", write: "transactions.write" },
+  import_batch: { read: "imports.run", write: "imports.run" },
+};
+
+@Injectable()
+export class FilesService {
+  private readonly logger = new Logger(FilesService.name);
+
+  constructor(
+    private readonly db: DbService,
+    private readonly storage: StorageService,
+    private readonly audit: AuditService,
+  ) {}
+
+  /* ---------------------------------------------------------------------- */
+  /* Permissions                                                            */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A file is exactly as private as the thing it hangs on.
+   *
+   * Deliberately no `files.read` permission of its own. A parallel vocabulary
+   * would be one more list to keep in step with the first, and the day they
+   * disagree is the day a document is readable by somebody who cannot open the
+   * record it belongs to.
+   */
+  private ownerOf(row: FileRow): { owner: FileOwner; id: string } {
+    if (row.teamMemberId) return { owner: "team_member", id: row.teamMemberId };
+    if (row.transactionId)
+      return { owner: "transaction", id: row.transactionId };
+    if (row.importBatchId)
+      return { owner: "import_batch", id: row.importBatchId };
+    // The table has a check constraint making this unreachable. If it is ever
+    // reached, refusing is the only safe reading of a file owned by nothing.
+    throw new NotFoundException("This file is not attached to anything");
+  }
+
+  private assertAccess(
+    row: FileRow,
+    actor: AuthenticatedUser,
+    mode: "read" | "write",
+  ): void {
+    const { owner } = this.ownerOf(row);
+    const needed = OWNER_PERMISSIONS[owner][mode];
+    if (!hasPermission(actor.role, needed)) {
+      throw new ForbiddenException(
+        `Your role cannot do this (needs ${needed})`,
+      );
+    }
+
+    // An appointment letter states the salary on its face. Reading the team
+    // directory is not the same as reading that.
+    if (COMPENSATION_FILE_KINDS.includes(row.kind)) {
+      const extra: Permission =
+        mode === "read" ? "team.compensation.read" : "team.compensation.write";
+      if (!hasPermission(actor.role, extra)) {
+        throw new ForbiddenException(
+          `${FILE_KIND_LABELS[row.kind]} carries a pay figure (needs ${extra})`,
+        );
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Reading                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  private toDto(row: FileRow, uploadedByName: string | null = null): FileDto {
+    return {
+      id: row.id,
+      kind: row.kind,
+      label: row.label,
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      isImage: isImageMime(row.mimeType),
+      uploadedBy: row.uploadedBy,
+      uploadedByName,
+      createdAt: row.createdAt.toISOString(),
+      // Relative to the API root, which is where the browser's client already
+      // points. Never a path on disk, and never a URL nginx would answer on
+      // its own — every read of these bytes goes through assertAccess above.
+      url: `/files/${row.id}/content`,
+    };
+  }
+
+  private ownerColumn(owner: FileOwner) {
+    return owner === "team_member"
+      ? files.teamMemberId
+      : owner === "transaction"
+        ? files.transactionId
+        : files.importBatchId;
+  }
+
+  async listFor(
+    owner: FileOwner,
+    ownerId: string,
+    actor: AuthenticatedUser,
+  ): Promise<FileDto[]> {
+    const rows = await this.db.client
+      .select({ file: files, uploaderName: users.fullName })
+      .from(files)
+      .leftJoin(users, eq(users.id, files.uploadedBy))
+      .where(and(eq(this.ownerColumn(owner), ownerId), isNull(files.deletedAt)))
+      .orderBy(desc(files.createdAt));
+
+    // Filtered rather than refused: a role that can read the person but not
+    // their appointment letter should see the rest of the list, not a 403 that
+    // makes the whole tab look broken.
+    return rows
+      .filter(
+        (r) =>
+          !COMPENSATION_FILE_KINDS.includes(r.file.kind) ||
+          hasPermission(actor.role, "team.compensation.read"),
+      )
+      .map((r) => this.toDto(r.file, r.uploaderName));
+  }
+
+  /** The row plus a stream, once the caller has been allowed to have it. */
+  async open(id: string, actor: AuthenticatedUser) {
+    const [row] = await this.db.client
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), isNull(files.deletedAt)))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("No such file");
+    this.assertAccess(row, actor, "read");
+
+    if (!(await this.storage.exists(row.storageKey))) {
+      // The row says the file is here and the disk disagrees. Say so plainly
+      // rather than streaming an empty response that looks like a corrupt
+      // download — this is what a restore that missed the uploads looks like.
+      throw new NotFoundException(
+        "This file is recorded but its contents are missing from the server",
+      );
+    }
+
+    return { row, stream: this.storage.stream(row.storageKey) };
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Writing                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  async upload(
+    owner: FileOwner,
+    ownerId: string,
+    input: UploadFileInput,
+    upload: Express.Multer.File,
+    actor: AuthenticatedUser,
+  ): Promise<FileDto> {
+    const { kind } = input;
+
+    if (!KINDS_BY_OWNER[owner].includes(kind)) {
+      throw new BadRequestException(
+        `A ${FILE_KIND_LABELS[kind].toLowerCase()} cannot be attached here`,
+      );
+    }
+
+    if (COMPENSATION_FILE_KINDS.includes(kind)) {
+      if (!hasPermission(actor.role, "team.compensation.write")) {
+        throw new ForbiddenException(
+          `${FILE_KIND_LABELS[kind]} carries a pay figure (needs team.compensation.write)`,
+        );
+      }
+    }
+
+    if (!upload?.buffer?.length) {
+      throw new BadRequestException("The file was empty");
+    }
+
+    const limit = MAX_FILE_BYTES[kind];
+    if (upload.size > limit) {
+      throw new BadRequestException(
+        `Too large — ${FILE_KIND_LABELS[kind]} is limited to ${Math.round(limit / (1024 * 1024))} MB`,
+      );
+    }
+
+    /**
+     * What it is, decided by reading it.
+     *
+     * The error names both sides on purpose. "Unsupported file type" sends
+     * somebody to convert a file that was already the right format, when what
+     * actually happened is that a .pdf was a renamed .docx.
+     */
+    const mimeType = sniffMime(upload.buffer, upload.mimetype);
+    if (!mimeType) {
+      throw new BadRequestException(
+        `Could not recognise this file. Allowed here: ${ALLOWED_MIME_TYPES[kind].join(", ")}`,
+      );
+    }
+    if (!ALLOWED_MIME_TYPES[kind].includes(mimeType)) {
+      throw new BadRequestException(
+        `This file is a ${mimeType}, which is not allowed for ${FILE_KIND_LABELS[kind].toLowerCase()}. Allowed: ${ALLOWED_MIME_TYPES[kind].join(", ")}`,
+      );
+    }
+
+    const stored = await this.storage.write(upload.buffer, mimeType);
+
+    try {
+      const row = await this.audit.mutate({
+        action: "create",
+        entityTable: "files",
+        module: "files",
+        isSensitive: COMPENSATION_FILE_KINDS.includes(kind),
+        summary: `Attached ${FILE_KIND_LABELS[kind].toLowerCase()} ${safeDisplayName(upload.originalname)}`,
+        // Nothing to read before a create; the inserted row is the "after".
+        read: () => Promise.resolve(undefined),
+        run: async (tx) => {
+          // The photo is singular, so the one it replaces stops being current
+          // in the same transaction that makes the new one current. Doing this
+          // afterwards would leave a window with two.
+          if (SINGULAR_KINDS.includes(kind)) {
+            await tx
+              .update(files)
+              .set({ deletedAt: new Date(), deletedBy: actor.id })
+              .where(
+                and(
+                  eq(this.ownerColumn(owner), ownerId),
+                  eq(files.kind, kind),
+                  isNull(files.deletedAt),
+                ),
+              );
+          }
+
+          const [inserted] = await tx
+            .insert(files)
+            .values({
+              storageKey: stored.storageKey,
+              originalName: safeDisplayName(upload.originalname),
+              mimeType,
+              sizeBytes: stored.sizeBytes,
+              checksum: stored.checksum,
+              kind,
+              label: input.label ?? null,
+              teamMemberId: owner === "team_member" ? ownerId : null,
+              transactionId: owner === "transaction" ? ownerId : null,
+              importBatchId: owner === "import_batch" ? ownerId : null,
+              uploadedBy: actor.id,
+            })
+            .returning();
+
+          return inserted;
+        },
+      });
+
+      return this.toDto(row, actor.fullName);
+    } catch (error) {
+      /**
+       * The bytes were written before the row, because a row pointing at a
+       * file that is not there is worse than a file no row points at: the
+       * first is a broken download, the second is disk nobody notices.
+       *
+       * If the insert failed anyway — a foreign key that does not exist is the
+       * likely one — take the bytes back out, or this becomes exactly the leak
+       * it was avoiding.
+       */
+      await this.storage.remove(stored.storageKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
+    const [row] = await this.db.client
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), isNull(files.deletedAt)))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("No such file");
+    this.assertAccess(row, actor, "write");
+
+    await this.audit.mutate({
+      action: "delete",
+      entityTable: "files",
+      entityId: row.id,
+      module: "files",
+      isSensitive: COMPENSATION_FILE_KINDS.includes(row.kind),
+      summary: `Removed ${FILE_KIND_LABELS[row.kind].toLowerCase()} ${row.originalName}`,
+      read: async (tx) => {
+        const [current] = await tx
+          .select()
+          .from(files)
+          .where(eq(files.id, id))
+          .limit(1);
+        return current;
+      },
+      run: async (tx) => {
+        await tx
+          .update(files)
+          .set({ deletedAt: new Date(), deletedBy: actor.id })
+          .where(eq(files.id, id));
+      },
+    });
+
+    /**
+     * The bytes go after the commit, not inside it.
+     *
+     * `unlink` cannot be rolled back, so doing it inside the transaction would
+     * mean a later failure leaves a committed-looking record whose file is
+     * already gone. This way the worst case is a file left on disk, which the
+     * sweep below reports rather than losing data.
+     */
+    try {
+      await this.storage.remove(row.storageKey);
+    } catch (error) {
+      this.logger.error(
+        `Removed the record for ${row.id} but could not delete ${row.storageKey}: ${String(error)}`,
+      );
+    }
+  }
+}

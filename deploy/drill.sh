@@ -123,8 +123,62 @@ if [ "${LIVE}" != "${BACK}" ]; then
   fail=1
 fi
 
+# --------------------------------------------------------------------------
+# The files the restored database expects
+# --------------------------------------------------------------------------
+# A dump holds every row and not one byte of any document. Restore it on a new
+# machine and the app comes back looking complete: the team page lists eighteen
+# people, each record names a CV, and every one of those links 404s.
+#
+# So the drill asks the question the row counts cannot: for each file the
+# database says exists, is it in the off-site copy, and is it the same file.
+UPLOADS_REMOTE="${UPLOADS_REMOTE:-${GDRIVE_REMOTE%%:*}:sfm-uploads}"
+
+EXPECTED="${WORK}/expected.txt"
+OFFSITE="${WORK}/offsite.txt"
+
+psql_in "${DRILL_DB}" \
+  -c "select storage_key from files where deleted_at is null order by storage_key;" \
+  | sed '/^$/d' > "${EXPECTED}"
+
+EXPECTED_COUNT=$(wc -l < "${EXPECTED}")
+
+if [ "${EXPECTED_COUNT}" -eq 0 ]; then
+  echo "  no uploaded files recorded yet — nothing to check off-site"
+else
+  rclone lsf --files-only -R "${UPLOADS_REMOTE}/current" 2>/dev/null | sort > "${OFFSITE}" || true
+  MISSING=$(comm -23 "${EXPECTED}" "${OFFSITE}" | head -20)
+
+  if [ -n "${MISSING}" ]; then
+    echo "FAILED: ${EXPECTED_COUNT} file(s) recorded, and these are not in ${UPLOADS_REMOTE}/current:" >&2
+    echo "${MISSING}" | sed 's/^/    /' >&2
+    fail=1
+  else
+    # Present is not the same as intact. Fetch one and check its sha256 against
+    # what the database recorded when it was uploaded — the only test that
+    # distinguishes a real copy from a file of the right name and length.
+    SAMPLE_KEY=$(head -1 "${EXPECTED}")
+    SAMPLE_SUM=$(psql_in "${DRILL_DB}" \
+      -c "select checksum from files where storage_key = '${SAMPLE_KEY}' limit 1;")
+
+    rclone copy "${UPLOADS_REMOTE}/current/${SAMPLE_KEY}" "${WORK}/sample/" --retries 3
+    ACTUAL_SUM=$(sha256sum "${WORK}/sample/$(basename "${SAMPLE_KEY}")" | cut -d' ' -f1)
+
+    if [ "${SAMPLE_SUM}" = "${ACTUAL_SUM}" ]; then
+      echo "  ${EXPECTED_COUNT} file(s) all present off-site; ${SAMPLE_KEY} matches its recorded checksum"
+    else
+      echo "FAILED: ${SAMPLE_KEY} came back with a different checksum" >&2
+      echo "        recorded ${SAMPLE_SUM}" >&2
+      echo "        fetched  ${ACTUAL_SUM}" >&2
+      fail=1
+    fi
+  fi
+fi
+
 if [ "${fail}" -eq 0 ]; then
-  echo "PASSED: the copy on Drive restores to the same figures as the live database"
+  echo
+  echo "PASSED: the copy on Drive restores to the same figures as the live database,"
+  echo "        and every file it refers to is off-site and intact"
 fi
 
 exit "${fail}"

@@ -106,7 +106,18 @@ services:
       # it, and every server-rendered page reports signed out while sign-in
       # itself appears to succeed.
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      # Inside the container. The host side is ./uploads, below.
+      UPLOAD_DIR: /data/uploads
       TZ: Asia/Dhaka
+    volumes:
+      # Uploaded files, on the host rather than in the container's own layer.
+      #
+      # This is primary data — a photograph of an employee, a scanned
+      # appointment letter — and nothing can regenerate it from the database.
+      # Left inside the container it would be destroyed by the next deploy,
+      # which replaces the container on every push, and the loss would be
+      # silent until somebody opened a record and found the document gone.
+      - ./uploads:/data/uploads
     expose:
       - "4001"
 

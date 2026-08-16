@@ -10,6 +10,7 @@ import {
   PSR_STATUS_LABELS,
   todayInDhaka,
   type EmploymentStatus,
+  type FileKind,
 } from "@finance/shared";
 import {
   ArrowLeft,
@@ -27,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { FileManager, PhotoUpload } from "@/components/files/file-manager";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +41,7 @@ import {
   MoneyInput,
   Select,
 } from "@/components/ui/field";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, fileHref } from "@/lib/api-client";
 import {
   teamApi,
   type CompensationDto,
@@ -65,6 +67,27 @@ import { TeamMemberForm } from "./team-member-form";
  * unambiguously, rather than in a format that reads differently in Dhaka than
  * it does in New York.
  */
+/**
+ * What can be attached to a person, in the order HR actually files them.
+ *
+ * `profile_photo` is not here on purpose — it has its own control beside the
+ * picture, because uploading one replaces the current photo rather than adding
+ * to a list, and a dropdown that quietly behaves differently for one of its
+ * options is a trap.
+ *
+ * `appointment_letter` and `salary_certificate` state a salary on their face,
+ * so the API asks for `team.compensation.read` before it will list or send
+ * one. A role without it sees the rest of the list and no gap.
+ */
+const TEAM_DOCUMENT_KINDS: readonly FileKind[] = [
+  "cv",
+  "appointment_letter",
+  "salary_certificate",
+  "nid",
+  "etin_certificate",
+  "other",
+];
+
 export function TeamMemberScreen({
   member,
   compensation,
@@ -106,12 +129,22 @@ export function TeamMemberScreen({
       </Link>
 
       <Card className="flex flex-wrap items-center gap-4 p-5">
-        <MemberPhoto
-          // Resets the broken-image state when the link itself changes.
-          key={member.photoUrl ?? "none"}
-          fullName={member.fullName}
-          photoUrl={member.photoUrl}
-        />
+        <div className="flex flex-col items-center gap-1.5">
+          <MemberPhoto
+            // Resets the broken-image state when the picture itself changes,
+            // including the moment a new one finishes uploading.
+            key={member.photoFileId ?? member.photoUrl ?? "none"}
+            fullName={member.fullName}
+            src={
+              member.photoFileId
+                ? fileHref(member.photoFileId)
+                : member.photoUrl
+            }
+          />
+          {canWrite ? (
+            <PhotoUpload memberId={member.id} onUploaded={refresh} />
+          ) : null}
+        </div>
 
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">
@@ -276,20 +309,50 @@ export function TeamMemberScreen({
         <Card className="lg:col-span-2">
           <CardHeader
             title="Documents"
-            description="Links, not uploads — this app keeps no files of its own"
+            description="Held on this company's own server"
           />
-          <CardBody className="flex flex-wrap gap-2">
-            <DocumentLink href={member.cvUrl} label="CV of the Employee" />
-            <DocumentLink
-              href={member.appointmentLetterUrl}
-              label="Signed Appointment Letter"
-            />
-            <DocumentLink
-              href={member.photoUrl}
-              label="Decent Image of the Employee"
+          <CardBody>
+            <FileManager
+              owner="team_member"
+              ownerId={member.id}
+              kinds={TEAM_DOCUMENT_KINDS}
+              canWrite={canWrite}
+              emptyLabel="No documents uploaded for this person yet."
             />
           </CardBody>
         </Card>
+
+        {/*
+          The links that were here before uploads existed.
+
+          Only rendered when a record actually has one. They were the whole
+          answer until 2026-08-16 and eighteen people have values in them, so
+          hiding them would look like the data had been lost — but a row of
+          "Not on file" placeholders beneath a working uploader tells the
+          reader nothing except that there are two systems.
+        */}
+        {member.cvUrl || member.appointmentLetterUrl || member.photoUrl ? (
+          <Card className="lg:col-span-2">
+            <CardHeader
+              title="Linked elsewhere"
+              description="Google Drive links added before this app stored files"
+            />
+            <CardBody className="flex flex-wrap gap-2">
+              {member.cvUrl ? (
+                <DocumentLink href={member.cvUrl} label="CV" />
+              ) : null}
+              {member.appointmentLetterUrl ? (
+                <DocumentLink
+                  href={member.appointmentLetterUrl}
+                  label="Appointment letter"
+                />
+              ) : null}
+              {member.photoUrl ? (
+                <DocumentLink href={member.photoUrl} label="Photo" />
+              ) : null}
+            </CardBody>
+          </Card>
+        ) : null}
 
         <Card className="lg:col-span-2">
           <CardHeader title="Notes" />
@@ -652,12 +715,14 @@ function StatusForm({
  */
 function MemberPhoto({
   fullName,
-  photoUrl,
+  src,
 }: {
   fullName: string;
-  photoUrl: string | null;
+  /** An uploaded file when there is one, otherwise the pasted Drive link. */
+  src: string | null;
 }) {
   const [broken, setBroken] = useState(false);
+  const photoUrl = src;
 
   if (!photoUrl || broken) {
     return (

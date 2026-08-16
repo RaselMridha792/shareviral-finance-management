@@ -275,6 +275,58 @@ OAuth client is still in Google Cloud Console, so on the new machine install
 rclone, run the three `rclone config` lines above with the same client ID and
 secret, and the backups are readable again.
 
+## Uploaded files
+
+Photographs, CVs, appointment letters, receipts, and the spreadsheet behind
+every import. They live on this server, in `deploy/uploads`, bind-mounted into
+the API container at `/data/uploads`.
+
+Three properties are worth knowing rather than rediscovering:
+
+- **Nothing is served by nginx.** Every download goes through
+  `GET /api/files/:id/content`, which looks up what the file is attached to and
+  applies that record's own permission. A URL on its own opens nothing. This is
+  why an appointment letter — which states a salary — needs
+  `team.compensation.read` and a receipt needs `transactions.read`, without a
+  second permission vocabulary to keep in step.
+- **What a file is, is decided by reading it.** The browser's Content-Type and
+  the extension are claims. `sniffMime` reads the first bytes and refuses
+  anything it does not recognise, so a script named `photo.png` is never stored
+  and never served back as an image on this app's own domain. SVG is refused
+  everywhere for the same reason.
+- **This is primary data.** A dump holds every row and not one byte of a
+  document, and nothing can regenerate a scanned letter. `backup.sh` syncs the
+  folder to `gdrive:sfm-uploads` each night and asks Drive to confirm it, and
+  `drill.sh` checks that every file the database refers to is in that copy —
+  then fetches one back and compares its sha256 to what was recorded on upload.
+
+### Applying the schema
+
+The table is created by an explicit file rather than `drizzle-kit push`:
+
+```bash
+cd /opt/sfm/deploy
+docker compose exec -T db psql -U sfm -d sfm -v ON_ERROR_STOP=1 \
+  < sql/2026-08-16-files.sql
+```
+
+**Run it before deploying the code that needs it.** The team profile reads the
+photograph with a subquery against this table, so between a deploy and this
+statement every profile page is a 500. The file is safe to run twice and
+harmless against the older code.
+
+### Files with no row, rows with no file
+
+```bash
+./deploy/sweep-orphan-files.sh            # report
+./deploy/sweep-orphan-files.sh --delete   # remove orphaned bytes
+```
+
+Deleting a person cascades their file rows away and leaves the bytes; that is
+the safe direction, and this is how the disk gets swept. The other half of its
+output matters more — a row whose file is missing is what a restore that
+brought back the database and forgot the uploads looks like.
+
 ## Looking at the data — db.hellonizam.com
 
 Adminer, for browsing the tables the way Supabase's dashboard did.

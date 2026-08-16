@@ -10,6 +10,7 @@ import { LoaderCircle } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { FileManager } from "@/components/files/file-manager";
 import { Drawer } from "@/components/ui/drawer";
 import {
   DateInput,
@@ -306,6 +307,28 @@ export function TransactionForm({
             defaultValue={transaction?.receiptUrl ?? ""}
           />
         </Field>
+
+        {/*
+          Uploading needs a row to attach to, so this only appears once the
+          entry exists. Offering it while recording would mean holding the file
+          in the browser until the save returned an id and then uploading it —
+          two ways to fail where the second one leaves a saved transaction and
+          a lost receipt, and no way for the person to tell which happened.
+        */}
+        {editing && transaction ? (
+          <Field
+            label="Receipt files"
+            hint="Kept on this company's own server"
+          >
+            <FileManager
+              owner="transaction"
+              ownerId={transaction.id}
+              kinds={["receipt", "other"]}
+              canWrite
+              emptyLabel="No receipt uploaded for this entry."
+            />
+          </Field>
+        ) : null}
 
         {/*
           Tax withheld: behind a toggle because most entries have none, and

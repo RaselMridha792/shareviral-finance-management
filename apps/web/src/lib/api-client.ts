@@ -183,3 +183,121 @@ export async function fetchDatabaseHealth(): Promise<ApiHealth | null> {
 }
 
 export { BASE_URL as API_BASE_URL };
+
+/* -------------------------------------------------------------------------- */
+/*  Files                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The API as the *browser* must address it, which is not always `BASE_URL`.
+ *
+ * On the server `BASE_URL` is the internal `http://api:4001/api`, reachable
+ * only from inside the Docker network. A URL rendered into an `<img src>` is
+ * fetched by the browser, so it has to be the public hostname or the picture
+ * is a broken icon on every profile — and only in production, where the two
+ * values differ.
+ */
+const PUBLIC_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001/api";
+
+/** Where the bytes of a stored file are, for the browser. */
+export function fileHref(fileId: string): string {
+  return `${PUBLIC_BASE_URL}/files/${fileId}/content`;
+}
+
+/**
+ * Multipart upload.
+ *
+ * Deliberately not `apiFetch`: that sets `Content-Type: application/json` on
+ * every request, and a multipart body needs the browser to write the header
+ * itself so it can include the boundary it generated. Setting it by hand
+ * produces a request the server cannot split back into fields, and the error
+ * arrives as a confusing "no file was sent".
+ *
+ * This posts straight to the API's own hostname. Worth knowing why: the app
+ * origin also forwards `/api`, and Next buffers a proxied body with a 10 MB
+ * default ceiling — a 15 MB CV sent that way is silently truncated. Going
+ * direct means nginx's 25 MB limit is the only one in the path.
+ */
+export async function apiUpload<T>(
+  path: string,
+  form: FormData,
+): Promise<T> {
+  const send = () =>
+    fetch(`${PUBLIC_BASE_URL}${path}`, {
+      method: "POST",
+      body: form,
+      headers: { "X-Requested-With": "finance-web" },
+      credentials: "include",
+    });
+
+  let response = await send();
+
+  if (response.status === 401) {
+    const refreshed = await fetch(`${PUBLIC_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "X-Requested-With": "finance-web" },
+      credentials: "include",
+    });
+    if (refreshed.ok) response = await send();
+  }
+
+  if (!response.ok) throw await toError(response);
+  return response.json() as Promise<T>;
+}
+
+export type StoredFile = {
+  id: string;
+  kind: string;
+  label: string | null;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  isImage: boolean;
+  uploadedBy: string | null;
+  uploadedByName: string | null;
+  createdAt: string;
+  url: string;
+};
+
+export function listTeamMemberFiles(memberId: string) {
+  return apiFetch<StoredFile[]>(`/files/team-member/${memberId}`, {
+    cache: "no-store",
+  });
+}
+
+export function uploadTeamMemberFile(
+  memberId: string,
+  file: File,
+  kind: string,
+  label?: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  if (label) form.append("label", label);
+  return apiUpload<StoredFile>(`/files/team-member/${memberId}`, form);
+}
+
+export function listTransactionFiles(transactionId: string) {
+  return apiFetch<StoredFile[]>(`/files/transaction/${transactionId}`, {
+    cache: "no-store",
+  });
+}
+
+export function uploadTransactionFile(
+  transactionId: string,
+  file: File,
+  kind: string,
+  label?: string,
+) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  if (label) form.append("label", label);
+  return apiUpload<StoredFile>(`/files/transaction/${transactionId}`, form);
+}
+
+export function deleteStoredFile(fileId: string) {
+  return apiFetch<void>(`/files/${fileId}`, { method: "DELETE" });
+}

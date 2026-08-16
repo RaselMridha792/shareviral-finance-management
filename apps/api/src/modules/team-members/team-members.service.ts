@@ -93,9 +93,26 @@ export type TeamMemberDto = {
   educationLevel: string | null;
   educationMajor: string | null;
 
-  /* Papers on file — links, never uploads. */
+  /**
+   * Papers on file.
+   *
+   * These are Google Drive links, and they stay — eighteen people have values
+   * in them. Since 2026-08-16 a record can also carry files this server holds;
+   * those are fetched from `/files/team-member/:id`, which is where the
+   * permission on a document that names a salary is applied.
+   */
   cvUrl: string | null;
   appointmentLetterUrl: string | null;
+
+  /**
+   * The uploaded photograph, if there is one, as a file id.
+   *
+   * Optional because it is read with a subquery that `returning()` cannot run:
+   * the create and update responses leave it out rather than claim there is no
+   * photo. Present on every read — the list and the profile — which is where
+   * anything renders a face.
+   */
+  photoFileId?: string | null;
 };
 
 @Injectable()
@@ -127,6 +144,10 @@ export class TeamMembersService {
 
     const [items, [{ total }]] = await Promise.all([
       this.db.client
+        // `projection`, not `readProjection`: the directory is a table of
+        // names and shows no faces, and a subquery per row for something no
+        // screen renders is cost with nothing on the other side of it. When
+        // the list grows avatars, this is the line that changes.
         .select(projection)
         .from(teamMembers)
         .where(where)
@@ -154,7 +175,7 @@ export class TeamMembersService {
    */
   async findOne(id: string): Promise<TeamMemberDto> {
     const [row] = await this.db.client
-      .select(projection)
+      .select(readProjection)
       .from(teamMembers)
       .where(and(eq(teamMembers.id, id), isNull(teamMembers.deletedAt)))
       .limit(1);
@@ -393,6 +414,31 @@ const projection = {
   educationMajor: teamMembers.educationMajor,
   cvUrl: teamMembers.cvUrl,
   appointmentLetterUrl: teamMembers.appointmentLetterUrl,
+};
+
+/**
+ * The projection plus the uploaded photograph.
+ *
+ * Kept separate from `projection` above because that one is also handed to
+ * `returning()` on insert and update, and `returning()` can only name columns
+ * of the table being written. A subquery there is a runtime error on the one
+ * path that has no photo to report anyway.
+ *
+ * A subquery rather than a join: a join would need `distinct` or a `group by`
+ * to survive a person ever having two photo rows, and getting that wrong
+ * duplicates people in the directory. Uploading a photo already retires the
+ * previous one in the same transaction, so `limit 1` is belt on top of braces.
+ */
+const readProjection = {
+  ...projection,
+  photoFileId: sql<string | null>`(
+    select f.id from files f
+    where f.team_member_id = ${teamMembers.id}
+      and f.kind = 'profile_photo'
+      and f.deleted_at is null
+    order by f.created_at desc
+    limit 1
+  )`,
 };
 
 function describeUpdate(

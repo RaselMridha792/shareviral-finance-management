@@ -43,6 +43,9 @@ deploy/nginx/certs/
 deploy/backups/
 # The basic-auth password in front of the database window.
 deploy/nginx/secrets/
+# Uploaded files. Primary data, backed up to Drive — never committed.
+deploy/uploads/
+uploads/
 
 # Test artefacts: minted role tokens and browser screenshots.
 # Tokens are written at the start of a run and deleted at the end; if a run is

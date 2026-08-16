@@ -15,6 +15,7 @@ import { AuditLogModule } from "./modules/audit/audit-log.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
 import { ExportsModule } from "./modules/exports/exports.module";
+import { FilesModule } from "./modules/files/files.module";
 import { FxModule } from "./modules/fx/fx.module";
 import { HealthModule } from "./modules/health/health.module";
 import { ImportsModule } from "./modules/imports/imports.module";
@@ -47,6 +48,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     TransactionsModule,
     ExportsModule,
     ImportsModule,
+    FilesModule,
     TeamMembersModule,
     PayrollModule,
     TdsModule,

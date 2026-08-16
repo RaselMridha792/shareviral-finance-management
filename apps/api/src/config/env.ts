@@ -64,6 +64,18 @@ const envSchema = z.object({
 
   /** The fallback the assistant uses when Settings holds no key. */
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  /**
+   * Where uploaded files are written.
+   *
+   * On the server this is a bind mount from the host, not a path inside the
+   * container: a photograph of an employee is primary data, and primary data
+   * that dies when a container is replaced is not stored, it is cached.
+   *
+   * The default suits a developer machine. `deploy/docker-compose.yml` sets it
+   * to /data/uploads, which is `deploy/uploads` on the host.
+   */
+  UPLOAD_DIR: z.string().trim().default("./uploads"),
 });
 
 export type Env = z.infer<typeof envSchema>;

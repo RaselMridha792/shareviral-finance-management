@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
@@ -16,6 +17,7 @@ import {
   transactions,
   vendors,
 } from "../../db/schema";
+import { FilesService } from "../files/files.service";
 import { SettingsService } from "../settings/settings.service";
 import { dedupeKey } from "../transactions/transactions.service";
 import type {
@@ -32,19 +34,54 @@ const MAX_ROWS = 10_000;
 
 @Injectable()
 export class ImportsService {
+  private readonly logger = new Logger(ImportsService.name);
+
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly settings: SettingsService,
+    private readonly files: FilesService,
   ) {}
 
   /** Reads the file, stores every row verbatim, and returns the headers. */
-  async upload(
-    file: { originalname: string; buffer: Buffer },
-    actor: AuthenticatedUser,
-  ) {
+  /**
+   * Takes the whole multer file rather than just its name and bytes, because
+   * the copy kept below needs the declared content type to tell a CSV from
+   * anything else that is merely valid text.
+   */
+  async upload(file: Express.Multer.File, actor: AuthenticatedUser) {
     const { headers, rows } = await readSpreadsheet(file.buffer);
-    return this.stage(file.originalname, headers, rows, actor);
+    const staged = await this.stage(file.originalname, headers, rows, actor);
+
+    /**
+     * Keep the file that was actually uploaded.
+     *
+     * The parsed rows are what the import works from, and they are already a
+     * reading of the file — a column mapped to the wrong field, a date read in
+     * the wrong order, an amount that lost its minus sign. When a figure is
+     * questioned six months later, "here is the spreadsheet the bank sent" is
+     * the only answer that settles it, and it is the one thing this app used to
+     * throw away the moment it had finished with it.
+     *
+     * Best effort, deliberately. An import that succeeded must not be undone
+     * because the archive copy failed — the rows are staged and the person is
+     * mid-flow. It is logged instead.
+     */
+    try {
+      await this.files.upload(
+        "import_batch",
+        staged.batch.id,
+        { kind: "import_source" },
+        file,
+        actor,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Staged ${staged.batch.id} but could not keep a copy of ${file.originalname}: ${String(error)}`,
+      );
+    }
+
+    return staged;
   }
 
   /**
