@@ -72,6 +72,7 @@ const SUITES = [
   ["09-payroll-reopen.mjs", "reopening a run after voiding its payment"],
   ["10-batch-of-drafts.mjs", "many records saved one at a time, one bad row and none stranded"],
   ["11-tds-over-deposit.mjs", "a challan larger than the month it covers is reported, not clamped away"],
+  ["12-file-uploads.mjs", "a file is what its bytes say, and as private as what it hangs on"],
 ];
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));
