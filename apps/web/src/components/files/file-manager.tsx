@@ -19,6 +19,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, Select } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/overlay";
+import { useToast } from "@/components/ui/toast";
 import {
   ApiError,
   deleteStoredFile,
@@ -59,6 +61,8 @@ export function FileManager({
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
+  const toast = useToast();
 
   /** Ask for the list again — after an upload, or after a delete. */
   const reload = () => setReloads((n) => n + 1);
@@ -118,6 +122,7 @@ export function FileManager({
       } else {
         await uploadTransactionFile(ownerId, file, kind);
       }
+      toast.show("Uploaded.");
       reload();
     } catch (caught) {
       setError(
@@ -131,17 +136,11 @@ export function FileManager({
   }
 
   async function onDelete(file: StoredFile) {
-    if (
-      !window.confirm(
-        `Remove ${file.originalName}? The file itself is deleted from the server.`,
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
       await deleteStoredFile(file.id);
+      toast.show(`${file.originalName} removed.`);
       reload();
     } catch (caught) {
       setError(
@@ -209,7 +208,7 @@ export function FileManager({
               {canWrite ? (
                 <button
                   type="button"
-                  onClick={() => void onDelete(file)}
+                  onClick={() => setPendingDelete(file)}
                   disabled={busy}
                   className="rounded-md p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                   aria-label={`Remove ${file.originalName}`}
@@ -269,6 +268,28 @@ export function FileManager({
           </p>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Remove this file?"
+        destructive
+        confirmLabel="Remove it"
+        body={
+          <>
+            <span className="font-medium text-foreground">
+              {pendingDelete?.originalName}
+            </span>{" "}
+            will be deleted from this company&apos;s server. The audit log keeps
+            the record that it existed; the file itself cannot be recovered.
+          </>
+        }
+        onConfirm={() => {
+          const file = pendingDelete;
+          setPendingDelete(null);
+          if (file) void onDelete(file);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
@@ -284,6 +305,7 @@ export function PhotoUpload({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   async function onPick(file: File | undefined) {
     if (!file) return;
@@ -300,6 +322,7 @@ export function PhotoUpload({
     setBusy(true);
     try {
       await uploadTeamMemberFile(memberId, file, "profile_photo");
+      toast.show("Photo updated.");
       onUploaded();
     } catch (caught) {
       setError(

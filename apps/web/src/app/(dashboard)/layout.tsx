@@ -5,6 +5,7 @@ import { MainRegion } from "@/components/layout/main-region";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { SettingsProvider } from "@/components/settings-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import { getSession } from "@/lib/api-client";
 import { settingsApi } from "@/lib/masters";
 
@@ -25,13 +26,20 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
   return (
     <SessionProvider user={user}>
       <SettingsProvider settings={settings}>
-        <div className="flex min-h-dvh">
-          <Sidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar />
-            <MainRegion>{children}</MainRegion>
+        {/*
+          Outside the layout rather than inside a page, so a toast raised just
+          before a navigation survives it. Raised inside a page it would unmount
+          with the page and the confirmation would flash and vanish.
+        */}
+        <ToastProvider>
+          <div className="flex min-h-dvh">
+            <Sidebar />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Topbar />
+              <MainRegion>{children}</MainRegion>
+            </div>
           </div>
-        </div>
+        </ToastProvider>
       </SettingsProvider>
     </SessionProvider>
   );

@@ -10,7 +10,6 @@ import {
   PSR_STATUS_LABELS,
   todayInDhaka,
   type EmploymentStatus,
-  type FileKind,
 } from "@finance/shared";
 import {
   ArrowLeft,
@@ -28,7 +27,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
-import { FileManager, PhotoUpload } from "@/components/files/file-manager";
+import { DocumentSlots } from "@/components/files/document-slots";
+import { PhotoUpload } from "@/components/files/file-manager";
+import { ImageLightbox } from "@/components/ui/overlay";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,27 +68,6 @@ import { TeamMemberForm } from "./team-member-form";
  * unambiguously, rather than in a format that reads differently in Dhaka than
  * it does in New York.
  */
-/**
- * What can be attached to a person, in the order HR actually files them.
- *
- * `profile_photo` is not here on purpose — it has its own control beside the
- * picture, because uploading one replaces the current photo rather than adding
- * to a list, and a dropdown that quietly behaves differently for one of its
- * options is a trap.
- *
- * `appointment_letter` and `salary_certificate` state a salary on their face,
- * so the API asks for `team.compensation.read` before it will list or send
- * one. A role without it sees the rest of the list and no gap.
- */
-const TEAM_DOCUMENT_KINDS: readonly FileKind[] = [
-  "cv",
-  "appointment_letter",
-  "salary_certificate",
-  "nid",
-  "etin_certificate",
-  "other",
-];
-
 export function TeamMemberScreen({
   member,
   compensation,
@@ -112,6 +92,11 @@ export function TeamMemberScreen({
   const [changingStatus, setChangingStatus] = useState(false);
 
   const refresh = () => router.refresh();
+
+  const [viewingPhoto, setViewingPhoto] = useState(false);
+  const photoSrc = member.photoFileId
+    ? fileHref(member.photoFileId)
+    : member.photoUrl;
   const currentPay =
     compensation.find((c) => c.effectiveTo === null) ?? compensation[0];
   // The sheet has an Age column. Storing it would be storing something that is
@@ -130,21 +115,34 @@ export function TeamMemberScreen({
 
       <Card className="flex flex-wrap items-center gap-4 p-5">
         <div className="flex flex-col items-center gap-1.5">
-          <MemberPhoto
-            // Resets the broken-image state when the picture itself changes,
-            // including the moment a new one finishes uploading.
-            key={member.photoFileId ?? member.photoUrl ?? "none"}
-            fullName={member.fullName}
-            src={
-              member.photoFileId
-                ? fileHref(member.photoFileId)
-                : member.photoUrl
-            }
-          />
+          <button
+            type="button"
+            onClick={() => photoSrc && setViewingPhoto(true)}
+            className={cn(
+              "rounded-xl",
+              photoSrc ? "cursor-zoom-in" : "cursor-default",
+            )}
+            aria-label={photoSrc ? `View ${member.fullName}'s photo` : undefined}
+          >
+            <MemberPhoto
+              // Resets the broken-image state when the picture itself changes,
+              // including the moment a new one finishes uploading.
+              key={member.photoFileId ?? member.photoUrl ?? "none"}
+              fullName={member.fullName}
+              src={photoSrc}
+            />
+          </button>
           {canWrite ? (
             <PhotoUpload memberId={member.id} onUploaded={refresh} />
           ) : null}
         </div>
+
+        <ImageLightbox
+          open={viewingPhoto}
+          src={photoSrc}
+          alt={member.fullName}
+          onClose={() => setViewingPhoto(false)}
+        />
 
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">
@@ -309,16 +307,10 @@ export function TeamMemberScreen({
         <Card className="lg:col-span-2">
           <CardHeader
             title="Documents"
-            description="Held on this company's own server"
+            description="Every paper this record should hold, and which are missing"
           />
           <CardBody>
-            <FileManager
-              owner="team_member"
-              ownerId={member.id}
-              kinds={TEAM_DOCUMENT_KINDS}
-              canWrite={canWrite}
-              emptyLabel="No documents uploaded for this person yet."
-            />
+            <DocumentSlots memberId={member.id} canWrite={canWrite} />
           </CardBody>
         </Card>
 

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { FileManager } from "@/components/files/file-manager";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
+import { useToast } from "@/components/ui/toast";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DateInput,
@@ -59,6 +60,7 @@ export function TransactionForm({
   onSaved: () => Promise<void> | void;
 }) {
   const editing = Boolean(transaction);
+  const toast = useToast();
   const [direction, setDirection] = useState<TxnDirection>(
     transaction?.direction ?? defaultDirection,
   );
@@ -183,6 +185,7 @@ export function TransactionForm({
           fxRate: showFx ? text("fxRate") : undefined,
         } as never);
       }
+      toast.show(editing ? `${transaction?.refNo} updated.` : "Entry recorded.");
       await onSaved();
       onClose();
     } catch (caught) {

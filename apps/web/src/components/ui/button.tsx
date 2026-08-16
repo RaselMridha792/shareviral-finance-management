@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
@@ -12,6 +12,14 @@ const VARIANTS: Record<Variant, string> = {
     "bg-surface text-foreground border border-border hover:bg-surface-muted",
   ghost:
     "bg-transparent text-muted-foreground border border-transparent hover:bg-surface-muted hover:text-foreground",
+  /**
+   * For the button that ends something: deleting a document, voiding an entry.
+   *
+   * Solid rather than an outline, because it sits beside Cancel and the eye
+   * should land on the one that cannot be undone before the hand does.
+   */
+  danger:
+    "bg-negative text-white hover:opacity-90 border border-transparent",
 };
 
 const SIZES: Record<Size, string> = {

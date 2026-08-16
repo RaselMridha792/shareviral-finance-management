@@ -8,6 +8,7 @@ import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
+import { useToast } from "@/components/ui/toast";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DateInput,
@@ -82,6 +83,7 @@ export function CashInForm({
   const [amountTyped, setAmountTyped] = useState(false);
 
   const money = useMoney();
+  const toast = useToast();
 
   /**
    * The taka the dollars and the rate come to.
@@ -233,6 +235,7 @@ export function CashInForm({
         notes: text("notes"),
         receiptUrl: undefined,
       });
+      toast.show("Transfer recorded.");
       await onSaved();
       close();
     } catch (caught) {
