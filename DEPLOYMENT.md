@@ -300,6 +300,27 @@ Three properties are worth knowing rather than rediscovering:
   `drill.sh` checks that every file the database refers to is in that copy —
   then fetches one back and compares its sha256 to what was recorded on upload.
 
+### The directory, before the first upload
+
+```bash
+mkdir -p /opt/sfm/deploy/uploads
+chown -R 1000:1000 /opt/sfm/deploy/uploads
+```
+
+`api.Dockerfile` ends with `USER node`, and Docker creates a bind-mounted path
+that does not exist yet as `root`. Without the `chown`, the container cannot
+write to its own uploads directory and every upload fails — the same shape as
+the basic-auth file that nginx's worker could not read.
+
+The API says so at start-up rather than at the first upload:
+
+```bash
+docker compose logs api | grep -i uploads
+# Uploads directory ready at /data/uploads
+```
+
+If it says *not writable* instead, the `chown` above is what is missing.
+
 ### Applying the schema
 
 The table is created by an explicit file rather than `drizzle-kit push`:
