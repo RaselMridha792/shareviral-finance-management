@@ -264,6 +264,94 @@ export class TeamMembersService {
     return row ?? null;
   }
 
+  /**
+   * Give everyone with no pay on record the figure they were hired at.
+   *
+   * The salary sheet reads `compensation_history` — what somebody earns now,
+   * and since when. `team_members.joiningSalary` is a different fact: what was
+   * agreed on the day they joined. Eighteen people were imported with the
+   * second and none of the first, so building a payroll run skipped every one
+   * of them and the sheet came out empty, with no way forward but opening
+   * eighteen profiles.
+   *
+   * Two decisions worth stating, because the easy version of this is wrong:
+   *
+   * The joining salary is **not** used silently at payroll time. It can be
+   * years old, and a run that quietly pays somebody their 2024 figure is a
+   * wrong payment nobody notices. This is an action a person takes, once, and
+   * every row it writes is in the audit log with the amount.
+   *
+   * Each record starts from that person's **own joining date**, not from one
+   * date chosen for everybody. That is what the figure actually means, and it
+   * makes an earlier month's payroll compute correctly too rather than only
+   * the month somebody happened to run this from.
+   *
+   * Only people with no pay record at all are touched. Anybody already set up
+   * is left exactly as they are — this can never overwrite a raise.
+   */
+  async backfillCompensationFromJoining(actor: AuthenticatedUser) {
+    const candidates = await this.db.client
+      .select({
+        id: teamMembers.id,
+        fullName: teamMembers.fullName,
+        joinedOn: teamMembers.joinedOn,
+        joiningSalary: teamMembers.joiningSalary,
+      })
+      .from(teamMembers)
+      .where(
+        and(
+          isNull(teamMembers.deletedAt),
+          eq(teamMembers.engagementType, "employee"),
+          sql`not exists (
+            select 1 from ${compensationHistory}
+            where ${compensationHistory.teamMemberId} = ${teamMembers.id}
+          )`,
+        ),
+      )
+      .orderBy(asc(teamMembers.fullName));
+
+    const ready = candidates.filter(
+      (c) => c.joiningSalary != null && Number(c.joiningSalary) > 0,
+    );
+    const withoutFigure = candidates
+      .filter((c) => c.joiningSalary == null || Number(c.joiningSalary) <= 0)
+      .map((c) => c.fullName);
+
+    if (!ready.length) {
+      return { created: 0, names: [], skipped: withoutFigure };
+    }
+
+    await this.db.transaction(async (tx) => {
+      for (const person of ready) {
+        await tx.insert(compensationHistory).values({
+          teamMemberId: person.id,
+          grossAmount: person.joiningSalary as string,
+          effectiveFrom: person.joinedOn,
+          changeReason: "Set from the salary agreed at joining",
+          createdBy: actor.id,
+        });
+
+        // One row each rather than one for the batch: an audit trail that says
+        // "eighteen salaries were set" answers none of the questions anybody
+        // asks it later.
+        await this.audit.record(tx, {
+          action: "update",
+          entityTable: "compensation_history",
+          entityId: person.id,
+          module: "team",
+          isSensitive: true,
+          summary: `Set ${person.fullName}'s pay to ${formatMoney(person.joiningSalary as string)} from ${person.joinedOn}, taken from their joining salary`,
+        });
+      }
+    });
+
+    return {
+      created: ready.length,
+      names: ready.map((p) => p.fullName),
+      skipped: withoutFigure,
+    };
+  }
+
   async setCompensation(
     teamMemberId: string,
     input: SetCompensationInput,

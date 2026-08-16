@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
   createTeamMemberSchema,
   listTeamQuerySchema,
@@ -29,6 +29,20 @@ export class TeamMembersController {
   @RequirePermission("team.read")
   list(@ZodQuery(listTeamQuerySchema) query: ListTeamQuery) {
     return this.team.list(query);
+  }
+
+  /**
+   * Give everyone with no pay on record the figure they were hired at.
+   *
+   * Declared before `:id`, or "compensation" is read as a team member id and
+   * the route 400s on the uuid parse — the same trap noted in
+   * VendorsController.
+   */
+  @Post("compensation/from-joining-salary")
+  @HttpCode(200)
+  @RequirePermission("team.compensation.write")
+  backfillCompensation(@CurrentUser() actor: AuthenticatedUser) {
+    return this.team.backfillCompensationFromJoining(actor);
   }
 
   @Get(":id")

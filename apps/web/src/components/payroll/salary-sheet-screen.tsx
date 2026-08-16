@@ -31,7 +31,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
-import { payrollApi, type PayrollLineDto, type PayrollRunDto } from "@/lib/payroll";
+import {
+  payrollApi,
+  teamApi,
+  type PayrollLineDto,
+  type PayrollRunDto,
+} from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 
 export function SalarySheetScreen({
@@ -46,6 +51,8 @@ export function SalarySheetScreen({
   const router = useRouter();
   const canWrite = useCan("payroll.write");
   const canPay = useCan("payroll.pay");
+  // Writing a compensation record is a pay decision, not a payroll one.
+  const canSetPay = useCan("team.compensation.write");
   // `exports.run` alone is not enough for a file of salary figures — HR holds
   // it and does not hold payroll.read.
   const canRunExports = useCan("exports.run");
@@ -60,18 +67,69 @@ export function SalarySheetScreen({
   const draft = run.status === "draft";
   const refresh = () => router.refresh();
 
+  /**
+   * Who the last build left out, because they have no pay on record.
+   *
+   * Kept so the screen can offer the way forward instead of only naming the
+   * problem. The message alone read as a failure with no remedy — and the
+   * remedy was eighteen profiles, opened one at a time.
+   */
+  const [skipped, setSkipped] = useState<string[]>([]);
+
   async function act(fn: () => Promise<unknown>, message?: string) {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const result = await fn();
-      const withMessage = result as { message?: string } | undefined;
+      const withMessage = result as
+        | { message?: string; skipped?: string[] }
+        | undefined;
       setNotice(withMessage?.message ?? message ?? null);
+      setSkipped(withMessage?.skipped ?? []);
       refresh();
     } catch (caught) {
       setError(
         caught instanceof ApiError ? caught.message : "Something went wrong.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Set the missing pay records from what each person was hired at.
+   *
+   * Offered here because here is where the gap is discovered. It writes real
+   * compensation records dated from each person's own joining date, so an
+   * earlier month computes correctly too — and it never touches anybody who
+   * already has a figure.
+   */
+  async function setPayFromJoining() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await teamApi.setPayFromJoiningSalary();
+      if (!result.created) {
+        setNotice(
+          result.skipped.length
+            ? `No joining salary is recorded for ${result.skipped.join(", ")}, so there is nothing to copy. Set their pay on the Team page.`
+            : "Everybody already has pay on record.",
+        );
+        setSkipped([]);
+      } else {
+        setNotice(
+          `Pay set for ${result.created} ${result.created === 1 ? "person" : "people"} from their joining salary. Build the list again.` +
+            (result.skipped.length
+              ? ` Still without a figure: ${result.skipped.join(", ")}.`
+              : ""),
+        );
+        setSkipped(result.skipped);
+      }
+      refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not set pay.",
       );
     } finally {
       setBusy(false);
@@ -160,9 +218,37 @@ export function SalarySheetScreen({
       ) : null}
 
       {notice ? (
-        <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-muted-foreground">
-          {notice}
-        </p>
+        <div className="flex flex-col gap-3 rounded-lg bg-warning/10 px-3 py-2.5 text-sm text-muted-foreground">
+          <p>{notice}</p>
+
+          {/*
+            The way out, next to the problem.
+
+            The sheet reads compensation_history — what somebody earns now.
+            An imported team member carries only the salary agreed at hire,
+            which is a different fact and deliberately not used for pay on its
+            own: it can be years old, and a run that quietly pays a 2024 figure
+            is a wrong payment nobody notices. So it is offered as something a
+            person does, once, and every record it writes names the amount in
+            the audit log.
+          */}
+          {skipped.length && draft && canSetPay ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={setPayFromJoining}
+              >
+                Set their pay from the joining salary
+              </Button>
+              <span className="text-xs">
+                Dated from each person&apos;s own joining date. Anyone who
+                already has a figure is left alone.
+              </span>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

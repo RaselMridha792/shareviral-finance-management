@@ -214,6 +214,20 @@ export const teamApi = {
       method: "POST",
       ...json(input),
     }),
+
+  /**
+   * Give everyone with no pay on record the figure they were hired at,
+   * effective from their own joining date.
+   *
+   * Only touches people who have no pay record at all, so it can never
+   * overwrite a raise, and every row it writes is in the audit log with the
+   * amount.
+   */
+  setPayFromJoiningSalary: () =>
+    apiFetch<{ created: number; names: string[]; skipped: string[] }>(
+      "/team-members/compensation/from-joining-salary",
+      { method: "POST" },
+    ),
 };
 
 export const payrollApi = {
