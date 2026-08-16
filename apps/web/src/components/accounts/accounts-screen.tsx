@@ -28,7 +28,11 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
-import { accountsApi, type AccountDto } from "@/lib/masters";
+import {
+  accountsApi,
+  type AccountDto,
+  type AccountWithBalance,
+} from "@/lib/masters";
 import { AccountForm } from "./account-form";
 
 const ICONS: Record<AccountType, ComponentType<{ className?: string }>> = {
@@ -41,7 +45,7 @@ const ICONS: Record<AccountType, ComponentType<{ className?: string }>> = {
 export function AccountsScreen({
   initialAccounts,
 }: {
-  initialAccounts: AccountDto[];
+  initialAccounts: AccountWithBalance[];
 }) {
   const router = useRouter();
   const canWrite = useCan("accounts.write");
@@ -65,8 +69,17 @@ export function AccountsScreen({
   const base = settings.baseCurrency;
   const inBase = active.filter((a) => a.currency === base);
   const otherCurrencies = active.filter((a) => a.currency !== base).length;
+  /**
+   * What the accounts hold now — not what they opened at.
+   *
+   * This summed `openingBalance`, which never changes, under a heading anybody
+   * reads as "the balance". Two cash-ins of ৳1,00,000 into a tin showing
+   * ৳40,000 left it showing ৳40,000, and the only clue was the caption on each
+   * card. The figure comes from the API now, where it is computed once and
+   * shared with the dashboard.
+   */
   const total = inBase
-    .reduce((sum, a) => sum + Number(a.openingBalance), 0)
+    .reduce((sum, a) => sum + Number(a.balance), 0)
     .toFixed(2);
 
   async function refresh() {
@@ -175,7 +188,7 @@ export function AccountsScreen({
           <Card className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4">
             <div>
               <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Opening total
+                Total held
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {otherCurrencies > 0 ? (
@@ -188,8 +201,8 @@ export function AccountsScreen({
                 ) : (
                   <>
                     {active.length} active account
-                    {active.length === 1 ? "" : "s"} · balances start moving once
-                    the ledger arrives
+                    {active.length === 1 ? "" : "s"} · opening balance plus every
+                    entry since, voided rows excluded
                   </>
                 )}
               </p>
@@ -253,7 +266,7 @@ function AccountCard({
   onArchive,
   onRestore,
 }: {
-  account: AccountDto;
+  account: AccountWithBalance;
   canWrite: boolean;
   onEdit: () => void;
   onArchive?: () => void;
@@ -278,13 +291,24 @@ function AccountCard({
         <Badge>{ACCOUNT_TYPE_LABELS[account.type]}</Badge>
       </div>
 
+      {/*
+        The balance, with what it started from underneath it.
+
+        The large figure was `openingBalance` and the caption said so, which
+        made it defensible and still wrong: on a card that looks like every
+        bank app anybody has used, the big number is what the account holds.
+        Opening stays, as the smaller line, because it is the base every entry
+        is counted from and worth being able to see.
+      */}
       <Amount
-        value={account.openingBalance}
+        value={account.balance}
         currency={account.currency}
         className="mt-5 block text-xl font-semibold tracking-tight"
       />
       <p className="num mt-0.5 text-xs text-muted-foreground">
-        Opening balance on {account.openingBalanceOn}
+        Opened at{" "}
+        <Amount value={account.openingBalance} currency={account.currency} /> on{" "}
+        {account.openingBalanceOn}
       </p>
 
       {canWrite ? (

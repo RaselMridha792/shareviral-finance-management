@@ -20,6 +20,33 @@ import { SettingsService } from "../settings/settings.service";
 
 export type AccountDto = Omit<Account, "deletedAt" | "entityId">;
 
+/**
+ * An account as the Accounts screen needs it: what it holds *now*.
+ *
+ * `openingBalance` stays alongside rather than being replaced. It is a real
+ * fact — the figure the books were opened at, and the base every later number
+ * is computed from — and the screen shows it as the caption under the balance.
+ */
+export type AccountWithBalanceDto = AccountDto & { balance: string };
+
+/**
+ * Where an account stands: what it opened at, plus everything that has moved
+ * through it since, with voided rows excluded.
+ *
+ * A correlated subquery rather than a join and a `group by`. The join version
+ * is the same arithmetic and needs every selected column repeated in the
+ * grouping — and the day somebody adds a column and forgets, the query either
+ * fails or, worse, starts returning an account per distinct value of it.
+ */
+const currentBalance = sql<string>`(
+  ${accounts.openingBalance} + coalesce((
+    select sum(${transactions.signedAmount})
+    from ${transactions}
+    where ${transactions.accountId} = ${accounts.id}
+      and ${transactions.voidedAt} is null
+  ), 0)
+)::text`;
+
 @Injectable()
 export class AccountsService {
   constructor(
@@ -28,12 +55,26 @@ export class AccountsService {
     private readonly settings: SettingsService,
   ) {}
 
-  async list(query: ListAccountsQuery): Promise<AccountDto[]> {
+  /**
+   * Carries the current balance, which it did not until 2026-08-16.
+   *
+   * The Accounts screen showed `openingBalance` under the heading "Opening
+   * total" and on each card as the one large figure. Read literally that was
+   * accurate; read the way anybody reads an Accounts page it was the balance,
+   * and it never moved. The owner recorded two cash-ins of ৳1,00,000 into a
+   * tin showing ৳40,000 and it still said ৳40,000 — twice — which is exactly
+   * the right thing to report as a bug.
+   *
+   * `balances()` below had already been corrected for the same mistake and
+   * this screen never called it. Putting the figure on the list the screen
+   * does call is what stops the two from being able to disagree again.
+   */
+  async list(query: ListAccountsQuery): Promise<AccountWithBalanceDto[]> {
     const filters = [isNull(accounts.deletedAt)];
     if (!query.includeInactive) filters.push(eq(accounts.isActive, true));
 
     return this.db.client
-      .select(projection)
+      .select({ ...projection, balance: currentBalance })
       .from(accounts)
       .where(and(...filters))
       .orderBy(asc(accounts.sortOrder), asc(accounts.name));
@@ -71,6 +112,15 @@ export class AccountsService {
    *    currency is listed with its own, and left out of the total.
    */
   async balances() {
+    /**
+     * The same `currentBalance` expression the list uses, on purpose.
+     *
+     * This used to compute the figure its own way — a join, a group by, and
+     * the addition done in JavaScript. Two places working out the same money
+     * two different ways is how the dashboard and the Accounts screen come to
+     * disagree, and the person looking at them has no way to tell which one to
+     * believe.
+     */
     const rows = await this.db.client
       .select({
         id: accounts.id,
@@ -78,32 +128,18 @@ export class AccountsService {
         type: accounts.type,
         currency: accounts.currency,
         isActive: accounts.isActive,
-        opening: accounts.openingBalance,
-        moved: sql<string>`coalesce(sum(${transactions.signedAmount}) filter (where ${transactions.voidedAt} is null), 0)::text`,
+        balance: currentBalance,
       })
       .from(accounts)
-      .leftJoin(transactions, eq(transactions.accountId, accounts.id))
       .where(isNull(accounts.deletedAt))
-      .groupBy(
-        accounts.id,
-        accounts.name,
-        accounts.type,
-        accounts.currency,
-        accounts.isActive,
-        accounts.openingBalance,
-      )
       .orderBy(accounts.name);
 
     const settings = await this.settings.get();
     const base = settings.baseCurrency;
 
     const balances = rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      currency: row.currency,
-      isActive: row.isActive,
-      balance: (Number(row.opening) + Number(row.moved)).toFixed(2),
+      ...row,
+      balance: Number(row.balance).toFixed(2),
     }));
 
     const total = balances

@@ -387,6 +387,18 @@ export class ExportsController {
           width: 10,
           value: (r) => r.currency,
         },
+        /**
+         * The balance first, because it is the column somebody opens this
+         * sheet for. Opening stays beside it — the figure the books were
+         * started at is what makes the balance checkable rather than merely
+         * stated.
+         */
+        {
+          header: "Balance",
+          key: "balance",
+          kind: "money",
+          value: (r) => r.balance,
+        },
         {
           header: "Opening balance",
           key: "opening",

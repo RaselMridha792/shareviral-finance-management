@@ -33,12 +33,25 @@ export type AccountDto = {
   routingNumber: string | null;
   swiftCode: string | null;
   currency: string;
+  /** The figure the books were opened at. It never changes. */
   openingBalance: string;
   openingBalanceOn: string;
   sortOrder: number;
   isActive: boolean;
   notes: string | null;
 };
+
+/**
+ * An account with what it holds now: the opening figure plus every entry
+ * against it, voided rows excluded. The API computes it, so this and the
+ * dashboard cannot arrive at different answers.
+ *
+ * A separate type rather than an optional field on `AccountDto`. Optional
+ * would compile everywhere and produce `NaN` in the total the first time a
+ * response without it reached the screen — a money figure that renders as
+ * nothing, from code that type-checked.
+ */
+export type AccountWithBalance = AccountDto & { balance: string };
 
 export type CategoryDto = {
   id: string;
@@ -102,7 +115,7 @@ export const settingsApi = {
 
 export const accountsApi = {
   list: (includeInactive = false) =>
-    apiFetch<AccountDto[]>(`/accounts?includeInactive=${includeInactive}`, {
+    apiFetch<AccountWithBalance[]>(`/accounts?includeInactive=${includeInactive}`, {
       cache: "no-store",
     }),
   create: (input: CreateAccountInput) =>
