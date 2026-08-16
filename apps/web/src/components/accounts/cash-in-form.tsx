@@ -58,11 +58,71 @@ export function CashInForm({
    * typed. A wrong figure is cheap to fix here and expensive to find later, in
    * a report that quietly says a dollar cost ৳1,227.
    */
-  const [amount, setAmount] = useState("");
+  const [typedAmount, setTypedAmount] = useState("");
   const [usdSent, setUsdSent] = useState("");
 
+  /**
+   * Whether the taka figure was typed rather than worked out.
+   *
+   * It has to be both. Dollars times the rate is what the transfer *should*
+   * have landed as, and it is the right thing to offer — the money starts as
+   * dollars and the person has the advice in front of them. But what actually
+   * reached the account is a fact, and the bank's charges mean it is regularly
+   * a few hundred taka short of the arithmetic. Overwriting a typed figure
+   * with a computed one would be the app arguing with the bank statement.
+   *
+   * So: computed until touched, then left alone.
+   */
+  const [amountTyped, setAmountTyped] = useState(false);
+
   const money = useMoney();
+
+  /**
+   * The taka the dollars and the rate come to.
+   *
+   * Worked out while rendering rather than pushed into state by an effect.
+   * An effect would mean the screen briefly shows one figure and then another,
+   * and every path that changes the dollars has to remember to keep the taka
+   * in step. Derived, there is only ever one answer and nothing to keep in
+   * step with anything.
+   */
+  const derivedAmount = (() => {
+    if (!usdSent.trim()) return "";
+    const usd = Number(plainAmount(usdSent));
+    const rate = Number(plainAmount(usdRate));
+    if (!Number.isFinite(usd) || usd <= 0) return "";
+    if (!Number.isFinite(rate) || rate <= 0) return "";
+    return (usd * rate).toFixed(2);
+  })();
+
+  /**
+   * Computed until somebody types in the box, then theirs.
+   *
+   * Dollars times the rate is what the transfer *should* have landed as, and
+   * offering it is right — the money starts as dollars and this is the order
+   * the advice reads. But what actually reached the account is a fact, and the
+   * bank's charges mean it is regularly a few hundred taka short of the
+   * arithmetic. Overwriting a typed figure would be the app arguing with the
+   * bank statement.
+   */
+  const amount = amountTyped ? typedAmount : derivedAmount;
   const realised = realisedRate(amount, usdSent);
+
+  /**
+   * True when the taka figure no longer matches the rate that was entered.
+   *
+   * Not an error — this is what a bank charge looks like, and the funding
+   * report divides taka by dollars rather than trusting the entered rate, so
+   * the realised figure is the one that will be reported. Said out loud
+   * because a silent difference between two rates on one screen is the thing
+   * worth noticing.
+   */
+  const enteredRate = Number(plainAmount(usdRate));
+  const drifted =
+    realised != null &&
+    Number.isFinite(enteredRate) &&
+    enteredRate > 0 &&
+    Math.abs(Number(realised.rate) - enteredRate) >= 0.01;
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +164,9 @@ export function CashInForm({
    * it is prefilled from the last one recorded anyway.
    */
   function close() {
-    setAmount("");
+    setTypedAmount("");
     setUsdSent("");
+    setAmountTyped(false);
     onClose();
   }
 
@@ -175,35 +236,122 @@ export function CashInForm({
             <DateInput name="txnDate" required defaultValue={todayInDhaka()} />
           </Field>
           <Field
-            label="Amount received"
+            label="Landed in"
             required
-            error={fieldErrors.amount}
-            hint="What landed, in taka"
+            error={fieldErrors.accountId}
+            hint="Our account the transfer arrived in"
+          >
+            <Select name="accountId" required defaultValue={accounts[0]?.id}>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
+        {/* The dollar side first, because that is the side the money starts
+            on and the side nobody can reconstruct afterwards. The rate is
+            asked at the only moment anybody knows it: it is read back all
+            month, since every taka figure is shown in dollars at the rate the
+            month's funding arrived at, and a rate looked up later is the rate
+            on the day of the lookup. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="USD sent"
+            error={fieldErrors.usdSent}
+            hint="What the sender sent. Blank for a local receipt."
           >
             <MoneyInput
-              name="amount"
-              required
+              name="usdSent"
               placeholder="0.00"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              value={usdSent}
+              onChange={(event) => setUsdSent(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="Dollar rate"
+            required
+            error={fieldErrors.usdRate}
+            hint={
+              latestRate
+                ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
+                : "What a dollar was worth on the day. It governs the whole month."
+            }
+          >
+            <Input
+              name="usdRate"
+              required
+              inputMode="decimal"
+              className="col-amount"
+              placeholder="122.77"
+              value={usdRate}
+              onChange={(event) => setUsdRate(event.target.value)}
             />
           </Field>
         </div>
 
         <Field
-          label="Landed in"
+          label="Amount received"
           required
-          error={fieldErrors.accountId}
-          hint="Our account the transfer arrived in"
+          error={fieldErrors.amount}
+          hint={
+            amountTyped
+              ? "What landed, in taka — as you typed it"
+              : "Worked out from the two above. Change it to what the bank actually credited."
+          }
         >
-          <Select name="accountId" required defaultValue={accounts[0]?.id}>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </Select>
+          <MoneyInput
+            name="amount"
+            required
+            placeholder="0.00"
+            value={amount}
+            onChange={(event) => {
+              setTypedAmount(event.target.value);
+              // From here on this box is the person's, not the arithmetic's.
+              setAmountTyped(true);
+            }}
+          />
         </Field>
+
+        {/* The arithmetic, back in front of the person who typed it. A digit
+            too many in either box turns a plausible rate into an absurd one,
+            and that is obvious here and nearly invisible in a report next
+            quarter. This is also the figure the funding report will show for
+            this transfer — it divides the same two numbers rather than
+            trusting the rate that was typed. */}
+        {realised ? (
+          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
+            <span className="num">
+              {money(realised.bdt, { hideDecimals: true })} ÷{" "}
+              {money(realised.usd, { currency: "USD", hideDecimals: true })} ={" "}
+              <strong className="font-semibold text-foreground">
+                {money(realised.rate)}
+              </strong>
+            </span>{" "}
+            per USD — the rate this transfer actually achieved.
+            {drifted ? (
+              <>
+                {" "}
+                That is not {trimRate(usdRate)}, which is normal when the bank
+                takes a charge — the funding report will show{" "}
+                {money(realised.rate)}.
+              </>
+            ) : null}
+          </p>
+        ) : usdSent.trim() ? (
+          <p className="text-xs text-muted-foreground">
+            Enter the rate and the taka figure fills itself in.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Leave <span className="font-medium">USD sent</span> blank for a
+            local receipt and type the taka directly. Filled in, this transfer
+            appears in the funding report with the rate it achieved.
+          </p>
+        )}
 
         <Field label="Category" required error={fieldErrors.categoryId}>
           <Select name="categoryId" required defaultValue={defaultCategoryId}>
@@ -283,76 +431,6 @@ export function CashInForm({
           </Field>
         </fieldset>
 
-        {/* The dollar side of the transfer, and the only part of this form
-            nobody can reconstruct afterwards. The rate is asked here, at the
-            only moment anybody knows it, because it is read back all month:
-            every taka figure after it is shown in dollars at the rate the
-            month's funding arrived at. A rate looked up later is the rate on
-            the day of the lookup. */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            label="USD sent"
-            error={fieldErrors.usdSent}
-            hint="Optional — what the sender sent, before conversion"
-          >
-            <MoneyInput
-              name="usdSent"
-              placeholder="0.00"
-              value={usdSent}
-              onChange={(event) => setUsdSent(event.target.value)}
-            />
-          </Field>
-
-          <Field
-            label="Dollar rate"
-            required
-            error={fieldErrors.usdRate}
-            hint={
-              latestRate
-                ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
-                : "What a dollar was worth on the day. It governs the whole month."
-            }
-          >
-            <Input
-              name="usdRate"
-              required
-              inputMode="decimal"
-              className="col-amount"
-              placeholder="122.77"
-              value={usdRate}
-              onChange={(event) => setUsdRate(event.target.value)}
-            />
-          </Field>
-        </div>
-
-        {/* The arithmetic, back in front of the person who typed it. A digit
-            too many in either box turns a plausible rate into an absurd one,
-            and that is obvious here and nearly invisible in a report next
-            quarter. This is also the figure the funding report will show for
-            this transfer — it divides the same two numbers. */}
-        {realised ? (
-          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
-            <span className="num">
-              {money(realised.bdt, { hideDecimals: true })} ÷{" "}
-              {money(realised.usd, { currency: "USD", hideDecimals: true })} ={" "}
-              <strong className="font-semibold text-foreground">
-                {money(realised.rate)}
-              </strong>
-            </span>{" "}
-            per USD — the rate this transfer actually achieved.
-          </p>
-        ) : usdSent.trim() ? (
-          <p className="text-xs text-muted-foreground">
-            Fill in both the amount received and the dollars sent to see the
-            rate this transfer achieved.
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Leave <span className="font-medium">USD sent</span> blank for a
-            local receipt. Filled in, this transfer appears in the funding
-            report with the rate it achieved.
-          </p>
-        )}
 
         <Field label="Notes" error={fieldErrors.notes}>
           <Textarea name="notes" />
