@@ -173,6 +173,19 @@ jobs:
             docker compose pull --quiet api web
             docker compose up -d --remove-orphans
 
+            # nginx's configuration is a bind-mounted file. Changing it in git
+            # changes it on disk and nothing else: the container's definition
+            # is identical, so `up -d` leaves it running with the config it
+            # read when it started, and an edit to sfm.conf silently never
+            # takes effect.
+            #
+            # Tested first, reloaded second, and in that order on purpose. If
+            # the new file is bad, `nginx -t` fails, `set -e` stops the deploy,
+            # and the old configuration keeps serving the site — which is a far
+            # better outcome than a reload that takes nginx down.
+            docker compose exec -T nginx nginx -t
+            docker compose exec -T nginx nginx -s reload
+
             # Images pile up fast on 50 GB. Keep the current ones, drop the
             # rest — dangling only, so a tagged rollback target survives.
             docker image prune -f
