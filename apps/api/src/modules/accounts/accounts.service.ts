@@ -33,18 +33,28 @@ export type AccountWithBalanceDto = AccountDto & { balance: string };
  * Where an account stands: what it opened at, plus everything that has moved
  * through it since, with voided rows excluded.
  *
- * A correlated subquery rather than a join and a `group by`. The join version
- * is the same arithmetic and needs every selected column repeated in the
- * grouping — and the day somebody adds a column and forgets, the query either
- * fails or, worse, starts returning an account per distinct value of it.
+ * Paired with `.leftJoin(transactions, eq(transactions.accountId, accounts.id))`
+ * and `.groupBy(accounts.id)`, and it does not work without them.
+ *
+ * It was briefly written as a correlated subquery instead, and that was wrong
+ * in a way worth recording. Inside a `sql` template drizzle renders a column as
+ * its bare name — `"account_id"`, not `"transactions"."account_id"` — because
+ * the template is text it does not parse. Its own operators qualify; the
+ * template does not. So `where ${transactions.accountId} = ${accounts.id}`
+ * became `where "account_id" = "id"`, both of which resolve inside the
+ * subquery's own FROM, and the condition asked whether a transaction's account
+ * is its own id. Never true, sum NULL, coalesce 0 — every balance came back
+ * exactly equal to its opening figure, which is precisely the bug the change
+ * was meant to fix and looks identical to it.
+ *
+ * The join is safe because the correlation is written with `eq()`, which
+ * qualifies, and the three columns named below exist on one table each.
  */
 const currentBalance = sql<string>`(
-  ${accounts.openingBalance} + coalesce((
-    select sum(${transactions.signedAmount})
-    from ${transactions}
-    where ${transactions.accountId} = ${accounts.id}
-      and ${transactions.voidedAt} is null
-  ), 0)
+  ${accounts.openingBalance} + coalesce(
+    sum(${transactions.signedAmount}) filter (
+      where ${transactions.voidedAt} is null
+    ), 0)
 )::text`;
 
 @Injectable()
@@ -73,11 +83,18 @@ export class AccountsService {
     const filters = [isNull(accounts.deletedAt)];
     if (!query.includeInactive) filters.push(eq(accounts.isActive, true));
 
-    return this.db.client
-      .select({ ...projection, balance: currentBalance })
-      .from(accounts)
-      .where(and(...filters))
-      .orderBy(asc(accounts.sortOrder), asc(accounts.name));
+    return (
+      this.db.client
+        .select({ ...projection, balance: currentBalance })
+        .from(accounts)
+        .leftJoin(transactions, eq(transactions.accountId, accounts.id))
+        .where(and(...filters))
+        // The primary key alone. Postgres allows every other column of the same
+        // table once its key is grouped, so this cannot fall out of step with
+        // `projection` the way listing each column by hand would.
+        .groupBy(accounts.id)
+        .orderBy(asc(accounts.sortOrder), asc(accounts.name))
+    );
   }
 
   async findOne(id: string): Promise<AccountDto> {
@@ -131,7 +148,9 @@ export class AccountsService {
         balance: currentBalance,
       })
       .from(accounts)
+      .leftJoin(transactions, eq(transactions.accountId, accounts.id))
       .where(isNull(accounts.deletedAt))
+      .groupBy(accounts.id)
       .orderBy(accounts.name);
 
     const settings = await this.settings.get();
