@@ -6,7 +6,9 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
+import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DateInput,
   Field,
@@ -17,7 +19,11 @@ import {
 } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
-import type { AccountDto, CategoryNode } from "@/lib/masters";
+import {
+  categoriesApi,
+  type AccountDto,
+  type CategoryNode,
+} from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
 
 /**
@@ -148,11 +154,33 @@ export function CashInForm({
     };
   }, [open]);
 
+  /**
+   * The two searchable boxes keep their value here: the form is read with
+   * `FormData`, so the value has to reach a hidden input, and a hidden input
+   * does not remember anything on its own.
+   */
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+
+  /** Refetched when a category is added from inside this form. */
+  const [tree, setTree] = useState(categories);
+  async function onCategoryCreated() {
+    try {
+      setTree(await categoriesApi.tree());
+    } catch {
+      // The new heading is already selected — its id came back from the
+      // create. Only its label would be missing until the next page load.
+    }
+  }
+
   // Money in can only be filed under a money-in heading.
-  const usable = categories.filter(
+  const usable = tree.filter(
     (group) => group.kind === "in" || group.kind === "both",
   );
-  const defaultCategoryId = fundingCategoryId(usable);
+  const [categoryId, setCategoryId] = useState(() =>
+    fundingCategoryId(
+      categories.filter((g) => g.kind === "in" || g.kind === "both"),
+    ),
+  );
 
   /**
    * Closing empties the two controlled boxes.
@@ -241,13 +269,19 @@ export function CashInForm({
             error={fieldErrors.accountId}
             hint="Our account the transfer arrived in"
           >
-            <Select name="accountId" required defaultValue={accounts[0]?.id}>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              name="accountId"
+              value={accountId}
+              onChange={setAccountId}
+              invalid={Boolean(fieldErrors.accountId?.length)}
+              options={accounts.map((account) => ({
+                value: account.id,
+                label: account.name,
+                hint: account.bankName ?? undefined,
+              }))}
+              placeholder="Choose an account"
+              searchPlaceholder="Type to find an account…"
+            />
           </Field>
         </div>
 
@@ -354,23 +388,18 @@ export function CashInForm({
         )}
 
         <Field label="Category" required error={fieldErrors.categoryId}>
-          <Select name="categoryId" required defaultValue={defaultCategoryId}>
-            <option value="" disabled>
-              Choose a category
-            </option>
-            {usable.map((group) => (
-              <optgroup key={group.id} label={group.name}>
-                <option value={group.id}>{group.name} (general)</option>
-                {group.children
-                  .filter((child) => child.isActive)
-                  .map((child) => (
-                    <option key={child.id} value={child.id}>
-                      {child.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </Select>
+          <CategorySelect
+            name="categoryId"
+            value={categoryId}
+            onChange={setCategoryId}
+            categories={usable}
+            // Money arriving, so a category added from here belongs on the
+            // money-in side. Getting this wrong would file a heading where
+            // this very form could never offer it again.
+            kind="in"
+            invalid={Boolean(fieldErrors.categoryId?.length)}
+            onCreated={onCategoryCreated}
+          />
         </Field>
 
         <Field

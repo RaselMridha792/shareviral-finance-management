@@ -11,7 +11,9 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FileManager } from "@/components/files/file-manager";
+import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   DateInput,
   Field,
@@ -23,7 +25,7 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { fxApi } from "@/lib/reports";
-import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { categoriesApi, type AccountDto, type CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 
 export function TransactionForm({
@@ -98,8 +100,37 @@ export function TransactionForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
+  /**
+   * The two searchable boxes hold their value in state, because a hidden input
+   * is what carries it into `FormData` and a hidden input has nothing to
+   * remember it for you.
+   *
+   * Seeded from the row being edited, or from the caller's default. Safe to
+   * seed from props: the drawer unmounts its children on close, so this is
+   * built fresh every time the form opens.
+   */
+  const [accountId, setAccountId] = useState(
+    transaction?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? "",
+  );
+  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
+
+  /**
+   * A category added from inside this form is not in the tree the parent
+   * screen handed down, so the list is kept here and refetched once.
+   */
+  const [tree, setTree] = useState(categories);
+  async function onCategoryCreated() {
+    try {
+      setTree(await categoriesApi.tree());
+    } catch {
+      // The new category is selected either way — the id came back from the
+      // create. Only its name would be missing from the list until the page
+      // is next loaded, which is not worth failing a save over.
+    }
+  }
+
   // A money-out entry may only use a money-out category, and the reverse.
-  const usable = categories.filter(
+  const usable = tree.filter(
     (group) => group.kind === direction || group.kind === "both",
   );
 
@@ -226,42 +257,32 @@ export function TransactionForm({
 
         {!editing ? (
           <Field label="Account" required error={fieldErrors.accountId}>
-            <Select
+            <SearchableSelect
               name="accountId"
-              required
-              defaultValue={defaultAccountId ?? accounts[0]?.id}
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
+              value={accountId}
+              onChange={setAccountId}
+              invalid={Boolean(fieldErrors.accountId?.length)}
+              options={accounts.map((account) => ({
+                value: account.id,
+                label: account.name,
+                hint: account.bankName ?? undefined,
+              }))}
+              placeholder="Choose an account"
+              searchPlaceholder="Type to find an account…"
+            />
           </Field>
         ) : null}
 
         <Field label="Category" required error={fieldErrors.categoryId}>
-          <Select
+          <CategorySelect
             name="categoryId"
-            required
-            defaultValue={transaction?.categoryId ?? ""}
-          >
-            <option value="" disabled>
-              Choose a category
-            </option>
-            {usable.map((group) => (
-              <optgroup key={group.id} label={group.name}>
-                <option value={group.id}>{group.name} (general)</option>
-                {group.children
-                  .filter((child) => child.isActive)
-                  .map((child) => (
-                    <option key={child.id} value={child.id}>
-                      {child.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </Select>
+            value={categoryId}
+            onChange={setCategoryId}
+            categories={usable}
+            kind={direction}
+            invalid={Boolean(fieldErrors.categoryId?.length)}
+            onCreated={onCategoryCreated}
+          />
         </Field>
 
         <Field label="Description" required error={fieldErrors.description}>

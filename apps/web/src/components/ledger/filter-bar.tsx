@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/ui/field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 
@@ -130,25 +131,38 @@ export function FilterBar({
           </select>
         ) : null}
 
-        <select
+        {/*
+          Searchable, because this is the longest list on the screen and the
+          one people come to the ledger to use. Scrolling a grouped list to
+          find "Courier and postage" is the whole reason the filter gets
+          ignored.
+
+          "All categories" is an option rather than a cleared value, so
+          undoing the filter is in the same place as setting it.
+        */}
+        <SearchableSelect
+          className="w-56"
           value={filters.categoryId ?? ""}
-          onChange={(event) =>
-            set({ categoryId: event.target.value || undefined })
-          }
-          className={cn(controlClass, "h-9 w-auto")}
-        >
-          <option value="">All categories</option>
-          {categories.map((group) => (
-            <optgroup key={group.id} label={group.name}>
-              <option value={group.id}>{group.name} (general)</option>
-              {group.children.map((child) => (
-                <option key={child.id} value={child.id}>
-                  {child.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          onChange={(next) => set({ categoryId: next || undefined })}
+          placeholder="All categories"
+          searchPlaceholder="Type to find a category…"
+          emptyLabel="No category matches that."
+          options={[
+            { value: "", label: "All categories" },
+            ...categories.flatMap((group) => [
+              {
+                value: group.id,
+                label: `${group.name} (general)`,
+                group: group.name,
+              },
+              ...group.children.map((child) => ({
+                value: child.id,
+                label: child.name,
+                group: group.name,
+              })),
+            ]),
+          ]}
+        />
 
         <select
           value={filters.paymentMethod ?? ""}
