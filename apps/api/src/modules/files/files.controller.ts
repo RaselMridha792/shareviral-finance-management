@@ -54,7 +54,11 @@ export class FilesController {
     @Param("id") id: string,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.files.listFor("team_member", uuidSchema.parse(id), actor);
+    // The photograph is not a document. It has its own control beside the
+    // face, and listing it here again makes one file look like two.
+    return this.files.listFor("team_member", uuidSchema.parse(id), actor, [
+      "profile_photo",
+    ]);
   }
 
   @Post("team-member/:id")
@@ -157,6 +161,22 @@ export class FilesController {
        * national ID. Short, so a replaced photo does not linger on screen.
        */
       "Cache-Control": "private, max-age=300",
+      /**
+       * Overriding helmet, which sets `same-origin` on everything.
+       *
+       * This is the one route whose response is loaded by another origin as a
+       * subresource: the app is app.hellonizam.com and this is
+       * api.hellonizam.com, so an `<img>` on a profile is cross-origin. Under
+       * `same-origin` the browser fetches the bytes, answers 200, and then
+       * refuses to hand them to the page — a broken image with a successful
+       * request behind it, which is what a profile photograph looked like on
+       * 2026-08-16 and why it took a header dump to find.
+       *
+       * `same-site`, not `cross-origin`: hellonizam.com may embed these, and
+       * nothing else may. A scan of somebody's national ID should still be
+       * unusable from a page somebody else controls.
+       */
+      "Cross-Origin-Resource-Policy": "same-site",
     });
 
     return new StreamableFile(stream);

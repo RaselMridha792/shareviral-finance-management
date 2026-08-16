@@ -224,6 +224,27 @@ console.log("\nWho may read it back");
     asHr.status === 200
       ? ok("HR can open a photo", "200 — team.read is enough for a face")
       : bad("HR and a photo", `expected 200, got ${asHr.status}`);
+
+    /**
+     * The header that decides whether a 200 is any use.
+     *
+     * The app is app.hellonizam.com and this API is api.hellonizam.com, so a
+     * profile photograph is a cross-origin subresource. helmet sets
+     * Cross-Origin-Resource-Policy: same-origin on everything, under which the
+     * browser fetches the bytes, reports 200, and then refuses to give them to
+     * the page. Every photograph was a broken image with a successful request
+     * behind it, and only a header dump showed why.
+     *
+     * Asserted rather than commented, because the symptom is invisible from
+     * the response body and from the status code.
+     */
+    const corp = asHr.headers.get("cross-origin-resource-policy");
+    corp === "same-site"
+      ? ok("the photo may be embedded by the app", `CORP: ${corp}`)
+      : bad(
+          "cross-origin-resource-policy",
+          `expected same-site, got ${corp ?? "(absent)"} — a 200 the browser will not render`,
+        );
   }
 }
 

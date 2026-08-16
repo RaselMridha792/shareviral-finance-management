@@ -143,6 +143,16 @@ export class FilesService {
     owner: FileOwner,
     ownerId: string,
     actor: AuthenticatedUser,
+    /**
+     * Kinds to leave out.
+     *
+     * The documents list on a person passes `profile_photo`, because the
+     * photograph has its own control beside the face it belongs to. Listing it
+     * again underneath makes it look like two files, and the delete button in
+     * that list removes the picture from the top of the page without ever
+     * saying so.
+     */
+    exclude: readonly FileKind[] = [],
   ): Promise<FileDto[]> {
     const rows = await this.db.client
       .select({ file: files, uploaderName: users.fullName })
@@ -155,6 +165,7 @@ export class FilesService {
     // their appointment letter should see the rest of the list, not a 403 that
     // makes the whole tab look broken.
     return rows
+      .filter((r) => !exclude.includes(r.file.kind))
       .filter(
         (r) =>
           !COMPENSATION_FILE_KINDS.includes(r.file.kind) ||
