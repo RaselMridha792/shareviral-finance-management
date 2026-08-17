@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
+import { BrandMark } from "@/components/layout/brand-mark";
 import {
   NAV_GROUPS,
   SECONDARY_ACCENT,
@@ -503,9 +504,10 @@ export function SidebarContent({
           collapsed ? "justify-center px-2" : "px-5",
         )}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-[11px] font-semibold text-primary-foreground">
-          SFM
-        </span>
+        {/* The mark itself, not "SFM" set in a coloured box. The rounded
+            square is part of the artwork, so it needs no container of its
+            own. */}
+        <BrandMark className="size-8 shrink-0" />
         {collapsed ? null : (
           <>
             <span className="truncate text-[15px] font-semibold tracking-tight">

@@ -113,6 +113,11 @@ const SCREENS = [
   ["/payroll", "Payroll"],
   ["/tax/withholding", "Withholding tax"],
   ["/reports", "Reports"],
+  // Its own screen since the statement stopped being a tab on Reports. Added
+  // here the same day: a screen missing from this list is a screen nobody
+  // checks at four widths in two themes, and this one is the document that
+  // leaves the company.
+  ["/statement", "Statement"],
   ["/import", "Import"],
   ["/settings", "Settings"],
   ["/assistant", "Assistant"],

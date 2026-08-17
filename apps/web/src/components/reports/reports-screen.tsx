@@ -1,11 +1,9 @@
 "use client";
 
 import {
-  GRANULARITIES,
   todayInDhaka,
   type BankStats,
   type CurrencyView,
-  type FinancialStatement,
   type FundingReport,
   type Granularity,
   type PeriodReport,
@@ -22,34 +20,46 @@ import { useCallback, useEffect, useState } from "react";
 import { useCan } from "@/components/auth/session-provider";
 import { useMoney } from "@/components/settings-provider";
 import { Amount } from "@/components/money/amount";
-import { StatementView } from "@/components/reports/statement-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
+import {
+  TabStrip,
+  granularityTabs,
+} from "@/components/reports/granularity-tabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
 import { reportsApi, type AvailablePeriods } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { id: "period", label: "The period" },
-  { id: "bank", label: "Month by month" },
-  { id: "funding", label: "Funding from the CEO" },
-  // Not a fourth report. The other three answer a question; this one is the
-  // signed document, and it carries its own period controls because the
-  // statement is always about one period at a time.
-  { id: "statement", label: "Statement" },
-] as const;
-type TabId = (typeof TABS)[number]["id"];
+/**
+ * Four reports by the period they cover, then the two that answer a different
+ * question.
+ *
+ * The first four used to be one tab, "The period", with a dropdown called
+ * Granularity beside it. Naming them the way the documents are named puts all
+ * four in view and stops somebody hunting for "the quarterly one" inside a
+ * control named after an axis.
+ *
+ * "Month by month" and "Funding from the CEO" are not granularities of the
+ * same report — they are separate questions — so they sit after the four
+ * rather than among them. The statement is no longer here at all: it is a
+ * signed document rather than a report, and it has its own screen.
+ */
+const REPORT_TABS = granularityTabs("Report");
+const OTHER_TABS = [
+  { id: "bank" as const, label: "Month by month" },
+  { id: "funding" as const, label: "Funding from the CEO" },
+];
+const TABS = [...REPORT_TABS, ...OTHER_TABS];
+type TabId = Granularity | "bank" | "funding";
 
-const GRANULARITY_LABELS: Record<Granularity, string> = {
-  month: "Month",
-  quarter: "Quarter",
-  half: "Half year",
-  year: "Full year",
-};
+/** True for the four that are the period report at one length or another. */
+function isPeriodTab(tab: TabId): tab is Granularity {
+  return tab !== "bank" && tab !== "funding";
+}
 
 const th =
   "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
@@ -58,12 +68,9 @@ const thRight = `${th} text-right`;
 export function ReportsScreen({
   initialPeriods,
   initialReport,
-  initialStatement,
 }: {
   initialPeriods: AvailablePeriods;
   initialReport: PeriodReport;
-  /** Null when the statement endpoint could not answer. */
-  initialStatement: FinancialStatement | null;
 }) {
   const canSeeUsd = useCan("reports.usd");
   // Each read unconditionally: the right to download plus the right to see
@@ -71,9 +78,16 @@ export function ReportsScreen({
   const canRunExports = useCan("exports.run");
   const canSeeReports = useCan("reports.view");
   const canExport = canRunExports && canSeeReports;
-  const [tab, setTab] = useState<TabId>("period");
+  /**
+   * The open tab, which for four of the six *is* the granularity.
+   *
+   * Held as one piece of state rather than a tab plus a separate granularity:
+   * two states saying which report this is means two things that can disagree,
+   * and the tab strip is now the only way to choose.
+   */
+  const [tab, setTab] = useState<TabId>("month");
+  const granularity: Granularity = isPeriodTab(tab) ? tab : "month";
 
-  const [granularity, setGranularity] = useState<Granularity>("month");
   const [periods, setPeriods] = useState(initialPeriods);
   const [fiscalYear, setFiscalYear] = useState(initialPeriods.years[1]);
   const [index, setIndex] = useState(
@@ -98,13 +112,9 @@ export function ReportsScreen({
     // leave its red banner sitting above a tab that loaded perfectly well.
     setError(null);
 
-    // The statement fetches itself: it has its own period, and reloading it
-    // from here would fight the controls in its own header strip.
-    if (tab === "statement") return;
-
     setLoading(true);
     try {
-      if (tab === "period") {
+      if (isPeriodTab(tab)) {
         setReport(
           await reportsApi.period({ granularity, fiscalYear, index, currency }),
         );
@@ -158,17 +168,16 @@ export function ReportsScreen({
    * table being looked at rather than a bundle of all three.
    */
   function download() {
-    const target =
-      tab === "period"
-        ? exportUrl("reports/period", {
-            granularity,
-            fiscalYear,
-            index,
-            currency,
-          })
-        : tab === "bank"
-          ? exportUrl("reports/bank-stats", { year: fiscalYear, currency })
-          : exportUrl("reports/funding", {});
+    const target = isPeriodTab(tab)
+      ? exportUrl("reports/period", {
+          granularity,
+          fiscalYear,
+          index,
+          currency,
+        })
+      : tab === "bank"
+        ? exportUrl("reports/bank-stats", { year: fiscalYear, currency })
+        : exportUrl("reports/funding", {});
 
     window.location.href = target;
   }
@@ -179,7 +188,7 @@ export function ReportsScreen({
         title="Reports"
         description="What came in, what went out, and what it looks like in dollars."
         actions={
-          canExport && tab !== "statement" ? (
+          canExport ? (
             <Button variant="secondary" size="md" onClick={download}>
               <Download className="size-4" />
               Excel
@@ -189,66 +198,28 @@ export function ReportsScreen({
       />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div
-          role="tablist"
-          aria-label="Report"
-          className="tabs-scroll flex gap-1 border-b border-border"
-        >
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              role="tab"
-              type="button"
-              aria-selected={tab === entry.id}
-              onClick={() => setTab(entry.id)}
-              className={cn(
-                "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition",
-                tab === entry.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+        <TabStrip tabs={TABS} active={tab} onSelect={setTab} label="Report" />
 
         <div className="flex flex-wrap items-center gap-2">
-          {tab === "period" ? (
-            <>
-              <Select
-                aria-label="Granularity"
-                className="h-9 w-32"
-                value={granularity}
-                onChange={(e) => setGranularity(e.target.value as Granularity)}
-              >
-                {GRANULARITIES.map((g) => (
-                  <option key={g} value={g}>
-                    {GRANULARITY_LABELS[g]}
-                  </option>
-                ))}
-              </Select>
-              {periods.periods.length > 1 ? (
-                <Select
-                  aria-label="Period"
-                  className="h-9 w-40"
-                  value={index}
-                  onChange={(e) => setIndex(Number(e.target.value))}
-                >
-                  {/* A period that has not happened, or one from before the
-                      books begin, is greyed rather than dropped: not offered is
-                      a different thing from not there. */}
-                  {periods.periods.map((p) => (
-                    <option key={p.index} value={p.index} disabled={!p.selectable}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-            </>
+          {isPeriodTab(tab) && periods.periods.length > 1 ? (
+            <Select
+              aria-label="Period"
+              className="h-9 w-40"
+              value={index}
+              onChange={(e) => setIndex(Number(e.target.value))}
+            >
+              {/* A period that has not happened, or one from before the
+                  books begin, is greyed rather than dropped: not offered is
+                  a different thing from not there. */}
+              {periods.periods.map((p) => (
+                <option key={p.index} value={p.index} disabled={!p.selectable}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
           ) : null}
 
-          {tab !== "funding" && tab !== "statement" ? (
+          {tab !== "funding" ? (
             /* One control, two meanings. "The period" reads this as a fiscal
                year — July to June, when the setting says so — while "Month by
                month" groups by calendar year. Both used to render a bare
@@ -277,9 +248,9 @@ export function ReportsScreen({
             </Select>
           ) : null}
 
-          {/* The statement always shows both currencies side by side, so it
-              has nothing to switch. */}
-          {canSeeUsd && tab !== "funding" && tab !== "statement" ? (
+          {/* Funding is already a two-currency report by nature — dollars sent
+              against taka landed — so it has nothing to switch. */}
+          {canSeeUsd && tab !== "funding" ? (
             <div className="flex rounded-lg border border-border p-0.5">
               {(["BDT", "USD"] as const).map((option) => (
                 <button
@@ -317,22 +288,9 @@ export function ReportsScreen({
         </div>
       ) : null}
 
-      {tab === "period" && report ? <PeriodView report={report} /> : null}
+      {isPeriodTab(tab) && report ? <PeriodView report={report} /> : null}
       {tab === "bank" && bank ? <BankView stats={bank} /> : null}
       {tab === "funding" && funding ? <FundingView report={funding} /> : null}
-      {tab === "statement" ? (
-        <StatementView
-          initialStatement={initialStatement}
-          initialPeriods={initialPeriods}
-          initialFiscalYear={initialPeriods.years[1]}
-          initialIndex={Math.max(
-            1,
-            initialPeriods.periods.findIndex(
-              (p) => todayInDhaka() >= p.start && todayInDhaka() <= p.end,
-            ) + 1,
-          )}
-        />
-      ) : null}
     </>
   );
 }

@@ -5,6 +5,7 @@ import {
   Banknote,
   Bot,
   ChartColumn,
+  FileText,
   FileUp,
   Gauge,
   HandCoins,
@@ -182,6 +183,25 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/reports",
         label: "Reports",
         icon: ChartColumn,
+        permission: "reports.view",
+      },
+      {
+        /**
+         * Its own screen, straight after Reports.
+         *
+         * It was the fourth tab there, filed beside three reports — which made
+         * the one document somebody signs and sends out look like a fourth way
+         * of slicing the same figures. A report is read; a statement is
+         * issued.
+         *
+         * `reports.view` is the same permission: it is built from the same
+         * ledger by the same service, and the PDF inside asks for
+         * `dashboard.money` on top, which the screen checks for itself.
+         */
+        key: "statement",
+        href: "/statement",
+        label: "Statement",
+        icon: FileText,
         permission: "reports.view",
       },
       {

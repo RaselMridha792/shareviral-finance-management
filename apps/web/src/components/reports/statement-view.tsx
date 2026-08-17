@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  GRANULARITIES,
   formatMoney,
   type FinancialStatement,
   type Granularity,
@@ -50,13 +49,6 @@ import { cn } from "@/lib/utils";
  * the fact is prefixed with ≈ and greyed, and one with no rate at all is a
  * blank rather than a guess.
  */
-
-const GRANULARITY_LABELS: Record<Granularity, string> = {
-  month: "Month",
-  quarter: "Quarter",
-  half: "Half year",
-  year: "Full year",
-};
 
 const CHART_COLOURS = [
   "var(--chart-1)",
@@ -185,11 +177,21 @@ function MoneyPair({
 /* -------------------------------------------------------------------------- */
 
 export function StatementView({
+  granularity,
   initialStatement,
   initialPeriods,
   initialFiscalYear,
   initialIndex,
 }: {
+  /**
+   * How long a period this statement covers.
+   *
+   * A prop now rather than a select inside this component: the screen above
+   * chooses it with a tab per length, and a dropdown in here saying the same
+   * thing would be a second control for one decision — the kind that ends up
+   * disagreeing with the tab it sits under.
+   */
+  granularity: Granularity;
   initialStatement: FinancialStatement | null;
   initialPeriods: AvailablePeriods;
   initialFiscalYear: number;
@@ -197,7 +199,6 @@ export function StatementView({
 }) {
   // Grouping follows the company's setting — ৳12,50,000 or ৳1,250,000.
   const { numberFormat: format } = useSettings();
-  const [granularity, setGranularity] = useState<Granularity>("month");
   const [periods, setPeriods] = useState(initialPeriods);
   const [fiscalYear, setFiscalYear] = useState(initialFiscalYear);
   const [index, setIndex] = useState(initialIndex);
@@ -426,22 +427,8 @@ export function StatementView({
               {statement.lineItems === 1 ? " line item" : " line items"}
             </Badge>
 
-            <Select
-              aria-label="Period length"
-              className="h-9 w-auto"
-              value={granularity}
-              disabled={loading}
-              onChange={(event) =>
-                setGranularity(event.target.value as Granularity)
-              }
-            >
-              {GRANULARITIES.map((option) => (
-                <option key={option} value={option}>
-                  {GRANULARITY_LABELS[option]}
-                </option>
-              ))}
-            </Select>
-
+            {/* The period length used to be a select here. It is the tab
+                strip above now — four documents by name, all four in view. */}
             <Select
               aria-label="Financial year"
               title={
