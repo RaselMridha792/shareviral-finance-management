@@ -157,7 +157,24 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/sfm.conf:/etc/nginx/conf.d/default.conf:ro
+      # The DIRECTORY, not the file, and this is not a tidy-up.
+      #
+      # It was `./nginx/sfm.conf:/etc/nginx/conf.d/default.conf`, and a
+      # single-file bind mount binds the *inode*, not the path. The deploy runs
+      # `git reset --hard`, and git does not edit a file in place — it writes a
+      # new one and renames it over the top, which is a new inode. The mount
+      # kept pointing at the old one, so the container went on reading the
+      # config it started with, for ever.
+      #
+      # Every symptom pointed the wrong way. `nginx -t` passed, because it was
+      # testing the old file and the old file was valid. `nginx -s reload`
+      # succeeded, because reloading the same file works fine. The deploy went
+      # green. And nothing changed — rate limits added on 18 Aug had no effect
+      # at all until this line was fixed.
+      #
+      # A directory mount does not have the problem: the directory's inode is
+      # stable, and a file replaced inside it is simply seen.
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
       # Let's Encrypt writes here from the host; nginx only reads.
       - /etc/letsencrypt:/etc/letsencrypt:ro
       # Where certbot puts its challenge file, and where the port-80 block

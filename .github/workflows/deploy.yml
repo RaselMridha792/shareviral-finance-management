@@ -191,11 +191,9 @@ jobs:
             docker compose pull --quiet api web
             docker compose up -d --remove-orphans
 
-            # nginx's configuration is a bind-mounted file. Changing it in git
-            # changes it on disk and nothing else: the container's definition
-            # is identical, so `up -d` leaves it running with the config it
-            # read when it started, and an edit to sfm.conf silently never
-            # takes effect.
+            # nginx's configuration comes from a bind-mounted DIRECTORY, and
+            # `up -d` does not restart nginx when only the config changed — so
+            # it has to be told to re-read.
             #
             # Tested first, reloaded second, and in that order on purpose. If
             # the new file is bad, `nginx -t` fails, `set -e` stops the deploy,
@@ -203,6 +201,32 @@ jobs:
             # better outcome than a reload that takes nginx down.
             docker compose exec -T nginx nginx -t
             docker compose exec -T nginx nginx -s reload
+
+            # And then prove it, because "nginx -t passed" proved nothing.
+            #
+            # The config used to be bind-mounted as a single FILE. `git reset
+            # --hard` replaces a file rather than editing it, which makes a new
+            # inode, and a single-file bind mount follows the inode — so the
+            # container kept reading the config it booted with. `nginx -t`
+            # validated that stale file and passed. The reload reloaded it and
+            # succeeded. The deploy went green. Rate limits added on 18 Aug did
+            # nothing whatsoever for an hour, and every signal said fine.
+            #
+            # `nginx -T` dumps the configuration nginx is ACTUALLY running, so
+            # comparing a marker from the repo against that dump is the one
+            # check that would have caught it. A silent no-op deploy is worse
+            # than a failed one: a red run gets fixed, a green one gets trusted.
+            marker=$(grep -o 'zone=sfm_login[^ ;]*' nginx/conf.d/sfm.conf | head -1)
+            if [ -z "$marker" ]; then
+              echo "Could not find the marker in the repo's nginx config." >&2
+              exit 1
+            fi
+            if ! docker compose exec -T nginx nginx -T 2>/dev/null | grep -q "$marker"; then
+              echo "nginx is NOT running the config that is in git." >&2
+              echo "Looked for '${marker}' in the live configuration and did not find it." >&2
+              exit 1
+            fi
+            echo "nginx is running the config from git (found ${marker})."
 
             # Images pile up fast on 50 GB. Keep the current ones, drop the
             # rest — dangling only, so a tagged rollback target survives.
