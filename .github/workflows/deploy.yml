@@ -77,6 +77,42 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+      # The nginx config, checked here rather than on the server.
+      #
+      # It used to be impossible for a bad one to matter: the config was
+      # bind-mounted as a single file, git replaced the inode on every deploy,
+      # and the container went on reading whatever it booted with. Fixing that
+      # mount made the config live — and the very next deploy shipped a
+      # `keepalive_timeout` that the nginx image already sets in the same http
+      # block. `[emerg] directive is duplicate`, nginx refused to start,
+      # `restart: unless-stopped` put it in a crash loop, and the whole site was
+      # down until a human pushed a fix.
+      #
+      # The same nginx image the server runs, given the same file. Thirty
+      # seconds here against minutes of downtime there, and it fails the run
+      # before anything is built or pushed.
+      #
+      # The certificates and the htpasswd only exist on the VPS, so they are
+      # faked just well enough for the parser: `nginx -t` opens the certificate
+      # files and reads the config, it does not verify a chain of trust.
+      - name: The nginx config must be one nginx will actually start on
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          mkdir -p "$work/certs/live/app.hellonizam.com" "$work/secrets" "$work/certbot"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -subj "/CN=app.hellonizam.com" \
+            -keyout "$work/certs/live/app.hellonizam.com/privkey.pem" \
+            -out    "$work/certs/live/app.hellonizam.com/fullchain.pem" 2>/dev/null
+          : > "$work/secrets/db.htpasswd"
+
+          docker run --rm \
+            -v "$PWD/deploy/nginx/conf.d:/etc/nginx/conf.d:ro" \
+            -v "$work/certs:/etc/letsencrypt:ro" \
+            -v "$work/secrets:/etc/nginx/secrets:ro" \
+            -v "$work/certbot:/var/www/certbot:ro" \
+            nginx:1.27-alpine nginx -t
+
   # --------------------------------------------------------------------------
   # Build once, deploy the exact bytes that were built.
   # --------------------------------------------------------------------------
