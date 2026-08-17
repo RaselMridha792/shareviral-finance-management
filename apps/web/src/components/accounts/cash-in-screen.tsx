@@ -275,8 +275,17 @@ export function CashInScreen({
         )}
 
         <Card className="p-5">
+          {/*
+            "Transfers" alone said nothing about direction, on a page whose
+            whole subject is money arriving. Read quickly it could as easily
+            have been transfers made.
+
+            Not "Money received": the figure is a count, and the card to its
+            left is the amount. Two cards labelled as money, one holding 5,
+            would be worse than the ambiguity being fixed.
+          */}
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Transfers
+            Transfers received
           </p>
           <span className="num mt-3 block text-2xl font-semibold tracking-tight">
             {received.length}

@@ -225,10 +225,21 @@ function AccountBlock({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 className="text-sm font-semibold tracking-tight">{group.label}</h2>
-        <span className="truncate text-xs text-muted-foreground">
-          {group.accounts.join(" · ")}
-        </span>
+        {/*
+          The accounts name themselves.
+
+          It read "BD Bank overview" in the heading with "Petty cash (demo) ·
+          Standard Chartered Bank" in grey beside it — a fixed label saying
+          less than the line next to it, and the same names twice on the row.
+          The names are the heading now.
+
+          `group.label` remains the fallback. It cannot currently be reached —
+          a group with no accounts is never built — but a heading that renders
+          as an empty string would be a worse way to find that out.
+        */}
+        <h2 className="text-sm font-semibold tracking-tight">
+          {group.accounts.join(" · ") || group.label}
+        </h2>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
