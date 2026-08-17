@@ -50,10 +50,29 @@ export function TeamScreen({
     router.refresh();
   }
 
-  const employees = page.items.filter((m) => m.engagementType === "employee");
-  const contractors = page.items.filter(
-    (m) => m.engagementType === "contractor",
-  );
+  /**
+   * Two tabs, and the names matter.
+   *
+   * "Ex-employee" files a person under what they stopped being. These are
+   * people whose work is in the audit trail, whose payslips are still issued
+   * against them, and who may well come back — the same list a reference
+   * request is answered from. Current and Past say when somebody was here
+   * without saying anything about why they left, which the app does not know
+   * and has no business implying.
+   *
+   * On leave counts as current. Somebody on leave has not left.
+   */
+  const [tab, setTab] = useState<"current" | "past">("current");
+
+  const isCurrent = (m: TeamMemberDto) =>
+    m.status === "active" || m.status === "on_leave";
+
+  const current = page.items.filter(isCurrent);
+  const past = page.items.filter((m) => !isCurrent(m));
+
+  const shown = tab === "current" ? current : past;
+  const employees = shown.filter((m) => m.engagementType === "employee");
+  const contractors = shown.filter((m) => m.engagementType === "contractor");
 
   return (
     <>
@@ -142,16 +161,62 @@ export function TeamScreen({
         </Card>
       ) : (
         <>
-          <Section
-            title="Employees"
-            subtitle="Drawn on the monthly salary sheet"
-            members={employees}
-          />
-          <Section
-            title="Contractors"
-            subtitle="Paid against bills — not on the salary sheet"
-            members={contractors}
-          />
+          <div
+            role="tablist"
+            aria-label="Team"
+            className="flex gap-1 border-b border-border"
+          >
+            <Tab
+              selected={tab === "current"}
+              count={current.length}
+              onSelect={() => setTab("current")}
+            >
+              Current team
+            </Tab>
+            <Tab
+              selected={tab === "past"}
+              count={past.length}
+              onSelect={() => setTab("past")}
+            >
+              Past team
+            </Tab>
+          </div>
+
+          {shown.length === 0 ? (
+            <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
+                <Users className="size-5" />
+              </span>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {tab === "past"
+                  ? "Nobody has left yet. When somebody resigns or is let go, change their status on their profile and they move here — their record and their payslips stay."
+                  : "Nobody is currently working. Anybody who has left is under Past team."}
+              </p>
+            </Card>
+          ) : (
+            <>
+              <Section
+                title="Employees"
+                subtitle={
+                  tab === "past"
+                    ? "No longer on the salary sheet"
+                    : "Drawn on the monthly salary sheet"
+                }
+                members={employees}
+                past={tab === "past"}
+              />
+              <Section
+                title="Contractors"
+                subtitle={
+                  tab === "past"
+                    ? "No longer billing"
+                    : "Paid against bills — not on the salary sheet"
+                }
+                members={contractors}
+                past={tab === "past"}
+              />
+            </>
+          )}
         </>
       )}
 
@@ -168,7 +233,10 @@ function Section({
   title,
   subtitle,
   members,
+  past = false,
 }: {
+  /** Adds the last day, which is the fact the past tab is read for. */
+  past?: boolean;
   title: string;
   subtitle: string;
   members: TeamMemberDto[];
@@ -193,6 +261,7 @@ function Section({
                 <Th className="w-40">Designation</Th>
                 <Th className="w-32">Department</Th>
                 <Th className="w-28">Date of Joining</Th>
+                {past ? <Th className="w-28">Last day</Th> : null}
                 <Th className="w-36 text-right">Joining Salary</Th>
                 <Th className="w-28">Status</Th>
                 <Th className="w-24 text-right" />
@@ -278,6 +347,36 @@ function Section({
         </div>
       </Card>
     </div>
+  );
+}
+
+function Tab({
+  selected,
+  count,
+  onSelect,
+  children,
+}: {
+  selected: boolean;
+  count: number;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={cn(
+        "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition",
+        selected
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}{" "}
+      <span className="num text-xs text-muted-foreground">{count}</span>
+    </button>
   );
 }
 
