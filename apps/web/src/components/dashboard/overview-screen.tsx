@@ -4,6 +4,7 @@ import {
   GOVERNING_RATE_LABELS,
   MONTH_NAMES,
   formatMoney,
+  todayInDhaka,
   type AccountGroup,
   type OverviewReport,
 } from "@finance/shared";
@@ -73,6 +74,16 @@ export function OverviewScreen({
       format: settings.numberFormat,
       ...options,
     });
+
+  /**
+   * Whether the month on screen is over.
+   *
+   * Judged in Dhaka, not in the browser's timezone: at 3am on the first of
+   * September a laptop set to UTC still says August, and the dashboard would
+   * call a finished month current for six hours a month.
+   */
+  const [nowYear, nowMonth] = todayInDhaka().split("-").map(Number);
+  const periodHasEnded = year < nowYear || (year === nowYear && month < nowMonth);
 
   // Both go in the URL, so a chosen month survives a refresh and can be sent
   // to somebody else and open on the same figures.
@@ -184,7 +195,7 @@ export function OverviewScreen({
 
       {/* --- the figures, grouped by what the money is ------------------ */}
       {report.groups.map((group) => (
-        <AccountBlock key={group.key} group={group} />
+        <AccountBlock key={group.key} group={group} ended={periodHasEnded} />
       ))}
 
       <section className="flex flex-col gap-3">
@@ -248,7 +259,14 @@ export function OverviewScreen({
  * add up are four unrelated numbers, and a reader who checks once and finds
  * they disagree stops trusting the whole screen.
  */
-function AccountBlock({ group }: { group: AccountGroup }) {
+function AccountBlock({
+  group,
+  ended,
+}: {
+  group: AccountGroup;
+  /** True when the month on screen is over, so the figure is a close. */
+  ended: boolean;
+}) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -285,13 +303,28 @@ function AccountBlock({ group }: { group: AccountGroup }) {
           icon={ArrowUpRight}
           accent="negative"
         />
+        {/*
+          The same figure under two names, and both are accurate.
+
+          It has always been the *period's* close — opening as at the first of
+          the month, plus what moved during it. On the month in progress that
+          is what the accounts hold right now, so "Current balance" is the
+          honest word. Look back at July from August and the number does not
+          change meaning, but the word does: it is what July closed at, which
+          is exactly what August opened with. Calling that "current" invites
+          somebody to read a two-month-old figure as today's cash.
+        */}
         <StatTile
-          label="Current balance"
+          label={ended ? "Closing balance" : "Current balance"}
           value={group.closing}
           usd={group.usd.closing}
           icon={group.key === "card" ? CreditCard : Wallet}
           accent="primary"
-          hint="opening + in − out"
+          hint={
+            ended
+              ? "what the month closed at, and what the next opened with"
+              : "opening + in − out"
+          }
         />
       </div>
     </section>

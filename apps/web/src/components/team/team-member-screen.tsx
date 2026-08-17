@@ -93,6 +93,14 @@ export function TeamMemberScreen({
 
   const refresh = () => router.refresh();
 
+  /**
+   * Still here.
+   *
+   * `on_leave` counts: somebody on leave has not left, and a last day against
+   * them would be wrong rather than merely empty.
+   */
+  const working = member.status === "active" || member.status === "on_leave";
+
   const [viewingPhoto, setViewingPhoto] = useState(false);
   const photoSrc = member.photoFileId
     ? fileHref(member.photoFileId)
@@ -261,7 +269,18 @@ export function TeamMemberScreen({
                 {EMPLOYMENT_STATUS_LABELS[member.status]}
               </Badge>
             </Row>
-            <Row label="Last day" mono value={member.endedOn} />
+            {/*
+              Only for somebody who has one.
+
+              A row reading "Last day —" against a person who is working says
+              nothing, and reads as a gap in the record rather than as the
+              absence of an event. It appears the moment a status is set that
+              implies leaving, which is also the moment the form asks for the
+              date.
+            */}
+            {member.endedOn || !working ? (
+              <Row label="Last day" mono value={member.endedOn} />
+            ) : null}
           </CardBody>
         </Card>
 
