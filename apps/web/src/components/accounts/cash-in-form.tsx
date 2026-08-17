@@ -15,7 +15,6 @@ import {
   Field,
   Input,
   MoneyInput,
-  Select,
   Textarea,
 } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";

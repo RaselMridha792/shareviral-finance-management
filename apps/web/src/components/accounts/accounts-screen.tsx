@@ -10,7 +10,6 @@ import {
   ArchiveRestore,
   Banknote,
   CreditCard,
-  Download,
   Landmark,
   Plus,
   Smartphone,
@@ -27,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
-import { exportUrl } from "@/lib/ledger";
 import {
   accountsApi,
   type AccountDto,
@@ -44,16 +42,14 @@ const ICONS: Record<AccountType, ComponentType<{ className?: string }>> = {
 
 export function AccountsScreen({
   initialAccounts,
+  usdRate,
 }: {
   initialAccounts: AccountWithBalance[];
+  /** Taka per dollar, or null when none has been recorded. */
+  usdRate: string | null;
 }) {
   const router = useRouter();
   const canWrite = useCan("accounts.write");
-  // Both, and each read unconditionally — an export needs the permission to
-  // download and the permission to see what is being downloaded.
-  const canRunExports = useCan("exports.run");
-  const canReadAccounts = useCan("accounts.read");
-  const canExport = canRunExports && canReadAccounts;
 
   const [accounts, setAccounts] = useState(initialAccounts);
   const [editing, setEditing] = useState<AccountDto | null>(null);
@@ -122,21 +118,9 @@ export function AccountsScreen({
     <>
       <PageHeader
         title="Accounts"
-        description="Where money sits — bank accounts, cash, and mobile wallets."
+        description="Bank accounts and cards."
         actions={
           <>
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  window.location.href = exportUrl("accounts", {});
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
             {canWrite ? (
               <Button
                 variant="primary"
@@ -215,6 +199,8 @@ export function AccountsScreen({
               <AccountCard
                 key={account.id}
                 account={account}
+                usdRate={usdRate}
+                base={base}
                 canWrite={canWrite}
                 onEdit={() => setEditing(account)}
                 onArchive={() => archive(account)}
@@ -234,6 +220,8 @@ export function AccountsScreen({
               <AccountCard
                 key={account.id}
                 account={account}
+                usdRate={usdRate}
+                base={base}
                 canWrite={canWrite}
                 onEdit={() => setEditing(account)}
                 onRestore={() => restore(account)}
@@ -259,19 +247,61 @@ export function AccountsScreen({
   );
 }
 
+/**
+ * The same balance in the other currency, or null when it cannot be had.
+ *
+ * Only ever taka ↔ dollars, which is the only pair this company holds. An
+ * account already in the base currency converts to dollars and one in dollars
+ * converts back; anything else returns null rather than guessing at a cross
+ * rate nobody recorded.
+ */
+function otherCurrency(
+  balance: string,
+  currency: string,
+  base: string,
+  usdRate: string | null,
+): { value: string; currency: string } | null {
+  const rate = Number(usdRate);
+  if (!usdRate || !Number.isFinite(rate) || rate <= 0) return null;
+
+  const amount = Number(balance);
+  if (!Number.isFinite(amount)) return null;
+
+  if (currency === base) {
+    return { value: (amount / rate).toFixed(2), currency: "USD" };
+  }
+  if (currency === "USD") {
+    return { value: (amount * rate).toFixed(2), currency: base };
+  }
+  return null;
+}
+
 function AccountCard({
   account,
+  usdRate,
+  base,
   canWrite,
   onEdit,
   onArchive,
   onRestore,
 }: {
   account: AccountWithBalance;
+  /** Taka per dollar, or null when none has been recorded. */
+  usdRate: string | null;
+  /** The company's base currency, from Settings. */
+  base: string;
   canWrite: boolean;
   onEdit: () => void;
   onArchive?: () => void;
   onRestore?: () => void;
 }) {
+  const equivalent = otherCurrency(
+    account.balance,
+    account.currency,
+    base,
+    usdRate,
+  );
+
   const Icon = ICONS[account.type];
 
   return (
@@ -292,20 +322,41 @@ function AccountCard({
       </div>
 
       {/*
-        The balance, with what it started from underneath it.
+        The balance, in the currency the account is actually held in.
 
-        The large figure was `openingBalance` and the caption said so, which
-        made it defensible and still wrong: on a card that looks like every
-        bank app anybody has used, the big number is what the account holds.
-        Opening stays, as the smaller line, because it is the base every entry
-        is counted from and worth being able to see.
+        Which one is large follows `account.currency`, not the account type: a
+        card is usually the dollar one and a bank account the taka one, but
+        that is a habit rather than a rule, and the day somebody adds a taka
+        card the type would have been the wrong thing to read.
+
+        The second line is a translation and is marked as one — `~`, greyed,
+        with the rate in its tooltip. This app is careful never to let a
+        converted figure look like a recorded one, and a balance is exactly
+        where that would matter.
       */}
       <Amount
         value={account.balance}
         currency={account.currency}
         className="mt-5 block text-xl font-semibold tracking-tight"
       />
-      <p className="num mt-0.5 text-xs text-muted-foreground">
+
+      {equivalent ? (
+        <Amount
+          value={equivalent.value}
+          currency={equivalent.currency}
+          approximate
+          className="num block text-sm text-muted-foreground"
+        />
+      ) : (
+        <span
+          className="num block text-sm text-muted-foreground"
+          title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
+        >
+          —
+        </span>
+      )}
+
+      <p className="num mt-1.5 text-xs text-muted-foreground">
         Opened at{" "}
         <Amount value={account.openingBalance} currency={account.currency} /> on{" "}
         {account.openingBalanceOn}

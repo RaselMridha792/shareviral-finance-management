@@ -208,6 +208,13 @@ export function SearchableSelect({
       <button
         type="button"
         disabled={disabled}
+        /**
+         * A combobox, not a plain button. It holds a value, opens a listbox
+         * and can be invalid — none of which a button role can express, and
+         * `aria-invalid` on one is simply ignored, so a screen reader would
+         * never learn the field was rejected.
+         */
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}

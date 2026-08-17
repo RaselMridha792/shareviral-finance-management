@@ -74,8 +74,6 @@ export default async function OverviewPage({
       // So the Export button asks for the month on screen rather than the
       // server's default. `report.period` carries the dates but not the
       // coordinates the endpoint takes, and they are already worked out here.
-      fiscalYear={period.fiscalYear}
-      index={period.index}
     />
   );
 }

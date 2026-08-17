@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  GOVERNING_RATE_LABELS,
   MONTH_NAMES,
   formatMoney,
   todayInDhaka,
@@ -13,21 +12,18 @@ import {
   ArrowUpRight,
   CalendarClock,
   CreditCard,
-  FileDown,
   History,
-  LoaderCircle,
   Receipt,
   Sparkles,
   Users,
   Wallet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 
 import { StatTile, percentChange } from "@/components/dashboard/stat-tile";
 import { useSettings } from "@/components/settings-provider";
 import { Select } from "@/components/ui/field";
-import { API_BASE_URL } from "@/lib/api-client";
 
 /**
  * The screen somebody opens first, and often the only one they open.
@@ -49,8 +45,6 @@ export function OverviewScreen({
   month,
   year,
   years,
-  fiscalYear,
-  index,
 }: {
   firstName: string;
   report: OverviewReport;
@@ -58,14 +52,10 @@ export function OverviewScreen({
   month: number;
   year: number;
   years: number[];
-  /** The same month in the terms the API takes, for the export. */
-  fiscalYear: number;
-  index: number;
 }) {
   const router = useRouter();
   const settings = useSettings();
   const [busy, startTransition] = useTransition();
-  const [exporting, setExporting] = useState(false);
 
   const { totals, previous } = report;
   const money = (value: string, options?: { hideDecimals?: boolean }) =>
@@ -95,29 +85,6 @@ export function OverviewScreen({
     startTransition(() => router.push(`/?${params.toString()}`));
   }
 
-  function exportPdf() {
-    setExporting(true);
-    // The month on screen, not whatever the server would default to. A report
-    // that quietly covers a different period than the page it was downloaded
-    // from is worse than no button.
-    const params = new URLSearchParams({
-      granularity: report.period.granularity,
-      fiscalYear: String(fiscalYear),
-      index: String(index),
-    });
-    // A download, not a navigation: an anchor with `download` leaves the page
-    // where it is, and the API's Content-Disposition names the file. Assigning
-    // window.location would work too, but Next rightly complains that it looks
-    // like an internal navigation.
-    const link = document.createElement("a");
-    link.href = `${API_BASE_URL}/exports/overview.pdf?${params.toString()}`;
-    link.rel = "noopener";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    // The browser takes over from here; the spinner would otherwise never stop.
-    window.setTimeout(() => setExporting(false), 2000);
-  }
 
   return (
     <>
@@ -178,19 +145,6 @@ export function OverviewScreen({
             ))}
           </Select>
 
-          <button
-            type="button"
-            onClick={exportPdf}
-            disabled={exporting}
-            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-60"
-          >
-            {exporting ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <FileDown className="size-4" />
-            )}
-            Export report
-          </button>
         </div>
       </div>
 
@@ -332,8 +286,3 @@ function AccountBlock({
   );
 }
 
-/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
-function trimRate(rate: string): string {
-  const value = Number(rate);
-  return Number.isFinite(value) ? value.toFixed(2) : rate;
-}
