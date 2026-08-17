@@ -166,13 +166,36 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      # Pull first, then run the version that was pulled. The pull is not
+      # inside remote-deploy.sh on purpose: `git reset --hard` replaces that
+      # very file, and bash reads a script as it goes, so a script that
+      # replaces itself mid-run executes half of one version and half of
+      # another. Recovery by hand is these same three lines.
+      REMOTE: |
+        set -euo pipefail
+        cd /opt/sfm
+        git fetch --quiet origin main
+        git reset --hard --quiet origin/main
+        bash deploy/remote-deploy.sh
     permissions:
       contents: read
       # The server pulls the images, and a private repository's packages are
       # private too.
       packages: read
     steps:
+      # Two attempts, because a deploy that fails on a momentary network blip
+      # teaches people that a red run means nothing — and this pipeline has
+      # spent a whole evening proving how expensive that lesson is.
+      #
+      # `dial tcp ***:22: i/o timeout` after exactly 30 seconds is the action's
+      # default connect timeout giving up. The box was reachable minutes later
+      # by hand; it had simply been too busy to answer while a crash-looping
+      # container churned on its single core. 90 seconds is patience for a box
+      # under load, not a mask for one that is gone.
       - name: Deploy over SSH
+        id: deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1
         env:
           GHCR_USER: ${{ github.actor }}
@@ -181,120 +204,22 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          # Forwarded into the shell on the server, not written to a file.
           envs: GHCR_USER,GHCR_TOKEN
-          # A pull of two images on a small box is not instant.
+          timeout: 90s
           command_timeout: 15m
-          script: |
-            set -euo pipefail
-            cd /opt/sfm
+          script: ${{ env.REMOTE }}
 
-            # Signing in for the length of this pull, rather than leaving a
-            # token on the server. GITHUB_TOKEN dies when this job ends, so
-            # even a copy of it is worthless a minute from now — which is not
-            # true of a personal access token, and the reason not to use one.
-            # Three attempts, because one is not enough.
-            #
-            # GHCR answered `denied: denied` to a login that had worked on
-            # every deploy before it and worked again on a re-run a minute
-            # later, with nothing about the credentials changed in between. A
-            # deploy that fails on somebody else's momentary refusal, and has
-            # to be re-run by hand, teaches people that a red run means
-            # nothing — which is expensive on the run where it means something.
-            for attempt in 1 2 3; do
-              if echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
-                break
-              fi
-              if [ "$attempt" = "3" ]; then
-                echo "Could not sign in to ghcr.io after three attempts." >&2
-                exit 1
-              fi
-              echo "ghcr.io login failed, attempt ${attempt}. Retrying." >&2
-              sleep $((attempt * 5))
-            done
-            # Signed out even if the deploy fails below.
-            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-
-            # The compose file, nginx config and Dockerfiles live in git; only
-            # .env does not. Pulling keeps the server's copy honest.
-            git fetch --quiet origin main
-            git reset --hard --quiet origin/main
-
-            cd deploy
-
-            # Fetch the images this run just built, then swap. `up -d` without
-            # --build is what keeps the server from ever compiling anything.
-            docker compose pull --quiet api web
-            docker compose up -d --remove-orphans
-
-            # Wait until nginx can actually be entered before entering it.
-            #
-            # `up -d` returns when Docker reports the container Started, which
-            # is not the same as ready to exec into. When the container has just
-            # been *recreated* — which is what happens the first time a volume
-            # definition changes — the old one is still being torn down, and an
-            # exec issued in that window resolves to a process that is already
-            # gone:
-            #
-            #   OCI runtime exec failed: unable to create new parent process:
-            #   namespace path: lstat /proc/571318/ns/ipc: no such file
-            #
-            # That killed the deploy that was fixing the mount, one line after
-            # the fix worked. Polling with a trivial command separates "the
-            # container is not up yet", which is worth waiting for, from "the
-            # configuration is bad", which is worth failing on — and those two
-            # must not be retried the same way.
-            for attempt in $(seq 1 20); do
-              if docker compose exec -T nginx true >/dev/null 2>&1; then
-                break
-              fi
-              if [ "$attempt" = "20" ]; then
-                echo "nginx never became ready to accept a command." >&2
-                docker compose logs --tail 40 nginx >&2 || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            # nginx's configuration comes from a bind-mounted DIRECTORY, and
-            # `up -d` does not restart nginx when only the config changed — so
-            # it has to be told to re-read.
-            #
-            # Tested first, reloaded second, and in that order on purpose. If
-            # the new file is bad, `nginx -t` fails, `set -e` stops the deploy,
-            # and the old configuration keeps serving the site — which is a far
-            # better outcome than a reload that takes nginx down.
-            docker compose exec -T nginx nginx -t
-            docker compose exec -T nginx nginx -s reload
-
-            # And then prove it, because "nginx -t passed" proved nothing.
-            #
-            # The config used to be bind-mounted as a single FILE. `git reset
-            # --hard` replaces a file rather than editing it, which makes a new
-            # inode, and a single-file bind mount follows the inode — so the
-            # container kept reading the config it booted with. `nginx -t`
-            # validated that stale file and passed. The reload reloaded it and
-            # succeeded. The deploy went green. Rate limits added on 18 Aug did
-            # nothing whatsoever for an hour, and every signal said fine.
-            #
-            # `nginx -T` dumps the configuration nginx is ACTUALLY running, so
-            # comparing a marker from the repo against that dump is the one
-            # check that would have caught it. A silent no-op deploy is worse
-            # than a failed one: a red run gets fixed, a green one gets trusted.
-            marker=$(grep -o 'zone=sfm_login[^ ;]*' nginx/conf.d/sfm.conf | head -1)
-            if [ -z "$marker" ]; then
-              echo "Could not find the marker in the repo's nginx config." >&2
-              exit 1
-            fi
-            if ! docker compose exec -T nginx nginx -T 2>/dev/null | grep -q "$marker"; then
-              echo "nginx is NOT running the config that is in git." >&2
-              echo "Looked for '${marker}' in the live configuration and did not find it." >&2
-              exit 1
-            fi
-            echo "nginx is running the config from git (found ${marker})."
-
-            # Images pile up fast on 50 GB. Keep the current ones, drop the
-            # rest — dangling only, so a tagged rollback target survives.
-            docker image prune -f
-
-            docker compose ps
+      - name: Deploy over SSH — second attempt
+        if: steps.deploy.outcome == 'failure'
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN
+          timeout: 90s
+          command_timeout: 15m
+          script: ${{ env.REMOTE }}
