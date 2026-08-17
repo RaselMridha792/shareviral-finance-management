@@ -80,9 +80,16 @@ export function StatTile({
           itself separated from everything around it, so the eye reads them
           together rather than as two unrelated lines. */}
       <div className="mt-3 flex flex-col gap-1">
+        {/*
+          This tile draws its own dollar line just below, from a figure the
+          report converted at the *period's* rate. Letting the component add a
+          second one at today's rate would put two different dollar amounts
+          under one taka figure.
+        */}
         <Amount
           value={value}
           tone={tone === "neutral" ? "auto" : tone}
+          showCounterpart={false}
           className="block text-xl font-semibold tracking-tight sm:text-2xl"
         />
 

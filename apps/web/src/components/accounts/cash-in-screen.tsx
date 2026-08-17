@@ -363,7 +363,12 @@ export function CashInScreen({
                         <Sender row={row} />
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        <Amount value={row.amount} tone="in" className="block" />
+                        <Amount
+                          value={row.amount}
+                          tone="in"
+                          showCounterpart={false}
+                          className="block"
+                        />
                         {rowRate ? (
                           <Amount
                             value={inDollars(row.amount, rowRate)}

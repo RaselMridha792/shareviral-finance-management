@@ -191,7 +191,11 @@ export function AccountsScreen({
                 )}
               </p>
             </div>
-            <Amount value={total} currency={base} className="text-2xl font-semibold" />
+            <Amount
+              value={total}
+              currency={base}
+              className="text-2xl font-semibold"
+            />
           </Card>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -337,6 +341,7 @@ function AccountCard({
       <Amount
         value={account.balance}
         currency={account.currency}
+        showCounterpart={false}
         className="mt-5 block text-xl font-semibold tracking-tight"
       />
 
@@ -345,6 +350,7 @@ function AccountCard({
           value={equivalent.value}
           currency={equivalent.currency}
           approximate
+          showCounterpart={false}
           className="num block text-sm text-muted-foreground"
         />
       ) : (
@@ -358,7 +364,12 @@ function AccountCard({
 
       <p className="num mt-1.5 text-xs text-muted-foreground">
         Opened at{" "}
-        <Amount value={account.openingBalance} currency={account.currency} /> on{" "}
+        <Amount
+          value={account.openingBalance}
+          currency={account.currency}
+          showCounterpart={false}
+        />{" "}
+        on{" "}
         {account.openingBalanceOn}
       </p>
 

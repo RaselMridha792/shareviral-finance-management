@@ -159,10 +159,13 @@ function MoneyPair({
 }) {
   return (
     <span className="flex flex-col items-end">
+      {/* MoneyPair renders the dollar line itself, from the entry's own
+          recorded rate rather than today's. */}
       <Amount
         value={value.bdt}
         currency="BDT"
         tone={tone}
+        showCounterpart={false}
         className={cn(
           "block",
           size === "xl" && "text-2xl font-semibold tracking-tight",
