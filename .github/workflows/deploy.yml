@@ -191,6 +191,35 @@ jobs:
             docker compose pull --quiet api web
             docker compose up -d --remove-orphans
 
+            # Wait until nginx can actually be entered before entering it.
+            #
+            # `up -d` returns when Docker reports the container Started, which
+            # is not the same as ready to exec into. When the container has just
+            # been *recreated* — which is what happens the first time a volume
+            # definition changes — the old one is still being torn down, and an
+            # exec issued in that window resolves to a process that is already
+            # gone:
+            #
+            #   OCI runtime exec failed: unable to create new parent process:
+            #   namespace path: lstat /proc/571318/ns/ipc: no such file
+            #
+            # That killed the deploy that was fixing the mount, one line after
+            # the fix worked. Polling with a trivial command separates "the
+            # container is not up yet", which is worth waiting for, from "the
+            # configuration is bad", which is worth failing on — and those two
+            # must not be retried the same way.
+            for attempt in $(seq 1 20); do
+              if docker compose exec -T nginx true >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$attempt" = "20" ]; then
+                echo "nginx never became ready to accept a command." >&2
+                docker compose logs --tail 40 nginx >&2 || true
+                exit 1
+              fi
+              sleep 2
+            done
+
             # nginx's configuration comes from a bind-mounted DIRECTORY, and
             # `up -d` does not restart nginx when only the config changed — so
             # it has to be told to re-read.
