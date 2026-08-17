@@ -2,9 +2,7 @@
 
 import {
   todayInDhaka,
-  type BankStats,
   type CurrencyView,
-  type FundingReport,
   type Granularity,
   type PeriodReport,
 } from "@finance/shared";
@@ -18,9 +16,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
-import { useMoney } from "@/components/settings-provider";
 import { Amount } from "@/components/money/amount";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
@@ -35,35 +31,28 @@ import { reportsApi, type AvailablePeriods } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 
 /**
- * Four reports by the period they cover, then the two that answer a different
- * question.
+ * Four reports, one per period they cover, and nothing else.
  *
- * The first four used to be one tab, "The period", with a dropdown called
- * Granularity beside it. Naming them the way the documents are named puts all
- * four in view and stops somebody hunting for "the quarterly one" inside a
+ * There used to be one tab called "The period" with a dropdown named
+ * Granularity beside it, plus "Month by month", "Funding from the CEO" and
+ * "Statement". Naming the four periods the way the documents are named puts
+ * all four in view and stops somebody hunting for "the quarterly one" inside a
  * control named after an axis.
  *
- * "Month by month" and "Funding from the CEO" are not granularities of the
- * same report — they are separate questions — so they sit after the four
- * rather than among them. The statement is no longer here at all: it is a
- * signed document rather than a report, and it has its own screen.
+ * The other three are gone from this screen on the owner's instruction. The
+ * statement moved to a screen of its own — it is a signed document rather than
+ * a report. "Month by month" and "Funding from the CEO" were dropped outright.
+ *
+ * Their API endpoints and Excel exports are untouched: `/reports/bank-stats`,
+ * `/reports/funding`, `/exports/reports/bank-stats` and
+ * `/exports/reports/funding` still answer, and `reportsApi.bankStats` and
+ * `reportsApi.funding` are still on the client. Nothing calls them today, and
+ * the two view components that did were deleted rather than left to rot — they
+ * are one `git show` away if either report is ever wanted back. Same treatment
+ * income tax got when it left the UI.
  */
-const REPORT_TABS = granularityTabs("Report");
-const OTHER_TABS = [
-  { id: "bank" as const, label: "Month by month" },
-  { id: "funding" as const, label: "Funding from the CEO" },
-];
-const TABS = [...REPORT_TABS, ...OTHER_TABS];
-type TabId = Granularity | "bank" | "funding";
+const TABS = granularityTabs("Report");
 
-/** True for the four that are the period report at one length or another. */
-function isPeriodTab(tab: TabId): tab is Granularity {
-  return tab !== "bank" && tab !== "funding";
-}
-
-const th =
-  "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
-const thRight = `${th} text-right`;
 
 export function ReportsScreen({
   initialPeriods,
@@ -79,14 +68,13 @@ export function ReportsScreen({
   const canSeeReports = useCan("reports.view");
   const canExport = canRunExports && canSeeReports;
   /**
-   * The open tab, which for four of the six *is* the granularity.
+   * The open tab *is* the granularity.
    *
-   * Held as one piece of state rather than a tab plus a separate granularity:
-   * two states saying which report this is means two things that can disagree,
-   * and the tab strip is now the only way to choose.
+   * One piece of state rather than a tab plus a separate granularity: two
+   * states saying which report this is are two states that can disagree, and
+   * the tab strip is the only way to choose one.
    */
-  const [tab, setTab] = useState<TabId>("month");
-  const granularity: Granularity = isPeriodTab(tab) ? tab : "month";
+  const [granularity, setGranularity] = useState<Granularity>("month");
 
   const [periods, setPeriods] = useState(initialPeriods);
   const [fiscalYear, setFiscalYear] = useState(initialPeriods.years[1]);
@@ -102,32 +90,18 @@ export function ReportsScreen({
   const [currency, setCurrency] = useState<CurrencyView>("BDT");
 
   const [report, setReport] = useState<PeriodReport | null>(initialReport);
-  const [bank, setBank] = useState<BankStats | null>(null);
-  const [funding, setFunding] = useState<FundingReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    // Cleared before the early return below, so a failure on one tab does not
-    // leave its red banner sitting above a tab that loaded perfectly well.
+    // Cleared first, so a failure on one period does not leave its red banner
+    // sitting above a tab that loaded perfectly well.
     setError(null);
-
     setLoading(true);
     try {
-      if (isPeriodTab(tab)) {
-        setReport(
-          await reportsApi.period({ granularity, fiscalYear, index, currency }),
-        );
-      } else if (tab === "bank") {
-        setBank(
-          await reportsApi.bankStats({
-            year: fiscalYear,
-            currency,
-          }),
-        );
-      } else {
-        setFunding(await reportsApi.funding());
-      }
+      setReport(
+        await reportsApi.period({ granularity, fiscalYear, index, currency }),
+      );
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -137,7 +111,7 @@ export function ReportsScreen({
     } finally {
       setLoading(false);
     }
-  }, [tab, granularity, fiscalYear, index, currency]);
+  }, [granularity, fiscalYear, index, currency]);
 
   useEffect(() => {
     // Fetching from the API when the selection changes — setState happens in
@@ -161,25 +135,14 @@ export function ReportsScreen({
     };
   }, [granularity]);
 
-  /**
-   * The open tab, with the selection it is showing.
-   *
-   * Each tab is its own sheet from its own endpoint, so the download is the
-   * table being looked at rather than a bundle of all three.
-   */
+  /** The period on screen, in the currency on screen — not a bundle of four. */
   function download() {
-    const target = isPeriodTab(tab)
-      ? exportUrl("reports/period", {
-          granularity,
-          fiscalYear,
-          index,
-          currency,
-        })
-      : tab === "bank"
-        ? exportUrl("reports/bank-stats", { year: fiscalYear, currency })
-        : exportUrl("reports/funding", {});
-
-    window.location.href = target;
+    window.location.href = exportUrl("reports/period", {
+      granularity,
+      fiscalYear,
+      index,
+      currency,
+    });
   }
 
   return (
@@ -198,10 +161,15 @@ export function ReportsScreen({
       />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <TabStrip tabs={TABS} active={tab} onSelect={setTab} label="Report" />
+        <TabStrip
+          tabs={TABS}
+          active={granularity}
+          onSelect={setGranularity}
+          label="Report"
+        />
 
         <div className="flex flex-wrap items-center gap-2">
-          {isPeriodTab(tab) && periods.periods.length > 1 ? (
+          {periods.periods.length > 1 ? (
             <Select
               aria-label="Period"
               className="h-9 w-40"
@@ -219,38 +187,30 @@ export function ReportsScreen({
             </Select>
           ) : null}
 
-          {tab !== "funding" ? (
-            /* One control, two meanings. "The period" reads this as a fiscal
-               year — July to June, when the setting says so — while "Month by
-               month" groups by calendar year. Both used to render a bare
-               "2026", so the same choice showed two different windows with
-               nothing on screen to say so. The label now names which. */
-            <Select
-              aria-label={tab === "bank" ? "Calendar year" : "Financial year"}
-              title={
-                tab === "bank"
-                  ? "January to December"
-                  : periods.fiscalYearMode === "bd_july_june"
-                    ? "July to June"
-                    : "January to December"
-              }
-              className="h-9 w-auto"
-              value={fiscalYear}
-              onChange={(e) => setFiscalYear(Number(e.target.value))}
-            >
-              {periods.years.map((y) => (
-                <option key={y} value={y}>
-                  {tab !== "bank" && periods.fiscalYearMode === "bd_july_june"
-                    ? `FY ${y}–${String(y + 1).slice(2)}`
-                    : y}
-                </option>
-              ))}
-            </Select>
-          ) : null}
+          {/* Named rather than a bare "2026": under the July–June setting a
+              financial year spans two of the years a person would name, and a
+              picker that just says 2026 does not say which window it means. */}
+          <Select
+            aria-label="Financial year"
+            title={
+              periods.fiscalYearMode === "bd_july_june"
+                ? "July to June"
+                : "January to December"
+            }
+            className="h-9 w-auto"
+            value={fiscalYear}
+            onChange={(e) => setFiscalYear(Number(e.target.value))}
+          >
+            {periods.years.map((y) => (
+              <option key={y} value={y}>
+                {periods.fiscalYearMode === "bd_july_june"
+                  ? `FY ${y}–${String(y + 1).slice(2)}`
+                  : y}
+              </option>
+            ))}
+          </Select>
 
-          {/* Funding is already a two-currency report by nature — dollars sent
-              against taka landed — so it has nothing to switch. */}
-          {canSeeUsd && tab !== "funding" ? (
+          {canSeeUsd ? (
             <div className="flex rounded-lg border border-border p-0.5">
               {(["BDT", "USD"] as const).map((option) => (
                 <button
@@ -288,9 +248,7 @@ export function ReportsScreen({
         </div>
       ) : null}
 
-      {isPeriodTab(tab) && report ? <PeriodView report={report} /> : null}
-      {tab === "bank" && bank ? <BankView stats={bank} /> : null}
-      {tab === "funding" && funding ? <FundingView report={funding} /> : null}
+      {report ? <PeriodView report={report} /> : null}
     </>
   );
 }
@@ -473,245 +431,6 @@ function CategoryCard({
   );
 }
 
-function BankView({ stats }: { stats: BankStats }) {
-  const active = stats.months.filter((m) => m.entries > 0);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <FxCaption report={stats} />
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          title={`${stats.accountName} · ${stats.year}`}
-          description={
-            stats.busiest
-              ? `Busiest month: ${stats.busiest.label}, ${stats.busiest.entries} entries`
-              : "Nothing recorded this year"
-          }
-        />
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <th className={th}>Month</th>
-                <th className={thRight}>In</th>
-                <th className={th}>vs before</th>
-                <th className={thRight}>Out</th>
-                <th className={th}>vs before</th>
-                <th className={thRight}>Net</th>
-                <th className={thRight}>Balance after</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {active.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-10 text-center text-sm text-muted-foreground"
-                  >
-                    No entries in {stats.year}.
-                  </td>
-                </tr>
-              ) : (
-                active.map((month) => (
-                  <tr
-                    key={month.month}
-                    className="row-finance hover:bg-surface-muted/50"
-                  >
-                    <td className="px-4 py-2.5 font-medium">{month.label}</td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={month.moneyIn}
-                        currency={stats.currency}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Delta value={month.inChange} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={month.moneyOut}
-                        currency={stats.currency}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Delta value={month.outChange} invert />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={month.net}
-                        currency={stats.currency}
-                        className="block font-medium"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={month.closingBalance}
-                        currency={stats.currency}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            {active.length ? (
-              <tfoot>
-                <tr className="border-t-2 border-border bg-surface-muted/30">
-                  <td className="px-4 py-2.5 text-sm font-semibold">Year</td>
-                  <td className="px-4 py-2.5">
-                    <Amount
-                      value={stats.totals.moneyIn}
-                      currency={stats.currency}
-                      tone="neutral"
-                      className="block font-semibold"
-                    />
-                  </td>
-                  <td />
-                  <td className="px-4 py-2.5">
-                    <Amount
-                      value={stats.totals.moneyOut}
-                      currency={stats.currency}
-                      tone="neutral"
-                      className="block font-semibold"
-                    />
-                  </td>
-                  <td />
-                  <td className="px-4 py-2.5">
-                    <Amount
-                      value={stats.totals.net}
-                      currency={stats.currency}
-                      className="block font-semibold"
-                    />
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function FundingView({ report }: { report: FundingReport }) {
-  // The spread is money and was printed as bare digits — "cost ৳45000" — while
-  // every other figure on the page carries the company's own grouping.
-  const money = useMoney();
-
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-        <Info className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          These dollars are real, not translated. Each rate is what that
-          transfer actually achieved once the bank had taken its cut, recorded
-          on the day and never recalculated.
-        </span>
-      </p>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Tile label="Sent" value={report.totals.usdSent} currency="USD" />
-        <Tile label="Landed" value={report.totals.bdtReceived} currency="BDT" />
-        <Card className="flex flex-col gap-1 px-4 py-3.5">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Average rate
-          </span>
-          <span className="num text-xl font-medium">
-            {report.totals.averageRate}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            weighted by size, not an average of averages
-          </span>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          title="Every remittance"
-          description="What was sent, what arrived, and the rate it really got"
-        />
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <th className={th}>Date</th>
-                <th className={th}>Reference</th>
-                <th className={th}>Into</th>
-                <th className={thRight}>Sent</th>
-                <th className={thRight}>Landed</th>
-                <th className={thRight}>Rate achieved</th>
-                <th className={thRight}>Market that day</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {report.remittances.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-10 text-center text-sm text-muted-foreground"
-                  >
-                    No USD remittances recorded yet. Add one as a money-in entry
-                    with the dollar amount and the rate the bank gave.
-                  </td>
-                </tr>
-              ) : (
-                report.remittances.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="row-finance hover:bg-surface-muted/50"
-                  >
-                    <td className="num px-4 py-2.5">{row.txnDate}</td>
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {row.refNo}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.accountName}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={row.usdSent}
-                        currency="USD"
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={row.bdtReceived}
-                        currency="BDT"
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="num px-4 py-2.5 text-right font-medium">
-                      {row.realisedRate}
-                    </td>
-                    <td className="num px-4 py-2.5 text-right text-muted-foreground">
-                      {row.marketRate ? trimRate(row.marketRate) : "—"}
-                      {row.spread && Number(row.spread) > 0 ? (
-                        <Badge tone="neutral" className="ml-2">
-                          cost {money(row.spread, { hideDecimals: true })}
-                        </Badge>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 function Tile({
   label,
   value,
@@ -750,8 +469,3 @@ function Tile({
   );
 }
 
-/** "122.500000" is a database column; "122.50" is a rate somebody reads. */
-function trimRate(rate: string): string {
-  const value = Number(rate);
-  return Number.isFinite(value) ? value.toFixed(2) : rate;
-}
