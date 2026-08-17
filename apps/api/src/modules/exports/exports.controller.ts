@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import {
   ACCOUNT_TYPE_LABELS,
+  BILLING_CYCLE_HABIT_LABELS,
   EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
@@ -19,7 +20,9 @@ import {
   PSR_STATUS_LABELS,
   TDS_DEPOSIT_TYPE_LABELS,
   TXN_ORIGIN_LABELS,
+  VENDOR_TYPE_LABELS,
   bankStatsQuerySchema,
+  exportSubscriptionsQuerySchema,
   fiscalYearQuerySchema,
   formatMoney,
   fundingQuerySchema,
@@ -36,6 +39,7 @@ import {
   todayInDhaka,
   type BankStatsQuery,
   type CurrencyView,
+  type ExportSubscriptionsQuery,
   type FiscalYearQuery,
   type FundingQuery,
   type ListDepositsQuery,
@@ -71,6 +75,7 @@ import { StatementService } from "../reports/statement.service";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { TeamMembersService } from "../team-members/team-members.service";
+import { VendorsService } from "../vendors/vendors.service";
 import { ExcelService } from "./excel.service";
 import { buildOverviewReport } from "./overview-report";
 import { PdfService } from "./pdf.service";
@@ -110,6 +115,7 @@ export class ExportsController {
     private readonly team: TeamMembersService,
     private readonly reports: ReportsService,
     private readonly statement: StatementService,
+    private readonly vendors: VendorsService,
   ) {}
 
   /**
@@ -434,6 +440,162 @@ export class ExportsController {
       response,
       buffer,
       ExcelService.filename("accounts", todayInDhaka()),
+    );
+  }
+
+  /**
+   * The AI tools and subscriptions, for one month.
+   *
+   * Two services, joined here by id, because the screen is two things: the
+   * master list of tools (searchable, and including the ones switched off) and
+   * what the ledger says was actually paid for each of them in the month being
+   * looked at. Neither service is asked to grow a copy of the other's job.
+   *
+   * `includeInactive` defaults to true on the screen — a tool cancelled in June
+   * still cost money in June, and a file that quietly omits it understates the
+   * month. So the export follows the screen rather than the usual default.
+   */
+  @Get("subscriptions")
+  @RequirePermission("exports.run", "vendors.read")
+  async subscriptionsSheet(
+    @ZodQuery(exportSubscriptionsQuerySchema) query: ExportSubscriptionsQuery,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const [page, summary] = await Promise.all([
+      this.vendors.list({
+        q: query.q,
+        includeInactive: query.includeInactive,
+        page: 1,
+        pageSize: ExcelService.MAX_ROWS,
+      }),
+      this.vendors.subscriptions({ year: query.year, month: query.month }),
+    ]);
+
+    const byId = new Map(summary.lines.map((line) => [line.id, line]));
+
+    // Flattened once, here, rather than looked up inside each column's `value`:
+    // a Map lookup repeated across eleven columns is eleven chances for one of
+    // them to be given the wrong key.
+    const rows = page.items.map((vendor) => ({
+      vendor,
+      line: byId.get(vendor.id),
+    }));
+
+    type Row = (typeof rows)[number];
+
+    const buffer = await this.excel.build<Row>({
+      title: `AI tools and subscriptions — ${summary.period.label}`,
+      subtitle: [
+        query.q ? `Search: "${query.q}"` : "Every tool and payee",
+        `Paid in ${summary.period.label}: ${formatMoney(summary.paidThisPeriod)}` +
+          (Number(summary.unattributed) > 0
+            ? ` · incl. ${formatMoney(summary.unattributed)} not tied to a named tool`
+            : ""),
+        `${page.total} rows · exported ${todayInDhaka()}`,
+      ],
+      columns: [
+        {
+          header: "Name",
+          key: "name",
+          kind: "text",
+          width: 26,
+          value: (r) => r.vendor.name,
+        },
+        {
+          header: "Type",
+          key: "type",
+          kind: "text",
+          width: 18,
+          value: (r) => VENDOR_TYPE_LABELS[r.vendor.type] ?? r.vendor.type,
+        },
+        {
+          header: "Usually",
+          key: "cycle",
+          kind: "text",
+          width: 16,
+          // The column is plain text on the row rather than a narrowed enum, so
+          // a cycle stored before the fixed list still exports as itself.
+          value: (r) =>
+            BILLING_CYCLE_HABIT_LABELS[
+              r.vendor.billingCycle as keyof typeof BILLING_CYCLE_HABIT_LABELS
+            ] ?? r.vendor.billingCycle,
+        },
+        /**
+         * The list price and its currency in two cells, not one string.
+         *
+         * "$20.00" in a text cell cannot be added up or sorted, and this is the
+         * column somebody opens the file to add up. The currency beside it is
+         * what stops a taka-billed tool being read as dollars.
+         */
+        {
+          header: "Usual cost",
+          key: "usual",
+          kind: "money",
+          value: (r) => r.vendor.billingAmount,
+        },
+        {
+          header: "Usual cost currency",
+          key: "usualCcy",
+          kind: "text",
+          width: 12,
+          value: (r) => r.vendor.billingCurrency,
+        },
+        {
+          // Named for the month it covers, so a saved file still says which
+          // month it is six months from now.
+          header: `Paid in ${summary.period.label}`,
+          key: "paid",
+          kind: "money",
+          value: (r) => r.line?.paidThisPeriod ?? null,
+        },
+        {
+          header: "Payments in month",
+          key: "entries",
+          kind: "number",
+          width: 12,
+          value: (r) => r.line?.entriesThisPeriod ?? null,
+        },
+        {
+          header: "Last paid",
+          key: "lastPaid",
+          kind: "date",
+          value: (r) => r.line?.lastPaidOn ?? null,
+        },
+        {
+          header: "e-TIN",
+          key: "etin",
+          kind: "text",
+          value: (r) => r.vendor.etin,
+        },
+        { header: "BIN", key: "bin", kind: "text", value: (r) => r.vendor.bin },
+        {
+          header: "Active",
+          key: "active",
+          kind: "text",
+          width: 10,
+          value: (r) => (r.vendor.isActive ? "Yes" : "No"),
+        },
+      ],
+      rows,
+      // Only the taka column. Summing "Usual cost" would add dollars to taka
+      // and print the answer as if it meant something.
+      totalColumns: ["paid"],
+    });
+
+    await this.audit.log({
+      action: "export",
+      entityTable: "vendors",
+      summary: `Exported ${page.items.length} tools and subscriptions for ${summary.period.label} to Excel`,
+      module: "exports",
+    });
+
+    return send(
+      response,
+      buffer,
+      ExcelService.filename(
+        `subscriptions-${summary.period.start.slice(0, 7)}`,
+        todayInDhaka(),
+      ),
     );
   }
 

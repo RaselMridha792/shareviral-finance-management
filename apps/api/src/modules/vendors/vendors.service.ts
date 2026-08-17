@@ -6,6 +6,7 @@ import {
 import {
   VENDOR_TYPE_LABELS,
   fromMinorUnits,
+  isFutureMonth,
   monthRange,
   parseIsoDate,
   toMinorUnits,
@@ -241,12 +242,32 @@ export class VendorsService {
    * while every figure comes from the ledger. The question the screen exists to
    * answer is "have I bought Claude this month", which only the ledger knows.
    *
-   * The period is the current calendar month: that is the unit the buying
-   * decision is made in.
+   * The period is a calendar month — the unit the buying decision is made in —
+   * and defaults to this one. Any earlier month can be asked for, because "did
+   * we pay for Claude in June" is a question that gets asked in August.
    */
-  async subscriptions(): Promise<SubscriptionSummary> {
-    const { year, month } = parseIsoDate(todayInDhaka());
-    const period = monthRange(year, month);
+  async subscriptions(
+    asked: { year?: number; month?: number } = {},
+  ): Promise<SubscriptionSummary> {
+    /**
+     * Any month up to this one, defaulting to this one.
+     *
+     * A future month is refused rather than answered with zeros: "nothing was
+     * paid in October" and "October has not happened" are different facts, and
+     * a screen full of zeros states the first when it means the second.
+     */
+    if (asked.year && asked.month && isFutureMonth(asked.year, asked.month)) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: { month: "That month has not happened yet." },
+      });
+    }
+
+    const today = parseIsoDate(todayInDhaka());
+    const period = monthRange(
+      asked.year ?? today.year,
+      asked.month ?? today.month,
+    );
 
     const inPeriod = sql`${transactions.txnDate} between ${period.start} and ${period.end}`;
 

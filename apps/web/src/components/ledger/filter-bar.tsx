@@ -6,12 +6,13 @@ import {
   type PaymentMethod,
   type TxnDirection,
 } from "@finance/shared";
-import { Search, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { controlClass } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchField } from "@/components/ui/search-field";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 
@@ -67,16 +68,19 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="relative flex min-w-52 flex-1 items-center">
-          <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
-          <span className="sr-only">Search</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search description, reference, or ref no."
-            className={cn(controlClass, "pl-9")}
-          />
-        </label>
+        {/*
+          No Search button here, unlike the other screens: this one filters as
+          you type. A button that repeats what already happened teaches people
+          their typing did not count. The clear cross is the half that was
+          missing.
+        */}
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Search description, reference, or ref no."
+          label="Search the transactions"
+          className="min-w-52 flex-1"
+        />
 
         <label className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">From</span>
@@ -194,7 +198,18 @@ export function FilterBar({
         </label>
 
         {active > 0 ? (
-          <Button size="sm" variant="ghost" onClick={() => onChange({})}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              // The search box has to be emptied too, not just the filters.
+              // Clearing `filters.q` alone left the typed text on screen, and
+              // the debounce then saw it differ from the (now empty) filter
+              // and re-applied the search 300ms after it was cleared.
+              setSearch("");
+              onChange({});
+            }}
+          >
             <X className="size-3.5" />
             Clear {active}
           </Button>

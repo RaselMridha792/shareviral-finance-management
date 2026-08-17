@@ -10,7 +10,11 @@ import {
 import { Eye, FileText, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { ConfirmDialog, ImageLightbox } from "@/components/ui/overlay";
+import {
+  ConfirmDialog,
+  DocumentViewer,
+  ImageLightbox,
+} from "@/components/ui/overlay";
 import { useToast } from "@/components/ui/toast";
 import {
   ApiError,
@@ -173,9 +177,17 @@ export function DocumentSlots({
       </ul>
 
       <ImageLightbox
-        open={Boolean(preview)}
+        open={Boolean(preview?.isImage)}
         src={preview ? fileHref(preview.id) : null}
         alt={preview?.originalName ?? ""}
+        onClose={() => setPreview(null)}
+      />
+
+      <DocumentViewer
+        open={Boolean(preview && !preview.isImage)}
+        src={preview ? `${fileHref(preview.id)}?inline=1` : null}
+        name={preview?.originalName ?? ""}
+        downloadHref={preview ? fileHref(preview.id) : ""}
         onClose={() => setPreview(null)}
       />
 
@@ -238,24 +250,15 @@ function Row({
       </div>
 
       {/*
-        Images open here; anything else opens in a tab, because the browser's
-        own PDF viewer is better than any panel this app would build.
+        Both open on the page: an image in the lightbox, a document in the
+        viewer. It used to open a document in a new tab, which in practice
+        meant the browser saved it — and somebody checking whether the letter
+        on file is the signed one wants to look at it, not to own a copy of
+        it. Saving is a button inside the viewer.
       */}
-      {file.isImage ? (
-        <IconButton label={`View ${file.originalName}`} onClick={onPreview}>
-          <Eye className="size-4" />
-        </IconButton>
-      ) : (
-        <a
-          href={fileHref(file.id)}
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label={`Open ${file.originalName}`}
-          className="rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
-        >
-          <Eye className="size-4" />
-        </a>
-      )}
+      <IconButton label={`View ${file.originalName}`} onClick={onPreview}>
+        <Eye className="size-4" />
+      </IconButton>
 
       {canWrite ? (
         <IconButton

@@ -318,6 +318,44 @@ export const listVendorsQuerySchema = paginationQuerySchema.extend({
 });
 export type ListVendorsQuery = z.infer<typeof listVendorsQuerySchema>;
 
+/**
+ * Which month the tools-and-subscriptions figures are measured over.
+ *
+ * Year and month travel together or not at all. A year on its own would have to
+ * mean some month, and whichever one the server picked would be a guess made
+ * on the caller's behalf about money — so it is refused instead.
+ *
+ * The upper bound is not here: "has that month happened yet" depends on the
+ * clock, and a schema that knows today's date is a schema whose tests break in
+ * September. The service checks it against Dhaka time.
+ */
+export const subscriptionsQuerySchema = z
+  .strictObject({
+    year: z.coerce.number().int().min(2020).max(2100).optional(),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+  })
+  .refine((value) => (value.year === undefined) === (value.month === undefined), {
+    message: "Give both a year and a month, or neither.",
+    path: ["month"],
+  });
+export type SubscriptionsQuery = z.infer<typeof subscriptionsQuerySchema>;
+
+/** The same month, plus the filters the list on screen is showing. */
+export const exportSubscriptionsQuerySchema = z
+  .strictObject({
+    year: z.coerce.number().int().min(2020).max(2100).optional(),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+    q: z.string().trim().max(120).optional(),
+    includeInactive: boolish.default(false),
+  })
+  .refine((value) => (value.year === undefined) === (value.month === undefined), {
+    message: "Give both a year and a month, or neither.",
+    path: ["month"],
+  });
+export type ExportSubscriptionsQuery = z.infer<
+  typeof exportSubscriptionsQuerySchema
+>;
+
 /* -------------------------------------------------------------------------- */
 /*  Settings                                                                   */
 /* -------------------------------------------------------------------------- */

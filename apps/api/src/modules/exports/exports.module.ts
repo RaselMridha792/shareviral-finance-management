@@ -8,6 +8,7 @@ import { SettingsModule } from "../settings/settings.module";
 import { TdsModule } from "../tds/tds.module";
 import { TeamMembersModule } from "../team-members/team-members.module";
 import { TransactionsModule } from "../transactions/transactions.module";
+import { VendorsModule } from "../vendors/vendors.module";
 import { ExcelService } from "./excel.service";
 import { ExportsController } from "./exports.controller";
 import { PdfService } from "./pdf.service";
@@ -24,6 +25,7 @@ import { PdfService } from "./pdf.service";
     IncomeTaxModule,
     PayrollModule,
     TeamMembersModule,
+    VendorsModule,
   ],
   controllers: [ExportsController],
   providers: [ExcelService, PdfService],

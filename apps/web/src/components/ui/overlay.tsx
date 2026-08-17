@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,75 @@ export function ConfirmDialog({
             {confirmLabel}
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A stored document, read without leaving the page.
+ *
+ * Clicking a PDF used to put it in the Downloads folder, which is the wrong
+ * default for the common act: somebody checking whether the appointment letter
+ * on file is the signed one does not want a copy of it, they want to look at
+ * it. Saving is still a click away, in the corner.
+ *
+ * The `?inline=1` is what makes the API send it to be displayed rather than
+ * saved. A PDF shown this way runs in the browser's own viewer, which is
+ * sandboxed away from the page around it.
+ */
+export function DocumentViewer({
+  open,
+  src,
+  name,
+  downloadHref,
+  onClose,
+}: {
+  open: boolean;
+  src: string | null;
+  name: string;
+  downloadHref: string;
+  onClose: () => void;
+}) {
+  useDismissable(open, onClose);
+  if (!open || !src) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={name}
+      className="fixed inset-0 z-[95] flex flex-col bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-surface"
+      >
+        <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
+          <a
+            href={downloadHref}
+            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            aria-label={`Download ${name}`}
+          >
+            <Download className="size-4" />
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <iframe
+          src={src}
+          title={name}
+          className="min-h-0 flex-1 bg-white"
+        />
       </div>
     </div>
   );

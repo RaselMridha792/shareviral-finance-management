@@ -12,6 +12,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Res,
   StreamableFile,
   UploadedFile,
@@ -136,18 +137,31 @@ export class FilesController {
     @Param("id") id: string,
     @CurrentUser() actor: AuthenticatedUser,
     @Res({ passthrough: true }) res: Response,
+    /**
+     * `?inline=1` asks for the file to be displayed rather than saved.
+     *
+     * The viewer in the app passes it so a document can be read without
+     * landing in the Downloads folder first. The download button does not, so
+     * the same file can still be saved deliberately.
+     *
+     * A PDF shown this way runs inside the browser's own viewer, which is
+     * sandboxed away from the page embedding it — it cannot reach this
+     * origin's cookies or DOM. Images were always shown inline.
+     */
+    @Query("inline") inlineParam?: string,
   ): Promise<StreamableFile> {
     const { row, stream } = await this.files.open(uuidSchema.parse(id), actor);
 
-    const inline = isImageMime(row.mimeType);
+    const inline = isImageMime(row.mimeType) || inlineParam === "1";
 
     res.set({
       "Content-Type": row.mimeType,
       "Content-Length": String(row.sizeBytes),
       /**
-       * Images render in place because that is what a profile photo is for.
-       * Everything else downloads — a PDF opened inline runs in a viewer on
-       * this API's own origin, and there is no reason to hand it that.
+       * Images always render in place, because that is what a photograph is
+       * for. Everything else downloads unless the caller asked to view it, so
+       * a document opened in the app's viewer is read rather than saved, and
+       * the download button beside it still saves.
        */
       "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${row.originalName}"; filename*=UTF-8''${encodeURIComponent(row.originalName)}`,
       /**

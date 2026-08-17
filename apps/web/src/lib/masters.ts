@@ -164,11 +164,24 @@ export const vendorsApi = {
       cache: "no-store",
     });
   },
-  /** Every AI tool and subscription, with what was actually paid this month. */
-  subscriptions: () =>
-    apiFetch<SubscriptionSummary>("/vendors/subscriptions", {
-      cache: "no-store",
-    }),
+  /**
+   * Every AI tool and subscription, with what was actually paid in a month.
+   *
+   * Year and month go together or not at all — omitting both means the current
+   * Dhaka month, which is what the page opens on.
+   */
+  subscriptions: (params: { year?: number; month?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.year && params.month) {
+      search.set("year", String(params.year));
+      search.set("month", String(params.month));
+    }
+    const qs = search.toString();
+    return apiFetch<SubscriptionSummary>(
+      `/vendors/subscriptions${qs ? `?${qs}` : ""}`,
+      { cache: "no-store" },
+    );
+  },
 
   create: (input: CreateVendorInput) =>
     apiFetch<VendorDto>("/vendors", { method: "POST", ...json(input) }),

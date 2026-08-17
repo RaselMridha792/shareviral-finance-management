@@ -7,13 +7,14 @@ import {
   type AuditAction,
   type AuditEntryDto,
 } from "@finance/shared";
-import { ChevronDown, EyeOff, LoaderCircle, Search } from "lucide-react";
+import { ChevronDown, EyeOff, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DateInput, Input, Select } from "@/components/ui/field";
+import { DateInput, Select } from "@/components/ui/field";
+import { SearchField } from "@/components/ui/search-field";
 import { ApiError } from "@/lib/api-client";
 import { auditApi, type AuditFilters } from "@/lib/audit";
 import { cn } from "@/lib/utils";
@@ -91,15 +92,17 @@ export function AuditPanel() {
       </p>
 
       <Card className="flex flex-wrap items-end gap-2 p-3">
-        <label className="flex flex-1 items-center gap-2">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <Input
-            placeholder="Search what happened…"
-            className="h-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
+        {/* No Search button: this list filters as you type. The clear cross
+            is what was missing — the trail is long and there was no way back
+            to all of it except selecting the text and deleting it. */}
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Search what happened…"
+          label="Search the trail"
+          className="flex-1"
+          inputClassName="h-9"
+        />
 
         <Select
           aria-label="Action"
@@ -163,6 +166,10 @@ export function AuditPanel() {
             size="sm"
             variant="secondary"
             onClick={() => {
+              // The search box too, not just the filters. Emptying `filters.q`
+              // alone left the typed words on screen, and the debounce then
+              // put the search straight back 300ms after it was cleared.
+              setSearch("");
               setFilters({});
               setPage(1);
             }}

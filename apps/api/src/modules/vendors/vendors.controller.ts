@@ -2,6 +2,7 @@ import { Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import {
   createVendorSchema,
   listVendorsQuerySchema,
+  subscriptionsQuerySchema,
   updateVendorSchema,
   type CreateVendorInput,
   type ListVendorsQuery,
@@ -51,8 +52,11 @@ export class VendorsController {
    */
   @Get("subscriptions")
   @RequirePermission("vendors.read")
-  subscriptions() {
-    return this.vendors.subscriptions();
+  subscriptions(
+    @ZodQuery(subscriptionsQuerySchema)
+    query: z.infer<typeof subscriptionsQuerySchema>,
+  ) {
+    return this.vendors.subscriptions(query);
   }
 
   @Get(":id")

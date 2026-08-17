@@ -431,54 +431,6 @@ export function TeamMemberScreen({
 
           <Card>
             <CardHeader
-              title="History"
-              description="Every figure, and when it took effect"
-            />
-            <CardBody className="p-0">
-              {compensation.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-muted-foreground">
-                  No pay recorded yet.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="table-data min-w-[520px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-surface-muted/50 text-left">
-                        <Th>From</Th>
-                        <Th>Until</Th>
-                        <Th>Why</Th>
-                        <Th className="text-right">Gross</Th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {compensation.map((entry) => (
-                        <tr key={entry.id} className="row-finance">
-                          <td className="num px-5 py-2.5">
-                            {entry.effectiveFrom}
-                          </td>
-                          <td className="num px-5 py-2.5 text-muted-foreground">
-                            {entry.effectiveTo ?? "now"}
-                          </td>
-                          <td className="px-5 py-2.5 text-muted-foreground">
-                            {entry.changeReason ?? "—"}
-                          </td>
-                          <td className="px-5 py-2.5">
-                            <Amount
-                              value={entry.grossAmount}
-                              className="block font-medium"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
               title="Payslips"
               description="Every month they appear on a finalised salary sheet"
             />

@@ -1,7 +1,7 @@
 "use client";
 
 import { ROLE_LABELS } from "@finance/shared";
-import { LogOut, Menu, Search } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -48,17 +48,17 @@ export function Topbar() {
           <Menu className="size-5" />
         </button>
 
-        <label className="relative hidden max-w-sm flex-1 items-center sm:flex">
-          <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
-          <span className="sr-only">Search</span>
-          <input
-            type="search"
-            placeholder="Search…"
-            disabled
-            className="h-9 w-full rounded-lg border border-border bg-surface-muted pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-          />
-        </label>
+        {/*
+          There was a search box here, permanently `disabled`, searching
+          nothing. It came from the scaffold and never got wired up — greyed
+          out, but a search box all the same, in the most prominent place on
+          every screen. A control that cannot do the thing it depicts is worse
+          than no control: people try it, nothing happens, and they learn not
+          to trust the chrome.
 
+          Every screen that has something to search has its own search box on
+          it. If a global one is ever built it belongs here, working.
+        */}
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
 

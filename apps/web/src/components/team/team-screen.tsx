@@ -5,7 +5,7 @@ import {
   ENGAGEMENT_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Download, Eye, Plus, Search, Users } from "lucide-react";
+import { Download, Eye, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,8 +15,8 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { SearchField } from "@/components/ui/search-field";
 import { exportUrl } from "@/lib/ledger";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
@@ -149,25 +149,14 @@ export function TeamScreen({
         </p>
       ) : null}
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void refresh();
-        }}
-        className="relative flex max-w-sm items-center"
-      >
-        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
-        <label className="sr-only" htmlFor="team-search">
-          Search the team
-        </label>
-        <input
-          id="team-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, designation or phone"
-          className={cn(controlClass, "pl-9")}
-        />
-      </form>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        onSubmit={(next) => void refresh(next)}
+        placeholder="Search by name, designation or phone"
+        label="Search the team"
+        className="max-w-sm"
+      />
 
       {page.items.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
