@@ -12,7 +12,13 @@
 #
 #     cd /opt/sfm
 #     git fetch origin main && git reset --hard origin/main
-#     GHCR_USER=<you> GHCR_TOKEN=<token> ./deploy/remote-deploy.sh
+#     ./deploy/remote-deploy.sh
+#
+# With no arguments it brings the stack up on the images already on the box,
+# which is the four-in-the-morning case. To fetch a new release as well, give it
+# the registry credentials the pipeline uses:
+#
+#     GHCR_USER=<github-username> GHCR_TOKEN=<token> ./deploy/remote-deploy.sh
 #
 # The pull is deliberately NOT in here. `git reset --hard` replaces this very
 # file, and bash reads a script as it goes — replacing it mid-run is how you
@@ -22,9 +28,21 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# --------------------------------------------------------------------------
+# Credentials are optional, and that is the point.
+# --------------------------------------------------------------------------
+# Without them this skips the registry entirely and brings the stack up on the
+# images already on the box. That is the case that actually happens at four in
+# the morning: the code is already here, nginx will not start, and somebody
+# needs the thing running again — not a new release.
+#
+# Demanding a token for that turned recovery into a hunt for a token. The
+# pipeline always passes them, so a real deploy still fetches what it built.
+PULL=1
 if [ -z "${GHCR_USER:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
-  echo "GHCR_USER and GHCR_TOKEN must be set — they are what pulls the images." >&2
-  exit 1
+  PULL=0
+  echo "No registry credentials given — restarting on the images already here."
+  echo "(Set GHCR_USER and GHCR_TOKEN to fetch a new release.)"
 fi
 
 # --------------------------------------------------------------------------
@@ -39,6 +57,7 @@ fi
 # re-run a minute later, with nothing about the credentials changed. A deploy
 # that fails on somebody else's momentary refusal teaches people that a red run
 # means nothing — which is expensive on the run where it means something.
+if [ "$PULL" = "1" ]; then
 for attempt in 1 2 3; do
   if echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
     break
@@ -52,13 +71,16 @@ for attempt in 1 2 3; do
 done
 # Signed out even if everything below fails.
 trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+fi
 
 # --------------------------------------------------------------------------
 # Swap the images.
 # --------------------------------------------------------------------------
 # `up -d` without --build is what keeps this one-vCPU box from ever compiling
 # anything; the images were built on GitHub's runners.
-docker compose pull --quiet api web
+if [ "$PULL" = "1" ]; then
+  docker compose pull --quiet api web
+fi
 docker compose up -d --remove-orphans
 
 # --------------------------------------------------------------------------
