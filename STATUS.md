@@ -568,6 +568,34 @@ Then, when you want off Vercel and Render, `DEPLOYMENT.md` has the VPS move.
 Items 2 and 3 are needed before real data can be entered; 1 is worth fixing
 before transactions are filed under the wrong headings.
 
+## The architecture document (2026-08-18)
+
+It is a page in the app now: `apps/web/public/architecture.html`, served at
+`/architecture.html`. It was a chat attachment before, which meant every edit
+made a new copy and nobody could say which was current.
+
+**Behind the login, deliberately.** The proxy matcher covers `.html`, so a
+signed-out visitor is redirected. This is worth not undoing by accident: the
+page names four defences that are designed and not yet built — two-factor, idle
+timeout, the closed-books lock, and backup credentials kept off the box — next
+to the live domain. Making it public is a one-word change to the matcher, and
+should be a decision rather than a default. If a public version is wanted, cut
+the open items and publish that, not this file.
+
+Two things about the file itself:
+
+- **The fonts are inlined**, nine latin faces as base64, which is most of its
+  436KB. Not linked, on purpose: a font CDN announces every reader of this page
+  to a third party, which sits badly on a document about how carefully the
+  system is locked down. It also fails closed where the page is published as an
+  artifact, whose CSP blocks external font hosts and would silently fall back.
+- **The artifact copy is generated, never hand-edited.** Run
+  `node scripts/architecture-artifact.cjs` — the artifact host wraps whatever it
+  is given in its own `<html>`/`<head>`/`<body>`, so the full document has to be
+  stripped down first. Edit the page in `apps/web/public/`, regenerate,
+  republish. Only one of the two is ever written by a person, so they cannot
+  drift.
+
 ## Decisions worth remembering
 
 - **One ledger, not two.** Expenses and bank entries are the same table viewed
