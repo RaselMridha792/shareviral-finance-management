@@ -1,3 +1,4 @@
+import { isFutureMonth, isFutureYear } from "./datetime.ts";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -217,5 +218,37 @@ describe("daysBetween", () => {
 
   it("spans a BD income year", () => {
     assert.equal(daysBetween("2026-07-01", "2027-06-30"), 364);
+  });
+});
+
+describe("months that have not happened yet", () => {
+  // 17 August 2026, 09:00 UTC — mid-afternoon in Dhaka, same date either way.
+  const midMonth = new Date("2026-08-17T09:00:00Z");
+
+  it("does not call the running month future", () => {
+    assert.equal(isFutureMonth(2026, 8, midMonth), false);
+  });
+
+  it("calls next month and next year future", () => {
+    assert.equal(isFutureMonth(2026, 9, midMonth), true);
+    assert.equal(isFutureMonth(2027, 1, midMonth), true);
+    assert.equal(isFutureYear(2027, midMonth), true);
+  });
+
+  it("leaves the past alone", () => {
+    assert.equal(isFutureMonth(2026, 7, midMonth), false);
+    assert.equal(isFutureMonth(2025, 12, midMonth), false);
+    assert.equal(isFutureYear(2026, midMonth), false);
+  });
+
+  it("turns over in Dhaka, not in UTC", () => {
+    /**
+     * 31 August, 21:00 UTC is already 1 September in Dhaka. Asking the
+     * browser would call September future for another three hours, and the
+     * new month would be unreachable on the morning it starts.
+     */
+    const midnightInDhaka = new Date("2026-08-31T21:00:00Z");
+    assert.equal(isFutureMonth(2026, 9, midnightInDhaka), false);
+    assert.equal(isFutureMonth(2026, 10, midnightInDhaka), true);
   });
 });

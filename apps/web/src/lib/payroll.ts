@@ -223,6 +223,18 @@ export const teamApi = {
    * overwrite a raise, and every row it writes is in the audit log with the
    * amount.
    */
+  /**
+   * What everybody earns now, keyed by person.
+   *
+   * Fetched separately from the directory on purpose: the team DTO cannot
+   * carry a pay figure, which is what keeps the boundary structural. Only
+   * called when the session holds `team.compensation.read`.
+   */
+  currentSalaries: () =>
+    apiFetch<
+      Array<{ teamMemberId: string; grossAmount: string; currency: string }>
+    >("/team-members/compensation/current", { cache: "no-store" }),
+
   setPayFromJoiningSalary: () =>
     apiFetch<{ created: number; names: string[]; skipped: string[] }>(
       "/team-members/compensation/from-joining-salary",

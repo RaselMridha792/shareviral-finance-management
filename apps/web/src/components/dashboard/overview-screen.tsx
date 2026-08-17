@@ -127,25 +127,26 @@ export function OverviewScreen({
           <h1 className="text-2xl font-semibold tracking-tight">
             Overview, {firstName}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {report.period.label}
-            {report.usdRate ? (
-              <>
-                {" · dollars at "}
-                <span className="num">{trimRate(report.usdRate)}</span>
-                {" per USD — "}
-                {/* Which of the three rates won. Without this, a month that
-                    was funded looks broken after somebody edits the Settings
-                    rate and sees nothing move: the funding rate is meant to
-                    outrank it, and the screen has to say so. */}
-                {report.usdRateSource
-                  ? GOVERNING_RATE_LABELS[report.usdRateSource]
-                  : null}
-              </>
-            ) : (
-              " · no rate for this period, so no dollar figures. Set one in Settings, or record the month's funding with its rate."
-            )}
-          </p>
+          {/*
+            The rate line is gone when there is a rate, and stays when there is
+            not.
+
+            It read "August 2026 · dollars at 118.30 per USD — the rate this
+            month was funded at" under a heading that already says the month,
+            beside two selects that already choose it. Every dollar figure on
+            the page is greyed and marked as translated anyway, so the sentence
+            was restating on every visit something worth knowing once.
+
+            Its absence is a different matter: no rate means no dollar figures
+            at all, and a page that silently drops half its numbers has to say
+            why and where to fix it.
+          */}
+          {!report.usdRate ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              No rate for this period, so no dollar figures. Set one in
+              Settings, or record the month&apos;s funding with its rate.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

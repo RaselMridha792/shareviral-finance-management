@@ -6,6 +6,7 @@ import {
 import {
   canSeeCompensation,
   formatMoney,
+  todayInDhaka,
   type CreateTeamMemberInput,
   type ListTeamQuery,
   type Paginated,
@@ -351,6 +352,56 @@ export class TeamMembersService {
       names: ready.map((p) => p.fullName),
       skipped: withoutFigure,
     };
+  }
+
+  /**
+   * What everybody earns now, keyed by person.
+   *
+   * A separate call rather than a column on `TeamMemberDto`, and that is the
+   * whole point. The team projection has never been able to carry a pay
+   * figure — not "does not", *cannot*, because it never joins
+   * `compensation_history` — and that is what makes the boundary structural
+   * instead of a promise a future field could quietly break. The directory
+   * asks for this second thing only when the role holds the permission, and a
+   * role that does not simply gets a table with no salary column.
+   *
+   * Latest figure effective on or before today, per person. Somebody with no
+   * record at all is absent from the map, which the screen shows as "not set"
+   * — the same people the salary sheet skips, visible before payroll day
+   * rather than on it.
+   */
+  async currentCompensation(): Promise<
+    Array<{ teamMemberId: string; grossAmount: string; currency: string }>
+  > {
+    const rows = await this.db.client
+      .select({
+        teamMemberId: compensationHistory.teamMemberId,
+        grossAmount: compensationHistory.grossAmount,
+        currency: compensationHistory.currency,
+        effectiveFrom: compensationHistory.effectiveFrom,
+      })
+      .from(compensationHistory)
+      .where(sql`${compensationHistory.effectiveFrom} <= ${todayInDhaka()}`)
+      .orderBy(
+        compensationHistory.teamMemberId,
+        desc(compensationHistory.effectiveFrom),
+      );
+
+    // First row per person wins, which the ordering above has already decided.
+    // Done here rather than with `distinct on` so the rule is readable and the
+    // query is one drizzle understands without a raw fragment.
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!latest.has(row.teamMemberId)) latest.set(row.teamMemberId, row);
+    }
+
+    return [...latest.values()].map(
+      ({ teamMemberId, grossAmount, currency }) => ({
+        teamMemberId,
+        grossAmount,
+        currency,
+      }),
+    );
   }
 
   async setCompensation(

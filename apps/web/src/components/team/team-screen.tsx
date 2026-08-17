@@ -8,7 +8,7 @@ import {
 import { Download, Eye, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -63,6 +63,31 @@ export function TeamScreen({
    * On leave counts as current. Somebody on leave has not left.
    */
   const [tab, setTab] = useState<"current" | "past">("current");
+
+  /**
+   * What each person earns now, fetched only when the role may see it.
+   *
+   * Empty for a role without the permission, and the column is then not
+   * rendered at all — rather than rendered full of dashes, which reads as
+   * "nobody is paid" instead of "this is not yours to see".
+   */
+  const [salaries, setSalaries] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!canSeePay) return;
+    let alive = true;
+    void teamApi
+      .currentSalaries()
+      .then((rows) => {
+        if (alive) {
+          setSalaries(new Map(rows.map((r) => [r.teamMemberId, r.grossAmount])));
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [canSeePay, page]);
 
   const isCurrent = (m: TeamMemberDto) =>
     m.status === "active" || m.status === "on_leave";
@@ -204,6 +229,8 @@ export function TeamScreen({
                 }
                 members={employees}
                 past={tab === "past"}
+                showPay={canSeePay}
+                salaries={salaries}
               />
               <Section
                 title="Contractors"
@@ -214,6 +241,8 @@ export function TeamScreen({
                 }
                 members={contractors}
                 past={tab === "past"}
+                showPay={canSeePay}
+                salaries={salaries}
               />
             </>
           )}
@@ -234,9 +263,14 @@ function Section({
   subtitle,
   members,
   past = false,
+  showPay,
+  salaries,
 }: {
   /** Adds the last day, which is the fact the past tab is read for. */
   past?: boolean;
+  /** The salary column appears only for a role that may read pay. */
+  showPay: boolean;
+  salaries: Map<string, string>;
   title: string;
   subtitle: string;
   members: TeamMemberDto[];
@@ -262,7 +296,9 @@ function Section({
                 <Th className="w-32">Department</Th>
                 <Th className="w-28">Date of Joining</Th>
                 {past ? <Th className="w-28">Last day</Th> : null}
-                <Th className="w-36 text-right">Joining Salary</Th>
+                {showPay ? (
+                  <Th className="w-36 text-right">Current salary</Th>
+                ) : null}
                 <Th className="w-28">Status</Th>
                 <Th className="w-24 text-right" />
               </tr>
@@ -308,18 +344,44 @@ function Section({
                   <td className="num px-4 py-2.5 text-muted-foreground">
                     {member.joinedOn}
                   </td>
-                  {/* Replaced the PSR badge. Whether somebody filed a return
-                      is a withholding question and it is answered on the TDS
-                      screen; on a staff list it took a column and told a
-                      reader nothing they came here for. What was agreed at
-                      hire does belong here. */}
-                  <td className="col-amount px-4 py-2.5">
-                    {member.joiningSalary ? (
-                      <Amount value={member.joiningSalary} hideDecimals />
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
+                  {/*
+                    Must appear under exactly the same condition as its header.
+                    It did not, for one deploy: the header was added and this
+                    was not, so every row in the past tab was one cell short
+                    and each value sat under the heading to its left — the
+                    status badge under Joining Salary, and the button under
+                    Status. A row that is silently offset reads as wrong data
+                    rather than as a broken table.
+                  */}
+                  {past ? (
+                    <td className="num px-4 py-2.5 text-muted-foreground">
+                      {member.endedOn ?? "—"}
+                    </td>
+                  ) : null}
+                  {/*
+                    What they earn now, not what they were hired at.
+
+                    The joining figure was here first and is the wrong one to
+                    scan a directory with: it is fixed on the day somebody
+                    started and says nothing about today. It is still on the
+                    profile, where it is labelled as what it is.
+
+                    "Not set" is deliberate wording. Somebody with no
+                    compensation record is not on ৳0 — they are the person the
+                    salary sheet will silently skip, and this is where that
+                    shows up before payroll day rather than on it.
+                  */}
+                  {showPay ? (
+                    <td className="col-amount px-4 py-2.5">
+                      {salaries.get(member.id) ? (
+                        <Amount value={salaries.get(member.id)!} hideDecimals />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Not set
+                        </span>
+                      )}
+                    </td>
+                  ) : null}
                   <td className="px-4 py-2.5">
                     <Badge
                       tone={member.status === "active" ? "positive" : "neutral"}

@@ -24,6 +24,35 @@ export function todayInDhaka(now: Date = new Date()): IsoDate {
   return isoDateFormatter.format(now);
 }
 
+/**
+ * Is this calendar month still ahead of us?
+ *
+ * Every period picker in the app offers a whole year of months, so on the 17th
+ * of August somebody could open September and read a page of zeroes as though
+ * it were a finding. Worse on the ones that write: a payroll run for a month
+ * that has not happened, or a report exported for a period with nothing in it.
+ *
+ * Judged in Dhaka. On a laptop set to UTC, for the first six hours of the 1st,
+ * the browser's own month is still the previous one — so a picker that asked
+ * the browser would open the new month to nobody for a morning a month.
+ *
+ * The month that is running is *not* future: it is the one everybody works in.
+ */
+export function isFutureMonth(
+  year: number,
+  month: number,
+  now: Date = new Date(),
+): boolean {
+  const [thisYear, thisMonth] = todayInDhaka(now).split("-").map(Number);
+  return year > thisYear || (year === thisYear && month > thisMonth);
+}
+
+/** The same question about a whole year. */
+export function isFutureYear(year: number, now: Date = new Date()): boolean {
+  const [thisYear] = todayInDhaka(now).split("-").map(Number);
+  return year > thisYear;
+}
+
 /** Builds `YYYY-MM-DD` from calendar parts, with no timezone involved at all. */
 export function isoDate(year: number, month: number, day: number): IsoDate {
   const mm = String(month).padStart(2, "0");

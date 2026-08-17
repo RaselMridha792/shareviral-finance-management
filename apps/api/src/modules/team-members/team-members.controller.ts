@@ -38,6 +38,21 @@ export class TeamMembersController {
    * the route 400s on the uuid parse — the same trap noted in
    * VendorsController.
    */
+  /**
+   * What everybody earns now, for the directory's salary column.
+   *
+   * Its own route behind its own permission, rather than a field on the team
+   * list. A role without `team.compensation.read` gets a 403 here and a table
+   * with no salary column — the figures never travel in the same response as
+   * the names.
+   */
+  @Get("compensation/current")
+  @RequirePermission("team.compensation.read")
+  currentCompensation(@CurrentUser() actor: AuthenticatedUser) {
+    this.team.assertCanSeeCompensation(actor);
+    return this.team.currentCompensation();
+  }
+
   @Post("compensation/from-joining-salary")
   @HttpCode(200)
   @RequirePermission("team.compensation.write")
