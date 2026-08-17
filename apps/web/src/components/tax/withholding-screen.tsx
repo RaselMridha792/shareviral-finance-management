@@ -3,6 +3,9 @@
 import {
   FILING_STATUS_LABELS,
   TDS_DEPOSIT_TYPE_LABELS,
+  isSelectableMonth,
+  nearestSelectableMonth,
+  recordYears,
   todayInDhaka,
   type TdsDepositType,
 } from "@finance/shared";
@@ -421,6 +424,10 @@ export function WithholdingScreen({
       </Card>
 
       <ChallanForm
+        // Keyed on the month, so opening "record a challan" for July after
+        // looking at June starts on July rather than on whatever the form was
+        // last left showing.
+        key={recording ? `${recording.year}-${recording.month}` : "none"}
         target={recording}
         accounts={accounts}
         onClose={() => setRecording(null)}
@@ -509,8 +516,10 @@ function YearPicker({
   value: number;
   onChange: (year: number) => void;
 }) {
-  const now = Number(todayInDhaka().slice(0, 4));
-  const years = [now + 1, now, now - 1, now - 2];
+  // 2026 onwards, growing on its own. It used to offer next year and two years
+  // back — three years the company has no withholding records for, and one of
+  // them not yet begun.
+  const years = recordYears();
 
   return (
     <label className="flex items-center gap-2 text-sm">
@@ -545,6 +554,16 @@ function ChallanForm({
   const [error, setError] = useState<string | null>(null);
   const today = todayInDhaka();
 
+  // Which month's deductions the challan covers. Held here rather than read off
+  // the form on submit, because the month list has to grey out what the chosen
+  // year cannot have, and two uncontrolled boxes cannot see each other.
+  const [coversYear, setCoversYear] = useState(
+    target?.year ?? Number(today.slice(0, 4)),
+  );
+  const [coversMonth, setCoversMonth] = useState(
+    target?.month ?? Number(today.slice(5, 7)),
+  );
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -561,8 +580,8 @@ function ChallanForm({
         amount: String(data.get("amount") ?? "").replace(/,/g, ""),
         bankName: String(data.get("bankName") ?? "") || undefined,
         branch: String(data.get("branch") ?? "") || undefined,
-        periodYear: Number(data.get("periodYear")),
-        periodMonth: Number(data.get("periodMonth")),
+        periodYear: coversYear,
+        periodMonth: coversMonth,
         depositType: String(data.get("depositType")) as TdsDepositType,
         accountId: accountId || undefined,
         notes: String(data.get("notes") ?? "") || undefined,
@@ -607,18 +626,40 @@ function ChallanForm({
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/*
+              Which month's deductions this challan covers. Controlled, so the
+              month list can grey out what the chosen year cannot have — a
+              challan filed against a month that has not happened would allocate
+              against deductions nobody has made.
+            */}
             <Field label="Deductions from" required>
-              <Select name="periodMonth" defaultValue={target.month}>
-                {MONTHS.map((month, index) => (
-                  <option key={month} value={index + 1}>
-                    {month}
+              <Select
+                value={coversMonth}
+                onChange={(event) => setCoversMonth(Number(event.target.value))}
+              >
+                {MONTHS.map((name, index) => (
+                  <option
+                    key={name}
+                    value={index + 1}
+                    disabled={!isSelectableMonth(coversYear, index + 1)}
+                  >
+                    {name}
                   </option>
                 ))}
               </Select>
             </Field>
             <Field label="Year" required>
-              <Select name="periodYear" defaultValue={target.year}>
-                {[target.year - 1, target.year, target.year + 1].map((year) => (
+              <Select
+                value={coversYear}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  setCoversYear(next);
+                  setCoversMonth((current) =>
+                    nearestSelectableMonth(next, current),
+                  );
+                }}
+              >
+                {recordYears().map((year) => (
                   <option key={year} value={year}>
                     {year}
                   </option>

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import {
+  RECORDS_START,
   currentFiscalYear,
+  fiscalYearOf,
+  isoDate,
   monthRange,
   periodsInFiscalYear,
   todayInDhaka,
@@ -114,21 +117,53 @@ export class ReportsService {
     };
   }
 
-  /** Which periods a picker can offer, so the UI never invents one. */
+  /**
+   * Which periods a picker can offer, so the UI never invents one.
+   *
+   * Both ends are now bounded. It used to answer `[thisYear + 1, thisYear,
+   * thisYear - 1, thisYear - 2]` — a year that has not begun and two the company
+   * did not exist in. Every one of those renders a report of zeroes, and a
+   * report of zeroes reads as a finding rather than as an absence.
+   *
+   * The floor is the fiscal year containing May 2026, not the year 2026:
+   * under the July–June setting May 2026 falls in financial year 2025, so
+   * flooring at 2026 would hide the company's first two months.
+   *
+   * Future periods are returned rather than dropped, carrying `selectable:
+   * false`. The picker greys them — somebody looking for September needs to see
+   * that September exists and has not happened, instead of wondering whether
+   * the app has lost it.
+   */
   async availablePeriods(granularity: PeriodQuery["granularity"]) {
     const settings = await this.settings.get();
     const mode = settings.fiscalYearMode;
     const thisYear = currentFiscalYear(mode);
 
+    const firstRecordedDay = isoDate(
+      RECORDS_START.year,
+      RECORDS_START.month,
+      1,
+    );
+    const firstYear = fiscalYearOf(firstRecordedDay, mode);
+
+    const years: number[] = [];
+    for (let year = thisYear; year >= firstYear; year--) years.push(year);
+
+    const today = todayInDhaka();
+
     return {
       fiscalYearMode: mode,
-      years: [thisYear + 1, thisYear, thisYear - 1, thisYear - 2],
+      years,
       periods: periodsInFiscalYear(thisYear, mode, granularity).map(
         (range, i) => ({
           index: i + 1,
           label: range.label,
           start: range.start,
           end: range.end,
+          // A period that has not started yet, or one that ended before the
+          // books did. The period in progress is selectable: it is the one
+          // everybody works in.
+          selectable: range.start <= today && range.end >= firstRecordedDay,
         }),
       ),
     };

@@ -1,7 +1,7 @@
 "use client";
 
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
-import { ArrowLeft, Download, Plus } from "lucide-react";
+import { ArrowLeft, Download, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -104,6 +104,31 @@ export function RegisterScreen({
           </>
         }
       />
+
+      {/*
+        A tin of cash cannot hold less than nothing, and a bKash wallet cannot
+        go below zero — the provider refuses the payment. So a negative closing
+        balance on either is never a fact about the money; it is the records
+        saying something is missing from them, and the register is where the
+        missing thing gets found.
+
+        Bank accounts are excluded on purpose: an overdraft is real, and warning
+        about a true figure teaches people to ignore warnings.
+      */}
+      {(account.type === "cash" || account.type === "mobile_wallet") &&
+      register.closingBalance.trim().startsWith("-") ? (
+        <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+          <span>
+            <span className="font-medium">This balance cannot be right.</span>{" "}
+            {ACCOUNT_TYPE_LABELS[account.type as AccountType]} cannot hold less
+            than nothing. Something is missing from the entries below — most
+            often money put into this account that was never recorded. Work down
+            the list and find the day the balance first went under; whatever came
+            in around then is what has not been entered.
+          </span>
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">

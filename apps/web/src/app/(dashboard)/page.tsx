@@ -1,6 +1,7 @@
 import {
   fiscalYearOf,
   hasPermission,
+  isBeforeRecordYear,
   monthIndexInFiscalYear,
   todayInDhaka,
 } from "@finance/shared";
@@ -106,6 +107,9 @@ function periodOf(year: number, month: number, mode: FiscalYearMode) {
  * offering it only invites an empty screen. The one exception is a year already
  * in the URL, which stays on the list so a shared link does not silently
  * resolve to a different period than the one that was sent.
+ *
+ * Nothing before the books begin either. The fiscal years come from the ledger,
+ * and one stray back-dated entry would otherwise put 2024 on the list for good.
  */
 function calendarYears(
   fiscalYears: number[],
@@ -122,6 +126,7 @@ function calendarYears(
 
   return [...years]
     .filter((year) => year <= thisYear || year === selected)
+    .filter((year) => !isBeforeRecordYear(year))
     .sort((a, b) => b - a);
 }
 
@@ -131,8 +136,17 @@ function monthParam(raw: string | string[] | undefined): number | null {
   return Number.isInteger(month) && month >= 1 && month <= 12 ? month : null;
 }
 
-/** A plausible year, or null. Guards against `?year=0` and `?year=abcd`. */
+/**
+ * A year the books actually cover, or null.
+ *
+ * Guards against `?year=0` and `?year=abcd`, and now also against a year the
+ * company did not exist in. A hand-edited or stale URL asking for 2019 used to
+ * render a dashboard of zeroes, which reads as "the company earned nothing"
+ * rather than "there is nothing here"; falling back to this year is the honest
+ * answer to an impossible question.
+ */
 function yearParam(raw: string | string[] | undefined): number | null {
   const year = Number(Array.isArray(raw) ? raw[0] : raw);
-  return Number.isInteger(year) && year >= 2000 && year <= 2200 ? year : null;
+  if (!Number.isInteger(year) || year > 2200) return null;
+  return isBeforeRecordYear(year) ? null : year;
 }

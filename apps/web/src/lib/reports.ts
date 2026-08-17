@@ -21,6 +21,16 @@ export type AvailablePeriods = {
     label: string;
     start: string;
     end: string;
+    /**
+     * Whether this period can be chosen at all.
+     *
+     * False for one that has not happened yet and one from before the books
+     * begin. The server decides it, because "has September happened" depends on
+     * the clock and a browser set to UTC is six hours behind Dhaka. The picker
+     * greys it out rather than dropping it: not offered is a different thing
+     * from not there.
+     */
+    selectable: boolean;
   }>;
 };
 

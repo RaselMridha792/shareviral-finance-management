@@ -471,8 +471,15 @@ export function StatementView({
                 disabled={loading}
                 onChange={(event) => setIndex(Number(event.target.value))}
               >
+                {/* Greyed rather than dropped — a period that has not happened
+                    still needs to be visibly there, or somebody looking for
+                    September wonders whether the app has lost it. */}
                 {periods.periods.map((entry) => (
-                  <option key={entry.index} value={entry.index}>
+                  <option
+                    key={entry.index}
+                    value={entry.index}
+                    disabled={!entry.selectable}
+                  >
                     {entry.label}
                   </option>
                 ))}

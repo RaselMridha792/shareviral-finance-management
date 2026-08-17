@@ -235,8 +235,11 @@ export function ReportsScreen({
                   value={index}
                   onChange={(e) => setIndex(Number(e.target.value))}
                 >
+                  {/* A period that has not happened, or one from before the
+                      books begin, is greyed rather than dropped: not offered is
+                      a different thing from not there. */}
                   {periods.periods.map((p) => (
-                    <option key={p.index} value={p.index}>
+                    <option key={p.index} value={p.index} disabled={!p.selectable}>
                       {p.label}
                     </option>
                   ))}

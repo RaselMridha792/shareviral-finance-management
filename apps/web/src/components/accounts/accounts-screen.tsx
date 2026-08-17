@@ -14,6 +14,7 @@ import {
   Plus,
   Smartphone,
   SquarePen,
+  TriangleAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type ComponentType } from "react";
@@ -280,6 +281,52 @@ function otherCurrency(
   return null;
 }
 
+/**
+ * A balance that cannot be true, as opposed to one that is merely bad.
+ *
+ * A tin of cash cannot hold less than nothing, and a bKash wallet cannot go
+ * below zero — the provider refuses the payment. So a negative figure on either
+ * is never a fact about the money; it is the records telling you something is
+ * missing from them. Petty cash showed −৳6,97,475 for weeks, in the same
+ * unremarkable styling as every other balance.
+ *
+ * A bank account is deliberately excluded. An overdraft is a real thing a real
+ * bank grants, and warning about a true figure teaches people to ignore the
+ * warning.
+ *
+ * The sign is read off the string rather than through `Number()`, because money
+ * is `numeric(14,2)` and this codebase does not do arithmetic on it in JS. A
+ * leading minus is all the question needs.
+ */
+function impossiblyNegative(account: AccountWithBalance): boolean {
+  const holdsPhysicalMoney =
+    account.type === "cash" || account.type === "mobile_wallet";
+  return holdsPhysicalMoney && account.balance.trim().startsWith("-");
+}
+
+/**
+ * Names the likeliest cause and stops.
+ *
+ * "Negative balance" would tell somebody what they can already see. What they
+ * cannot see is *why* — and in practice it is nearly always the same why: money
+ * was spent out of the tin and the top-up that put it there was never entered.
+ * Warning rather than negative, because nothing has been lost: the money is
+ * fine and the record of it is not.
+ */
+function ImpossibleBalanceNote() {
+  return (
+    <p className="mt-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+      <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
+      <span>
+        <span className="font-medium">This balance cannot be right.</span> Cash
+        and wallets cannot hold less than nothing, so something is missing from
+        the records — most often money put into this account that was never
+        entered. Recording the cash that came in should bring it back.
+      </span>
+    </p>
+  );
+}
+
 function AccountCard({
   account,
   usdRate,
@@ -372,6 +419,8 @@ function AccountCard({
         on{" "}
         {account.openingBalanceOn}
       </p>
+
+      {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}
 
       {canWrite ? (
         <div className="mt-4 flex gap-2 border-t border-border pt-3">

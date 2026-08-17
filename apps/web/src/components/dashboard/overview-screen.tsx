@@ -3,6 +3,8 @@
 import {
   MONTH_NAMES,
   formatMoney,
+  isSelectableMonth,
+  nearestSelectableMonth,
   todayInDhaka,
   type AccountGroup,
   type OverviewReport,
@@ -78,9 +80,21 @@ export function OverviewScreen({
   // Both go in the URL, so a chosen month survives a refresh and can be sent
   // to somebody else and open on the same figures.
   function move(next: { month?: number; year?: number }) {
+    const wantYear = next.year ?? year;
+    /**
+     * Changing the year can strand the month.
+     *
+     * On March 2027, switching the year to 2026 asks for March 2026 — before
+     * the books begin. The month select greys that option out, but it was
+     * already selected, so nothing stops the pair. Snapping to the nearest
+     * month the year actually has means a year change always lands somewhere
+     * real, rather than on a screen of zeroes that reads as a finding.
+     */
+    const wantMonth = nearestSelectableMonth(wantYear, next.month ?? month);
+
     const params = new URLSearchParams({
-      month: String(next.month ?? month),
-      year: String(next.year ?? year),
+      month: String(wantMonth),
+      year: String(wantYear),
     });
     startTransition(() => router.push(`/?${params.toString()}`));
   }
@@ -124,8 +138,19 @@ export function OverviewScreen({
             disabled={busy}
             onChange={(event) => move({ month: Number(event.target.value) })}
           >
+            {/*
+              A month that has not happened, or one from before the books
+              begin, is greyed rather than dropped. Not offered is a different
+              thing from not there: somebody looking for September needs to see
+              that September exists and is not yet available, instead of
+              wondering whether the app has lost it.
+            */}
             {MONTH_NAMES.map((name, i) => (
-              <option key={name} value={i + 1}>
+              <option
+                key={name}
+                value={i + 1}
+                disabled={!isSelectableMonth(year, i + 1)}
+              >
                 {name}
               </option>
             ))}

@@ -770,11 +770,21 @@ export class ExportsController {
    *
    * Joining salary is therefore in it. It is on the sheet, HR already sees it
    * on the profile, and an export that silently drops a column visible on
-   * screen is the kind of surprise that sends people back to Excel. It is the
-   * *only* pay figure here, and it is safe to be: it is a frozen fact about
-   * the offer, while what anybody earns now lives in `compensation_history`
-   * behind `team.compensation.read`, which HR does not hold and which this
-   * DTO cannot reach.
+   * screen is the kind of surprise that sends people back to Excel. It is a
+   * frozen fact about the offer, and safe for HR to hold.
+   *
+   * **Current salary** is beside it now, and it is a different kind of figure.
+   * The directory grew a Current salary column so it would stop showing a
+   * two-year-old number where people expected today's, and a download that does
+   * not match the screen sends somebody back to the spreadsheet. So it is here
+   * — and gated, separately, on `team.compensation.read`.
+   *
+   * The gate is a *column that does not exist*, not a column of blanks. A blank
+   * column is a promise that the figure could arrive; an absent one says this
+   * file is not about pay. And it comes from `currentCompensation()`, the same
+   * method the screen's own column calls, fetched only when the permission is
+   * held — so for HR the figures are never even loaded into this process, let
+   * alone written to a cell.
    *
    * Age is worked out here rather than read. The sheet has an Age column and
    * the app deliberately does not store one, because a stored age is wrong by
@@ -784,13 +794,26 @@ export class ExportsController {
   @RequirePermission("exports.run", "team.read")
   async teamSheet(
     @ZodQuery(listTeamQuerySchema) query: ListTeamQuery,
+    @CurrentUser() actor: AuthenticatedUser,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const page = await this.team.list({
-      ...query,
-      page: 1,
-      pageSize: ExcelService.MAX_ROWS,
-    });
+    const canSeePay = hasPermission(actor.role, "team.compensation.read");
+
+    const [page, compensation] = await Promise.all([
+      this.team.list({
+        ...query,
+        page: 1,
+        pageSize: ExcelService.MAX_ROWS,
+      }),
+      // Not fetched at all without the permission. The alternative — fetch, then
+      // decline to render — puts every salary in this request's memory and one
+      // careless edit away from a cell.
+      canSeePay ? this.team.currentCompensation() : Promise.resolve([]),
+    ]);
+
+    const payNow = new Map(
+      compensation.map((row) => [row.teamMemberId, row.grossAmount]),
+    );
 
     type Row = (typeof page.items)[number];
 
@@ -856,6 +879,26 @@ export class ExportsController {
           kind: "money",
           value: (r) => r.joiningSalary,
         },
+        /**
+         * The column is spread in or it is not there.
+         *
+         * Written this way rather than as a `value` that returns null for HR,
+         * because the two are not the same file: an empty column headed
+         * "Current salary" invites the reader to ask why it is empty and who
+         * could fill it in, and it is one edit away from being filled.
+         */
+        ...(canSeePay
+          ? [
+              {
+                header: "Current salary",
+                key: "currentSalary",
+                kind: "money" as const,
+                // Blank rather than zero for somebody with nothing on record.
+                // A zero in a salary column is a statement, and the wrong one.
+                value: (r: Row) => payNow.get(r.id) ?? null,
+              },
+            ]
+          : []),
         {
           header: "Work email",
           key: "workEmail",
@@ -1015,8 +1058,14 @@ export class ExportsController {
     await this.audit.log({
       action: "export",
       entityTable: "team_members",
-      summary: `Exported ${page.items.length} team members to Excel`,
+      summary:
+        `Exported ${page.items.length} team members to Excel` +
+        (canSeePay ? ", including what each is paid now" : ""),
       module: "exports",
+      // A file of current salaries left the building, so the row is marked as
+      // one — and only when it actually did. Marking the HR download sensitive
+      // too would bury the ones that matter among the ones that do not.
+      isSensitive: canSeePay,
     });
 
     return send(

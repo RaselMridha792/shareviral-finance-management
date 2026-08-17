@@ -14,6 +14,7 @@ import {
   Lock,
   Printer,
   RefreshCw,
+  Save,
   TriangleAlert,
   Unlock,
 } from "lucide-react";
@@ -27,7 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Select } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
+import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
@@ -63,9 +66,25 @@ export function SalarySheetScreen({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const toast = useToast();
 
   const draft = run.status === "draft";
   const refresh = () => router.refresh();
+
+  /**
+   * Commits whatever is still being typed, and says so.
+   *
+   * Blurring the focused cell fires the same per-field save the sheet already
+   * does, so this adds no second way for a figure to reach the server — one
+   * path, one audit row, no chance of the two disagreeing. What it adds is the
+   * acknowledgement, which is the part that was missing.
+   */
+  function saveDraft() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+    toast.show("Draft saved. Nothing is locked until you finalise.");
+  }
 
   /**
    * Who the last build left out, because they have no pay on record.
@@ -174,6 +193,33 @@ export function SalarySheetScreen({
                 {lines.length ? "Rebuild list" : "Build list"}
               </Button>
             ) : null}
+            {/*
+              Save draft.
+
+              The cells already save one at a time as you leave them, and that
+              stays — eighteen people's tax figures typed against one Save
+              button is eighteen people's work to lose. But a sheet that saves
+              invisibly gives somebody no way to know it did, and the honest
+              answer to "have my figures gone in" was previously to reload the
+              page and look.
+
+              So the button does the two things that are actually true: it
+              commits whatever cell is still being typed in (blurring fires the
+              same save the cell already does), and it says so. It is
+              deliberately not the thing that persists the sheet — claiming
+              that would be a lie about where the work is done.
+            */}
+            {canWrite && draft && lines.length > 0 ? (
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={busy}
+                onClick={saveDraft}
+              >
+                <Save className="size-4" />
+                Save draft
+              </Button>
+            ) : null}
             {canWrite && draft && lines.length > 0 ? (
               <Button
                 variant="primary"
@@ -187,15 +233,34 @@ export function SalarySheetScreen({
                 Finalise
               </Button>
             ) : null}
-            {canWrite && run.status === "finalized" ? (
+            {/*
+              Reopen, on a paid run as well as a finalised one.
+
+              It used to appear only on `finalized`, which left a paid run with
+              no way back and nothing on screen saying why. The server has
+              always allowed both — it asks the ledger rather than the status,
+              so a run whose entries have all been voided reopens, and one with
+              money still out is refused with a message naming how many entries
+              are live and where to void them.
+
+              Showing the button on a paid run is therefore not a shortcut past
+              the rule; it is what makes the rule visible. Pressing it either
+              works, because nothing is out, or explains itself.
+            */}
+            {canWrite &&
+            (run.status === "finalized" || run.status === "paid") ? (
               <Button
                 variant="secondary"
                 size="md"
                 disabled={busy}
-                onClick={() => act(() => payrollApi.reopen(run.id))}
+                onClick={() =>
+                  run.status === "paid"
+                    ? setReopening(true)
+                    : act(() => payrollApi.reopen(run.id), "Open for editing.")
+                }
               >
                 <Unlock className="size-4" />
-                Reopen
+                {run.status === "paid" ? "Edit" : "Reopen"}
               </Button>
             ) : null}
             {canPay && run.status === "finalized" ? (
@@ -336,6 +401,38 @@ export function SalarySheetScreen({
         accounts={accounts}
         onClose={() => setPaying(false)}
         onPaid={refresh}
+      />
+
+      {/*
+        Editing a run the money has already left on.
+
+        Not a warning bolted onto a button that would have worked anyway — the
+        server decides, and it decides by counting live ledger entries rather
+        than by reading the status. This says what the two outcomes are before
+        somebody presses it, so the refusal is not a surprise.
+      */}
+      <ConfirmDialog
+        open={reopening}
+        title="Edit a run that has already been paid?"
+        confirmLabel="Try to reopen"
+        body={
+          <>
+            This run was marked paid, so there are ledger entries against it and
+            money has left the bank. Reopening it is only possible once those
+            entries have been voided on the transaction list — the figures on a
+            salary sheet and the payment made from it are not allowed to
+            disagree.
+            <span className="mt-2 block">
+              If anything is still live, nothing will change and you will be
+              told how many entries there are.
+            </span>
+          </>
+        }
+        onConfirm={() => {
+          setReopening(false);
+          void act(() => payrollApi.reopen(run.id), "Open for editing.");
+        }}
+        onCancel={() => setReopening(false)}
       />
     </>
   );

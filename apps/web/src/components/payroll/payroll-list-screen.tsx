@@ -2,6 +2,9 @@
 
 import {
   PAYROLL_STATUS_LABELS,
+  isSelectableMonth,
+  nearestSelectableMonth,
+  recordYears,
   todayInDhaka,
   type Paginated,
 } from "@finance/shared";
@@ -161,6 +164,23 @@ function NewRunForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const currentYear = Number(today.slice(0, 4));
+  const currentMonth = Number(today.slice(5, 7));
+
+  /**
+   * Controlled, so the month list can grey out what the chosen year cannot
+   * have.
+   *
+   * These were uncontrolled `defaultValue` selects, which meant the two boxes
+   * could not see each other: picking a year could not tell the month list that
+   * half its options had just become impossible. This is the picker that
+   * *writes* — an accidental payroll run for a month that has not happened
+   * creates a period, generates lines from today's salaries, and has to be
+   * unpicked by hand.
+   */
+  const [year, setYear] = useState(currentYear);
+  const [month, setMonth] = useState(currentMonth);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -169,8 +189,8 @@ function NewRunForm({
     const data = new FormData(event.currentTarget);
     try {
       const run = await payrollApi.createRun({
-        periodYear: Number(data.get("periodYear")),
-        periodMonth: Number(data.get("periodMonth")),
+        periodYear: year,
+        periodMonth: month,
         notes: String(data.get("notes") ?? "") || undefined,
       });
       onCreated(run.id);
@@ -182,27 +202,45 @@ function NewRunForm({
     }
   }
 
-  const currentYear = Number(today.slice(0, 4));
-  const currentMonth = Number(today.slice(5, 7));
-
   return (
     <Drawer open={open} onClose={onClose} title="Start a payroll month">
       <form id="run-form" onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Month" required>
-            <Select name="periodMonth" defaultValue={currentMonth}>
-              {MONTHS.map((month, index) => (
-                <option key={month} value={index + 1}>
-                  {month}
+            <Select
+              value={month}
+              onChange={(event) => setMonth(Number(event.target.value))}
+            >
+              {MONTHS.map((name, index) => (
+                <option
+                  key={name}
+                  value={index + 1}
+                  disabled={!isSelectableMonth(year, index + 1)}
+                >
+                  {name}
                 </option>
               ))}
             </Select>
           </Field>
           <Field label="Year" required>
-            <Select name="periodYear" defaultValue={currentYear}>
-              {[currentYear - 1, currentYear, currentYear + 1].map((year) => (
-                <option key={year} value={year}>
-                  {year}
+            {/*
+              2026 onwards, growing on its own. It used to offer next year as
+              well — a payroll month that has not happened, generated from
+              today's salaries and frozen against a period nobody has worked.
+            */}
+            <Select
+              value={year}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setYear(next);
+                // Changing the year can strand the month: December in a past
+                // year is fine, December in this one is not yet.
+                setMonth((current) => nearestSelectableMonth(next, current));
+              }}
+            >
+              {recordYears().map((option) => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </Select>

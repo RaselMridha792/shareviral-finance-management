@@ -1,4 +1,12 @@
-import { isFutureMonth, isFutureYear } from "./datetime.ts";
+import {
+  isBeforeRecordYear,
+  isBeforeRecords,
+  isFutureMonth,
+  isFutureYear,
+  isSelectableMonth,
+  nearestSelectableMonth,
+  recordYears,
+} from "./datetime.ts";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -250,5 +258,54 @@ describe("months that have not happened yet", () => {
     const midnightInDhaka = new Date("2026-08-31T21:00:00Z");
     assert.equal(isFutureMonth(2026, 9, midnightInDhaka), false);
     assert.equal(isFutureMonth(2026, 10, midnightInDhaka), true);
+  });
+});
+
+describe("what a period picker may offer", () => {
+  const AUG_2026 = new Date("2026-08-17T12:00:00Z");
+
+  it("starts the year list at 2026 and grows on its own", () => {
+    assert.deepEqual(recordYears(AUG_2026), [2026]);
+    assert.deepEqual(recordYears(new Date("2028-03-01T12:00:00Z")), [
+      2028, 2027, 2026,
+    ]);
+  });
+
+  it("refuses every month before the books begin", () => {
+    assert.equal(isBeforeRecords(2026, 4), true);
+    assert.equal(isBeforeRecords(2026, 5), false);
+    assert.equal(isBeforeRecords(2025, 12), true);
+    assert.equal(isBeforeRecordYear(2025), true);
+    assert.equal(isBeforeRecordYear(2026), false);
+  });
+
+  it("offers this month, and neither end beyond it", () => {
+    assert.equal(isSelectableMonth(2026, 8, AUG_2026), true, "the month running");
+    assert.equal(isSelectableMonth(2026, 7, AUG_2026), true);
+    assert.equal(isSelectableMonth(2026, 5, AUG_2026), true, "the first month");
+    assert.equal(isSelectableMonth(2026, 4, AUG_2026), false, "before the books");
+    assert.equal(isSelectableMonth(2026, 9, AUG_2026), false, "not yet");
+  });
+
+  it("clamps a month stranded by a change of year", () => {
+    // The case this exists for: on March 2027, switching the year back to 2026
+    // asks for March 2026 — before the books begin.
+    assert.equal(nearestSelectableMonth(2026, 3, AUG_2026), 5);
+    // And forward: December of the year that is running has not happened.
+    assert.equal(nearestSelectableMonth(2026, 12, AUG_2026), 8);
+    // A month that is already fine is left alone.
+    assert.equal(nearestSelectableMonth(2026, 6, AUG_2026), 6);
+  });
+
+  it("judges the boundary in Dhaka, not in UTC", () => {
+    // 03:00 on 1 September in Dhaka is still 31 August in UTC. A picker reading
+    // UTC would call September future for the first six hours of the month —
+    // to everybody, every month.
+    const justPastMidnightInDhaka = new Date("2026-08-31T21:00:00Z");
+    assert.equal(
+      isSelectableMonth(2026, 9, justPastMidnightInDhaka),
+      true,
+      "September is open the moment it is September in Dhaka",
+    );
   });
 });
