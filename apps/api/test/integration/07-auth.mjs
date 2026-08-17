@@ -309,6 +309,32 @@ const lockedOut = await login(EMAIL, NEW_PASSWORD);
   ? ok("the lock holds even against the correct password", `"${lockedOut.body.message}"`)
   : bad("lock holds", `HTTP ${lockedOut.status} ${JSON.stringify(lockedOut.body)}`);
 
+/**
+ * How long the lock lasts, which is the half the threshold test never covered.
+ *
+ * Asserted against the stored `locked_until` rather than only against the
+ * message, because the message is rounded up with Math.ceil — it would still
+ * read "5 minutes" for a lock of four minutes and one second, and a lock that
+ * quietly shortened would go unnoticed. A window is allowed for the round trip
+ * and the clock, not for a different setting.
+ */
+{
+  const [row] = (
+    await db.query(
+      "select extract(epoch from (locked_until - now())) as seconds from users where id = $1",
+      [userId],
+    )
+  ).rows;
+  const seconds = Number(row?.seconds ?? 0);
+  seconds > 4 * 60 && seconds <= 5 * 60
+    ? ok("the lock lasts five minutes", `${Math.round(seconds)}s left on it`)
+    : bad("lock duration", `expected just under 5 minutes, got ${Math.round(seconds)}s`);
+
+  /Try again in 5 minutes/i.test(lockedOut.body?.message ?? "")
+    ? ok("and says so in words", `"${lockedOut.body.message}"`)
+    : bad("lock duration wording", `"${lockedOut.body?.message}" does not say 5 minutes`);
+}
+
 const unknown = await login("nobody@shareviral.cash", "whatever");
 const wrongPw = await login(EMAIL.replace("t11", "t11x"), "whatever");
 unknown.body?.message === wrongPw.body?.message

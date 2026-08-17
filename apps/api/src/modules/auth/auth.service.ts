@@ -18,8 +18,24 @@ import {
   type IssuedTokens,
 } from "./token.service";
 
+/**
+ * Five wrong passwords, then five minutes of nothing.
+ *
+ * The wait was fifteen minutes and is five on the owner's instruction. Five is
+ * short enough that somebody who genuinely forgot their password is not locked
+ * out of their afternoon, and long enough to make guessing pointless: at five
+ * tries per five minutes an attacker manages sixty an hour, against a bcrypt
+ * hash at cost 12. Guessing a real password at that rate takes longer than the
+ * company will exist.
+ *
+ * The counter is per account, and that is the limit of what it can do. It does
+ * nothing against one password tried across every account in turn — no single
+ * account ever reaches five — which is why the login route is *also* rate
+ * limited per IP address. The two guard different attacks and neither replaces
+ * the other.
+ */
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
+const LOCKOUT_MINUTES = 5;
 export const BCRYPT_ROUNDS = 12;
 
 @Injectable()

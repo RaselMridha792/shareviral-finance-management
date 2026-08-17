@@ -67,13 +67,41 @@ export const DEFAULT_CARDS = [
 /** More than this and they stop being a glance and start being a table. */
 export const MAX_CARDS = 8;
 
+/**
+ * A taka figure in dollars, at the rate this period's report was built with.
+ *
+ * The four original cards get their dollar line from the server, which
+ * converted them with `report.usdRate`. Everything the chooser added — total
+ * spent, money in, cash in hand, every spend heading — had no such field, so
+ * those cards rendered with no dollar line at all while the four beside them
+ * had one. On a page whose whole rule is "every taka figure carries its
+ * dollars", four cards keeping the rule and four breaking it is worse than
+ * either.
+ *
+ * The same rate as the server used, deliberately: two cards on one row
+ * translated at two different rates would not add up, and somebody would
+ * eventually try to add them.
+ *
+ * Null when no rate is on file — the dollar line is then absent everywhere,
+ * which is the honest outcome and already what the four do.
+ */
+function inUsd(value: string, rate: string | null): string | null {
+  if (!rate) return null;
+  const perDollar = Number(rate);
+  const amount = Number(value);
+  if (!Number.isFinite(perDollar) || perDollar <= 0) return null;
+  if (!Number.isFinite(amount)) return null;
+  return (amount / perDollar).toFixed(2);
+}
+
 export function buildCatalogue(
   report: OverviewReport,
   previous: OverviewReport["previous"],
   money: (value: string, options?: { hideDecimals?: boolean }) => string,
 ): CardSpec[] {
-  const { expense, totals } = report;
+  const { expense, totals, usdRate } = report;
   const usd = expense.usd;
+  const dollars = (value: string) => inUsd(value, usdRate);
 
   const fixed: CardSpec[] = [
     {
@@ -104,6 +132,7 @@ export function buildCatalogue(
       tone: "out",
       accent: "negative",
       value: totals.moneyOut,
+      usd: dollars(totals.moneyOut),
       change: percentChange(totals.moneyOut, previous?.moneyOut),
       risingIsGood: false,
       hint: `${totals.entries} entries this period`,
@@ -116,6 +145,7 @@ export function buildCatalogue(
       tone: "in",
       accent: "positive",
       value: totals.moneyIn,
+      usd: dollars(totals.moneyIn),
       change: percentChange(totals.moneyIn, previous?.moneyIn),
     },
     {
@@ -124,6 +154,7 @@ export function buildCatalogue(
       group: "Position",
       icon: Scale,
       value: totals.net,
+      usd: dollars(totals.net),
       change: percentChange(totals.net, previous?.net),
       hint: "in minus out",
     },
@@ -134,6 +165,7 @@ export function buildCatalogue(
       icon: Wallet,
       accent: "primary",
       value: totals.cashInHand,
+      usd: dollars(totals.cashInHand),
       // Said out loud because it is the one figure on a row of period figures
       // that is not one. Every account, every entry, all time.
       hint: "every account, all time",
@@ -146,6 +178,7 @@ export function buildCatalogue(
       tone: "in",
       accent: "positive",
       value: totals.fundingReceived,
+      usd: dollars(totals.fundingReceived),
       change: percentChange(totals.fundingReceived, previous?.fundingReceived),
       hint: "landed from the CEO",
     },
@@ -164,6 +197,7 @@ export function buildCatalogue(
       group: "Tax",
       icon: Banknote,
       value: totals.taxDeposited,
+      usd: dollars(totals.taxDeposited),
       hint: "by challan, this period",
     },
     {
@@ -202,6 +236,7 @@ export function buildCatalogue(
       icon: Tag,
       tone: "out" as const,
       value: line.total,
+      usd: inUsd(line.total, usdRate),
       hint: `${line.share.toFixed(0)}% of what went out`,
     }));
 

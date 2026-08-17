@@ -1,4 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
+import { BrandMark } from "@/components/layout/brand-mark";
 
 export const metadata = {
   title: "Sign in · SFM",
@@ -14,9 +15,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-            SFM
-          </span>
+          {/* The mark carries its own rounded square, so it needs no coloured
+              box behind it — the same component the signed-in rail uses. */}
+          <BrandMark className="size-9 shrink-0" />
           <div>
             <p className="text-sm font-semibold tracking-tight">
               ShareViral Finance
