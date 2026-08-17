@@ -157,7 +157,25 @@ jobs:
             # token on the server. GITHUB_TOKEN dies when this job ends, so
             # even a copy of it is worthless a minute from now — which is not
             # true of a personal access token, and the reason not to use one.
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Three attempts, because one is not enough.
+            #
+            # GHCR answered `denied: denied` to a login that had worked on
+            # every deploy before it and worked again on a re-run a minute
+            # later, with nothing about the credentials changed in between. A
+            # deploy that fails on somebody else's momentary refusal, and has
+            # to be re-run by hand, teaches people that a red run means
+            # nothing — which is expensive on the run where it means something.
+            for attempt in 1 2 3; do
+              if echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+                break
+              fi
+              if [ "$attempt" = "3" ]; then
+                echo "Could not sign in to ghcr.io after three attempts." >&2
+                exit 1
+              fi
+              echo "ghcr.io login failed, attempt ${attempt}. Retrying." >&2
+              sleep $((attempt * 5))
+            done
             # Signed out even if the deploy fails below.
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
