@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { RateCaption } from "@/components/money/rate-caption";
+
 /**
  * Every screen is a document in a padded column — except the assistant, which
  * is a room.
@@ -25,7 +27,17 @@ export function MainRegion({ children }: { children: ReactNode }) {
 
   return (
     <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">{children}</div>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        {children}
+        {/*
+          Under every screen, because every screen now shows dollar figures
+          translated from taka and a translated figure that does not say what
+          rate produced it is a number nobody can check. Here rather than on
+          each page: one rate governs the whole app, so the sentence belongs in
+          one place.
+        */}
+        <RateCaption />
+      </div>
     </main>
   );
 }

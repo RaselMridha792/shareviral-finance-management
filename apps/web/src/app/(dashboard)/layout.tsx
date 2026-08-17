@@ -44,7 +44,10 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
           before a navigation survives it. Raised inside a page it would unmount
           with the page and the confirmation would flash and vanish.
         */}
-        <RateProvider rate={rates[0]?.rate ?? null}>
+        <RateProvider
+          rate={rates[0]?.rate ?? null}
+          asOf={rates[0]?.rateDate ?? null}
+        >
           <ToastProvider>
             <div className="flex min-h-dvh">
               <Sidebar />

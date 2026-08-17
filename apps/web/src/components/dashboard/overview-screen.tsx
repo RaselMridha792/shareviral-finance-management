@@ -12,18 +12,15 @@ import {
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CalendarClock,
   CreditCard,
   History,
-  Receipt,
-  Sparkles,
-  Users,
   Wallet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { StatTile, percentChange } from "@/components/dashboard/stat-tile";
+import { ExpenseRow } from "@/components/dashboard/expense-row";
+import { StatTile } from "@/components/dashboard/stat-tile";
 import { useSettings } from "@/components/settings-provider";
 import { Select } from "@/components/ui/field";
 
@@ -59,7 +56,6 @@ export function OverviewScreen({
   const settings = useSettings();
   const [busy, startTransition] = useTransition();
 
-  const { totals, previous } = report;
   const money = (value: string, options?: { hideDecimals?: boolean }) =>
     formatMoney(value, {
       currency: report.currency,
@@ -178,55 +174,18 @@ export function OverviewScreen({
         <AccountBlock key={group.key} group={group} ended={periodHasEnded} />
       ))}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-tight">
-            Expense overview
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {report.period.label}
-          </span>
-        </div>
+      {/*
+        The four figures at the top of the screen, and which four is now a
+        choice.
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile
-            label="Salary paid"
-            value={report.expense.salaryPaid}
-            usd={report.expense.usd.salaryPaid}
-            icon={Users}
-            change={percentChange(
-              report.expense.salaryPaid,
-              previous?.salaryPaid,
-            )}
-            risingIsGood={false}
-            hint={`${report.headcount.employees} on payroll`}
-          />
-          <StatTile
-            label="AI & other tools"
-            value={report.expense.toolsAndSubscriptions}
-            usd={report.expense.usd.toolsAndSubscriptions}
-            icon={Sparkles}
-            hint="subscriptions and the card"
-          />
-          <StatTile
-            label="Tax withheld"
-            value={report.expense.taxWithheld}
-            usd={report.expense.usd.taxWithheld}
-            icon={Receipt}
-            hint={`${money(totals.taxDeposited, { hideDecimals: true })} deposited`}
-          />
-          <StatTile
-            label="Tax not yet deposited"
-            value={report.expense.taxOutstanding}
-            usd={report.expense.usd.taxOutstanding}
-            icon={CalendarClock}
-            accent={
-              Number(report.expense.taxOutstanding) > 0 ? "warning" : "muted"
-            }
-            hint="all time, not this period"
-          />
-        </div>
-      </section>
+        It was a fixed row: salary, tools, tax withheld, tax not yet deposited.
+        Three of those were right for this company and the fourth was an
+        all-time obligation sitting in a row of period figures. More to the
+        point, which figures matter is not a decision that can be made once, in
+        advance, by somebody who does not watch this company's spending — so it
+        is made here instead, by the person reading it.
+      */}
+      <ExpenseRow report={report} money={money} />
     </>
   );
 }

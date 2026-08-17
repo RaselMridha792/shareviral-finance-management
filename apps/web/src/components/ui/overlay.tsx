@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
  * Shared by both overlays below rather than written twice, because the second
  * copy is the one that forgets to put the scrollbar back.
  */
-function useDismissable(open: boolean, onClose: () => void) {
+export function useDismissable(open: boolean, onClose: () => void) {
   useEffect(() => {
     if (!open) return;
 

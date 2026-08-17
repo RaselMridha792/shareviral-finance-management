@@ -25,22 +25,40 @@ import { createContext, useContext, type ReactNode } from "react";
  * Null when no rate has ever been recorded, and then nothing is shown rather
  * than something invented.
  */
-const RateContext = createContext<string | null>(null);
+const RateContext = createContext<{ rate: string | null; asOf: string | null }>(
+  { rate: null, asOf: null },
+);
 
 export function RateProvider({
   rate,
+  asOf,
   children,
 }: {
   rate: string | null;
+  /** The date that rate was recorded for, so the caption can say "as of". */
+  asOf?: string | null;
   children: ReactNode;
 }) {
-  return <RateContext.Provider value={rate}>{children}</RateContext.Provider>;
+  return (
+    <RateContext.Provider value={{ rate, asOf: asOf ?? null }}>
+      {children}
+    </RateContext.Provider>
+  );
 }
 
 /** Taka per dollar, or null when none is on file. */
 export function useUsdRate(): number | null {
-  const raw = useContext(RateContext);
+  const { rate: raw } = useContext(RateContext);
   if (!raw) return null;
   const rate = Number(raw);
   return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+
+/** The same rate with the date it is from, for the caption. */
+export function useUsdRateContext(): { rate: number; asOf: string | null } | null {
+  const { rate: raw, asOf } = useContext(RateContext);
+  if (!raw) return null;
+  const rate = Number(raw);
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  return { rate, asOf };
 }
