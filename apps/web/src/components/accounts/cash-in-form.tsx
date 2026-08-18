@@ -1,8 +1,20 @@
 "use client";
 
-import { isValidAmount, todayInDhaka } from "@finance/shared";
-import { LoaderCircle } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  ALLOWED_MIME_TYPES,
+  formatFileSize,
+  isValidAmount,
+  MAX_FILE_BYTES,
+  todayInDhaka,
+} from "@finance/shared";
+import { LoaderCircle, Paperclip, X } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
@@ -17,7 +29,7 @@ import {
   Textarea,
 } from "@/components/ui/field";
 import { FileManager } from "@/components/files/file-manager";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { CategorySelect } from "@/components/ledger/category-select";
 import {
@@ -28,14 +40,33 @@ import {
 import { fxApi } from "@/lib/reports";
 
 /**
- * A remittance advice, typed in.
+ * The two files a receipt comes with.
  *
- * The paper the bank sends names four things about the *sender* — its bank, the
- * account the money left, the name on that account, and often a SWIFT code —
- * plus the reference the wire travelled under and the rate the day was settled
- * at. Those are what this form asks for. Which of our own accounts it landed in
- * is chosen here too, because the advice does not decide that: it is a fact
- * about our side, and a transfer can land in any of them.
+ * Stored under the kinds the ledger already uses. The owner calls the second
+ * one a transaction screenshot and that is what the button says, but the kind
+ * stays `bank_statement`: renaming it would leave every document already filed
+ * under it in a category nothing looks in.
+ */
+type DocKind = "invoice" | "bank_statement";
+
+const DOCUMENT_NAMES: Record<DocKind, string> = {
+  invoice: "invoice",
+  bank_statement: "transaction screenshot",
+};
+
+/**
+ * A receipt, in the shape of the sheet it replaces.
+ *
+ * The owner's spreadsheet has ten columns and this asks for those and no more,
+ * plus three the sheet cannot carry: the heading the ledger files it under, and
+ * a file beside each of the two reference numbers. The remittance advice's own
+ * detail — the sending bank, the account the money left, the SWIFT code — went
+ * with the rest. The sheet asks for one Sender, so one Sender is what this asks.
+ *
+ * Date is the one field here that no column of the sheet asks for. It stays
+ * because the API requires it, and because this screen is read a month at a
+ * time: an entry dated wrongly is not a wrong date, it is an entry that has
+ * vanished out of the month it belongs to.
  *
  * It writes an ordinary money-in transaction. Nothing here bypasses the ledger.
  */
@@ -82,6 +113,18 @@ export function CashInForm({
    */
   const [amountTyped, setAmountTyped] = useState(false);
 
+  /**
+   * The two files, picked while the rest is being typed and held here until
+   * there is something to hang them on.
+   *
+   * They cannot go up any earlier: an upload is addressed to a transaction id,
+   * and the transaction does not exist until this form is submitted. Holding
+   * them is what lets both be chosen in one pass instead of the entry being
+   * saved and a second screen handed over.
+   */
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+
   const money = useMoney();
   const toast = useToast();
 
@@ -103,16 +146,7 @@ export function CashInForm({
     return (usd * rate).toFixed(2);
   })();
 
-  /**
-   * Computed until somebody types in the box, then theirs.
-   *
-   * Dollars times the rate is what the transfer *should* have landed as, and
-   * offering it is right — the money starts as dollars and this is the order
-   * the advice reads. But what actually reached the account is a fact, and the
-   * bank's charges mean it is regularly a few hundred taka short of the
-   * arithmetic. Overwriting a typed figure would be the app arguing with the
-   * bank statement.
-   */
+  /** Computed until somebody types in the box, then theirs. */
   const amount = amountTyped ? typedAmount : derivedAmount;
   const realised = realisedRate(amount, usdSent);
 
@@ -133,20 +167,18 @@ export function CashInForm({
     Math.abs(Number(realised.rate) - enteredRate) >= 0.01;
 
   /**
-   * The saved entry, while its documents are still being attached.
+   * The saved entry, and the documents that did not make it up with it.
    *
-   * A file needs a row to hang on, so the invoice and the statement cannot be
-   * part of the same request as the entry itself. The alternative — hold both
-   * in the browser and upload after the save returns — has two ways to fail,
-   * and the second leaves a saved transfer and a lost invoice with nothing on
-   * screen to say which happened.
-   *
-   * So the drawer does not close on save. It becomes the attach step, with the
-   * entry already safe in the ledger. Somebody who walks away has a recorded
-   * transfer and no documents, which the table marks — rather than no transfer
-   * at all, which is the worse of the two.
+   * Only ever set when an upload failed. The ordinary ending is that the entry
+   * saves, the files follow it and the drawer closes — a second step with
+   * nothing left to do on it is a step nobody should be shown. But a save that
+   * succeeds and an upload that does not is a real outcome, and the honest
+   * answer is neither to report the whole save as failed nor to swallow it:
+   * the money is recorded, and the file is one button from the row that now
+   * exists to take it.
    */
   const [saved, setSaved] = useState<TransactionDto | null>(null);
+  const [failed, setFailed] = useState<{ kind: DocKind; reason: string }[]>([]);
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,15 +211,6 @@ export function CashInForm({
    */
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
 
-  /**
-   * The heading this files under — settled here rather than asked.
-   *
-   * A transfer from abroad is funding, every time. A select with one right
-   * answer and a dozen wrong ones only ever costs somebody a miscategorised
-   * month. The API still wants the id, so it is looked up instead of dropped:
-   * by slug, off the tree this screen already loaded, because the ids are
-   * different in every database and the slugs are not.
-   */
   /** Refetched when a heading is added from inside this form. */
   const [tree, setTree] = useState(categories);
   const [categoryId, setCategoryId] = useState(() =>
@@ -209,20 +232,66 @@ export function CashInForm({
   );
 
   /**
-   * Closing empties the two controlled boxes.
+   * Closing empties what the drawer would not.
    *
-   * Everything else in here is uncontrolled and the drawer unmounts its
-   * children, so the form comes back blank on its own. These two would not,
-   * and a reopened form pre-filled with the last transfer's figures is how the
-   * same amount gets recorded twice. The rate is deliberately not cleared —
-   * it is prefilled from the last one recorded anyway.
+   * Most of this form is uncontrolled and unmounts with the panel, so it comes
+   * back blank on its own. The figures and the two picked files would not, and
+   * a reopened form still carrying the last transfer's amount is how the same
+   * money gets recorded twice. The rate is deliberately kept — it is prefilled
+   * from the last one recorded anyway.
    */
   function close() {
     setTypedAmount("");
     setUsdSent("");
     setAmountTyped(false);
+    setInvoiceFile(null);
+    setScreenshotFile(null);
+    /**
+     * Anything attached from the recovery panel landed after the table was
+     * last refreshed, so ask for it again on the way out — otherwise the row
+     * whose invoice was just attached still reads as having nothing on it.
+     */
+    if (saved) void onSaved();
     setSaved(null);
+    setFailed([]);
     onClose();
+  }
+
+  /** The slots with a file in them, in the order they appear on the form. */
+  function chosen(): { kind: DocKind; file: File }[] {
+    return [
+      { kind: "invoice" as const, file: invoiceFile },
+      { kind: "bank_statement" as const, file: screenshotFile },
+    ].filter(
+      (slot): slot is { kind: DocKind; file: File } => slot.file !== null,
+    );
+  }
+
+  /**
+   * Send whatever was picked, now that there is a row to address it to.
+   *
+   * One at a time, and never throwing. A failed invoice must not stop the
+   * screenshot from going up, and neither of them may surface as the save
+   * having failed — by the time this runs the money is already in the ledger.
+   */
+  async function attach(transactionId: string) {
+    const failures: { kind: DocKind; reason: string }[] = [];
+
+    for (const slot of chosen()) {
+      try {
+        await uploadTransactionFile(transactionId, slot.file, slot.kind);
+      } catch (caught) {
+        failures.push({
+          kind: slot.kind,
+          reason:
+            caught instanceof ApiError
+              ? caught.message
+              : "The upload did not go through.",
+        });
+      }
+    }
+
+    return failures;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -254,11 +323,9 @@ export function CashInForm({
     try {
       const created = await ledgerApi.recordCashIn({
         txnDate: String(data.get("txnDate")),
+        // The bank's number for the transfer, as against `invoiceNo`, which is
+        // ours. The sheet calls this one the Transaction ID.
         reference: text("reference"),
-        // The company's own number for the transfer, as against `reference`,
-        // which is the bank's. It was on screen, marked required, and never
-        // sent — so every one typed since this form shipped was dropped on the
-        // way out, and the column that shows it would have read blank forever.
         invoiceNo: text("invoiceNo"),
         description: String(data.get("description")),
         accountId: String(data.get("accountId")),
@@ -269,18 +336,43 @@ export function CashInForm({
         // before: an ordinary money-in with a reference rate on it. Given, the
         // API fills the conversion columns the funding report reads.
         usdSent: plainAmount(String(data.get("usdSent") ?? "")) || undefined,
-        senderBankName: text("senderBankName"),
+        /**
+         * The sheet's Sender is an entity — "ShareViral Corp" — which is the
+         * name the sending account is held in, so `senderAccountName` and not
+         * `senderBankName`, which is where the money left from rather than who
+         * sent it. The other three sender columns are simply not sent; rows
+         * written before this form was cut down keep the values they were
+         * given.
+         */
         senderAccountName: text("senderAccountName"),
-        senderAccountNumber: text("senderAccountNumber"),
-        senderSwiftCode: text("senderSwiftCode"),
         // Money from abroad arrives one way. Offering a choice here would only
         // create a row that says a wire was paid in cash.
         paymentMethod: "bank_transfer",
         notes: text("notes"),
-        receiptUrl: undefined,
       });
-      toast.show("Transfer recorded. Attach the documents to finish.");
+
+      const picked = chosen().length;
+      const failures = await attach(created.id);
+
+      // Before either ending: the row is in the table now, and how many
+      // documents hang on it is part of what that table draws.
       await onSaved();
+
+      if (failures.length === 0) {
+        toast.show(
+          picked > 0
+            ? "Transfer recorded, documents attached."
+            : "Transfer recorded. Nothing attached to it.",
+        );
+        close();
+        return;
+      }
+
+      toast.show(
+        `Recorded as ${created.refNo}, but a document did not upload.`,
+        "error",
+      );
+      setFailed(failures);
       setSaved(created);
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -299,54 +391,31 @@ export function CashInForm({
       open={open}
       onClose={close}
       title="Add cash"
-      description="Money received from abroad, as the remittance advice states it."
+      description="The columns of the receipts sheet, and the two files behind them."
     >
       {saved ? (
         <div className="flex flex-col gap-4">
-          <p className="rounded-lg bg-positive/10 px-4 py-3 text-sm">
+          <p className="rounded-lg bg-negative/10 px-4 py-3 text-sm">
             <span className="font-medium">Recorded as</span>{" "}
-            <span className="num">{saved.refNo}</span>. It is in the ledger
-            already — attaching the documents is the last step.
+            <span className="num">{saved.refNo}</span> — the entry is saved and
+            the table already has it. What did not go up is the{" "}
+            {failed.map((slot) => DOCUMENT_NAMES[slot.kind]).join(" and the ")}:{" "}
+            {failed.map((slot) => slot.reason).join(" ")} Attaching it here
+            needs nothing typed again.
           </p>
 
-          {/*
-            Two uploaders rather than one with a kind picker. The pair is what
-            a remittance comes with, and naming them separately is the
-            difference between "documents: 2" and being able to answer "show me
-            the invoice for this transfer" three months from now.
-          */}
-          <Field
-            label="Invoice PDF"
-            required
-            hint="The bill this transfer settles"
-          >
-            <FileManager
-              owner="transaction"
-              ownerId={saved.id}
-              kinds={["invoice"]}
-              canWrite
-              emptyLabel="No invoice attached yet."
-            />
-          </Field>
-
-          <Field
-            label="Bank statement screenshot"
-            required
-            hint="The bank's own record that the money arrived"
-          >
-            <FileManager
-              owner="transaction"
-              ownerId={saved.id}
-              kinds={["bank_statement"]}
-              canWrite
-              emptyLabel="No statement attached yet."
-            />
-          </Field>
+          <FileManager
+            owner="transaction"
+            ownerId={saved.id}
+            kinds={failed.map((slot) => slot.kind)}
+            canWrite
+            emptyLabel="Nothing attached yet."
+          />
 
           <p className="text-xs text-muted-foreground">
-            Closing without attaching leaves the transfer recorded and its
-            documents missing. The transactions table marks those rows, so they
-            can be found and finished later.
+            Leaving now keeps the entry and loses only the file. The
+            transactions table marks rows with nothing attached, so this one can
+            be found and finished later.
           </p>
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -369,37 +438,79 @@ export function CashInForm({
                 defaultValue={todayInDhaka()}
               />
             </Field>
-            <Field
-              label="Landed in"
-              required
-              error={fieldErrors.accountId}
-              hint="Our account the transfer arrived in"
-            >
-              <SearchableSelect
-                name="accountId"
-                value={accountId}
-                onChange={setAccountId}
-                invalid={Boolean(fieldErrors.accountId?.length)}
-                options={accounts.map((account) => ({
-                  value: account.id,
-                  label: account.name,
-                  hint: account.bankName ?? undefined,
-                }))}
-                placeholder="Choose an account"
-                searchPlaceholder="Type to find an account…"
+
+            <Field label="Category" required error={fieldErrors.categoryId}>
+              <CategorySelect
+                name="categoryId"
+                value={categoryId}
+                onChange={setCategoryId}
+                categories={usable}
+                // Money arriving, so a heading added from here belongs on the
+                // money-in side. Getting this wrong would file a heading where
+                // this very form could never offer it again.
+                kind="in"
+                invalid={Boolean(fieldErrors.categoryId?.length)}
+                onCreated={onCategoryCreated}
               />
             </Field>
           </div>
 
-          {/* The dollar side first, because that is the side the money starts
-            on and the side nobody can reconstruct afterwards. The rate is
-            asked at the only moment anybody knows it: it is read back all
-            month, since every taka figure is shown in dollars at the rate the
-            month's funding arrived at, and a rate looked up later is the rate
-            on the day of the lookup. */}
+          {/* Two reference numbers, side by side because the paperwork has both
+            and they answer different questions: the invoice number is ours —
+            what the transfer was against — and the transaction id is the
+            bank's, what to quote when asking them about it. Each carries the
+            paper it refers to on the clip beside it. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Invoice No." required error={fieldErrors.invoiceNo}>
+              <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
+                <Input
+                  name="invoiceNo"
+                  required
+                  className="num min-w-0 flex-1"
+                  placeholder="INV-002"
+                />
+              </Attach>
+            </Field>
+
+            <Field
+              label="Transaction ID"
+              required
+              error={fieldErrors.reference}
+            >
+              <Attach
+                kind="bank_statement"
+                file={screenshotFile}
+                onPick={setScreenshotFile}
+              >
+                <Input
+                  name="reference"
+                  required
+                  className="num min-w-0 flex-1"
+                  placeholder="FT26081200412"
+                />
+              </Attach>
+            </Field>
+          </div>
+
+          <Field label="Description" required error={fieldErrors.description}>
+            <Input
+              name="description"
+              required
+              placeholder="August funding from ShareViral Corp"
+            />
+          </Field>
+
+          {/* The dollar side and the rate first, then the taka they come to.
+            The sheet reads taka-first, but this box fills itself in from the
+            two beside it, and an answer printed above its own inputs is a box
+            that appears to change on its own. The rate is asked at the only
+            moment anybody knows it: it is read back all month, since every
+            taka figure is shown in dollars at the rate the month's funding
+            arrived at, and a rate looked up later is the rate on the day of
+            the lookup. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="USD sent"
+              label="Amount (USD)"
               error={fieldErrors.usdSent}
               hint="What the sender sent. Blank for a local receipt."
             >
@@ -412,7 +523,7 @@ export function CashInForm({
             </Field>
 
             <Field
-              label="Dollar rate"
+              label="Rate"
               required
               error={fieldErrors.usdRate}
               hint={
@@ -434,7 +545,7 @@ export function CashInForm({
           </div>
 
           <Field
-            label="Amount received"
+            label="Amount (BDT)"
             required
             error={fieldErrors.amount}
             hint={
@@ -481,123 +592,40 @@ export function CashInForm({
                 </>
               ) : null}
             </p>
-          ) : usdSent.trim() ? (
-            <p className="text-xs text-muted-foreground">
-              Enter the rate and the taka figure fills itself in.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Leave <span className="font-medium">USD sent</span> blank for a
-              local receipt and type the taka directly. Filled in, this transfer
-              appears in the funding report with the rate it achieved.
-            </p>
-          )}
+          ) : null}
 
-          {/*
-          Two reference numbers, because the paperwork has two and they answer
-          different questions. The invoice is ours — what the transfer was
-          against. The transaction id is the bank's — what to quote when asking
-          them about it. One field would hold whichever was typed first.
-        */}
-          <Field label="Category" required error={fieldErrors.categoryId}>
-            <CategorySelect
-              name="categoryId"
-              value={categoryId}
-              onChange={setCategoryId}
-              categories={usable}
-              // Money arriving, so a heading added from here belongs on the
-              // money-in side. Getting this wrong would file a heading where
-              // this very form could never offer it again.
-              kind="in"
-              invalid={Boolean(fieldErrors.categoryId?.length)}
-              onCreated={onCategoryCreated}
+          {/* Our side, not the sender's. The advice does not decide which of
+            our accounts a transfer lands in, and it can land in any of them. */}
+          <Field
+            label="Received Bank Name"
+            required
+            error={fieldErrors.accountId}
+            hint="The account of ours the money landed in"
+          >
+            <SearchableSelect
+              name="accountId"
+              value={accountId}
+              onChange={setAccountId}
+              invalid={Boolean(fieldErrors.accountId?.length)}
+              options={accounts.map((account) => ({
+                value: account.id,
+                label: account.name,
+                hint: account.bankName ?? undefined,
+              }))}
+              placeholder="Choose an account"
+              searchPlaceholder="Type to find an account…"
             />
           </Field>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
-              label="Invoice no."
-              required
-              error={fieldErrors.invoiceNo}
-              hint="The invoice this transfer settles"
-            >
-              <Input
-                name="invoiceNo"
-                required
-                className="num"
-                placeholder="INV-002"
-              />
-            </Field>
-
-            <Field
-              label="Transaction id"
-              required
-              error={fieldErrors.reference}
-              hint="The bank's reference for this transfer"
-            >
-              <Input
-                name="reference"
-                required
-                className="num"
-                placeholder="FT26081200412"
-              />
-            </Field>
-          </div>
-
-          <Field label="Description" required error={fieldErrors.description}>
-            <Input
-              name="description"
-              required
-              placeholder="August funding from ShareViral Corp"
-            />
+          {/* Optional, as every sender field on this form has always been. The
+            sheet fills it in every time, but a receipt whose sender nobody
+            wrote down is still a receipt, and refusing it would lose the
+            amount along with the name. */}
+          <Field label="Sender" error={fieldErrors.senderAccountName}>
+            <Input name="senderAccountName" placeholder="ShareViral Corp" />
           </Field>
 
-          {/* The sending side, kept together because it is copied off one
-            document in one go. Every field optional: an advice without a
-            SWIFT is still a transfer that happened, and losing the whole
-            record over a line the bank did not print helps nobody. */}
-          <fieldset className="grid gap-4 rounded-lg bg-surface-muted p-4">
-            <legend className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Sent from
-            </legend>
-
-            <Field
-              label="Account number"
-              error={fieldErrors.senderAccountNumber}
-            >
-              <Input
-                name="senderAccountNumber"
-                className="num"
-                placeholder="0123456789"
-              />
-            </Field>
-
-            <Field
-              label="Account name"
-              error={fieldErrors.senderAccountName}
-              hint="The name the sending account is held in"
-            >
-              <Input name="senderAccountName" placeholder="ShareViral Corp" />
-            </Field>
-
-            <Field label="Bank name" error={fieldErrors.senderBankName}>
-              <Input name="senderBankName" placeholder="Bank of America" />
-            </Field>
-
-            <Field
-              label="SWIFT code"
-              error={fieldErrors.senderSwiftCode}
-              hint="Optional — leave it blank if the advice does not say"
-            >
-              <Input
-                name="senderSwiftCode"
-                className="num uppercase"
-                placeholder="BOFAUS3N"
-              />
-            </Field>
-          </fieldset>
-
-          <Field label="Notes" error={fieldErrors.notes}>
+          <Field label="Note" error={fieldErrors.notes}>
             <Textarea name="notes" />
           </Field>
 
@@ -612,12 +640,12 @@ export function CashInForm({
         </form>
       )}
 
-      {/* The footer belongs to the form step only — the attach step carries
+      {/* The footer belongs to the form step only — the recovery panel carries
           its own Done, and a Cancel beside an entry that is already saved
           would read as if it could undo it. */}
       {saved ? null : (
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={close}>
             Cancel
           </Button>
           <Button
@@ -632,6 +660,108 @@ export function CashInForm({
         </div>
       )}
     </Drawer>
+  );
+}
+
+/**
+ * A text box with the paper it refers to clipped beside it.
+ *
+ * Both numbers on this form point at a document, so the document is asked for
+ * in the same breath as the number rather than on a step afterwards. Nothing
+ * is uploaded from here — the file is handed up and held until the entry has
+ * an id for it to hang on.
+ */
+function Attach({
+  kind,
+  file,
+  onPick,
+  children,
+}: {
+  kind: DocKind;
+  file: File | null;
+  onPick: (file: File | null) => void;
+  children: ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [rejected, setRejected] = useState<string | null>(null);
+
+  function choose(picked: File | undefined) {
+    // Emptied straight away so picking the same file again — after clearing
+    // it, or after it was refused — still counts as a change.
+    if (inputRef.current) inputRef.current.value = "";
+    if (!picked) return;
+
+    /**
+     * Refused here as well as by the server, which reads the bytes and has the
+     * final say. This exists so the answer arrives while the file is being
+     * chosen, rather than after the entry is saved — which is the one moment
+     * the message is awkward to act on.
+     */
+    const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
+    if (picked.type && !allowed.includes(picked.type)) {
+      setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
+      return;
+    }
+    if (picked.size > MAX_FILE_BYTES[kind]) {
+      setRejected(
+        `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
+      );
+      return;
+    }
+
+    setRejected(null);
+    onPick(picked);
+  }
+
+  return (
+    <span className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex items-center gap-2">
+        {children}
+
+        <input
+          ref={inputRef}
+          type="file"
+          className="sr-only"
+          // Every camera roll and every scanner, as asked. The server keeps a
+          // narrower list than this and says so if it has to; `choose` says it
+          // first, in the moment.
+          accept="image/*,application/pdf"
+          onChange={(event) => choose(event.target.files?.[0])}
+        />
+
+        {/* A button rather than the file input itself: a bare one renders as a
+          browser-styled control too wide to sit beside a text box, and the
+          label that would normally dress it cannot nest inside the label
+          `Field` already is. */}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="size-9 shrink-0 px-0"
+          title={`Attach the ${DOCUMENT_NAMES[kind]}`}
+          aria-label={`Attach the ${DOCUMENT_NAMES[kind]}`}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Paperclip className="size-4" />
+        </Button>
+      </span>
+
+      {rejected ? (
+        <span className="text-xs text-negative">{rejected}</span>
+      ) : file ? (
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate">{file.name}</span>
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            aria-label={`Remove ${file.name}`}
+            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        </span>
+      ) : null}
+    </span>
   );
 }
 

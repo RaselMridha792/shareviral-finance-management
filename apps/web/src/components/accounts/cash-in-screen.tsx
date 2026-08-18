@@ -7,6 +7,7 @@ import {
   todayInDhaka,
 } from "@finance/shared";
 import { Landmark, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -322,19 +323,19 @@ export function CashInScreen({
                       identity that renumbers itself when a row is voided would
                       be one people quote at each other and get wrong. */}
                   <Th className="text-right">SL</Th>
-                  <Th>Date</Th>
-                  <Th>Invoice no</Th>
-                  <Th>Transaction id</Th>
+                  <Th>Invoice No.</Th>
                   <Th>Description</Th>
-                  <Th>Sent from</Th>
-                  {/* The other end of the transfer in the column before it, so
-                      it sits next to it. Named "our" because both columns are
-                      a bank account and nothing but the wording says which
-                      side of the wire each one is. */}
-                  <Th>Our account</Th>
-                  <Th className="text-right">Amount, BDT</Th>
-                  <Th className="text-right">Amount, USD</Th>
+                  <Th className="text-right">Amount (BDT)</Th>
+                  <Th className="text-right">Amount (USD)</Th>
                   <Th className="text-right">Rate</Th>
+                  <Th>Transaction ID</Th>
+                  {/* Ours — the account the money landed in. The column after
+                      it is the other end of the wire, and both of them are a
+                      bank account: only the two headings say which side each
+                      one is. */}
+                  <Th>Received Bank Name</Th>
+                  <Th>Sender</Th>
+                  <Th>Note</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -351,39 +352,11 @@ export function CashInScreen({
                       <td className="num px-4 py-2.5 text-right text-muted-foreground">
                         {index + 1}
                       </td>
-                      <td className="num px-4 py-2.5 whitespace-nowrap">
-                        {row.txnDate}
-                      </td>
                       <DocumentCell row={row} onOpen={setDocumentsFor}>
                         {row.invoiceNo}
                       </DocumentCell>
-                      <DocumentCell row={row} onOpen={setDocumentsFor}>
-                        {row.reference}
-                      </DocumentCell>
-                      <td className="max-w-[22rem] px-4 py-2.5">
+                      <td className="cell-prose px-4 py-2.5">
                         <span className="font-medium">{row.description}</span>
-                        {/* The optional note, on the row rather than behind a
-                            click. It is the only one of the thirteen fields
-                            that is not required, and a note nobody sees is a
-                            note nobody writes. Clamped, with the whole of it
-                            on hover, because one long note must not set the
-                            height of every row above it. */}
-                        {row.notes ? (
-                          <span
-                            title={row.notes}
-                            className="mt-0.5 block truncate text-xs text-muted-foreground italic"
-                          >
-                            {row.notes}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Sender row={row} />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {row.accountName ?? (
-                          <span className="text-muted-foreground">—</span>
-                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Amount
@@ -416,6 +389,47 @@ export function CashInScreen({
                         {rateOf(row)
                           ? `৳${trimRate(rateOf(row) as string)}`
                           : "—"}
+                      </td>
+                      <DocumentCell row={row} onOpen={setDocumentsFor}>
+                        {row.reference}
+                      </DocumentCell>
+                      <td className="px-4 py-2.5">
+                        {/* Opens the account itself — its bank, branch, number
+                            and what it holds now — rather than this screen's
+                            own list. "Which account did that land in, and what
+                            is in it" is one question, and it was two pages. */}
+                        {row.accountName ? (
+                          <Link
+                            href={`/accounts/${row.accountId}`}
+                            className="transition hover:text-primary hover:underline"
+                          >
+                            {row.accountName}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {/* One name, the way the sheet has it. The advice also
+                            gives the sending bank, the account number and a
+                            SWIFT code; those stay on the entry rather than
+                            crowd a column the sheet writes as one sender. */}
+                        {row.senderAccountName ?? row.senderBankName ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="max-w-[18rem] px-4 py-2.5 text-muted-foreground">
+                        {/* The only one of the thirteen fields that is not
+                            required, and a note nobody sees is a note nobody
+                            writes — so it is on the row, cut to the column
+                            with the whole of it on hover. */}
+                        {row.notes ? (
+                          <span title={row.notes} className="block truncate">
+                            {row.notes}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   );
@@ -453,7 +467,6 @@ export function CashInScreen({
   );
 }
 
-/** The sending bank and the account it left, when the advice named them. */
 /**
  * A number on the sheet that opens what it refers to.
  *
@@ -497,32 +510,6 @@ function DocumentCell({
         {children}
       </button>
     </td>
-  );
-}
-
-function Sender({ row }: { row: TransactionDto }) {
-  const account = [row.senderAccountName, row.senderAccountNumber]
-    .filter(Boolean)
-    .join(" · ");
-
-  if (!row.senderBankName && !account) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-
-  return (
-    <span className="flex flex-col">
-      <span>{row.senderBankName ?? "—"}</span>
-      {account ? (
-        <span className="num mt-0.5 block text-xs text-muted-foreground">
-          {account}
-        </span>
-      ) : null}
-      {row.senderSwiftCode ? (
-        <span className="num mt-0.5 block text-xs text-muted-foreground">
-          SWIFT {row.senderSwiftCode}
-        </span>
-      ) : null}
-    </span>
   );
 }
 
