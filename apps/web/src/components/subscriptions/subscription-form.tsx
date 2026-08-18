@@ -3,8 +3,6 @@
 import {
   BILLING_CYCLES,
   BILLING_CYCLE_LABELS,
-  PAYMENT_METHODS,
-  PAYMENT_METHOD_LABELS,
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_CATEGORY_LABELS,
   SUBSCRIPTION_STATUSES,
@@ -12,6 +10,7 @@ import {
   costsAgree,
   deriveCost,
   type BillingCycle,
+  type AccountType,
   type PaymentMethod,
   type SubscriptionCategory,
   type SubscriptionStatus,
@@ -34,6 +33,34 @@ import { ApiError } from "@/lib/api-client";
 import type { AccountDto, VendorDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
+
+/**
+ * The payment method the chosen account implies.
+ *
+ * The owner merged "Paid by" and "Card or account" — they meant the same thing
+ * to them, and the account is the one that carries a name. The enum column did
+ * not go away with the control, so it is worked out here instead of being left
+ * at a default that would be wrong for every bank account.
+ *
+ * Falls back to what was already stored when nothing is picked, so editing a
+ * plan's name cannot quietly rewrite how it is paid.
+ */
+function methodOfAccount(
+  accounts: AccountDto[],
+  accountId: string,
+  existing?: SubscriptionDto,
+): PaymentMethod {
+  const account = accounts.find((entry) => entry.id === accountId);
+  if (!account) return (existing?.paymentMethod as PaymentMethod) ?? "card";
+
+  const byType: Record<AccountType, PaymentMethod> = {
+    bank: "bank_transfer",
+    cash: "cash",
+    mobile_wallet: "mobile_banking",
+    card: "card",
+  };
+  return byType[account.type];
+}
 
 type Seat = {
   teamMemberId: string;
@@ -92,13 +119,7 @@ export function SubscriptionForm({
   const [nextRenewalOn, setNextRenewalOn] = useState(
     subscription?.nextRenewalOn ?? "",
   );
-  const [renewalNote, setRenewalNote] = useState(
-    subscription?.renewalNote ?? "",
-  );
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
-    (subscription?.paymentMethod as PaymentMethod) ?? "card",
-  );
   const [accountId, setAccountId] = useState(subscription?.accountId ?? "");
   const [boughtFor, setBoughtFor] = useState(subscription?.boughtFor ?? "");
   const [loginEmail, setLoginEmail] = useState(subscription?.loginEmail ?? "");
@@ -149,6 +170,30 @@ export function SubscriptionForm({
 
   const chosen = new Set(seats.map((seat) => seat.teamMemberId));
 
+  /**
+   * The active team, plus anybody already holding a seat on this plan.
+   *
+   * The page fetches active members only, which is right for adding somebody.
+   * But a plan seated by a person who has since left is exactly the plan
+   * somebody opens — to take them off it — and without them in the options the
+   * row rendered blank, as though the seat were empty. Then saving would have
+   * silently dropped them.
+   */
+  const pickable = [
+    ...members.map((member) => ({
+      value: member.id,
+      label: member.fullName,
+    })),
+    ...(subscription?.users ?? [])
+      .filter(
+        (user) => !members.some((member) => member.id === user.teamMemberId),
+      )
+      .map((user) => ({
+        value: user.teamMemberId,
+        label: `${user.fullName} (no longer active)`,
+      })),
+  ];
+
   async function save() {
     setPending(true);
     setError(null);
@@ -165,8 +210,18 @@ export function SubscriptionForm({
         billingCycle,
         startDate,
         nextRenewalOn,
-        renewalNote,
-        paymentMethod,
+        // No longer asked for — the account picker is the only "paid by" the
+        // form shows. It still has to be sent: the field's `.default("card")`
+        // lands in the schema's output type, which is what the client is typed
+        // against, so leaving it out is a compile error rather than a default.
+        // Sending back what is stored keeps editing a bank-transfer plan from
+        // quietly turning it into a card one.
+        // There is one control now, and it names an account. The column still
+        // exists, so it is derived from what that account IS rather than
+        // stamped "card" on everything — a bank account paying a plan is a
+        // transfer, and anything grouping by this would otherwise be wrong for
+        // every row created from here on.
+        paymentMethod: methodOfAccount(accounts, accountId, subscription),
         accountId,
         boughtFor,
         loginEmail,
@@ -353,7 +408,7 @@ export function SubscriptionForm({
           <Field
             label="Renews on"
             error={fieldErrors.nextRenewalOn}
-            hint="Leave empty when there is no date"
+            hint="Leave empty when there is no date — say why in Notes"
           >
             <DateInput
               value={nextRenewalOn}
@@ -361,34 +416,7 @@ export function SubscriptionForm({
             />
           </Field>
 
-          <Field
-            label="Instead of a date"
-            error={fieldErrors.renewalNote}
-            hint='For rows like "Credit base"'
-          >
-            <Input
-              value={renewalNote}
-              maxLength={120}
-              onChange={(e) => setRenewalNote(e.target.value)}
-            />
-          </Field>
-
-          <Field label="Paid by" error={fieldErrors.paymentMethod}>
-            <Select
-              value={paymentMethod}
-              onChange={(e) =>
-                setPaymentMethod(e.target.value as PaymentMethod)
-              }
-            >
-              {PAYMENT_METHODS.map((id) => (
-                <option key={id} value={id}>
-                  {PAYMENT_METHOD_LABELS[id]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="Card or account" error={fieldErrors.accountId}>
+          <Field label="Payment Method" error={fieldErrors.accountId}>
             <SearchableSelect
               value={accountId}
               onChange={setAccountId}
@@ -401,9 +429,9 @@ export function SubscriptionForm({
           </Field>
 
           <Field
-            label="Bought for"
+            label="User Department"
             error={fieldErrors.boughtFor}
-            hint="As you would say it — not a department"
+            hint="The team it was bought for, as you would say it"
           >
             <Input
               value={boughtFor}
@@ -414,7 +442,7 @@ export function SubscriptionForm({
           </Field>
 
           <Field
-            label="Login it sits under"
+            label="Login accounts"
             error={fieldErrors.loginEmail}
             hint="Who pays and who uses are different questions"
           >
@@ -429,7 +457,7 @@ export function SubscriptionForm({
         {/* ---------------------------------------------------------------- */}
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">Who is on it</h3>
+            <h3 className="text-sm font-semibold">User name</h3>
             <Button
               variant="ghost"
               size="sm"
@@ -451,6 +479,16 @@ export function SubscriptionForm({
 
           {fieldErrors.users ? (
             <p className="text-xs text-negative">{fieldErrors.users[0]}</p>
+          ) : null}
+
+          {/* Said out loud rather than left to a picker that opens onto
+              nothing: these names are the active team, so an empty one means
+              the Team screen is empty, not that the form is broken. */}
+          {members.length === 0 ? (
+            <p className="text-xs text-warning">
+              There is nobody to pick. The names here are the active team —
+              somebody has to be added on the Team screen first.
+            </p>
           ) : null}
 
           {seats.length === 0 ? (
@@ -477,19 +515,15 @@ export function SubscriptionForm({
                         )
                       }
                       placeholder="Pick somebody"
-                      options={members
+                      options={pickable
                         // Somebody already on the plan is not offered again —
                         // the API refuses a duplicate, and finding that out on
                         // save is a worse way to learn it.
                         .filter(
-                          (member) =>
-                            member.id === seat.teamMemberId ||
-                            !chosen.has(member.id),
-                        )
-                        .map((member) => ({
-                          value: member.id,
-                          label: member.fullName,
-                        }))}
+                          (person) =>
+                            person.value === seat.teamMemberId ||
+                            !chosen.has(person.value),
+                        )}
                     />
                   </Field>
 
