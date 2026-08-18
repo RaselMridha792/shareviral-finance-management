@@ -423,3 +423,68 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Subscriptions — the paid tools, seat by seat                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The ten headings the tools sheet uses, kept exactly as they are there.
+ *
+ * Named SUBSCRIPTION_* in full rather than CATEGORIES, because
+ * `packages/shared` is a flat `export *` barrel and every exported name shares
+ * one namespace — `CATEGORY_KINDS` already means something else in it.
+ */
+export const SUBSCRIPTION_CATEGORIES = [
+  "ai_tool",
+  "development",
+  "marketing",
+  "design",
+  "hr",
+  "productivity",
+  "management",
+  "esim",
+  "server_support",
+  "finance",
+] as const;
+export const subscriptionCategorySchema = z.enum(SUBSCRIPTION_CATEGORIES);
+export type SubscriptionCategory = z.infer<typeof subscriptionCategorySchema>;
+
+export const SUBSCRIPTION_CATEGORY_LABELS: Record<
+  SubscriptionCategory,
+  string
+> = {
+  ai_tool: "AI Tool",
+  development: "Development",
+  marketing: "Marketing",
+  design: "Design",
+  hr: "HR",
+  productivity: "Productivity",
+  management: "Management",
+  esim: "eSIM",
+  server_support: "Server Support",
+  finance: "Finance",
+};
+
+/**
+ * Four states, and the last two are not the same thing.
+ *
+ * `canceled` is a decision — somebody stopped paying for it. `expired` is what
+ * happened on its own when nobody renewed. A sheet can afford to blur them; a
+ * screen that asks "what did we cancel this quarter" cannot.
+ */
+export const SUBSCRIPTION_STATUSES = [
+  "active",
+  "paused",
+  "canceled",
+  "expired",
+] as const;
+export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES);
+export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
+
+export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  active: "Active",
+  paused: "Paused",
+  canceled: "Canceled",
+  expired: "Expired",
+};

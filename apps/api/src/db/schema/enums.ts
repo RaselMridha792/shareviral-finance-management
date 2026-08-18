@@ -1,4 +1,8 @@
-import { ROLES } from "@finance/shared";
+import {
+  ROLES,
+  SUBSCRIPTION_CATEGORIES,
+  SUBSCRIPTION_STATUSES,
+} from "@finance/shared";
 import { pgEnum } from "drizzle-orm/pg-core";
 
 /**
@@ -84,6 +88,23 @@ export const txnOriginEnum = pgEnum("txn_origin", [
   "tax_payment",
   "system",
 ]);
+
+/**
+ * Both derived from the shared arrays rather than retyped.
+ *
+ * `vendorTypeEnum` above is the counter-example: VENDOR_TYPES in
+ * packages/shared and the pgEnum here are two hand-maintained copies of one
+ * list, and nothing checks that they still agree. `userRoleEnum = pgEnum(...,
+ * ROLES)` is the pattern worth following, and this follows it.
+ */
+export const subscriptionCategoryEnum = pgEnum(
+  "subscription_category",
+  SUBSCRIPTION_CATEGORIES,
+);
+export const subscriptionStatusEnum = pgEnum(
+  "subscription_status",
+  SUBSCRIPTION_STATUSES,
+);
 
 export const fxSourceEnum = pgEnum("fx_source", ["manual", "api"]);
 
