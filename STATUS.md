@@ -1138,9 +1138,11 @@ Deliberately almost none: a start date and an end date. Nothing else.
 And the dollar/taka switcher comes off, matching every other screen — taka
 large, dollars underneath it, always both, never a toggle.
 
-### One thing to ask before building
+### The dollar figure — answered
 
-*"table er khetre usd and bdt er jonne only new row add hote pare"* — for USD
-and BDT only a new row may be added. That reads two ways: a second **column**
-for the dollar figure, or the dollar figure on a second **line inside the same
-cell**, which is what every other table on this app does. Ask rather than guess.
+Asked, because the instruction read two ways. The owner: *"no need for a
+separate column for the dollar, it can go small underneath."*
+
+So the same treatment as everywhere else: taka on the line, dollars small
+beneath it, in the same cell. Six columns, not seven. `Amount` already renders
+exactly that and is what the other tables use — no new component.
