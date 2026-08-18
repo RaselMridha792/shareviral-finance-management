@@ -12,6 +12,7 @@ import { CompanyPanel } from "./company-panel";
 import { FxPanel } from "./fx-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
+import { SecurityPanel } from "./security-panel";
 import { UsersPanel } from "./users-panel";
 import { useCan } from "@/components/auth/session-provider";
 
@@ -19,6 +20,10 @@ const TABS = [
   { id: "company", label: "Company & formatting" },
   { id: "categories", label: "Categories" },
   { id: "fx", label: "Exchange rate" },
+  // No permission. This is your own account's second factor, not an
+  // administrator's view of anybody else's — there is nothing here that could
+  // be gated, because everyone has exactly one account to look after.
+  { id: "security", label: "Your sign-in" },
   // Creating an account is the ability to grant any permission in the app, so
   // this tab is Super Admin only — and the API refuses everyone else anyway.
   { id: "users", label: "People who can sign in", permission: "users.manage" },
@@ -92,6 +97,7 @@ export function SettingsScreen({
         <CategoriesPanel initialTree={initialTree} />
       ) : null}
       {tab === "fx" ? <FxPanel settings={initialSettings} /> : null}
+      {tab === "security" ? <SecurityPanel /> : null}
       {tab === "users" && canManageUsers ? (
         <UsersPanel initialUsers={initialUsers} />
       ) : null}
