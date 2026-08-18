@@ -15,11 +15,13 @@ import {
   confirmTwoFactorSchema,
   loginSchema,
   twoFactorPasswordAndCodeSchema,
+  verifySecondStepSchema,
   type BeginTwoFactorSetupInput,
   type ChangePasswordInput,
   type ConfirmTwoFactorInput,
   type LoginInput,
   type TwoFactorPasswordAndCodeInput,
+  type VerifySecondStepInput,
 } from "./auth.schemas";
 import type { IssuedTokens } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
@@ -60,7 +62,38 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { user, tokens } = await this.auth.login(body, clientOf(request));
+    const result = await this.auth.login(body, clientOf(request));
+
+    // No session on this branch, and nothing to set one from - the union has
+    // no `tokens` here, so a cookie cannot be written by accident.
+    if ("twoFactorRequired" in result) {
+      return { twoFactorRequired: true as const, challenge: result.challenge };
+    }
+
+    setAuthCookies(response, result.tokens);
+    return this.auth.describe(result.user);
+  }
+
+  /**
+   * The code, exchanged for the session the password alone no longer buys.
+   *
+   * Public, because the caller has no session yet by definition. What stands in
+   * for one is the challenge, which is worthless without a code, and wrong
+   * codes count against the account's own lockout.
+   */
+  @Public()
+  @Post("2fa/verify")
+  @HttpCode(200)
+  async verifySecondStep(
+    @ZodBody(verifySecondStepSchema) body: VerifySecondStepInput,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { user, tokens } = await this.auth.verifySecondStep(
+      body.challenge,
+      body.code,
+      clientOf(request),
+    );
     setAuthCookies(response, tokens);
     return this.auth.describe(user);
   }

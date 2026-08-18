@@ -81,6 +81,25 @@ async function toError(response: Response): Promise<ApiError> {
  * Pass `allow401` when the caller wants to decide for itself; `getSession`
  * does, since its whole job is to answer "is anyone signed in".
  */
+/**
+ * Where a 401 is the answer, not a stale session.
+ *
+ * Two things above key off this, and both would misbehave on the sign-in
+ * endpoints:
+ *
+ *  - The retry. A 401 normally means the access token aged out, so the client
+ *    refreshes and sends the request again. Replaying `2fa/verify` would submit
+ *    the same wrong code a second time, and wrong codes are counted - five and
+ *    the account is locked. One typo would spend two of the five.
+ *  - The redirect. Bouncing to /login on a 401 is right for an expired session
+ *    and useless here: it throws away the message explaining what to fix, on
+ *    the very screen that exists to say it.
+ *
+ * `/auth/refresh` is in the set for its own reason - refreshing after a failed
+ * refresh is a loop.
+ */
+const SIGNING_IN = new Set(["/auth/login", "/auth/2fa/verify", "/auth/refresh"]);
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & { allow401?: boolean } = {},
@@ -95,14 +114,14 @@ export async function apiFetch<T>(
   // proxy renews the token before the render starts instead.
   const inBrowser = typeof window !== "undefined";
 
-  if (inBrowser && response.status === 401 && path !== "/auth/refresh") {
+  if (inBrowser && response.status === 401 && !SIGNING_IN.has(path)) {
     const refreshed = await request("/auth/refresh", { method: "POST" });
     if (refreshed.ok) {
       response = await request(path, rest);
     }
   }
 
-  if (response.status === 401 && !allow401 && path !== "/auth/login") {
+  if (response.status === 401 && !allow401 && !SIGNING_IN.has(path)) {
     await goToLogin();
   }
 
@@ -142,10 +161,34 @@ export type SessionUser = {
   permissions: Permission[];
 };
 
+/**
+ * A password now buys one of two things, so the caller has to look at which.
+ *
+ * `twoFactorRequired` comes back for accounts that have enrolled, and there is
+ * no session behind it - no cookie has been set. The challenge is handed to
+ * `verifySecondStep` along with the code.
+ */
+export type LoginOutcome =
+  | { twoFactorRequired?: undefined } & SessionUser
+  | { twoFactorRequired: true; challenge: string };
+
 export function login(email: string, password: string) {
-  return apiFetch<SessionUser>("/auth/login", {
+  return apiFetch<LoginOutcome>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+}
+
+/**
+ * The challenge is held in memory by the page and posted back here, never
+ * stored. It is a credential with five minutes to live; putting it in
+ * localStorage would leave it lying around for a script to find, and in a
+ * cookie the browser would attach it to requests nobody asked it to.
+ */
+export function verifySecondStep(challenge: string, code: string) {
+  return apiFetch<SessionUser>("/auth/2fa/verify", {
+    method: "POST",
+    body: JSON.stringify({ challenge, code }),
   });
 }
 

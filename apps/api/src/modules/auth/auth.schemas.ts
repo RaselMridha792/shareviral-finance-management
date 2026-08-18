@@ -60,3 +60,17 @@ export const twoFactorPasswordAndCodeSchema = z.strictObject({
 export type TwoFactorPasswordAndCodeInput = z.infer<
   typeof twoFactorPasswordAndCodeSchema
 >;
+
+/**
+ * The second step at sign-in.
+ *
+ * The challenge travels in the body rather than a cookie, and deliberately: a
+ * cookie would be attached by the browser to any request to this origin, which
+ * is the shape of a CSRF. This one has to be handed back by the page that was
+ * given it.
+ */
+export const verifySecondStepSchema = z.strictObject({
+  challenge: z.string().min(1),
+  code: twoFactorCodeSchema,
+});
+export type VerifySecondStepInput = z.infer<typeof verifySecondStepSchema>;

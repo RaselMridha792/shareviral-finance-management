@@ -12,11 +12,26 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import { DbService } from "../../db/db.service";
 import { users } from "../../db/schema";
 import type { ChangePasswordInput, LoginInput } from "./auth.schemas";
+import { ChallengeService } from "./challenge.service";
 import {
   TokenService,
   type ClientInfo,
   type IssuedTokens,
 } from "./token.service";
+import { TwoFactorService } from "./two-factor.service";
+
+/**
+ * A password can now end in one of two places, so the caller has to look.
+ *
+ * Modelled as a union rather than a nullable `tokens` field on purpose: the
+ * controller cannot reach for cookies on the challenge branch, because on that
+ * branch there is nothing named `tokens` to reach for. The compiler enforces
+ * what a comment would only ask for, and setting a session cookie beside
+ * "please enter your code" is precisely the bug worth making impossible.
+ */
+export type LoginResult =
+  | { user: AuthenticatedUser; tokens: IssuedTokens }
+  | { twoFactorRequired: true; challenge: string };
 
 /**
  * Five wrong passwords, then five minutes of nothing.
@@ -44,12 +59,11 @@ export class AuthService {
     private readonly db: DbService,
     private readonly tokens: TokenService,
     private readonly audit: AuditService,
+    private readonly twoFactor: TwoFactorService,
+    private readonly challenges: ChallengeService,
   ) {}
 
-  async login(
-    input: LoginInput,
-    client: ClientInfo,
-  ): Promise<{ user: AuthenticatedUser; tokens: IssuedTokens }> {
+  async login(input: LoginInput, client: ClientInfo): Promise<LoginResult> {
     const [record] = await this.db.client
       .select()
       .from(users)
@@ -112,6 +126,36 @@ export class AuthService {
       .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() })
       .where(eq(users.id, record.id));
 
+    /**
+     * The password was right. Whether that is enough depends on this account.
+     *
+     * Per-account, not a global switch, and that is the whole reason this
+     * could ship without a flag day: somebody who has not enrolled signs in
+     * exactly as before. Nobody is locked out by the arrival of the check —
+     * only by their own enrolment, which they did themselves and hold ten
+     * recovery codes for.
+     *
+     * No tokens are issued here and no cookies are set. What comes back is a
+     * challenge, which is not a session: different signing key, and the guard
+     * refuses it. See challenge.service.ts.
+     */
+    if (await this.twoFactor.isEnrolled(record.id)) {
+      await this.audit.log({
+        action: "login",
+        entityTable: "users",
+        entityId: record.id,
+        summary: `${record.fullName} passed the password, second step pending`,
+        module: "auth",
+        actorUserId: record.id,
+        actorRole: record.role,
+      });
+
+      return {
+        twoFactorRequired: true as const,
+        challenge: await this.challenges.issue(record.id),
+      };
+    }
+
     const issued = await this.tokens.issue(record, client);
 
     await this.audit.log({
@@ -119,6 +163,65 @@ export class AuthService {
       entityTable: "users",
       entityId: record.id,
       summary: `${record.fullName} signed in`,
+      module: "auth",
+      actorUserId: record.id,
+      actorRole: record.role,
+    });
+
+    return { user: toAuthUser(record), tokens: issued };
+  }
+
+  /**
+   * The second step: a code, and then the session.
+   *
+   * The password is not asked for again — the challenge is the proof it was
+   * given, and it expires in five minutes. Wrong codes are counted against the
+   * account's own lockout, so this endpoint being reachable without a password
+   * does not turn six digits into something worth grinding at.
+   */
+  async verifySecondStep(
+    challenge: string,
+    code: string,
+    client: ClientInfo,
+  ): Promise<{ user: AuthenticatedUser; tokens: IssuedTokens }> {
+    const userId = await this.challenges.open(challenge);
+
+    const [record] = await this.db.client
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    // Everything that could have changed in the five minutes since the
+    // password was accepted is checked again, because a challenge is not a
+    // decision — it is only evidence that the password was right.
+    if (!record || record.deletedAt || record.status !== "active") {
+      throw new UnauthorizedException("This account is not active");
+    }
+
+    const check = await this.twoFactor.checkCode(userId, code, client.ip);
+    if (!check.ok) {
+      await this.audit.log({
+        action: "login_failed",
+        entityTable: "users",
+        entityId: record.id,
+        summary: `Failed second step for ${record.email}`,
+        module: "auth",
+        actorUserId: record.id,
+        actorRole: record.role,
+      });
+      throw new UnauthorizedException(check.message);
+    }
+
+    const issued = await this.tokens.issue(record, client);
+
+    await this.audit.log({
+      action: "login",
+      entityTable: "users",
+      entityId: record.id,
+      summary: check.usedRecoveryCode
+        ? `${record.fullName} signed in with a RECOVERY CODE`
+        : `${record.fullName} signed in, with a code`,
       module: "auth",
       actorUserId: record.id,
       actorRole: record.role,

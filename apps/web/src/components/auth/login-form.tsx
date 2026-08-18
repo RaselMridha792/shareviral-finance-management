@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ApiError, login } from "@/lib/api-client";
+import { ApiError, login, verifySecondStep } from "@/lib/api-client";
 
 const inputClass =
   "h-10 w-full rounded-lg border border-border bg-surface-muted px-3 text-sm outline-none transition focus-visible:border-primary focus-visible:bg-surface";
@@ -14,6 +14,16 @@ const inputClass =
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  /**
+   * Held here and nowhere else.
+   *
+   * It is a credential with five minutes to live. localStorage would leave it
+   * lying about for any script to pick up, and a cookie would have the browser
+   * attaching it to requests nobody asked for. React state dies with the page,
+   * which for something this short-lived is the correct storage.
+   */
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   /** Typing a password nobody can read is how a typo becomes "wrong password". */
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +38,19 @@ export function LoginForm({ next }: { next: string }) {
     const data = new FormData(event.currentTarget);
 
     try {
-      await login(
+      const outcome = await login(
         String(data.get("email") ?? ""),
         String(data.get("password") ?? ""),
       );
+
+      // The password was right but is not, on its own, a session. No cookie
+      // has been set; the code is what completes it.
+      if (outcome.twoFactorRequired) {
+        setChallenge(outcome.challenge);
+        setPending(false);
+        return;
+      }
+
       // Replace, not push — the login page must not sit in the back history.
       router.replace(next);
       router.refresh();
@@ -44,6 +63,50 @@ export function LoginForm({ next }: { next: string }) {
       }
       setPending(false);
     }
+  }
+
+  async function onSubmitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!challenge) return;
+    setPending(true);
+    setError(null);
+
+    try {
+      await verifySecondStep(challenge, code);
+      router.replace(next);
+      router.refresh();
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setError(caught.message);
+        // An expired or rejected challenge cannot be retried with a new code —
+        // the password has to be given again — so the form goes back rather
+        // than leaving somebody typing codes at a ticket that will never work.
+        if (caught.status === 401 && /password again/i.test(caught.message)) {
+          setChallenge(null);
+          setCode("");
+        }
+      } else {
+        setError("Can't reach the server. Check that the API is running.");
+      }
+      setPending(false);
+    }
+  }
+
+  if (challenge) {
+    return (
+      <SecondStep
+        code={code}
+        onCode={setCode}
+        pending={pending}
+        error={error}
+        onSubmit={onSubmitCode}
+        onBack={() => {
+          setChallenge(null);
+          setCode("");
+          setError(null);
+        }}
+      />
+    );
   }
 
   return (
@@ -151,6 +214,94 @@ export function LoginForm({ next }: { next: string }) {
             "Sign in"
           )}
         </Button>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * The code step.
+ *
+ * A separate screen rather than a field that appears below the password,
+ * because the password is already accepted by this point and leaving it on
+ * screen invites somebody to change it and press Enter — which would fail
+ * confusingly, since it is the challenge that is being redeemed now, not the
+ * password.
+ */
+function SecondStep({
+  code,
+  onCode,
+  pending,
+  error,
+  onSubmit,
+  onBack,
+}: {
+  code: string;
+  onCode: (next: string) => void;
+  pending: boolean;
+  error: string | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onBack: () => void;
+}) {
+  return (
+    <Card className="p-6">
+      <h1 className="text-lg font-semibold tracking-tight">
+        Enter your code
+      </h1>
+      <p className="mt-1 mb-5 text-sm text-muted-foreground">
+        The six digits from your authenticator app. A recovery code works here
+        too, if your phone is not to hand.
+      </p>
+
+      <form method="post" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">Code</span>
+          <input
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            placeholder="123456"
+            value={code}
+            onChange={(event) => onCode(event.target.value)}
+            className={`${inputClass} num tracking-[0.3em]`}
+          />
+        </label>
+
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          disabled={pending}
+          className="mt-1 w-full"
+        >
+          {pending ? (
+            <>
+              <LoaderCircle className="size-4 animate-spin" />
+              Checking…
+            </>
+          ) : (
+            "Sign in"
+          )}
+        </Button>
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Start again
+        </button>
       </form>
     </Card>
   );

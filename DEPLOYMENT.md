@@ -336,6 +336,57 @@ photograph with a subquery against this table, so between a deploy and this
 statement every profile page is a 500. The file is safe to run twice and
 harmless against the older code.
 
+## Locked out by two-step sign-in
+
+The break-glass. Worth reading before it is needed rather than after.
+
+Signing in asks for a code only from accounts that enrolled themselves, so
+nobody is locked out by the feature arriving. What can lock somebody out is
+their own phone: wiped, lost, replaced, or with a clock far enough adrift that
+every code it shows is wrong.
+
+**Try the recovery codes first.** They were shown once at enrolment, ten of
+them, and each works exactly where the six digits go - on the sign-in screen
+and on the Settings panel. Using one is recorded in the audit trail as
+`signed in with a RECOVERY CODE`, in those words, because somebody using a
+recovery code is either having a bad day or is not who they say they are, and
+both are worth being able to see afterwards.
+
+**If the codes are gone too**, remove the enrolment directly. This does not
+touch the password, and the account signs in with the password alone
+afterwards, exactly as it did before enrolling.
+
+Change the address on the first line and paste the whole block:
+
+```bash
+cd /opt/sfm/deploy
+set -a; . ./.env; set +a
+WHO='someone@shareviral.cash'
+
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -v ON_ERROR_STOP=1 -v who="$WHO" <<'SQL'
+begin;
+delete from recovery_codes
+ where user_id = (select id from users where lower(email) = lower(:'who'));
+delete from user_two_factor
+ where user_id = (select id from users where lower(email) = lower(:'who'));
+commit;
+
+select u.email,
+       (select count(*) from user_two_factor t where t.user_id = u.id) as enrolments
+  from users u
+ where lower(u.email) = lower(:'who');
+SQL
+```
+
+`enrolments` must come back `0`, and the row must be the person you meant — if
+no row comes back at all, the address is wrong and nothing was deleted. They
+can then sign in with their password and set two-step up again from Settings.
+
+There is deliberately no way to do this from inside the application. An
+administrator who could switch off somebody else's second factor is a way
+around it, and the whole point of the second factor is that there is not one.
+
 ## Schema changes, generally
 
 Every one goes in `deploy/sql/` as a dated file, applied by hand, **before** the

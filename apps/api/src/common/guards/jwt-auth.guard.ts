@@ -23,6 +23,20 @@ export type AccessTokenClaims = {
   sub: string;
   role: AuthenticatedUser["role"];
   tv: number;
+  /**
+   * Absent on an access token. Present on anything minted for another purpose.
+   *
+   * This guard asks whether a token is *valid*, and until two-step sign-in
+   * arrived that was the same question as whether it is a session — every JWT
+   * this application produced was an access token. It is not the same question
+   * any more: the sign-in challenge is also a signed JWT naming a user.
+   *
+   * The challenge is signed with a different key, so it cannot verify here at
+   * all. This check is the second lock on the same door, and the cheaper one to
+   * keep: a future token type that reuses the access secret by mistake gets a
+   * 401 rather than a session.
+   */
+  typ?: string;
 };
 
 type RequestWithUser = Request & { user?: AuthenticatedUser };
@@ -54,6 +68,11 @@ export class JwtAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException("Session expired");
     }
+
+    // A token minted for something other than being a session is not a
+    // session, however well it verifies. Tokens issued before this claim
+    // existed carry no `typ` and are unaffected.
+    if (claims.typ) throw new UnauthorizedException("Not signed in");
 
     const [record] = await this.db.client
       .select({
