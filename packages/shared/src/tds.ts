@@ -305,3 +305,37 @@ export function proRataTds(
   if (daysInMonth <= 0) return "0.00";
   return fromMinorUnits((monthly * BigInt(daysWorked)) / BigInt(daysInMonth));
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Request contracts                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Saving a year's rule.
+ *
+ * `fiscalYear` is not in the body — it is the path segment, so a payload
+ * cannot claim to be for a year the URL disagrees with.
+ */
+export const saveTdsPolicySchema = tdsPolicySchema.omit({ fiscalYear: true });
+export type SaveTdsPolicyInput = z.infer<typeof saveTdsPolicySchema>;
+
+/**
+ * The calculator.
+ *
+ * A salary and a year. `declaredInvestment` is only read when the policy has
+ * `assumeFullInvestment` off, and is here so the calculator can show what
+ * switching that off would do to somebody without changing the policy first.
+ */
+export const calculateTdsSchema = z.strictObject({
+  annualSalary: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount, like 1200000 or 1200000.00"),
+  fiscalYear: z.coerce.number().int().min(2000).max(2200),
+  declaredInvestment: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,2})?$/)
+    .optional(),
+});
+export type CalculateTdsInput = z.infer<typeof calculateTdsSchema>;

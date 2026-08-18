@@ -1,18 +1,22 @@
 import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
 import {
   allocateDepositSchema,
+  calculateTdsSchema,
   createTdsDepositSchema,
   fileReturnSchema,
   fiscalYearQuerySchema,
+  saveTdsPolicySchema,
   listDepositsQuerySchema,
   pendingQuerySchema,
   tdsLiabilityQuerySchema,
   type AllocateDepositInput,
+  type CalculateTdsInput,
   type CreateTdsDepositInput,
   type FileReturnInput,
   type FiscalYearQuery,
   type ListDepositsQuery,
   type PendingQuery,
+  type SaveTdsPolicyInput,
   type TdsLiabilityQuery,
 } from "@finance/shared";
 import { z } from "zod";
@@ -23,6 +27,7 @@ import {
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
 import { ZodBody, ZodQuery } from "../../common/pipes/zod-validation.pipe";
+import { TaxPolicyService } from "./tax-policy.service";
 import { TdsService } from "./tds.service";
 
 const uuidSchema = z.string().uuid("Not a valid id");
@@ -36,6 +41,8 @@ const returnIdSchema = z.union([
   z.string().regex(/^unsaved:\d{4}:[1-4]$/, "Not a valid id"),
 ]);
 
+const yearSchema = z.coerce.number().int().min(2000).max(2200);
+
 const unallocatedQuerySchema = z.strictObject({
   year: z.coerce.number().int().min(2000).max(2200),
   month: z.coerce.number().int().min(1).max(12),
@@ -43,7 +50,60 @@ const unallocatedQuerySchema = z.strictObject({
 
 @Controller("tds")
 export class TdsController {
-  constructor(private readonly tds: TdsService) {}
+  constructor(
+    private readonly tds: TdsService,
+    private readonly policy: TaxPolicyService,
+  ) {}
+
+  /* ---------------------------------------------------------------------- */
+  /*  The rule itself                                                        */
+  /* ---------------------------------------------------------------------- */
+  //
+  // Declared before the `:id` routes further down. A literal segment written
+  // after one is swallowed: `GET /tds/policy` would reach the id handler,
+  // `uuidSchema.parse("policy")` would throw, and the endpoint would 400 with
+  // a message about uuids.
+
+  @Get("policy/years")
+  @RequirePermission("tds.read")
+  policyYears() {
+    return this.policy.years();
+  }
+
+  @Get("policy/:year")
+  @RequirePermission("tds.read")
+  policyForYear(@Param("year") year: string) {
+    return this.policy.forYear(yearSchema.parse(year));
+  }
+
+  /**
+   * Changing the rule is a settings change, not a tax entry — it decides what
+   * every future payroll withholds, so it follows the same permission as the
+   * rest of Settings rather than `tds.write`.
+   */
+  @Post("policy/:year")
+  @HttpCode(200)
+  @RequirePermission("settings.write")
+  savePolicy(
+    @Param("year") year: string,
+    @ZodBody(saveTdsPolicySchema) body: SaveTdsPolicyInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.policy.save(yearSchema.parse(year), body, actor);
+  }
+
+  /**
+   * What one salary comes to, with the whole working.
+   *
+   * A GET with query parameters rather than a POST: it reads a rule and
+   * computes, writes nothing, and being linkable is useful — an accountant
+   * checking a figure can send somebody the URL.
+   */
+  @Get("policy-calculator")
+  @RequirePermission("tds.read")
+  calculate(@ZodQuery(calculateTdsSchema) query: CalculateTdsInput) {
+    return this.policy.calculate(query);
+  }
 
   @Get("liability")
   @RequirePermission("tds.read")
