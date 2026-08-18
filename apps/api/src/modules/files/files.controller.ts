@@ -109,6 +109,34 @@ export class FilesController {
     );
   }
 
+  @Get("subscription/:id")
+  @RequirePermission("vendors.read")
+  listForSubscription(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("subscription", uuidSchema.parse(id), actor);
+  }
+
+  @Post("subscription/:id")
+  @RequirePermission("vendors.write")
+  @upload()
+  uploadForSubscription(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "subscription",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
   @Get("import-batch/:id")
   @RequirePermission("imports.run")
   listForImportBatch(

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { importBatches } from "./imports";
+import { subscriptions } from "./subscriptions";
 import { teamMembers } from "./team";
 import { transactions } from "./transactions";
 import { users } from "./users";
@@ -81,6 +82,9 @@ export const files = pgTable(
     importBatchId: uuid("import_batch_id").references(() => importBatches.id, {
       onDelete: "cascade",
     }),
+    subscriptionId: uuid("subscription_id").references(() => subscriptions.id, {
+      onDelete: "cascade",
+    }),
 
     uploadedBy: uuid("uploaded_by").references(() => users.id, {
       onDelete: "set null",
@@ -105,6 +109,7 @@ export const files = pgTable(
     index("files_team_member_idx").on(t.teamMemberId, t.kind),
     index("files_transaction_idx").on(t.transactionId),
     index("files_import_batch_idx").on(t.importBatchId),
+    index("files_subscription_idx").on(t.subscriptionId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     /**
@@ -117,7 +122,8 @@ export const files = pgTable(
       "files_one_owner",
       sql`(case when ${t.teamMemberId} is not null then 1 else 0 end
          + case when ${t.transactionId} is not null then 1 else 0 end
-         + case when ${t.importBatchId} is not null then 1 else 0 end) = 1`,
+         + case when ${t.importBatchId} is not null then 1 else 0 end
+         + case when ${t.subscriptionId} is not null then 1 else 0 end) = 1`,
     ),
   ],
 );

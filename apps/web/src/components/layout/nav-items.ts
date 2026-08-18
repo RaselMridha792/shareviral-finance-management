@@ -15,6 +15,7 @@ import {
   Settings,
   ShoppingBag,
   Sparkles,
+  Store,
   UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -109,12 +110,20 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: "transactions.read",
           },
           {
-            // Still /vendors underneath — the table is the same one, and a URL
-            // change would break every bookmark for a label.
+            // The register of plans: what is bought, who is on it, which card
+            // renews it. /vendors is still there and still answers a different
+            // question — what was actually *paid*, to whom, in a month.
             key: "expenses-subscriptions",
-            href: "/vendors",
+            href: "/subscriptions",
             label: "AI tools and subscriptions",
             icon: Sparkles,
+            permission: "vendors.read",
+          },
+          {
+            key: "expenses-vendors",
+            href: "/vendors",
+            label: "Suppliers and spend",
+            icon: Store,
             permission: "vendors.read",
           },
           {

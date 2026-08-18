@@ -17,7 +17,6 @@ import {
   subscriptionCategoryEnum,
   subscriptionStatusEnum,
 } from "./enums";
-import { files } from "./files";
 import { teamMembers } from "./team";
 import { vendors } from "./vendors";
 
@@ -113,11 +112,6 @@ export const subscriptions = pgTable(
      * It may also not be an office address.
      */
     loginEmail: varchar("login_email", { length: 200 }),
-
-    /** A screenshot of the plan, opened from the tool's name. */
-    screenshotFileId: uuid("screenshot_file_id").references(() => files.id, {
-      onDelete: "set null",
-    }),
 
     notes: text("notes"),
 

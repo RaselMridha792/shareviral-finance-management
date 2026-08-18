@@ -37,6 +37,14 @@ export const FILE_KINDS = [
   "invoice",
   /** A screenshot or PDF of the bank's own record of the movement. */
   "bank_statement",
+  /**
+   * The plan page of a paid tool, as it looked when it was bought.
+   *
+   * The reason it is a screenshot rather than a note: what a plan includes is
+   * on the vendor's own page, and that page changes without telling anybody.
+   * A year later "Max 5x" no longer means what it meant.
+   */
+  "subscription_screenshot",
   "import_source",
   "other",
 ] as const;
@@ -49,6 +57,7 @@ export const FILE_OWNERS = [
   "team_member",
   "transaction",
   "import_batch",
+  "subscription",
 ] as const;
 export const fileOwnerSchema = z.enum(FILE_OWNERS);
 export type FileOwner = z.infer<typeof fileOwnerSchema>;
@@ -63,6 +72,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   receipt: "Receipt",
   invoice: "Invoice",
   bank_statement: "Bank statement",
+  subscription_screenshot: "Plan screenshot",
   import_source: "Imported file",
   other: "Document",
 };
@@ -92,6 +102,8 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
     "other",
   ],
   transaction: ["receipt", "invoice", "bank_statement", "other"],
+  // One kind, and that is the point: this is the plan page, not a folder.
+  subscription: ["subscription_screenshot"],
   import_batch: ["import_source"],
 };
 
@@ -133,6 +145,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   invoice: DOCUMENT_MIME_TYPES,
   // Images too, because "bank statement" in practice means a screenshot of one.
   bank_statement: DOCUMENT_MIME_TYPES,
+  // A screenshot, overwhelmingly — but a PDF invoice for the plan is the same
+  // evidence, so the wider list rather than images alone.
+  subscription_screenshot: DOCUMENT_MIME_TYPES,
   import_source: SPREADSHEET_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
@@ -162,6 +177,8 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   // UPLOAD_HARD_LIMIT_BYTES would be refused by multer with a generic error
   // before this rule could name itself.
   bank_statement: 10 * MB,
+  // Same reasoning: a screen capture of a pricing page, not a document.
+  subscription_screenshot: 10 * MB,
   import_source: 15 * MB,
   other: 15 * MB,
 };

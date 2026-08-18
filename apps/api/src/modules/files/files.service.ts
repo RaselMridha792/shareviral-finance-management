@@ -37,7 +37,16 @@ import { StorageService } from "./storage.service";
  * whichever component was written last. Documents are left plural on purpose —
  * a scanned appointment letter is regularly two files.
  */
-const SINGULAR_KINDS: readonly FileKind[] = ["profile_photo"];
+const SINGULAR_KINDS: readonly FileKind[] = [
+  "profile_photo",
+  /**
+   * And the plan screenshot, for the same reason: it is rendered as *the*
+   * picture of the plan, opened by clicking the tool's name. Two of them means
+   * a screen has to pick, and "the newest" is a rule invented in whichever
+   * component was written last.
+   */
+  "subscription_screenshot",
+];
 
 /** Which permission a file's owner demands, to read it and to change it. */
 const OWNER_PERMISSIONS: Record<
@@ -47,6 +56,10 @@ const OWNER_PERMISSIONS: Record<
   team_member: { read: "team.read", write: "team.write" },
   transaction: { read: "transactions.read", write: "transactions.write" },
   import_batch: { read: "imports.run", write: "imports.run" },
+  // The same pair the register itself is gated on — a screenshot of a plan is
+  // the plan, and a second boundary around it would have to be granted to
+  // exactly the same people.
+  subscription: { read: "vendors.read", write: "vendors.write" },
 };
 
 @Injectable()
@@ -77,6 +90,8 @@ export class FilesService {
       return { owner: "transaction", id: row.transactionId };
     if (row.importBatchId)
       return { owner: "import_batch", id: row.importBatchId };
+    if (row.subscriptionId)
+      return { owner: "subscription", id: row.subscriptionId };
     // The table has a check constraint making this unreachable. If it is ever
     // reached, refusing is the only safe reading of a file owned by nothing.
     throw new NotFoundException("This file is not attached to anything");
@@ -132,11 +147,18 @@ export class FilesService {
   }
 
   private ownerColumn(owner: FileOwner) {
-    return owner === "team_member"
-      ? files.teamMemberId
-      : owner === "transaction"
-        ? files.transactionId
-        : files.importBatchId;
+    // A lookup rather than a chain of ternaries: the chain had no branch for a
+    // new owner and would have silently filed one under import batches.
+    // `satisfies` rather than an annotation: it still fails to compile when a
+    // new owner is added without a column here, but it does not flatten four
+    // distinct column types into the first one's.
+    const columns = {
+      team_member: files.teamMemberId,
+      transaction: files.transactionId,
+      import_batch: files.importBatchId,
+      subscription: files.subscriptionId,
+    } satisfies Record<FileOwner, unknown>;
+    return columns[owner];
   }
 
   async listFor(
@@ -309,6 +331,7 @@ export class FilesService {
               teamMemberId: owner === "team_member" ? ownerId : null,
               transactionId: owner === "transaction" ? ownerId : null,
               importBatchId: owner === "import_batch" ? ownerId : null,
+              subscriptionId: owner === "subscription" ? ownerId : null,
               uploadedBy: actor.id,
             })
             .returning();
