@@ -4,7 +4,25 @@ import { Download, FileText, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { fileHref, listTransactionFiles, type StoredFile } from "@/lib/api-client";
+import {
+  fileHref,
+  listTransactionFiles,
+  type StoredFile,
+} from "@/lib/api-client";
+
+/**
+ * Is this one worth drawing rather than listing?
+ *
+ * The mime type first, because it was decided by reading the bytes rather than
+ * trusting the name. The extension is only a fallback for a file stored before
+ * that sniffing existed.
+ */
+function isPdf(file: StoredFile): boolean {
+  return (
+    file.mimeType === "application/pdf" ||
+    file.originalName.toLowerCase().endsWith(".pdf")
+  );
+}
 
 /**
  * What is attached to one entry, opened from its reference number.
@@ -15,17 +33,39 @@ import { fileHref, listTransactionFiles, type StoredFile } from "@/lib/api-clien
  * stay in the edit form, where the person has already said they are changing
  * this entry.
  *
- * Images are shown; anything else gets a row with a download. The API serves
- * bytes from the company's own server behind the session, so an <img> here is
- * a normal authenticated request rather than a public URL.
+ * Images and PDFs are shown; anything else gets a row with a download. The API
+ * serves bytes from the company's own server behind the session, so an <img>
+ * or an <iframe> here is a normal authenticated request rather than a public
+ * URL.
+ *
+ * `kinds` narrows it to what the reader actually clicked. An entry carries the
+ * invoice it was against and the bank's record of the payment, and those are
+ * reached from different cells; answering both to a click on one of them reads
+ * as the app not knowing which is which.
  */
 export function DocumentsDialog({
   transactionId,
   refNo,
+  kinds,
+  title,
   onClose,
 }: {
   transactionId: string;
   refNo: string;
+  /**
+   * Which of the entry's documents this opening is about.
+   *
+   * An entry carries more than one — the invoice it was against and the bank's
+   * own record of the payment — and they are reached from different cells. A
+   * click on the invoice number that answers with the bank statement as well
+   * is answering a question nobody asked, and on a screen full of numbers it
+   * reads as the app not knowing which is which.
+   *
+   * Left out, everything attached is shown. That is right for a general
+   * "documents" affordance and wrong for a specific one.
+   */
+  kinds?: readonly string[];
+  title?: string;
   onClose: () => void;
 }) {
   const [files, setFiles] = useState<StoredFile[] | null>(null);
@@ -44,6 +84,19 @@ export function DocumentsDialog({
       live = false;
     };
   }, [transactionId]);
+
+  /**
+   * Narrowed to what was actually clicked, and only when a caller says so.
+   *
+   * Filtered here rather than in the request: the endpoint answers per entry,
+   * and asking it twice for two subsets of the same short list would be two
+   * round trips for one row of a table.
+   */
+  const shown = files
+    ? kinds
+      ? files.filter((file) => kinds.includes(file.kind))
+      : files
+    : null;
 
   // Escape closes it. A dialog opened by a stray click on a table cell should
   // be dismissable without aiming at anything.
@@ -68,7 +121,9 @@ export function DocumentsDialog({
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface shadow-lg">
         <div className="flex items-center gap-3 border-b border-border px-5 py-3.5">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Attached documents</p>
+            <p className="text-sm font-semibold">
+              {title ?? "Attached documents"}
+            </p>
             <p className="num truncate text-xs text-muted-foreground">
               {refNo}
             </p>
@@ -93,13 +148,18 @@ export function DocumentsDialog({
               <LoaderCircle className="size-4 animate-spin" />
               Looking…
             </p>
-          ) : files.length === 0 ? (
+          ) : !shown || shown.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              Nothing is attached to this entry.
+              {kinds && files.length > 0
+                ? // Something is attached, just not this. Saying so is the
+                  // difference between "you forgot the invoice" and "the app
+                  // lost your files".
+                  "Nothing of this kind is attached to this entry yet."
+                : "Nothing is attached to this entry."}
             </p>
           ) : (
             <div className="flex flex-col gap-4">
-              {files.map((file) => (
+              {shown.map((file) => (
                 <figure key={file.id} className="flex flex-col gap-2">
                   {file.isImage ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -108,7 +168,27 @@ export function DocumentsDialog({
                       alt={file.label ?? file.originalName}
                       className="max-h-[55vh] w-full rounded-lg border border-border object-contain"
                     />
+                  ) : isPdf(file) ? (
+                    /**
+                     * Read here rather than downloaded to be read.
+                     *
+                     * `?inline=1` is what the API already understands: without
+                     * it the same bytes come back as an attachment and the
+                     * browser saves them instead of drawing them. It runs in
+                     * the browser's own PDF viewer, which is sandboxed away
+                     * from this page — it cannot reach these cookies or this
+                     * DOM — and the Download beside it still saves the file
+                     * deliberately.
+                     */
+                    <iframe
+                      src={`${fileHref(file.id)}?inline=1`}
+                      title={file.label ?? file.originalName}
+                      className="h-[55vh] w-full rounded-lg border border-border bg-white"
+                    />
                   ) : (
+                    /* Neither a picture nor a PDF — a spreadsheet, say. There
+                       is nothing to draw, so the row says what it is and the
+                       download beside it is the whole affordance. */
                     <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
                       <FileText className="size-5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate text-sm">

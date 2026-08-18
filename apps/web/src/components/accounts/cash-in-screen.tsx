@@ -62,7 +62,17 @@ export function CashInScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
-  const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  /**
+   * Which entry, and which of its documents.
+   *
+   * Both, because the two numbers on a row point at different paper — the
+   * invoice this transfer settles, and the bank's own record of it — and a
+   * click on one of them should answer with that one.
+   */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: TransactionDto;
+    kind: "invoice" | "bank_statement";
+  } | null>(null);
 
   /** The month's rate, straight from the API. Null when there is none. */
   const [rate, setRate] = useState<string | null>(null);
@@ -352,7 +362,11 @@ export function CashInScreen({
                       <td className="num px-4 py-2.5 text-right text-muted-foreground">
                         {index + 1}
                       </td>
-                      <DocumentCell row={row} onOpen={setDocumentsFor}>
+                      <DocumentCell
+                        row={row}
+                        kind="invoice"
+                        onOpen={setDocumentsFor}
+                      >
                         {row.invoiceNo}
                       </DocumentCell>
                       <td className="cell-prose px-4 py-2.5">
@@ -390,7 +404,11 @@ export function CashInScreen({
                           ? `৳${trimRate(rateOf(row) as string)}`
                           : "—"}
                       </td>
-                      <DocumentCell row={row} onOpen={setDocumentsFor}>
+                      <DocumentCell
+                        row={row}
+                        kind="bank_statement"
+                        onOpen={setDocumentsFor}
+                      >
                         {row.reference}
                       </DocumentCell>
                       <td className="px-4 py-2.5">
@@ -442,11 +460,13 @@ export function CashInScreen({
 
       {documentsFor ? (
         <DocumentsDialog
-          transactionId={documentsFor.id}
+          transactionId={documentsFor.row.id}
+          kinds={[documentsFor.kind]}
+          title={documentsFor.kind === "invoice" ? "Invoice" : "Bank statement"}
           refNo={
-            [documentsFor.invoiceNo, documentsFor.reference]
-              .filter(Boolean)
-              .join("  ·  ") || documentsFor.refNo
+            (documentsFor.kind === "invoice"
+              ? documentsFor.row.invoiceNo
+              : documentsFor.row.reference) ?? documentsFor.row.refNo
           }
           onClose={() => setDocumentsFor(null)}
         />
@@ -481,12 +501,18 @@ export function CashInScreen({
  */
 function DocumentCell({
   row,
+  kind,
   children,
   onOpen,
 }: {
   row: TransactionDto;
+  /** Which paper this number points at — the invoice, or the bank's record. */
+  kind: "invoice" | "bank_statement";
   children: string | null;
-  onOpen: (row: TransactionDto) => void;
+  onOpen: (of: {
+    row: TransactionDto;
+    kind: "invoice" | "bank_statement";
+  }) => void;
 }) {
   if (!children) {
     return <td className="px-4 py-2.5 text-muted-foreground">—</td>;
@@ -496,7 +522,7 @@ function DocumentCell({
     <td className="px-4 py-2.5">
       <button
         type="button"
-        onClick={() => onOpen(row)}
+        onClick={() => onOpen({ row, kind })}
         title={
           row.documentCount > 0
             ? `${row.documentCount} attached`
