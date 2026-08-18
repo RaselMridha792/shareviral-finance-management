@@ -17,8 +17,9 @@ import {
   MoneyInput,
   Textarea,
 } from "@/components/ui/field";
+import { FileManager } from "@/components/files/file-manager";
 import { ApiError } from "@/lib/api-client";
-import { ledgerApi } from "@/lib/ledger";
+import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import {
   categoriesApi,
   type AccountDto,
@@ -131,6 +132,22 @@ export function CashInForm({
     enteredRate > 0 &&
     Math.abs(Number(realised.rate) - enteredRate) >= 0.01;
 
+  /**
+   * The saved entry, while its documents are still being attached.
+   *
+   * A file needs a row to hang on, so the invoice and the statement cannot be
+   * part of the same request as the entry itself. The alternative — hold both
+   * in the browser and upload after the save returns — has two ways to fail,
+   * and the second leaves a saved transfer and a lost invoice with nothing on
+   * screen to say which happened.
+   *
+   * So the drawer does not close on save. It becomes the attach step, with the
+   * entry already safe in the ledger. Somebody who walks away has a recorded
+   * transfer and no documents, which the table marks — rather than no transfer
+   * at all, which is the worse of the two.
+   */
+  const [saved, setSaved] = useState<TransactionDto | null>(null);
+
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -196,6 +213,7 @@ export function CashInForm({
     setTypedAmount("");
     setUsdSent("");
     setAmountTyped(false);
+    setSaved(null);
     onClose();
   }
 
@@ -212,7 +230,7 @@ export function CashInForm({
     };
 
     try {
-      await ledgerApi.recordCashIn({
+      const created = await ledgerApi.recordCashIn({
         txnDate: String(data.get("txnDate")),
         reference: text("reference"),
         description: String(data.get("description")),
@@ -234,9 +252,9 @@ export function CashInForm({
         notes: text("notes"),
         receiptUrl: undefined,
       });
-      toast.show("Transfer recorded.");
+      toast.show("Transfer recorded. Attach the documents to finish.");
       await onSaved();
-      close();
+      setSaved(created);
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -256,6 +274,61 @@ export function CashInForm({
       title="Record cash in"
       description="Money received from abroad, as the remittance advice states it."
     >
+      {saved ? (
+        <div className="flex flex-col gap-4">
+          <p className="rounded-lg bg-positive/10 px-4 py-3 text-sm">
+            <span className="font-medium">Recorded as</span>{" "}
+            <span className="num">{saved.refNo}</span>. It is in the ledger
+            already — attaching the documents is the last step.
+          </p>
+
+          {/*
+            Two uploaders rather than one with a kind picker. The pair is what
+            a remittance comes with, and naming them separately is the
+            difference between "documents: 2" and being able to answer "show me
+            the invoice for this transfer" three months from now.
+          */}
+          <Field
+            label="Invoice PDF"
+            required
+            hint="The bill this transfer settles"
+          >
+            <FileManager
+              owner="transaction"
+              ownerId={saved.id}
+              kinds={["invoice"]}
+              canWrite
+              emptyLabel="No invoice attached yet."
+            />
+          </Field>
+
+          <Field
+            label="Bank statement screenshot"
+            required
+            hint="The bank's own record that the money arrived"
+          >
+            <FileManager
+              owner="transaction"
+              ownerId={saved.id}
+              kinds={["bank_statement"]}
+              canWrite
+              emptyLabel="No statement attached yet."
+            />
+          </Field>
+
+          <p className="text-xs text-muted-foreground">
+            Closing without attaching leaves the transfer recorded and its
+            documents missing. The transactions table marks those rows, so they
+            can be found and finished later.
+          </p>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button type="button" variant="primary" onClick={close}>
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
       <form
         id="cash-in-form"
         onSubmit={onSubmit}
@@ -504,21 +577,27 @@ export function CashInForm({
           </p>
         ) : null}
       </form>
+      )}
 
-      <div className="mt-6 flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          form="cash-in-form"
-          variant="primary"
-          disabled={pending}
-        >
-          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Record it
-        </Button>
-      </div>
+      {/* The footer belongs to the form step only — the attach step carries
+          its own Done, and a Cancel beside an entry that is already saved
+          would read as if it could undo it. */}
+      {saved ? null : (
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="cash-in-form"
+            variant="primary"
+            disabled={pending}
+          >
+            {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            Record it
+          </Button>
+        </div>
+      )}
     </Drawer>
   );
 }

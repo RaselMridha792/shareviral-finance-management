@@ -28,6 +28,15 @@ export const FILE_KINDS = [
   "nid",
   "etin_certificate",
   "receipt",
+  /**
+   * The bill the money was against, as opposed to `receipt`, which is proof it
+   * was paid. A remittance carries both and they are not interchangeable: an
+   * auditor asking "what was this transfer for" wants the first, and "did it
+   * actually go" wants the second.
+   */
+  "invoice",
+  /** A screenshot or PDF of the bank's own record of the movement. */
+  "bank_statement",
   "import_source",
   "other",
 ] as const;
@@ -52,6 +61,8 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   nid: "National ID",
   etin_certificate: "e-TIN certificate",
   receipt: "Receipt",
+  invoice: "Invoice",
+  bank_statement: "Bank statement",
   import_source: "Imported file",
   other: "Document",
 };
@@ -80,7 +91,7 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
     "etin_certificate",
     "other",
   ],
-  transaction: ["receipt", "other"],
+  transaction: ["receipt", "invoice", "bank_statement", "other"],
   import_batch: ["import_source"],
 };
 
@@ -119,6 +130,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   nid: DOCUMENT_MIME_TYPES,
   etin_certificate: DOCUMENT_MIME_TYPES,
   receipt: DOCUMENT_MIME_TYPES,
+  invoice: DOCUMENT_MIME_TYPES,
+  // Images too, because "bank statement" in practice means a screenshot of one.
+  bank_statement: DOCUMENT_MIME_TYPES,
   import_source: SPREADSHEET_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
@@ -142,6 +156,12 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   nid: 10 * MB,
   etin_certificate: 10 * MB,
   receipt: 15 * MB,
+  invoice: 15 * MB,
+  // A screenshot, so smaller — and the cap is the honest place to say so. The
+  // multipart limit is one number for every route, so a per-kind limit above
+  // UPLOAD_HARD_LIMIT_BYTES would be refused by multer with a generic error
+  // before this rule could name itself.
+  bank_statement: 10 * MB,
   import_source: 15 * MB,
   other: 15 * MB,
 };
