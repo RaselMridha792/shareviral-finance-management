@@ -213,6 +213,10 @@ export function OtherExpensesScreen({
               rows={rows}
               onEdit={setEditing}
               onVoid={setVoiding}
+              // Every row here is money out, so a Type column would say the
+              // same word all the way down. How it was paid is what people
+              // scan for instead.
+              showPaymentMethod
               emptyMessage="No expenses recorded in this month."
             />
           )}

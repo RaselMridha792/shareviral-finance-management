@@ -1,0 +1,147 @@
+"use client";
+
+import { Download, FileText, LoaderCircle, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { fileHref, listTransactionFiles, type StoredFile } from "@/lib/api-client";
+
+/**
+ * What is attached to one entry, opened from its reference number.
+ *
+ * Read-only on purpose. The reference in a table is something people click
+ * while scanning, often on somebody else's screen, and a delete button one
+ * mis-click away from a receipt does not belong there. Attaching and removing
+ * stay in the edit form, where the person has already said they are changing
+ * this entry.
+ *
+ * Images are shown; anything else gets a row with a download. The API serves
+ * bytes from the company's own server behind the session, so an <img> here is
+ * a normal authenticated request rather than a public URL.
+ */
+export function DocumentsDialog({
+  transactionId,
+  refNo,
+  onClose,
+}: {
+  transactionId: string;
+  refNo: string;
+  onClose: () => void;
+}) {
+  const [files, setFiles] = useState<StoredFile[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    listTransactionFiles(transactionId)
+      .then((next) => {
+        if (live) setFiles(next);
+      })
+      .catch(() => {
+        if (live) setError("Could not read the documents for this entry.");
+      });
+    return () => {
+      live = false;
+    };
+  }, [transactionId]);
+
+  // Escape closes it. A dialog opened by a stray click on a table cell should
+  // be dismissable without aiming at anything.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Documents attached to ${refNo}`}
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface shadow-lg">
+        <div className="flex items-center gap-3 border-b border-border px-5 py-3.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Attached documents</p>
+            <p className="num truncate text-xs text-muted-foreground">
+              {refNo}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {error ? (
+            <p className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative">
+              {error}
+            </p>
+          ) : !files ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" />
+              Looking…
+            </p>
+          ) : files.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nothing is attached to this entry.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {files.map((file) => (
+                <figure key={file.id} className="flex flex-col gap-2">
+                  {file.isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fileHref(file.id)}
+                      alt={file.label ?? file.originalName}
+                      className="max-h-[55vh] w-full rounded-lg border border-border object-contain"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
+                      <FileText className="size-5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {file.originalName}
+                      </span>
+                    </div>
+                  )}
+                  <figcaption className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="min-w-0 flex-1 truncate">
+                      {file.label ?? file.originalName}
+                      {file.uploadedByName ? ` · ${file.uploadedByName}` : ""}
+                    </span>
+                    <a
+                      href={fileHref(file.id)}
+                      download={file.originalName}
+                      className="inline-flex shrink-0 items-center gap-1 font-medium text-primary hover:underline"
+                    >
+                      <Download className="size-3.5" />
+                      Download
+                    </a>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end border-t border-border px-5 py-3">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

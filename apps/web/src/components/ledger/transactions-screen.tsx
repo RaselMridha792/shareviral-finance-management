@@ -155,6 +155,9 @@ export function TransactionsScreen({
           rows={rows}
           onEdit={setEditing}
           onVoid={setVoiding}
+          // Both directions appear here, so which one a row is has to be
+          // readable rather than inferred from a colour.
+          showType
           emptyMessage={
             Object.keys(filters).length
               ? "Nothing matches these filters."
