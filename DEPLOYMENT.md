@@ -336,6 +336,37 @@ photograph with a subquery against this table, so between a deploy and this
 statement every profile page is a 500. The file is safe to run twice and
 harmless against the older code.
 
+## Schema changes, generally
+
+Every one goes in `deploy/sql/` as a dated file, applied by hand, **before** the
+code that reads it is deployed. Not `drizzle-kit push`: push compares the schema
+to the live database and picks its statements at run time, so nobody reads them
+first and a rename it interprets as a drop-and-add takes the column's data with
+it. Fine on a laptop, wrong on the database the company's money is in.
+
+It is also the only option on this server. The API image is pruned to production
+dependencies and ships `dist` without `src`, so there is no drizzle-kit inside
+the container and no schema for it to read — `docker compose exec api npm run
+db:push` cannot work, and the compose file is in `deploy/`, not the repository
+root, so it must be run from there.
+
+Every file in `deploy/sql/` is safe to run twice, names its own verification
+query at the bottom, and takes its identifiers from `drizzle-kit generate`
+rather than being typed by hand, so a later push from a development machine sees
+a schema that already matches and proposes nothing.
+
+```bash
+cd /opt/sfm/deploy
+set -a; . ./.env; set +a          # POSTGRES_USER / POSTGRES_DB, not guessed
+docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -v ON_ERROR_STOP=1 < sql/2026-08-18-two-factor.sql
+```
+
+| File | What it adds | Deploy order |
+|---|---|---|
+| `sql/2026-08-16-files.sql` | `files` | before the code |
+| `sql/2026-08-18-two-factor.sql` | `user_two_factor`, `recovery_codes` | before the code |
+
 ### Files with no row, rows with no file
 
 ```bash
