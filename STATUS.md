@@ -765,7 +765,7 @@ column was wrong.
 | `subscription_category` | **new** - the sheet's ten, exactly |
 | `subscription_status` | **new** - active, paused, canceled, expired |
 | `payment_method` | **extend** the existing one with `paypal` and `payoneer` (the sheet's `paypneer`) |
-| `billing_cycle` | **reuse**. The sheet's Monthly / quarterly / Annually are the existing monthly / quarterly / yearly; the screen shows the sheet's wording, which is all anybody sees. A second value meaning "yearly" alongside `yearly` would be two words for one thing in a schema that already uses the first. |
+| `billing_cycle` | **reuse the shared array — but it is NOT a pgEnum.** `vendors.billingCycle` is `text("billing_cycle").notNull().default("none")`; only the shared `BILLING_CYCLES` array and its zod schema constrain it. An earlier version of this note called it an existing enum, which was wrong. Declaring the new table's column as a pgEnum would make two tables disagree about the same idea, one checked by Postgres and one not. The sheet's Monthly / quarterly / Annually are the existing monthly / quarterly / yearly, and the screen shows the sheet's wording. |
 
 ### Also asked for### Also asked for
 
@@ -820,6 +820,74 @@ $15,600.16 in the Cash In sheet, not 13,35,000.
 The app cannot reproduce this - the two amounts are separate stored columns and
 there is no operation that slides one against the other. It is noted only
 because starting the real books from this template would carry the error in.
+
+## Next: Other Expenses (asked 2026-08-18)
+
+Nine columns: SL, Date, Category, Description, Amount (BDT), Amount (USD),
+Payment Method, Reference No., USD Rate. Reference No. opens an attached
+screenshot. Choosing the "Others" category during entry offers a screenshot
+upload.
+
+**This is not a new page.** `/expenses/other` already exists and is already
+"everything except tooling" - the sheet's own header says "Excluding AI &
+Tools", and the API has an `excludeToolSpend` predicate built on the same
+definition the tools screen counts with. The work is changes to that screen,
+not a new one.
+
+**The figures in this sheet are internally consistent**, unlike the All
+Transactions one: 44,816 / 370.38 = 121.00, 25,935 / 214.34 = 121.00,
+140,000 / 1,147.54 = 122.00. Exact.
+
+**Payment Method needs nothing new.** Bank Transfer, Cash and Mobile Banking
+are all already in the app's `payment_method` enum.
+
+**Two rows carry no USD at all** - the cash one and the mobile banking one -
+which reads as deliberate: there was no conversion, so there is no dollar
+figure. Worth confirming, because the alternative (always translate at the
+app's rate) is a different column.
+
+**Reference No. is empty in all five rows** and is the field that is meant to
+be clickable. Open question below.
+
+## What the convention sweep found (2026-08-18)
+
+Twelve agents mapped the six subsystems the new work has to match, each map
+then checked against the files by a second agent. The findings that change
+what gets written:
+
+- **`billing_cycle` is plain `text`, not a pgEnum.** Corrected above.
+- **"Subscriptions" already exists as a *view*, not a table.** There is
+  `packages/shared/src/subscriptions.ts`, `GET /vendors/subscriptions`,
+  `GET /exports/subscriptions`, and a `subscription-payment-form.tsx`. Every
+  figure in it comes from the ledger on purpose - the file says a stored
+  "renews on the 3rd" is a habit rather than a schedule, and a monthly total
+  built from it would assert spending that may never have happened. The new
+  stored table must sit *beside* that view without contradicting it.
+- **Attaching a file to a new kind of owner is not one change but five**, and
+  four of them fail in ways that do not look like the cause: the
+  `files_one_owner` check constraint (sums the owner columns and demands
+  exactly 1, so a new column alone makes every upload rejected), `ownerOf()`
+  (miss it and reads and deletes 404 with a message that reads like data
+  corruption), `OWNER_PERMISSIONS` (**`GET /files/:id/content` carries no
+  `@RequirePermission` - that map is the only gate, so a missing entry serves
+  bytes to any signed-in user**), `KINDS_BY_OWNER`, and `SINGULAR_KINDS`.
+- **A transaction attachment needs none of that.** `transaction` is already a
+  file owner with `receipt` and `other` kinds, and `transaction-form.tsx`
+  already renders the uploader. The Cash In and Other Expenses attachments are
+  nearly free.
+- **A pgEnum value added without running the SQL fails only at runtime**, as a
+  bare `500 Internal server error` - drizzle does no client-side enum checking
+  and the exception filter has no branch for a driver error. And the reverse
+  (a value live in the database but missing from the shared array) compiles
+  clean everywhere and only surfaces as a wrong label on screen.
+- **`ALTER TYPE ... ADD VALUE` cannot be used in the transaction that added
+  it.** The house SQL style wraps everything in `begin; ... commit;`, so the
+  value and anything using it must be separate.
+- **`packages/shared` is consumed as built `dist/`.** Editing `src` changes
+  nothing until it is rebuilt.
+- **HR's `vendors.read` is load-bearing for navigation**, not incidental - the
+  whole Expenses group survives the sidebar filter only because that child
+  does. Gating the tools screen on a new permission HR lacks removes the group.
 
 ## Still waiting on answers
 
