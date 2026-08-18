@@ -120,7 +120,38 @@ done
 # is bad, `nginx -t` fails, `set -e` stops here, and the old configuration keeps
 # serving the site — far better than a reload that takes nginx down.
 docker compose exec -T nginx nginx -t
+
+# Note the time before reloading, so the log can be read from here forward and
+# an old error is not mistaken for a new one.
+reload_from=$(date -u +%Y-%m-%dT%H:%M:%S)
 docker compose exec -T nginx nginx -s reload
+
+# --------------------------------------------------------------------------
+# Did the master actually ACCEPT it?
+# --------------------------------------------------------------------------
+# `nginx -t` cannot answer this and neither can `nginx -T`. Both parse the
+# files from disk in a fresh process; neither asks the running master what it
+# is serving. `nginx -s reload` only sends a signal, and returns success for
+# having sent it.
+#
+# So the master can read the new configuration, refuse it, log why, and carry
+# on serving the old one - with the site up, every command exiting zero, and
+# the deploy green. That is exactly what happened on 18 Aug: a limit_req zone
+# whose key changed while its name stayed the same is rejected, because the
+# shared memory zone survives a reload and nginx will only reuse one whose key
+# still matches.
+#
+#   [emerg] limit_req "sfm_login" uses the "$login_limit_key" key
+#           while previously it used the "$binary_remote_addr" key
+#
+# It logged that four times across four deploys and nothing ever went red.
+sleep 2
+if docker compose logs --since "$reload_from" nginx 2>&1 | grep -E '\[emerg\]|\[alert\]'; then
+  echo "" >&2
+  echo "nginx REFUSED the new configuration and is still serving the old one." >&2
+  echo "The lines above are from the reload that just happened." >&2
+  exit 1
+fi
 
 # --------------------------------------------------------------------------
 # And then prove it, because "nginx -t passed" once proved nothing.
@@ -161,11 +192,13 @@ if [ ! -s "$live" ]; then
   exit 1
 fi
 
-# Trailing whitespace and a final newline are the only things allowed to differ.
-if ! diff -q <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf)              <(sed -e 's/[[:space:]]*$//' "$live") >/dev/null; then
+# Whitespace only. `nginx -T` pads each dumped file with a blank line, so
+# without -B this check fails on every single deploy - which is a gate that
+# cries wolf, and a gate that cries wolf gets ignored on the day it is right.
+if ! diff -qB <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf) <(sed -e 's/[[:space:]]*$//' "$live") >/dev/null; then
   echo "nginx is NOT running the config that is in git." >&2
   echo "--- what differs (git on the left, live on the right) ---" >&2
-  diff <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf)        <(sed -e 's/[[:space:]]*$//' "$live") | head -40 >&2
+  diff -B <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf) <(sed -e 's/[[:space:]]*$//' "$live") | head -40 >&2
   rm -f "$live"
   exit 1
 fi
