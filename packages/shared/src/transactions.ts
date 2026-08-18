@@ -128,6 +128,11 @@ export const createTransactionSchema = z
 
     paymentMethod: paymentMethodSchema.default("bank_transfer"),
     reference: optionalText(120),
+    /**
+     * The company's own document number — INV-002, SAL-JUL. Separate from
+     * `reference`, which is the bank's.
+     */
+    invoiceNo: optionalText(60),
     description: z.string().trim().min(2, "Say what this was for").max(300),
     notes: optionalText(1000),
     receiptUrl: receiptUrlSchema,
@@ -248,6 +253,16 @@ export const recordCashInSchema = z.strictObject({
   /** The bank's reference for the wire — what a query about it would quote. */
   reference: optionalText(120),
 
+  /**
+   * The invoice this transfer settles. Ours, not the bank's.
+   *
+   * Optional in the contract even though the Cash In screen asks for it,
+   * because the same schema records a local receipt that has no invoice at
+   * all. The screen is where "every field is required" belongs; a schema that
+   * refuses a true record is a schema that loses it.
+   */
+  invoiceNo: optionalText(60),
+
   description: z
     .string()
     .trim()
@@ -309,6 +324,7 @@ export const updateTransactionSchema = z
     counterparty: optionalText(160),
     paymentMethod: paymentMethodSchema.optional(),
     reference: optionalText(120),
+    invoiceNo: optionalText(60),
     description: z.string().trim().min(2).max(300).optional(),
     notes: optionalText(1000),
     receiptUrl: receiptUrlSchema,

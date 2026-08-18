@@ -200,6 +200,18 @@ export function TransactionTable({
                         <Paperclip className="size-3" />
                         {row.refNo}
                       </span>
+                      {/*
+                        Both, when both exist. The invoice is the company's
+                        own number and the one a person searches for; the
+                        bank's reference is what a query to the bank quotes.
+                        Showing only one means the other is invisible on
+                        exactly the rows where somebody needs it.
+                      */}
+                      {row.invoiceNo ? (
+                        <span className="num block text-xs text-foreground">
+                          {row.invoiceNo}
+                        </span>
+                      ) : null}
                       {row.reference ? (
                         <span className="num block text-xs text-muted-foreground">
                           {row.reference}

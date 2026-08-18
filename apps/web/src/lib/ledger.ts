@@ -24,7 +24,10 @@ export type TransactionDto = {
   description: string;
   notes: string | null;
   paymentMethod: PaymentMethod;
+  /** The bank's — a wire reference, a cheque number. */
   reference: string | null;
+  /** The company's own — INV-002, SAL-JUL. */
+  invoiceNo: string | null;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;

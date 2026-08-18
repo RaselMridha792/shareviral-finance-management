@@ -404,13 +404,41 @@ export function CashInForm({
           />
         </Field>
 
-        <Field
-          label="Transaction id"
-          error={fieldErrors.reference}
-          hint="The bank's reference for this transfer"
-        >
-          <Input name="reference" className="num" placeholder="FT26081200412" />
-        </Field>
+        {/*
+          Two reference numbers, because the paperwork has two and they answer
+          different questions. The invoice is ours — what the transfer was
+          against. The transaction id is the bank's — what to quote when asking
+          them about it. One field would hold whichever was typed first.
+        */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Invoice no."
+            required
+            error={fieldErrors.invoiceNo}
+            hint="The invoice this transfer settles"
+          >
+            <Input
+              name="invoiceNo"
+              required
+              className="num"
+              placeholder="INV-002"
+            />
+          </Field>
+
+          <Field
+            label="Transaction id"
+            required
+            error={fieldErrors.reference}
+            hint="The bank's reference for this transfer"
+          >
+            <Input
+              name="reference"
+              required
+              className="num"
+              placeholder="FT26081200412"
+            />
+          </Field>
+        </div>
 
         <Field label="Description" required error={fieldErrors.description}>
           <Input

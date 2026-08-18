@@ -111,6 +111,18 @@ export const transactions = pgTable(
     /** Cheque number, bank reference, transaction id. */
     reference: varchar("reference", { length: 120 }),
 
+    /**
+     * The document number this entry answers to: INV-002, SAL-JUL, TOOL-JUL.
+     *
+     * Separate from `reference`, and the two are separate in the paperwork
+     * too. `reference` is the bank's — the wire reference off the remittance
+     * advice, `FT26081200412`. This one is the company's own, the number on
+     * the invoice or the payroll sheet the money was against. A single field
+     * would have to hold whichever was typed first, and the other would be
+     * lost on exactly the rows where an auditor asks for both.
+     */
+    invoiceNo: varchar("invoice_no", { length: 60 }),
+
     description: text("description").notNull(),
     notes: text("notes"),
 

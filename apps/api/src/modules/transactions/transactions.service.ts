@@ -80,6 +80,7 @@ export type TransactionDto = {
   notes: string | null;
   paymentMethod: string;
   reference: string | null;
+  invoiceNo: string | null;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;
@@ -558,6 +559,7 @@ export class TransactionsService {
               counterparty: input.counterparty,
               paymentMethod: input.paymentMethod,
               reference: input.reference,
+              invoiceNo: input.invoiceNo,
               description: input.description,
               notes: input.notes,
               receiptUrl: input.receiptUrl,
@@ -614,6 +616,7 @@ export class TransactionsService {
         categoryId: input.categoryId,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
+        invoiceNo: input.invoiceNo,
         description: input.description,
         notes: input.notes,
         receiptUrl: input.receiptUrl,
@@ -710,6 +713,9 @@ export class TransactionsService {
               : {}),
             ...(input.reference !== undefined
               ? { reference: input.reference }
+              : {}),
+            ...(input.invoiceNo !== undefined
+              ? { invoiceNo: input.invoiceNo }
               : {}),
             ...(input.description ? { description: input.description } : {}),
             ...(input.notes !== undefined ? { notes: input.notes } : {}),
@@ -933,6 +939,7 @@ const projection = {
   notes: transactions.notes,
   paymentMethod: transactions.paymentMethod,
   reference: transactions.reference,
+  invoiceNo: transactions.invoiceNo,
   receiptUrl: transactions.receiptUrl,
   billAmount: transactions.billAmount,
   withheldTaxAmount: transactions.withheldTaxAmount,
