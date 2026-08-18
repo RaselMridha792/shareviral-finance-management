@@ -661,6 +661,86 @@ it.
 
 This is also what the Cash In table's bank link points at, so it comes first.
 
+## Next: the AI & tools tracker, as the sheet actually is (data received 2026-08-18)
+
+**Not built.** The owner sent the CSV export of `Master_Input`, screenshots of
+all four dropdowns, and the person-by-tool matrix that sits below the data.
+Recorded here because the sheet answers most of the design questions the
+earlier note asked.
+
+### What the sheet is
+
+**Each row is not a tool.** It is one person's subscription to one tool for one
+billing period. Claude Pro appears nine times because seven people are on it
+and some have renewed - khairul@ has June (Expired) and July (Active): one
+subscription, two months.
+
+**The matrix underneath is the many-to-many link**, and it settles the question
+the earlier note left open:
+
+| tool | rows in Master_Input | people marked Yes |
+|---|---|---|
+| Clickup | 1 - $130, "13 seats", omar@ | 12 |
+| Github | 1 - $40, nizam@ | 9 |
+
+One subscription, twelve users. A `team_member_id` column on `vendors` would
+have lost eleven of them.
+
+**The email is the account holder, not the user.** Github is under nizam@ and
+nizam does not appear in the matrix at all. Who pays and who uses are different
+questions and the app needs both.
+
+### The four dropdowns, from the screenshots
+
+- **Category** — AI Tool, Development, Marketing, Design, HR, Productivity,
+  Management, eSIM, Server Support, Finance
+- **Billing Cycle** — Monthly, Annually, quarterly
+- **Status** — Active, Paused, Canceled, Expired
+- **Payment Method** — Card, PayPal, Bank Transfer, paypneer
+
+### Open questions
+
+1. **Status has five values; the tabs were specified as four.** Active /
+   Cancelled / Paused / All was asked for, but the sheet also has Expired.
+   Expired reads as "ran out on its own" and Canceled as "stopped
+   deliberately", which are different facts. Five tabs, or does Expired fold
+   into Cancelled?
+2. **Two Khairuls.** `Z.H.M Khairul Basar` and `Khairul Bashar` are separate
+   rows in the matrix, and Master_Input has only `khairul@shareviral.cash`.
+   One person or two?
+3. **The matrix is keyed by name, Master_Input by email.** Joining them needs a
+   name-to-email mapping against the app's own team members. To be confirmed
+   rather than guessed from spelling.
+4. **Two tools in the matrix have no subscription row at all** - `Linkedin`
+   (Rukiya) and `Paid Posting` (Ishtiaque). No cost is recorded anywhere.
+5. **`developer@shareviral.cash`** (Numero eSIM) is a role address, not a
+   person. Does it map to somebody, or is it a team-held account?
+
+### Data that will not survive a naive import
+
+- `Claude plan - 20x` is `Claude Max plan - 20x` with "Max" missing - the owner
+  has already highlighted that row red.
+- `" Claude Max plan - 20x"` has a leading space; `"Claude Max Plan 5x. "` has
+  a trailing space and a full stop. Three tools where there is one.
+- `"Jun 20, 2026"` in one Start Date; every other row is `2026-06-20`.
+- `"Credit Base"` sitting in a date column (Claude Pro, $45).
+- `Equivalent (BDT)` and `USD Rate` are empty in all 32 rows.
+- `User Name` is empty in all 32 rows; people are identifiable only by
+  `Login accounts`.
+- Same name, different price: Claude Max plan - 20x at $113 and $200; Claude
+  Max Plan 5x at $100 and $88.48; Claude Pro at $20 and $45. Proration or
+  error - only the owner knows.
+- `paypneer` for Payoneer; `Card ` with a trailing space on every row.
+
+Normalising these is easy. Deciding **which are typos and which are facts** is
+not, and is the owner's call before anything is imported.
+
+### Also asked for
+
+An upload field for a screenshot of the tool, viewable by clicking the tool's
+name in the table - the same pattern as the Cash In invoice and statement. The
+`files` machinery already covers it.
+
 ## Still waiting on answers
 
 1. **The category list** — 39 are seeded as a proposal. Which headings are wrong
