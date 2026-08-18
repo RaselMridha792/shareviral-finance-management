@@ -28,6 +28,8 @@ export type TransactionDto = {
   reference: string | null;
   /** The company's own — INV-002, SAL-JUL. */
   invoiceNo: string | null;
+  /** Attached documents. Zero is what the table marks. */
+  documentCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;

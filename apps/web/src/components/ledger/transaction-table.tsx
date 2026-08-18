@@ -1,7 +1,7 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
-import { Ban, Link2, Paperclip, SquarePen } from "lucide-react";
+import { Ban, Link2, Paperclip, SquarePen, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -196,9 +196,40 @@ export function TransactionTable({
                       title="Show the attached documents"
                       className="group cursor-pointer text-left"
                     >
-                      <span className="num flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
-                        <Paperclip className="size-3" />
+                      {/*
+                        The count, and a warning when it is zero.
+
+                        The Cash In and expense screens insist on documents, but
+                        a file needs a row to attach to, so an entry is saved a
+                        moment before its documents are — and anybody who closes
+                        the drawer in that moment leaves a recorded entry with
+                        nothing attached. Without this the gap is invisible and
+                        the form's insistence is theatre.
+                      */}
+                      <span
+                        className={cn(
+                          "num flex items-center gap-1 text-xs font-medium group-hover:underline",
+                          row.documentCount > 0
+                            ? "text-primary"
+                            : "text-warning",
+                        )}
+                        title={
+                          row.documentCount > 0
+                            ? `${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`
+                            : "Nothing is attached to this entry"
+                        }
+                      >
+                        {row.documentCount > 0 ? (
+                          <Paperclip className="size-3" />
+                        ) : (
+                          <TriangleAlert className="size-3" />
+                        )}
                         {row.refNo}
+                        {row.documentCount > 1 ? (
+                          <span className="text-muted-foreground">
+                            ×{row.documentCount}
+                          </span>
+                        ) : null}
                       </span>
                       {/*
                         Both, when both exist. The invoice is the company's

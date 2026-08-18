@@ -81,6 +81,16 @@ export type TransactionDto = {
   paymentMethod: string;
   reference: string | null;
   invoiceNo: string | null;
+  /**
+   * How many documents are attached. Zero is the interesting value.
+   *
+   * The Cash In and expense screens insist on an invoice and a statement, but a
+   * file needs a row to attach to, so the entry is saved a moment before its
+   * documents are. Somebody who closes the drawer in that moment leaves a
+   * recorded entry with nothing attached, and without this the gap is
+   * invisible — the form's insistence would be theatre.
+   */
+  documentCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;
@@ -927,6 +937,35 @@ export class TransactionsService {
   }
 }
 
+/**
+ * How many live documents hang on the row.
+ *
+ * A subquery rather than a join, because a join would return the transaction
+ * once per attached file and quietly double every figure on the page the first
+ * time somebody uploaded two.
+ *
+ * Written with no interpolated column objects, and that is the whole trick.
+ * Inside a `sql` template drizzle renders a column as its bare name, so
+ * `${transactions.id}` becomes `"id"` — and inside `from files` that `"id"` is
+ * the *file's* own. The team-member photograph was broken exactly this way and
+ * the comment there records it: the condition asked whether a file's owner is
+ * its own id, which is never true, and NULL is a perfectly good answer to
+ * "which photo", so nothing errored and every avatar fell back to initials.
+ *
+ * So both sides are literal text. `df` aliases files so nothing is ambiguous,
+ * and `transactions.id` resolves against the outer query — which holds as long
+ * as the outer query does not alias that table. It does not, in any of the four
+ * places this projection is used.
+ */
+function documentCount() {
+  return sql<number>`(
+    select count(*)::int
+      from files df
+     where df.transaction_id = transactions.id
+       and df.deleted_at is null
+  )`;
+}
+
 const projection = {
   id: transactions.id,
   refNo: transactions.refNo,
@@ -940,6 +979,7 @@ const projection = {
   paymentMethod: transactions.paymentMethod,
   reference: transactions.reference,
   invoiceNo: transactions.invoiceNo,
+  documentCount: documentCount(),
   receiptUrl: transactions.receiptUrl,
   billAmount: transactions.billAmount,
   withheldTaxAmount: transactions.withheldTaxAmount,
