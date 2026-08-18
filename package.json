@@ -34,7 +34,7 @@
     "test:all": "npm run test && npm run test:integration && npm run test:browser"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^10.0.5"
   },
   "engines": {
     "node": ">=20"
