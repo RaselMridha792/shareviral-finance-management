@@ -698,44 +698,65 @@ questions and the app needs both.
 - **Status** — Active, Paused, Canceled, Expired
 - **Payment Method** — Card, PayPal, Bank Transfer, paypneer
 
-### Open questions
+### Answered by the owner, 18 Aug
 
-1. **Status has five values; the tabs were specified as four.** Active /
-   Cancelled / Paused / All was asked for, but the sheet also has Expired.
-   Expired reads as "ran out on its own" and Canceled as "stopped
-   deliberately", which are different facts. Five tabs, or does Expired fold
-   into Cancelled?
-2. **Two Khairuls.** `Z.H.M Khairul Basar` and `Khairul Bashar` are separate
-   rows in the matrix, and Master_Input has only `khairul@shareviral.cash`.
-   One person or two?
-3. **The matrix is keyed by name, Master_Input by email.** Joining them needs a
-   name-to-email mapping against the app's own team members. To be confirmed
-   rather than guessed from spelling.
-4. **Two tools in the matrix have no subscription row at all** - `Linkedin`
-   (Rukiya) and `Paid Posting` (Ishtiaque). No cost is recorded anywhere.
-5. **`developer@shareviral.cash`** (Numero eSIM) is a role address, not a
-   person. Does it map to somebody, or is it a team-held account?
+- **Five tabs**, final: Active, Paused, Canceled, Expired, All.
+- **Nobody is matched to a name.** The sheet's matrix and its seventeen names
+  are not imported. Instead a subscription records the **team it was bought
+  for** as free text, and **who uses it** is chosen from the app's own active
+  team members.
+- **The login email stays free text** — it may not be an office address, so it
+  is a label rather than a person.
+- The red marks, the three Claude spellings, the price differences and the
+  empty columns are **not worth chasing**: the data is dummy, and what matters
+  is the shape.
 
-### Data that will not survive a naive import
+### The shape, decided
 
-- `Claude plan - 20x` is `Claude Max plan - 20x` with "Max" missing - the owner
-  has already highlighted that row red.
-- `" Claude Max plan - 20x"` has a leading space; `"Claude Max Plan 5x. "` has
-  a trailing space and a full stop. Three tools where there is one.
-- `"Jun 20, 2026"` in one Start Date; every other row is `2026-06-20`.
-- `"Credit Base"` sitting in a date column (Claude Pro, $45).
-- `Equivalent (BDT)` and `USD Rate` are empty in all 32 rows.
-- `User Name` is empty in all 32 rows; people are identifiable only by
-  `Login accounts`.
-- Same name, different price: Claude Max plan - 20x at $113 and $200; Claude
-  Max Plan 5x at $100 and $88.48; Claude Pro at $20 and $45. Proration or
-  error - only the owner knows.
-- `paypneer` for Payoneer; `Card ` with a trailing space on every row.
+Two tables, because a tool and a subscription to it are different things -
+Claude is one vendor and nine of these.
 
-Normalising these is easy. Deciding **which are typos and which are facts** is
-not, and is the owner's call before anything is imported.
+**`subscriptions`** — one plan, one price, one lifecycle:
 
-### Also asked for
+| column | type | why |
+|---|---|---|
+| `vendor_id` | uuid → vendors | the company. Claude, Figma, Github |
+| `plan_name` | text | "Max Plan 5x", "Professional Full seats" |
+| `category` | enum | the sheet's ten, as an enum so it cannot drift |
+| `cost_usd` | numeric(14,2) | the price as billed |
+| `billing_cycle` | existing enum | none / monthly / quarterly / yearly - already in the app |
+| `start_date` | date | |
+| `next_renewal_on` | date, nullable | nullable is what "Credit Base" needs |
+| `renewal_note` | text, nullable | and this is where that phrase lives |
+| `status` | enum | active / paused / canceled / expired |
+| `payment_method` | existing enum | plus `payoneer`, which the app lacks |
+| `account_id` | uuid → accounts, nullable | which card actually pays it |
+| `bought_for` | text | "Engineering Core" - the team, as typed |
+| `login_email` | text, nullable | a label, not a person |
+| `screenshot_file_id` | uuid → files, nullable | opened from the tool's name |
+| `notes` | text, nullable | |
+
+**`subscription_users`** — subscription × team member, both keys.
+
+Chosen over a single `user_id` because it costs nothing and the sheet already
+needs it: Clickup is one row and twelve users, Github one row and nine. Picking
+one name from the dropdown is the same gesture as picking twelve, and it is
+what makes "which tools is this person on" answerable for shared seats too.
+
+**No BDT column, and no rate column.** They are empty in all 32 rows, and the
+app already has the rule: a subscription is priced in dollars, so the dollars
+are the fact and taka is a reading of it, shown translated with its rate named
+like every other figure here. What was actually paid in taka is a ledger row,
+at the rate that day really achieved - which is a different and better number
+than a rate typed into a sheet.
+
+**Two enums the app already has** and this reuses rather than duplicates:
+`billing_cycle` (none/monthly/quarterly/yearly) and `payment_method`
+(bank_transfer/cash/cheque/mobile_banking/card/other). The sheet's `paypneer`
+is Payoneer and needs adding to the second; its `Annually` is the existing
+`yearly`.
+
+### Also asked for### Also asked for
 
 An upload field for a screenshot of the tool, viewable by clicking the tool's
 name in the table - the same pattern as the Cash In invoice and statement. The
