@@ -243,29 +243,44 @@ function SecondStep({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onBack: () => void;
 }) {
+  /**
+   * The API takes either in the same field, so this changes nothing it sends.
+   * It exists because a person whose phone is dead does not read the small
+   * print under a box marked "Code" - they look for the way out, and if there
+   * is no visible way out they conclude they are locked out of the company's
+   * accounts. The escape hatch has to be a thing you can see.
+   */
+  const [useRecovery, setUseRecovery] = useState(false);
+
   return (
     <Card className="p-6">
       <h1 className="text-lg font-semibold tracking-tight">
-        Enter your code
+        {useRecovery ? "Use a recovery code" : "Enter your code"}
       </h1>
       <p className="mt-1 mb-5 text-sm text-muted-foreground">
-        The six digits from your authenticator app. A recovery code works here
-        too, if your phone is not to hand.
+        {useRecovery
+          ? "One of the ten codes you saved when you set this up. Each one works once."
+          : "The six digits from your authenticator app."}
       </p>
 
       <form method="post" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Code</span>
+          <span className="text-sm font-medium">
+            {useRecovery ? "Recovery code" : "Code"}
+          </span>
           <input
             name="code"
-            inputMode="numeric"
+            // Not numeric for a recovery code — a number pad cannot type it.
+            inputMode={useRecovery ? "text" : "numeric"}
             autoComplete="one-time-code"
+            autoCapitalize="characters"
+            spellCheck={false}
             autoFocus
             required
-            placeholder="123456"
+            placeholder={useRecovery ? "XXXX-XXXX-XXXX-XXXX" : "123456"}
             value={code}
             onChange={(event) => onCode(event.target.value)}
-            className={`${inputClass} num tracking-[0.3em]`}
+            className={`${inputClass} num ${useRecovery ? "tracking-wider" : "tracking-[0.3em]"}`}
           />
         </label>
 
@@ -295,14 +310,36 @@ function SecondStep({
           )}
         </Button>
 
-        <button
-          type="button"
-          onClick={onBack}
-          className="cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline"
-        >
-          Start again
-        </button>
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => {
+              setUseRecovery(!useRecovery);
+              onCode("");
+            }}
+            className="cursor-pointer text-left text-xs font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {useRecovery
+              ? "Use my authenticator app instead"
+              : "Lost your phone? Use a recovery code"}
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="cursor-pointer text-left text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Start again
+          </button>
+        </div>
       </form>
+
+      {useRecovery ? (
+        <p className="mt-4 text-xs text-muted-foreground">
+          No codes left either? An administrator has to clear the enrolment on
+          the server — there is deliberately no way to do it from inside the
+          app, because anyone who could would be a way around the second step.
+        </p>
+      ) : null}
     </Card>
   );
 }

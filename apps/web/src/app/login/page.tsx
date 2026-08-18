@@ -10,6 +10,12 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : "/";
+  /**
+   * Why they are back here. Without this, an idle sign-out is indistinguishable
+   * from something having gone wrong, and "it logged me out for no reason" is
+   * how a security control gets asked to be turned off.
+   */
+  const idled = params.reason === "idle";
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
@@ -25,6 +31,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             <p className="text-xs text-muted-foreground">Management portal</p>
           </div>
         </div>
+
+        {idled ? (
+          <p className="mb-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted-foreground">
+            You were signed out because this screen was left idle. Nothing is
+            wrong — sign in again to carry on.
+          </p>
+        ) : null}
 
         <LoginForm next={next} />
 

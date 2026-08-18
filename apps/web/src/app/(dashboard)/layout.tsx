@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { IdleTimeout } from "@/components/auth/idle-timeout";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { MainRegion } from "@/components/layout/main-region";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -49,6 +50,11 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
           asOf={rates[0]?.rateDate ?? null}
         >
           <ToastProvider>
+            {/*
+              Inside the signed-in layout only. The sign-in page has no session
+              to time out, and a countdown there would be nonsense.
+            */}
+            <IdleTimeout />
             <div className="flex min-h-dvh">
               <Sidebar />
               <div className="flex min-w-0 flex-1 flex-col">
