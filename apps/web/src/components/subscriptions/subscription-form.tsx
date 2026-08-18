@@ -15,8 +15,8 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { Trash2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { Paperclip, Trash2, TriangleAlert } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -30,9 +30,13 @@ import {
 } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
-import type { AccountDto, VendorDto } from "@/lib/masters";
+import { vendorsApi, type AccountDto, type VendorDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
-import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
+import {
+  subscriptionsApi,
+  uploadSubscriptionScreenshot,
+  type SubscriptionDto,
+} from "@/lib/subscriptions";
 
 /**
  * The payment method the chosen account implies.
@@ -99,7 +103,25 @@ export function SubscriptionForm({
 }) {
   const editing = Boolean(subscription);
 
-  const [vendorId, setVendorId] = useState(subscription?.vendorId ?? "");
+  /**
+   * Typed, not picked.
+   *
+   * The owner asked for a name field rather than a dropdown, and they are
+   * right about the use: a tool is bought and then entered, so the name is
+   * already known and hunting for it in a list is work the form invented. The
+   * vendor row behind it is still real — it is looked up by name on save, and
+   * created when it is new, so a name typed once becomes a name the rest of
+   * the app can group spending by.
+   */
+  const [toolName, setToolName] = useState(subscription?.vendorName ?? "");
+
+  /**
+   * The plan screenshot, chosen while typing and posted once there is a row to
+   * hang it on. A file needs the subscription's id, which does not exist until
+   * the save returns — that is the only reason it is not uploaded here.
+   */
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const screenshotPicker = useRef<HTMLInputElement>(null);
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
   const [category, setCategory] = useState<SubscriptionCategory>(
     subscription?.category ?? "ai_tool",
@@ -194,11 +216,44 @@ export function SubscriptionForm({
       })),
   ];
 
+  /**
+   * The vendor row behind the typed name.
+   *
+   * Matched case-insensitively against what is already on the books, so
+   * "claude" and "Claude" stay one company rather than two that never add up.
+   * Created when it is genuinely new — which is the point of typing the name
+   * instead of picking it.
+   */
+  async function resolveVendor(): Promise<string> {
+    const wanted = toolName.trim();
+    const existing = vendors.find(
+      (vendor) => vendor.name.trim().toLowerCase() === wanted.toLowerCase(),
+    );
+    if (existing) return existing.id;
+    const created = await vendorsApi.create({
+      name: wanted,
+      // The vendor is a stub the subscription hangs on: what it costs, how
+      // often and in what currency all live on the subscription itself, so
+      // repeating them here would be two places to change one price.
+      type: "ai_tool",
+      billingCycle: "none",
+      billingCurrency: "USD",
+      psrStatus: "unknown",
+    });
+    return created.id;
+  }
+
   async function save() {
     setPending(true);
     setError(null);
     setFieldErrors({});
     try {
+      if (toolName.trim().length < 2) {
+        setFieldErrors({ vendorId: ["Give the tool a name"] });
+        return;
+      }
+      const vendorId = await resolveVendor();
+
       const body = {
         vendorId,
         planName,
@@ -237,11 +292,29 @@ export function SubscriptionForm({
           })),
       };
 
-      if (subscription) {
-        await subscriptionsApi.update(subscription.id, body);
-      } else {
-        await subscriptionsApi.create(body);
+      const saved = subscription
+        ? await subscriptionsApi.update(subscription.id, body)
+        : await subscriptionsApi.create(body);
+
+      /**
+       * The plan is saved by here, so a screenshot that will not upload is not
+       * a failed save. Said out loud rather than swallowed, and rather than
+       * reported as the whole thing having failed.
+       */
+      if (screenshot) {
+        try {
+          await uploadSubscriptionScreenshot(saved.id, screenshot);
+        } catch (caught) {
+          onSaved();
+          setError(
+            `The plan is saved, but the screenshot did not upload: ${
+              caught instanceof ApiError ? caught.message : "try it again"
+            }. Click the tool's name on the list to attach it.`,
+          );
+          return;
+        }
       }
+
       onSaved();
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -288,16 +361,62 @@ export function SubscriptionForm({
     >
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Company" required error={fieldErrors.vendorId}>
-            <SearchableSelect
-              value={vendorId}
-              onChange={setVendorId}
-              placeholder="Claude, Figma, Github…"
-              options={vendors.map((vendor) => ({
-                value: vendor.id,
-                label: vendor.name,
-              }))}
-            />
+          <Field label="Tool name" required error={fieldErrors.vendorId}>
+            <div className="flex items-center gap-2">
+              <Input
+                value={toolName}
+                maxLength={120}
+                placeholder="Claude, Figma, Github…"
+                onChange={(e) => setToolName(e.target.value)}
+                list="subscription-tool-names"
+              />
+              {/* The plan screenshot, beside the name it belongs to — and the
+                  same picture the tool's name opens on the list. */}
+              <input
+                ref={screenshotPicker}
+                type="file"
+                accept="image/*,application/pdf"
+                className="sr-only"
+                onChange={(event) => {
+                  setScreenshot(event.target.files?.[0] ?? null);
+                  // Cleared so picking the same file twice still fires.
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => screenshotPicker.current?.click()}
+                title="Attach a screenshot of the plan"
+                aria-label="Attach a screenshot of the plan"
+                className="shrink-0 cursor-pointer rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+              >
+                <Paperclip className="size-4" />
+              </button>
+            </div>
+
+            {/* Names already on the books, offered rather than imposed — the
+                field is still free text, so a new tool is typed and not
+                hunted for. */}
+            <datalist id="subscription-tool-names">
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.name} />
+              ))}
+            </datalist>
+
+            {screenshot ? (
+              <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">
+                  {screenshot.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setScreenshot(null)}
+                  className="shrink-0 cursor-pointer font-medium text-negative hover:underline"
+                >
+                  Remove
+                </button>
+              </p>
+            ) : null}
           </Field>
 
           <Field label="Plan" required error={fieldErrors.planName}>
@@ -502,76 +621,91 @@ export function SubscriptionForm({
               {seats.map((seat, index) => (
                 <li
                   key={index}
-                  className="grid items-end gap-2 rounded-lg border border-border p-2 sm:grid-cols-[1fr_auto_auto_auto]"
+                  className="flex flex-col gap-2 rounded-lg border border-border p-3"
                 >
-                  <Field label="Person" className="min-w-0">
-                    <SearchableSelect
-                      value={seat.teamMemberId}
-                      onChange={(value) =>
-                        setSeats(
-                          seats.map((s, i) =>
-                            i === index ? { ...s, teamMemberId: value } : s,
-                          ),
-                        )
-                      }
-                      placeholder="Pick somebody"
-                      options={pickable
-                        // Somebody already on the plan is not offered again —
-                        // the API refuses a duplicate, and finding that out on
-                        // save is a worse way to learn it.
-                        .filter(
-                          (person) =>
-                            person.value === seat.teamMemberId ||
-                            !chosen.has(person.value),
-                        )}
-                    />
-                  </Field>
-
-                  <Field label="Their status">
-                    <Select
-                      value={seat.status}
-                      className="w-32"
-                      onChange={(e) =>
-                        setSeats(
-                          seats.map((s, i) =>
-                            i === index
-                              ? {
-                                  ...s,
-                                  status: e.target.value as SubscriptionStatus,
-                                }
-                              : s,
-                          ),
-                        )
-                      }
-                    >
-                      {SUBSCRIPTION_STATUSES.map((id) => (
-                        <option key={id} value={id}>
-                          {SUBSCRIPTION_STATUS_LABELS[id]}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-
-                  <Field label="From">
-                    <DateInput
-                      className="w-36"
-                      value={seat.fromDate}
-                      onChange={(e) =>
-                        setSeats(
-                          seats.map((s, i) =>
-                            i === index
-                              ? { ...s, fromDate: e.target.value }
-                              : s,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-
+                  {/* Stacked, because this drawer is 448px wide and four
+                      controls on one line collapsed the person picker to
+                      nothing — its label printed on top of the next one's and
+                      there was no visible way to choose anybody at all. */}
                   <div className="flex items-end gap-2">
+                    <Field label="Person" className="min-w-0 flex-1">
+                      <SearchableSelect
+                        value={seat.teamMemberId}
+                        onChange={(value) =>
+                          setSeats(
+                            seats.map((s, i) =>
+                              i === index ? { ...s, teamMemberId: value } : s,
+                            ),
+                          )
+                        }
+                        placeholder="Pick somebody"
+                        options={pickable
+                          // Somebody already on the plan is not offered again —
+                          // the API refuses a duplicate, and finding that out on
+                          // save is a worse way to learn it.
+                          .filter(
+                            (person) =>
+                              person.value === seat.teamMemberId ||
+                              !chosen.has(person.value),
+                          )}
+                      />
+                    </Field>
+
+                    <button
+                      type="button"
+                      aria-label="Take this person off the plan"
+                      onClick={() =>
+                        setSeats(seats.filter((_, i) => i !== index))
+                      }
+                      className="mb-1 shrink-0 cursor-pointer rounded-md p-2 text-muted-foreground transition hover:bg-negative/10 hover:text-negative"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <Field label="Status">
+                      <Select
+                        value={seat.status}
+                        onChange={(e) =>
+                          setSeats(
+                            seats.map((s, i) =>
+                              i === index
+                                ? {
+                                    ...s,
+                                    status: e.target
+                                      .value as SubscriptionStatus,
+                                  }
+                                : s,
+                            ),
+                          )
+                        }
+                      >
+                        {SUBSCRIPTION_STATUSES.map((id) => (
+                          <option key={id} value={id}>
+                            {SUBSCRIPTION_STATUS_LABELS[id]}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+
+                    <Field label="From">
+                      <DateInput
+                        value={seat.fromDate}
+                        onChange={(e) =>
+                          setSeats(
+                            seats.map((s, i) =>
+                              i === index
+                                ? { ...s, fromDate: e.target.value }
+                                : s,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+
                     <Field label="Until">
                       <DateInput
-                        className="w-36"
                         value={seat.untilDate}
                         onChange={(e) =>
                           setSeats(
@@ -584,16 +718,6 @@ export function SubscriptionForm({
                         }
                       />
                     </Field>
-                    <button
-                      type="button"
-                      aria-label="Take this person off the plan"
-                      onClick={() =>
-                        setSeats(seats.filter((_, i) => i !== index))
-                      }
-                      className="mb-1 cursor-pointer rounded-md p-2 text-muted-foreground transition hover:bg-negative/10 hover:text-negative"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
                   </div>
                 </li>
               ))}
