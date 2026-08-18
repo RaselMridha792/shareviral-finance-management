@@ -53,6 +53,23 @@ export class PayrollController {
     return this.payroll.generateLines(uuidSchema.parse(id), actor);
   }
 
+  /**
+   * Reapplies the year's rule to a draft sheet.
+   *
+   * Separate from generate-lines because rebuilding would throw away the
+   * bonuses and breakdowns somebody has typed since — and the reason to want
+   * this is usually that the rates were published after the sheet was built.
+   */
+  @Post("runs/:id/recalculate-tds")
+  @HttpCode(200)
+  @RequirePermission("payroll.write")
+  recalculateTds(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.payroll.recalculateTds(uuidSchema.parse(id), actor);
+  }
+
   @Patch("lines/:id")
   @RequirePermission("payroll.write")
   updateLine(

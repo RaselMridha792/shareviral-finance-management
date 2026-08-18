@@ -5,7 +5,7 @@ import { Calculator, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
-import { Amount } from "@/components/money/amount";
+import { TdsWorking } from "@/components/tds/tds-working";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -459,50 +459,7 @@ function TdsCalculator({ year }: { year: number }) {
           </p>
         ) : null}
 
-        {r ? (
-          <div className="rounded-lg border border-border">
-            <Line label="Total salary income" value={r.annualSalary} />
-            <Line
-              label={`Less exempted — ${r.exemption.byFraction} by fraction, cap ${r.exemption.cap}`}
-              value={`-${r.exemption.applied}`}
-            />
-            <Line label="Net taxable income" value={r.taxableIncome} strong />
-
-            {r.bands.map((band, i) => (
-              <Line
-                key={i}
-                label={`${band.label} @ ${(band.rate * 100).toFixed(band.rate * 100 % 1 ? 2 : 0)}%  — on ${band.amount}`}
-                value={band.tax}
-                muted
-              />
-            ))}
-            <Line label="Tax before rebate" value={r.taxBeforeRebate} strong />
-
-            <Line
-              label={`Rebate — on investment ${r.rebate.onInvestment}, on income ${r.rebate.onTaxableIncome}, ceiling ${r.rebate.fixedCap}`}
-              value={`-${r.rebate.applied}`}
-            />
-            <Line label="Tax after rebate" value={r.taxAfterRebate} />
-
-            {r.minimumTaxApplied ? (
-              <Line
-                label="Minimum tax applied — the rebate had taken it below the floor"
-                value={r.minimumTaxApplied}
-                muted
-              />
-            ) : null}
-
-            <Line label="Net payable tax, for the year" value={r.netAnnualTax} strong />
-            <div className="flex items-baseline justify-between gap-4 bg-surface-muted px-4 py-3">
-              <span className="text-sm font-semibold">Monthly TDS</span>
-              <Amount
-                value={r.monthlyTds}
-                showCounterpart={false}
-                className="text-lg font-semibold"
-              />
-            </div>
-          </div>
-        ) : null}
+        {r ? <TdsWorking result={r} /> : null}
 
         {result && !result.exact ? (
           <p className="text-xs text-muted-foreground">
@@ -516,35 +473,6 @@ function TdsCalculator({ year }: { year: number }) {
 }
 
 /* -------------------------------------------------------------------------- */
-
-function Line({
-  label,
-  value,
-  strong = false,
-  muted = false,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border px-4 py-2.5 last:border-b-0">
-      <span
-        className={
-          muted ? "text-xs text-muted-foreground" : "text-sm text-muted-foreground"
-        }
-      >
-        {label}
-      </span>
-      <Amount
-        value={value}
-        showCounterpart={false}
-        className={strong ? "font-semibold" : muted ? "text-xs" : ""}
-      />
-    </div>
-  );
-}
 
 /** A rate, typed as a percentage and stored as a fraction. */
 function Percent({

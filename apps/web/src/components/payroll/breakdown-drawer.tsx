@@ -67,7 +67,10 @@ export function BreakdownDrawer({
     line.bonusAmount,
     line.otherAdditions,
   ]);
-  const deductionsPaid = sum([line.tdsAmount, line.otherDeductions]);
+  // The tax is not part of what is described here — the app works it out and
+  // the payslip adds it as its own line. What this side has to account for is
+  // the rest: advances, unpaid leave, anything typed on the sheet.
+  const deductionsPaid = line.otherDeductions;
 
   async function onSave() {
     setPending(true);
@@ -161,7 +164,8 @@ export function BreakdownDrawer({
           setRows={setDeductions}
           usual={USUAL_DEDUCTIONS}
           target={deductionsPaid}
-          targetLabel="Deductions on the sheet"
+          targetLabel="Other deductions on the sheet"
+          note="Tax is worked out by the app and added to the payslip on its own line — leave it out of this list."
           money={money}
         />
       </div>
@@ -178,6 +182,7 @@ function Side({
   usual,
   target,
   targetLabel,
+  note,
   money,
 }: {
   heading: string;
@@ -186,6 +191,7 @@ function Side({
   usual: readonly string[];
   target: string;
   targetLabel: string;
+  note?: string;
   money: (value: string) => string;
 }) {
   const total = sum(rows.map((row) => row.amount || "0"));
@@ -211,6 +217,8 @@ function Side({
           </Button>
         ) : null}
       </div>
+
+      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
 
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">

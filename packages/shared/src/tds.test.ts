@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { fromMinorUnits, toMinorUnits } from "./money.ts";
 import {
   DEFAULT_TDS_POLICY,
   calculateTds,
+  monthlyTdsFor,
   proRataTds,
   saveTdsPolicySchema,
+  tdsBasisSchema,
   tdsPolicySchema,
   type TdsPolicy,
 } from "./tds.ts";
@@ -512,5 +515,135 @@ describe("what the arithmetic does with remainders", () => {
 describe("proRataTds guards", () => {
   it("returns nothing rather than dividing by zero", () => {
     assert.equal(proRataTds("18250.00", 10, 0), "0.00");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  A month's deduction, and the working stored beside it                      */
+/* -------------------------------------------------------------------------- */
+
+describe("monthlyTdsFor", () => {
+  /**
+   * The projection is twelve times the month, not earnings to date. It is the
+   * convention the company's own working uses, and the only one available in
+   * January for somebody whose salary may change in April.
+   */
+  it("projects the year from the month", () => {
+    const { annualSalary } = monthlyTdsFor("65500.00", DEFAULT_TDS_POLICY);
+    assert.equal(annualSalary, "786000.00");
+  });
+
+  it("agrees with calculating the year directly", () => {
+    for (const monthly of ["45000.00", "65500.00", "100000.00", "250000.00"]) {
+      const viaMonth = monthlyTdsFor(monthly, DEFAULT_TDS_POLICY);
+      const annual = fromMinorUnits(toMinorUnits(monthly) * 12n);
+      assert.equal(
+        viaMonth.monthlyTds,
+        calculateTds(annual, DEFAULT_TDS_POLICY).monthlyTds,
+        `${monthly} a month`,
+      );
+    }
+  });
+
+  it("deducts nothing from a salary under the threshold", () => {
+    // 45,000 a month is 5,40,000 a year: a 1,80,000 exemption leaves 3,60,000,
+    // which is inside the first band.
+    const { monthlyTds, result } = monthlyTdsFor("45000.00", DEFAULT_TDS_POLICY);
+    assert.equal(result.taxableIncome, "360000.00");
+    assert.equal(monthlyTds, "0.00");
+  });
+
+  it("uses the declared investment only when the policy is not assuming", () => {
+    const declaring: TdsPolicy = {
+      ...DEFAULT_TDS_POLICY,
+      rebate: { ...DEFAULT_TDS_POLICY.rebate, assumeFullInvestment: false },
+    };
+
+    const nothingDeclared = monthlyTdsFor("100000.00", declaring, "0");
+    const declared = monthlyTdsFor("100000.00", declaring, "200000.00");
+    assert.equal(nothingDeclared.result.rebate.applied, "0.00");
+    assert.ok(
+      Number(declared.result.rebate.applied) > 0,
+      "declaring an investment must reduce the tax",
+    );
+    assert.ok(Number(declared.monthlyTds) < Number(nothingDeclared.monthlyTds));
+
+    // With the assumption on — the company's own choice — it is ignored.
+    const assumed = monthlyTdsFor("100000.00", DEFAULT_TDS_POLICY, "0");
+    const assumedDeclaring = monthlyTdsFor(
+      "100000.00",
+      DEFAULT_TDS_POLICY,
+      "200000.00",
+    );
+    assert.equal(assumed.monthlyTds, assumedDeclaring.monthlyTds);
+  });
+
+  it("moves when the rule moves — which is the point of a stored basis", () => {
+    const cheaper: TdsPolicy = {
+      ...DEFAULT_TDS_POLICY,
+      rebate: { ...DEFAULT_TDS_POLICY.rebate, rebateRate: 0.1 },
+    };
+    assert.notEqual(
+      monthlyTdsFor("250000.00", DEFAULT_TDS_POLICY).monthlyTds,
+      monthlyTdsFor("250000.00", cheaper).monthlyTds,
+    );
+  });
+});
+
+describe("the basis stored on a payroll line", () => {
+  const basis = {
+    fiscalYear: 2026,
+    annualSalary: "786000.00",
+    declaredInvestment: "0",
+    exactYear: true,
+    policy: DEFAULT_TDS_POLICY,
+  };
+
+  it("round-trips, so a payslip can be reopened and re-derived", () => {
+    const parsed = tdsBasisSchema.safeParse(JSON.parse(JSON.stringify(basis)));
+    assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
+    assert.equal(
+      calculateTds(
+        parsed.data.annualSalary,
+        parsed.data.policy,
+        parsed.data.declaredInvestment,
+      ).monthlyTds,
+      monthlyTdsFor("65500.00", DEFAULT_TDS_POLICY).monthlyTds,
+    );
+  });
+
+  /**
+   * The whole rule, not a reference to it. Policy rows are edited in place, so
+   * a stored id would mean next year's rates rewrote the working behind every
+   * payslip already issued.
+   */
+  it("carries the rule itself, and a broken one is refused", () => {
+    assert.equal(
+      tdsBasisSchema.safeParse({
+        ...basis,
+        policy: { ...DEFAULT_TDS_POLICY, slabs: DEFAULT_TDS_POLICY.slabs.slice(0, 5) },
+      }).success,
+      false,
+      "a slab table with no open band must not be storable as a basis either",
+    );
+  });
+
+  it("refuses a negative salary or investment", () => {
+    assert.equal(
+      tdsBasisSchema.safeParse({ ...basis, annualSalary: "-1.00" }).success,
+      false,
+    );
+    assert.equal(
+      tdsBasisSchema.safeParse({ ...basis, declaredInvestment: "-1.00" }).success,
+      false,
+    );
+  });
+
+  it("refuses a key nobody defined", () => {
+    assert.equal(
+      tdsBasisSchema.safeParse({ ...basis, monthlyTds: "1750.00" }).success,
+      false,
+      "the figure is on the line, not in the basis — two copies would drift",
+    );
   });
 });

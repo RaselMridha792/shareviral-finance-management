@@ -56,10 +56,23 @@ export function PayslipView({
     ["Other additions", payslip.otherAdditions],
   ]);
 
-  const deductions = breakdownOr(payslip.deductionsBreakdown, [
-    ["Tax deducted at source", payslip.tdsAmount],
-    [payslip.deductionNote ?? "Other deductions", payslip.otherDeductions],
-  ]);
+  /**
+   * The tax is always its own line, appended to whatever was described.
+   *
+   * The breakdown covers the deductions somebody entered — an advance, unpaid
+   * leave. The tax is not one of those: the app works it out, so it cannot be
+   * left to a typed list to remember. Without this, filling in a breakdown
+   * would drop the tax off the page while leaving it in the total, and the
+   * column would stop adding up in the one place it must.
+   */
+  const deductions = [
+    ...breakdownOr(payslip.deductionsBreakdown, [
+      [payslip.deductionNote ?? "Other deductions", payslip.otherDeductions],
+    ]),
+    ...(Number(payslip.tdsAmount) !== 0
+      ? [{ label: "Tax deducted at source", amount: payslip.tdsAmount }]
+      : []),
+  ];
 
   // The two totals are the line's own figures, never the sum of the lists
   // above. A breakdown is a description of the gross; if somebody types one

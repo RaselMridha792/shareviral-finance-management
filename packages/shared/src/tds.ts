@@ -404,3 +404,52 @@ export const calculateTdsSchema = z.strictObject({
     .optional(),
 });
 export type CalculateTdsInput = z.infer<typeof calculateTdsSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  What a payroll line's tax was worked out from                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole working behind one month's deduction, frozen onto the line.
+ *
+ * The policy itself and not a reference to it. Tax policy rows are edited in
+ * place — that is the point of a dynamic rule — so a reference would mean that
+ * setting next year's rates silently rewrote the working behind every payslip
+ * already issued. An employee asking in March why February deducted what it
+ * did must get February's answer.
+ *
+ * `annualSalary` is stored beside the policy because it is the other half of
+ * the sum, and because it is a projection rather than a fact: twelve times the
+ * month's gross, which is what the deduction assumes and what will be wrong the
+ * moment somebody gets a raise. Keeping it visible is what lets a screen say
+ * so.
+ */
+export const tdsBasisSchema = z.strictObject({
+  fiscalYear: z.number().int().min(2000).max(2200),
+  annualSalary: policyAmountSchema,
+  declaredInvestment: policyAmountSchema,
+  /** False when the year asked for had no rule and an earlier one was used. */
+  exactYear: z.boolean(),
+  policy: tdsPolicySchema,
+});
+export type TdsBasis = z.infer<typeof tdsBasisSchema>;
+
+/**
+ * A month's deduction from a month's gross.
+ *
+ * The annual figure is twelve times the month, not the person's earnings to
+ * date. That is the convention the company's own working uses, and it is the
+ * only one available in January for somebody whose salary may change in April:
+ * the deduction each month is a twelfth of the tax on the year the month
+ * implies. A raise changes the projection from that month on, and the months
+ * before it are not restated — which is also how the advisor's sheet behaves.
+ */
+export function monthlyTdsFor(
+  monthlyGross: string,
+  policy: TdsPolicy,
+  declaredInvestment = "0",
+): { monthlyTds: string; annualSalary: string; result: TdsResult } {
+  const annualSalary = fromMinorUnits(toMinorUnits(monthlyGross) * 12n);
+  const result = calculateTds(annualSalary, policy, declaredInvestment);
+  return { monthlyTds: result.monthlyTds, annualSalary, result };
+}

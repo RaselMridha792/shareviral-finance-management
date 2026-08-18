@@ -5,6 +5,7 @@ import type {
   EducationLevel,
   EmploymentStatus,
   EngagementType,
+  TdsBasis,
   Gender,
   Paginated,
   PaymentMode,
@@ -151,6 +152,16 @@ export type PayrollLineDto = {
    * built. `null` on lines created before the breakdown existed, which the
    * payslip renders as a single Basic Salary row rather than an empty table.
    */
+  /**
+   * Everything the tax figure was worked out from, frozen when it was.
+   *
+   * The whole rule rather than a reference to it: policy rows are edited in
+   * place, so a reference would mean next year's rates rewrote the working
+   * behind every payslip already issued. Null on lines from before the app
+   * calculated, and where no rule is set up for the year.
+   */
+  tdsBasis: TdsBasis | null;
+  tdsDeclaredInvestment: string | null;
   earningsBreakdown: PayslipLineDto[] | null;
   deductionsBreakdown: PayslipLineDto[] | null;
   paidDays: number | null;
@@ -277,6 +288,11 @@ export const payrollApi = {
   generateLines: (id: string) =>
     apiFetch<{ created: number; skipped: string[]; message?: string }>(
       `/payroll/runs/${id}/generate-lines`,
+      { method: "POST" },
+    ),
+  recalculateTds: (id: string) =>
+    apiFetch<{ changed: number; message: string }>(
+      `/payroll/runs/${id}/recalculate-tds`,
       { method: "POST" },
     ),
   updateLine: (id: string, input: UpdatePayrollLineInput) =>

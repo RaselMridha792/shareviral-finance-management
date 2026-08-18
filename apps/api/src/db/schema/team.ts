@@ -341,10 +341,45 @@ export const payrollLines = pgTable(
       .notNull()
       .default("0"),
 
-    /** Typed in by the user — the accountant works it out, the app records it. */
+    /**
+     * Worked out by the app from the year's rule, not typed in.
+     *
+     * It was typed in once, when the app only recorded what the accountant had
+     * calculated. It now calculates, so this is an output — and `tdsBasis`
+     * below is what makes it checkable.
+     */
     tdsAmount: numeric("tds_amount", { precision: 14, scale: 2 })
       .notNull()
       .default("0"),
+
+    /**
+     * Everything the figure above was worked out from, frozen.
+     *
+     * `{ fiscalYear, annualSalary, declaredInvestment, policy }` — the whole
+     * rule, not a reference to the row it came from. Tax policy rows are edited
+     * in place, so a reference would mean that changing next year's rates
+     * silently rewrites the working behind every payslip already issued. This
+     * is the same reason the bank details beside it are snapshots.
+     *
+     * Null on lines from before the app calculated, and on any line where no
+     * rule was configured for the year — which is a state a screen has to be
+     * able to show, rather than a zero that looks deliberate.
+     */
+    tdsBasis: jsonb("tds_basis"),
+
+    /**
+     * What this person actually put into a rebatable investment.
+     *
+     * Only read when the year's rule has `assumeFullInvestment` switched off.
+     * With it on — which is the company's own deliberate choice — everybody is
+     * treated as having invested the full eligible amount and this is ignored.
+     * The column exists so that switching it off leaves somewhere to put the
+     * real figure, rather than leaving a switch that cannot be used.
+     */
+    tdsDeclaredInvestment: numeric("tds_declared_investment", {
+      precision: 14,
+      scale: 2,
+    }),
     otherDeductions: numeric("other_deductions", { precision: 14, scale: 2 })
       .notNull()
       .default("0"),

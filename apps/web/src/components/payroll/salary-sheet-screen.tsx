@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  calculateTds,
   PAYMENT_MODES,
   PAYMENT_MODE_LABELS,
   PAYROLL_STATUS_LABELS,
@@ -8,6 +9,7 @@ import {
 } from "@finance/shared";
 import {
   ArrowLeft,
+  Calculator,
   CircleCheck,
   Download,
   LoaderCircle,
@@ -25,6 +27,7 @@ import { useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
+import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
 import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
@@ -194,6 +197,23 @@ export function SalarySheetScreen({
               >
                 <RefreshCw className="size-4" />
                 {lines.length ? "Rebuild list" : "Build list"}
+              </Button>
+            ) : null}
+            {/*
+              Separate from Rebuild, because rebuilding starts the sheet again
+              and loses the bonuses and breakdowns typed since. The reason to
+              want this is usually that the rates were published after the
+              sheet was built.
+            */}
+            {canWrite && draft && lines.length ? (
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={busy}
+                onClick={() => act(() => payrollApi.recalculateTds(run.id))}
+              >
+                <Calculator className="size-4" />
+                Work out the tax again
               </Button>
             ) : null}
             {/*
@@ -452,6 +472,7 @@ function LineRow({
 }) {
   const settings = useSettings();
   const [breakdown, setBreakdown] = useState(false);
+  const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -489,7 +510,7 @@ function LineRow({
       <Cell value={line.grossAmount} field="grossAmount" editable={editable} onSave={save} />
       <Cell value={line.bonusAmount} field="bonusAmount" editable={editable} onSave={save} />
       <Cell value={line.otherAdditions} field="otherAdditions" editable={editable} onSave={save} />
-      <Cell value={line.tdsAmount} field="tdsAmount" editable={editable} onSave={save} highlight />
+      <TdsCell line={line} onOpen={() => setWorking(true)} />
       <Cell value={line.otherDeductions} field="otherDeductions" editable={editable} onSave={save} />
       <td className="px-4 py-2">
         <Amount value={line.netAmount} tone="neutral" className="block font-semibold" />
@@ -521,6 +542,14 @@ function LineRow({
           ) : null}
         </div>
 
+        {working ? (
+          <TdsWorkingDrawer
+            line={line}
+            open={working}
+            onClose={() => setWorking(false)}
+          />
+        ) : null}
+
         {breakdown ? (
           <BreakdownDrawer
             line={line}
@@ -533,6 +562,114 @@ function LineRow({
         ) : null}
       </td>
     </tr>
+  );
+}
+
+/**
+ * The tax, which is no longer typed.
+ *
+ * A button rather than a figure, because a number somebody cannot check is a
+ * number they will not trust — and the whole reason for working it out in the
+ * app was so the arithmetic is there to be looked at. The amber mark is for a
+ * line with no working behind it: a run from before the app calculated, or an
+ * income year with no rule set up.
+ */
+function TdsCell({
+  line,
+  onOpen,
+}: {
+  line: PayrollLineDto;
+  onOpen: () => void;
+}) {
+  return (
+    <td className="px-4 py-2">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={
+          line.tdsBasis
+            ? "How this was worked out"
+            : "No rule was applied to this line"
+        }
+        className="flex w-full cursor-pointer items-center justify-end gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted"
+      >
+        {line.tdsBasis ? null : (
+          <TriangleAlert className="size-3 shrink-0 text-warning" />
+        )}
+        <Amount value={line.tdsAmount} tone="neutral" />
+      </button>
+    </td>
+  );
+}
+
+/**
+ * The whole sum behind one person's deduction.
+ *
+ * Recomputed here from the frozen basis rather than fetched, so what is shown
+ * is the arithmetic that produced the stored figure and not a fresh call
+ * against whatever the rule says today. If the two ever disagree, that is
+ * exactly what somebody needs to see, so the panel says so.
+ */
+function TdsWorkingDrawer({
+  line,
+  open,
+  onClose,
+}: {
+  line: PayrollLineDto;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const basis = line.tdsBasis;
+  const result = basis
+    ? calculateTds(basis.annualSalary, basis.policy, basis.declaredInvestment)
+    : null;
+  const agrees = result ? result.monthlyTds === line.tdsAmount : true;
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={`${line.fullName} — how the tax was worked out`}
+      description={
+        basis
+          ? `Under the ${basis.fiscalYear}-${String(basis.fiscalYear + 1).slice(2)} rule, on twelve times this month's gross`
+          : undefined
+      }
+    >
+      {!basis ? (
+        <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm">
+          Nothing was worked out for this line — either it predates the app
+          calculating tax, or no rule is set up for that income year. Settings →
+          Salary TDS has the form, and then{" "}
+          <strong>Work out the tax again</strong> applies it.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {!basis.exactYear ? (
+            <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm">
+              That income year had no rule of its own, so an earlier
+              year&apos;s was used.
+            </p>
+          ) : null}
+
+          {!agrees ? (
+            <p className="rounded-lg bg-negative/10 px-3 py-2.5 text-sm">
+              The stored figure and this working disagree. What is on the sheet
+              is what will be deducted; <strong>Work out the tax again</strong>{" "}
+              brings them back together.
+            </p>
+          ) : null}
+
+          {result ? <TdsWorking result={result} /> : null}
+
+          <p className="text-xs text-muted-foreground">
+            The yearly figure is a projection — twelve times this month&apos;s
+            gross. A raise changes it from that month on, and the months before
+            it are not restated.
+          </p>
+        </div>
+      )}
+    </Drawer>
   );
 }
 

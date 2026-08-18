@@ -387,7 +387,10 @@ export const updatePayrollLineSchema = z
     grossAmount: amountSchema.optional(),
     bonusAmount: amountSchema.optional(),
     otherAdditions: amountSchema.optional(),
-    tdsAmount: amountSchema.optional(),
+    // No `tdsAmount`. The app works the tax out from the year's rule; a screen
+    // that let somebody type over it would make the stored working a lie.
+    // Settings → Salary TDS is where a wrong figure gets fixed.
+    tdsDeclaredInvestment: amountSchema.nullable().optional(),
     otherDeductions: amountSchema.optional(),
     deductionNote: optionalText(200),
     remarks: optionalText(200),

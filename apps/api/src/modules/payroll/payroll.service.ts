@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   formatMoney,
+  monthlyTdsFor,
   payslipBreakdownSchema,
   PAYSLIP_RUN_STATUSES,
   TDS_WARNING_RATIO,
@@ -14,6 +15,8 @@ import {
   type Paginated,
   type PayPayrollInput,
   type PayslipBreakdown,
+  type TdsBasis,
+  type TdsPolicy,
   type UpdatePayrollLineInput,
 } from "@finance/shared";
 import {
@@ -42,6 +45,7 @@ import {
   transactions,
 } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
+import { TaxPolicyService } from "../tds/tax-policy.service";
 import { nextRefNos } from "../transactions/ref-no";
 
 const MONTHS = [
@@ -65,6 +69,7 @@ export class PayrollService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly settings: SettingsService,
+    private readonly taxPolicy: TaxPolicyService,
   ) {}
 
   async listRuns(
@@ -229,6 +234,7 @@ export class PayrollService {
     }
 
     const withoutPay: string[] = [];
+    let noTaxRule = false;
 
     const created = await this.audit.mutate({
       action: "update",
@@ -273,10 +279,23 @@ export class PayrollService {
             continue;
           }
 
+          // Worked out here rather than typed later: the sheet arrives with
+          // the tax already on it, and the figure carries the rule that
+          // produced it.
+          const { tdsAmount, tdsBasis } = await this.computeTds(
+            run.periodYear,
+            run.periodMonth,
+            pay.grossAmount,
+            null,
+          );
+          if (!tdsBasis) noTaxRule = true;
+
           await tx.insert(payrollLines).values({
             payrollRunId: runId,
             teamMemberId: employee.id,
             grossAmount: pay.grossAmount,
+            tdsAmount,
+            tdsBasis,
             // Frozen here rather than read at print time: this is what the
             // split was in this month. When nobody has recorded one, the whole
             // gross becomes a single Basic Salary line — true, and what
@@ -297,12 +316,21 @@ export class PayrollService {
       },
     });
 
+    // Both are worth saying, and neither is an error: a sheet with somebody
+    // missing is still a sheet, and one with the tax unset is still payable.
+    const notes = [
+      withoutPay.length
+        ? `${withoutPay.length} left out because no pay is recorded for them: ${withoutPay.join(", ")}`
+        : null,
+      noTaxRule
+        ? "No tax rule is set up for that income year, so every tax figure is zero. Settings → Salary TDS has the form."
+        : null,
+    ].filter(Boolean);
+
     return {
       created,
       skipped: withoutPay,
-      message: withoutPay.length
-        ? `${withoutPay.length} left out because no pay is recorded for them: ${withoutPay.join(", ")}`
-        : undefined,
+      message: notes.length ? notes.join(" ") : undefined,
     };
   }
 
@@ -316,11 +344,16 @@ export class PayrollService {
         id: payrollLines.id,
         runId: payrollLines.payrollRunId,
         grossAmount: payrollLines.grossAmount,
+        tdsAmount: payrollLines.tdsAmount,
+        tdsDeclaredInvestment: payrollLines.tdsDeclaredInvestment,
         isPaid: payrollLines.isPaid,
         fullName: teamMembers.fullName,
+        periodYear: payrollRuns.periodYear,
+        periodMonth: payrollRuns.periodMonth,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
       .where(eq(payrollLines.id, lineId))
       .limit(1);
 
@@ -331,21 +364,23 @@ export class PayrollService {
       );
     }
 
-    const gross = Number(input.grossAmount ?? line.grossAmount);
-    const tds = Number(input.tdsAmount ?? 0);
+    // The tax is an output now, so it moves whenever either half of its sum
+    // does — the gross, or what the person declared having invested.
+    const recompute =
+      input.grossAmount !== undefined ||
+      input.tdsDeclaredInvestment !== undefined;
 
-    // The app records tax rather than working it out, so it cannot check the
-    // figure — but it can notice one that is almost certainly a typo.
-    if (input.tdsAmount !== undefined && gross > 0) {
-      if (tds > gross) {
-        throw new BadRequestException({
-          message: "Validation failed",
-          errors: {
-            tdsAmount: ["Tax cannot be more than the gross pay"],
-          },
-        });
-      }
-    }
+    const computed = recompute
+      ? await this.computeTds(
+          line.periodYear,
+          line.periodMonth,
+          input.grossAmount ?? line.grossAmount,
+          input.tdsDeclaredInvestment ?? line.tdsDeclaredInvestment,
+        )
+      : null;
+
+    const gross = Number(input.grossAmount ?? line.grossAmount);
+    const tds = Number(computed?.tdsAmount ?? line.tdsAmount);
 
     await this.audit.mutate({
       action: "update",
@@ -365,7 +400,12 @@ export class PayrollService {
       run: async (tx) => {
         await tx
           .update(payrollLines)
-          .set({ ...input, updatedAt: new Date(), updatedBy: actor.id })
+          .set({
+            ...input,
+            ...(computed ?? {}),
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
           .where(eq(payrollLines.id, lineId));
         await this.recalculate(tx, line.runId);
       },
@@ -658,6 +698,139 @@ export class PayrollService {
     });
 
     return this.getRun(runId);
+  }
+
+  /**
+   * What one line's tax comes to, and everything it was worked out from.
+   *
+   * Always the BD income year, whatever the app's reporting mode is set to.
+   * `fiscalYearMode` decides which months a report calls a quarter; it does not
+   * decide when the tax year runs, and a company reporting on calendar quarters
+   * still deducts against July–June.
+   *
+   * Returns nulls rather than throwing when no rule has been set up. A payroll
+   * run must still be buildable in a year nobody has configured yet — the
+   * screen says the tax is unset, which is honest, where a zero would look
+   * like a decision.
+   */
+  private async computeTds(
+    periodYear: number,
+    periodMonth: number,
+    grossAmount: string,
+    declaredInvestment: string | null,
+  ): Promise<{ tdsAmount: string; tdsBasis: TdsBasis | null }> {
+    const fiscalYear = periodMonth >= 7 ? periodYear : periodYear - 1;
+
+    let found: { policy: TdsPolicy; exact: boolean };
+    try {
+      found = await this.taxPolicy.forYear(fiscalYear);
+    } catch {
+      // No rule for the year, and none before it. Not an error here: a run has
+      // to be buildable in a year nobody has configured yet.
+      return { tdsAmount: "0.00", tdsBasis: null };
+    }
+    const { policy, exact: exactYear } = found;
+
+    const investment = policy.rebate.assumeFullInvestment
+      ? "0"
+      : (declaredInvestment ?? "0");
+
+    const { monthlyTds, annualSalary } = monthlyTdsFor(
+      grossAmount,
+      policy,
+      investment,
+    );
+
+    return {
+      tdsAmount: monthlyTds,
+      tdsBasis: {
+        fiscalYear,
+        annualSalary,
+        declaredInvestment: investment,
+        exactYear,
+        policy,
+      },
+    };
+  }
+
+  /**
+   * Reapplies the year's rule to every line on a draft run.
+   *
+   * Wanted after the rule itself changes: rates are published late, and a sheet
+   * built in July under last year's bands should not have to be rebuilt from
+   * scratch — rebuilding would discard the bonuses and the breakdowns somebody
+   * has typed since.
+   */
+  async recalculateTds(runId: string, actor: AuthenticatedUser) {
+    const { run } = await this.getRun(runId);
+
+    if (run.status !== "draft") {
+      throw new BadRequestException(
+        "This run is finalised — reopen it before the tax can be worked out again.",
+      );
+    }
+
+    let changed = 0;
+    let unset = 0;
+
+    await this.audit.mutate({
+      action: "update",
+      entityTable: "payroll_runs",
+      entityId: runId,
+      summary: `Worked out the tax again on the ${run.label} salary sheet`,
+      module: "payroll",
+      isSensitive: true,
+      read: async (tx) => {
+        const [row] = await tx
+          .select({ totalTds: payrollRuns.totalTds })
+          .from(payrollRuns)
+          .where(eq(payrollRuns.id, runId))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const lines = await tx
+          .select({
+            id: payrollLines.id,
+            grossAmount: payrollLines.grossAmount,
+            tdsAmount: payrollLines.tdsAmount,
+            declared: payrollLines.tdsDeclaredInvestment,
+          })
+          .from(payrollLines)
+          .where(eq(payrollLines.payrollRunId, runId));
+
+        for (const line of lines) {
+          const { tdsAmount, tdsBasis } = await this.computeTds(
+            run.periodYear,
+            run.periodMonth,
+            line.grossAmount,
+            line.declared,
+          );
+          if (!tdsBasis) unset++;
+          if (tdsAmount !== line.tdsAmount) changed++;
+
+          await tx
+            .update(payrollLines)
+            .set({
+              tdsAmount,
+              tdsBasis,
+              updatedAt: new Date(),
+              updatedBy: actor.id,
+            })
+            .where(eq(payrollLines.id, line.id));
+        }
+
+        await this.recalculate(tx, runId);
+        return lines.length;
+      },
+    });
+
+    return {
+      changed,
+      message: unset
+        ? `No tax rule is set up for that year, so ${unset} of the figures are zero. Settings → Salary TDS has the form.`
+        : `${changed} ${changed === 1 ? "figure" : "figures"} changed.`,
+    };
   }
 
   /** One person's payslip. */
