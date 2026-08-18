@@ -21,10 +21,11 @@ import { cn } from "@/lib/utils";
 /**
  * Every paid tool this person is on, or has ever been on.
  *
- * The status here is the person's, not the plan's. Clickup can be perfectly
- * active as a subscription while this particular seat was cancelled in July,
- * and the two being the same field is how somebody ends up still being billed
- * for a leaver. Where the two disagree, the plan's is shown beside it.
+ * The status here is the plan's. A seat is a person and nothing else — the
+ * date and the status are given once, when the tool is bought, and they cover
+ * everybody on it. So a seat carries no status of its own to filter on, and
+ * reading the one it was created with would drop every row into whichever
+ * default it happened to get and leave three of these tabs permanently empty.
  *
  * Five tabs, and the fifth is not a status — "All" is the absence of the
  * filter rather than a value of it.
@@ -67,19 +68,30 @@ export function MemberTools({
   // and a request per tab would make switching between them slower than
   // reading them.
   const shown = useMemo(
-    () => (rows ?? []).filter((row) => tab === "all" || row.status === tab),
+    () => (rows ?? []).filter((row) => tab === "all" || row.planStatus === tab),
     [rows, tab],
   );
 
   // Counted from everything, not from the tab — a tab reading "Active" with
-  // nothing under it should still say how many there are elsewhere.
+  // nothing under it should still say how many there are elsewhere. Counted the
+  // same way it is filtered, or a tab promises rows it cannot then show.
   const counts = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of rows ?? []) {
-      map.set(row.status, (map.get(row.status) ?? 0) + 1);
+      map.set(row.planStatus, (map.get(row.planStatus) ?? 0) + 1);
     }
     return map;
   }, [rows]);
+
+  // Seats written before a seat became just a person still carry their own
+  // dates, and those are a real record of who had what when. Nothing writes
+  // them any more, so the column earns its width only while such rows exist —
+  // asked of every row rather than the tab's, so the table does not change
+  // shape underneath somebody switching tabs.
+  const hasOwnDates = useMemo(
+    () => (rows ?? []).some((row) => row.fromDate || row.untilDate),
+    [rows],
+  );
 
   if (error) {
     return (
@@ -169,18 +181,14 @@ export function MemberTools({
                 >
                   Plan cost
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  From
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  Until
-                </th>
+                {hasOwnDates ? (
+                  <th
+                    scope="col"
+                    className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                  >
+                    Their own dates
+                  </th>
+                ) : null}
                 <th
                   scope="col"
                   className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
@@ -209,24 +217,13 @@ export function MemberTools({
                       format: numberFormat,
                     })}
                   </td>
-                  <td className="num px-3 py-2 text-sm">
-                    {row.fromDate ?? "—"}
-                  </td>
-                  <td className="num px-3 py-2 text-sm">
-                    {row.untilDate ?? "—"}
-                  </td>
+                  {hasOwnDates ? (
+                    <td className="px-3 py-2 text-sm">
+                      <OwnDates from={row.fromDate} until={row.untilDate} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2">
-                    <AccessPill status={row.status} />
-                    {/* Only when the two differ. A seat that matches its plan
-                        needs no second badge saying so. */}
-                    {row.planStatus !== row.status ? (
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        plan is{" "}
-                        {SUBSCRIPTION_STATUS_LABELS[
-                          row.planStatus
-                        ].toLowerCase()}
-                      </span>
-                    ) : null}
+                    <AccessPill status={row.planStatus} />
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link
@@ -248,7 +245,53 @@ export function MemberTools({
         The cost shown is the whole plan&apos;s, not this person&apos;s share —
         a thirteen-seat plan costs what it costs however many people are on it.
       </p>
+
+      {hasOwnDates ? (
+        <p className="text-xs text-muted-foreground">
+          Access runs with the plan, whose own dates are on the tool. The dates
+          above are older per-person records, kept as they were written.
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * A window somebody was given back when a seat had dates of its own.
+ *
+ * Rendered as one range rather than two columns because it is history, not
+ * something being kept up to date — and a half of it can be missing, which two
+ * columns of em-dashes read as "we lost this" rather than "it was never
+ * written". The plan's own start and renewal would be the honest fallback for
+ * the missing half, but they are not on this row: `MemberSubscriptionDto`
+ * carries the plan's status and nothing else of the plan's, so the Open link
+ * is where a reader goes for them.
+ */
+function OwnDates({
+  from,
+  until,
+}: {
+  from: string | null;
+  until: string | null;
+}) {
+  if (!from && !until) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      {from ? (
+        <span className="num">{from}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )}
+      <span aria-hidden className="text-muted-foreground">
+        →
+      </span>
+      <span className="sr-only">to</span>
+      {until ? (
+        <span className="num">{until}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )}
+    </span>
   );
 }
 

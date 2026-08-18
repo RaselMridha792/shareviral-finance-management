@@ -15,7 +15,7 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { Paperclip, Trash2, TriangleAlert } from "lucide-react";
+import { Paperclip, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -65,13 +65,6 @@ function methodOfAccount(
   };
   return byType[account.type];
 }
-
-type Seat = {
-  teamMemberId: string;
-  status: SubscriptionStatus;
-  fromDate: string;
-  untilDate: string;
-};
 
 /**
  * Adding or changing one plan.
@@ -147,13 +140,15 @@ export function SubscriptionForm({
   const [loginEmail, setLoginEmail] = useState(subscription?.loginEmail ?? "");
   const [notes, setNotes] = useState(subscription?.notes ?? "");
 
-  const [seats, setSeats] = useState<Seat[]>(
-    subscription?.users.map((user) => ({
-      teamMemberId: user.teamMemberId,
-      status: user.status,
-      fromDate: user.fromDate ?? "",
-      untilDate: user.untilDate ?? "",
-    })) ?? [],
+  /**
+   * Who is on the plan — ids, and nothing else.
+   *
+   * A seat used to carry its own status and its own two dates. The owner took
+   * all three off it: the date is given once, when the plan is bought, and
+   * everybody on the plan gets that date. What is left of a seat is a person.
+   */
+  const [seats, setSeats] = useState<string[]>(
+    subscription?.users.map((user) => user.teamMemberId) ?? [],
   );
 
   const [pending, setPending] = useState(false);
@@ -190,7 +185,7 @@ export function SubscriptionForm({
 
   const agree = costsAgree({ costUsd, costBdt, usdRate });
 
-  const chosen = new Set(seats.map((seat) => seat.teamMemberId));
+  const chosen = new Set(seats);
 
   /**
    * The active team, plus anybody already holding a seat on this plan.
@@ -281,15 +276,17 @@ export function SubscriptionForm({
         boughtFor,
         loginEmail,
         notes,
-        users: seats
-          // A row somebody opened and left empty is not a person.
-          .filter((seat) => seat.teamMemberId !== "")
-          .map((seat) => ({
-            teamMemberId: seat.teamMemberId,
-            status: seat.status,
-            fromDate: seat.fromDate || undefined,
-            untilDate: seat.untilDate || undefined,
-          })),
+        users: seats.map((teamMemberId) => ({
+          teamMemberId,
+          // Sent although nothing on screen sets it any more, and for the same
+          // reason as `paymentMethod` above: `.default("active")` lands in the
+          // schema's output type, which is the type the client is written
+          // against, so omitting it is a compile error rather than a default.
+          // The value is the plan's own status, because that is what the owner
+          // said governs everybody on it. The dates are optional on the schema
+          // and go unsent — the plan carries those too.
+          status,
+        })),
       };
 
       const saved = subscription
@@ -575,30 +572,26 @@ export function SubscriptionForm({
 
         {/* ---------------------------------------------------------------- */}
         <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">User name</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                setSeats([
-                  ...seats,
-                  {
-                    teamMemberId: "",
-                    status: "active",
-                    fromDate: "",
-                    untilDate: "",
-                  },
-                ])
-              }
-            >
-              Add somebody
-            </Button>
-          </div>
+          <h3 className="text-sm font-semibold">User name</h3>
 
-          {fieldErrors.users ? (
-            <p className="text-xs text-negative">{fieldErrors.users[0]}</p>
-          ) : null}
+          {/* One picker, and picking somebody is the whole act of adding them.
+              It holds no value of its own, so it clears itself and the next
+              person can be chosen straight after — where the button that used
+              to be here made you say twice, every time, that you wanted
+              somebody on the plan. */}
+          <Field label="Person" error={fieldErrors.users}>
+            <SearchableSelect
+              value=""
+              onChange={(value) => setSeats([...seats, value])}
+              placeholder="Pick somebody"
+              options={pickable.filter(
+                // Somebody already on the plan is not offered again — the API
+                // refuses a duplicate, and finding that out on save is a worse
+                // way to learn it.
+                (person) => !chosen.has(person.value),
+              )}
+            />
+          </Field>
 
           {/* Said out loud rather than left to a picker that opens onto
               nothing: these names are the active team, so an empty one means
@@ -617,110 +610,37 @@ export function SubscriptionForm({
               back empty for all of them.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {seats.map((seat, index) => (
-                <li
-                  key={index}
-                  className="flex flex-col gap-2 rounded-lg border border-border p-3"
-                >
-                  {/* Stacked, because this drawer is 448px wide and four
-                      controls on one line collapsed the person picker to
-                      nothing — its label printed on top of the next one's and
-                      there was no visible way to choose anybody at all. */}
-                  <div className="flex items-end gap-2">
-                    <Field label="Person" className="min-w-0 flex-1">
-                      <SearchableSelect
-                        value={seat.teamMemberId}
-                        onChange={(value) =>
-                          setSeats(
-                            seats.map((s, i) =>
-                              i === index ? { ...s, teamMemberId: value } : s,
-                            ),
-                          )
-                        }
-                        placeholder="Pick somebody"
-                        options={pickable
-                          // Somebody already on the plan is not offered again —
-                          // the API refuses a duplicate, and finding that out on
-                          // save is a worse way to learn it.
-                          .filter(
-                            (person) =>
-                              person.value === seat.teamMemberId ||
-                              !chosen.has(person.value),
-                          )}
-                      />
-                    </Field>
-
+            <ul className="flex flex-wrap gap-2">
+              {seats.map((teamMemberId) => {
+                // The name comes from `pickable`, which is why somebody who
+                // has since left the company still reads as themselves — and
+                // why their chip still says they are no longer active.
+                const label =
+                  pickable.find((person) => person.value === teamMemberId)
+                    ?.label ?? "Somebody";
+                // Chips wrap, and one is capped at the width of the row it
+                // sits in: this drawer is 448px wide, so a long name has to be
+                // allowed to run out of room rather than push the line off the
+                // side of it.
+                return (
+                  <li
+                    key={teamMemberId}
+                    className="flex max-w-full items-center gap-1 rounded-full border border-border bg-surface-muted py-1 pr-1 pl-3 text-sm"
+                  >
+                    <span className="min-w-0 truncate">{label}</span>
                     <button
                       type="button"
-                      aria-label="Take this person off the plan"
+                      aria-label={`Take ${label} off the plan`}
                       onClick={() =>
-                        setSeats(seats.filter((_, i) => i !== index))
+                        setSeats(seats.filter((id) => id !== teamMemberId))
                       }
-                      className="mb-1 shrink-0 cursor-pointer rounded-md p-2 text-muted-foreground transition hover:bg-negative/10 hover:text-negative"
+                      className="shrink-0 cursor-pointer rounded-full p-1 text-muted-foreground transition hover:bg-negative/10 hover:text-negative"
                     >
-                      <Trash2 className="size-4" />
+                      <X className="size-3.5" />
                     </button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <Field label="Status">
-                      <Select
-                        value={seat.status}
-                        onChange={(e) =>
-                          setSeats(
-                            seats.map((s, i) =>
-                              i === index
-                                ? {
-                                    ...s,
-                                    status: e.target
-                                      .value as SubscriptionStatus,
-                                  }
-                                : s,
-                            ),
-                          )
-                        }
-                      >
-                        {SUBSCRIPTION_STATUSES.map((id) => (
-                          <option key={id} value={id}>
-                            {SUBSCRIPTION_STATUS_LABELS[id]}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-
-                    <Field label="From">
-                      <DateInput
-                        value={seat.fromDate}
-                        onChange={(e) =>
-                          setSeats(
-                            seats.map((s, i) =>
-                              i === index
-                                ? { ...s, fromDate: e.target.value }
-                                : s,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Until">
-                      <DateInput
-                        value={seat.untilDate}
-                        onChange={(e) =>
-                          setSeats(
-                            seats.map((s, i) =>
-                              i === index
-                                ? { ...s, untilDate: e.target.value }
-                                : s,
-                            ),
-                          )
-                        }
-                      />
-                    </Field>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

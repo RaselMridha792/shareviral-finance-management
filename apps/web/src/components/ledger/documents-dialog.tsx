@@ -11,6 +11,80 @@ import {
 } from "@/lib/api-client";
 
 /**
+ * A PDF, drawn from bytes this page fetched itself.
+ *
+ * Pointing an iframe straight at the API does not work and the reason is not
+ * the code: the app is served from one host and the API from another, and the
+ * API sends `X-Frame-Options`, so the browser refuses to frame it and shows
+ * "refused to connect". Images are unaffected — that header governs frames,
+ * not `<img>`.
+ *
+ * Fetching the bytes and framing a `blob:` URL sidesteps it entirely, because
+ * the frame's origin is then this page's own. It is also the better answer than
+ * relaxing the header: the API keeps refusing to be framed by anybody, which is
+ * what that header is for, and this page gets the file through the session it
+ * already holds.
+ *
+ * `?inline=1` still matters — without it the same bytes carry an attachment
+ * disposition and the viewer offers to save rather than draw.
+ */
+function PdfFrame({ file }: { file: StoredFile }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let url: string | null = null;
+    let live = true;
+
+    fetch(`${fileHref(file.id)}?inline=1`, { credentials: "include" })
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.blob();
+      })
+      .then((blob) => {
+        url = URL.createObjectURL(blob);
+        if (live) setSrc(url);
+        // Revoked on unmount rather than here: the frame is still reading it.
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      });
+
+    return () => {
+      live = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [file.id]);
+
+  if (failed) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
+        <FileText className="size-5 shrink-0" />
+        <span className="min-w-0 flex-1">
+          This one would not open here. Download it to read it.
+        </span>
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="flex h-[55vh] items-center justify-center rounded-lg border border-border">
+        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={src}
+      title={file.label ?? file.originalName}
+      className="h-[55vh] w-full rounded-lg border border-border bg-white"
+    />
+  );
+}
+
+/**
  * Is this one worth drawing rather than listing?
  *
  * The mime type first, because it was decided by reading the bytes rather than
@@ -35,8 +109,8 @@ function isPdf(file: StoredFile): boolean {
  *
  * Images and PDFs are shown; anything else gets a row with a download. The API
  * serves bytes from the company's own server behind the session, so an <img>
- * or an <iframe> here is a normal authenticated request rather than a public
- * URL.
+ * here is a normal authenticated request rather than a public URL. A PDF takes
+ * the longer way round — see `PdfFrame`.
  *
  * `kinds` narrows it to what the reader actually clicked. An entry carries the
  * invoice it was against and the bank's record of the payment, and those are
@@ -169,22 +243,7 @@ export function DocumentsDialog({
                       className="max-h-[55vh] w-full rounded-lg border border-border object-contain"
                     />
                   ) : isPdf(file) ? (
-                    /**
-                     * Read here rather than downloaded to be read.
-                     *
-                     * `?inline=1` is what the API already understands: without
-                     * it the same bytes come back as an attachment and the
-                     * browser saves them instead of drawing them. It runs in
-                     * the browser's own PDF viewer, which is sandboxed away
-                     * from this page — it cannot reach these cookies or this
-                     * DOM — and the Download beside it still saves the file
-                     * deliberately.
-                     */
-                    <iframe
-                      src={`${fileHref(file.id)}?inline=1`}
-                      title={file.label ?? file.originalName}
-                      className="h-[55vh] w-full rounded-lg border border-border bg-white"
-                    />
+                    <PdfFrame file={file} />
                   ) : (
                     /* Neither a picture nor a PDF — a spreadsheet, say. There
                        is nothing to draw, so the row says what it is and the
