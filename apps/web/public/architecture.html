@@ -360,11 +360,11 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
     <div class="statehead">
       <div class="card">
         <div class="barhead">
-          <div class="n">13 <span>/ 16</span></div>
+          <div class="n">14 <span>/ 16</span></div>
           <div class="t">Attacks stopped by a finished wall</div>
         </div>
-        <div class="seg" aria-label="13 of 16 attacks stopped">
-          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="warn"></i><i class="warn"></i><i class="warn"></i>
+        <div class="seg" aria-label="14 of 16 attacks stopped">
+          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="warn"></i><i class="warn"></i>
         </div>
         <div class="legend">
           <b><span class="dot g"></span> stops at a built wall</b>
@@ -373,11 +373,11 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
       </div>
       <div class="card">
         <div class="barhead">
-          <div class="n">11 <span>/ 17</span></div>
+          <div class="n">12 <span>/ 17</span></div>
           <div class="t">Hardening commitments shipped</div>
         </div>
-        <div class="seg" aria-label="11 of 17 shipped">
-          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <div class="seg" aria-label="12 of 17 shipped">
+          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i>
         </div>
         <div class="legend">
           <b><span class="dot g"></span> shipped and evidenced</b>
@@ -460,7 +460,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
   <div class="wrap">
     <div class="eyebrow"><b>02</b> Security <s></s></div>
     <h2>How far anybody actually gets</h2>
-    <p class="lede">Six walls stand between the internet and a salary figure. Sixteen ways in were written down, then each one was walked to the wall that stops it. <b>Thirteen stop at a wall that is built and tested. Three stop at a wall that is drawn but not finished</b>, and until it is, those three reach the data.</p>
+    <p class="lede">Six walls stand between the internet and a salary figure. Sixteen ways in were written down, then each one was walked to the wall that stops it. <b>Fourteen stop at a wall that is built and tested. Two stop at a wall that is drawn but not finished</b>, and until it is, those two reach the data.</p>
 
     <div class="panel">
       <div class="figcap">The six walls, outermost first</div>
@@ -469,7 +469,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
         <div class="wall"><div class="lv">L2 · password, lock, bcrypt</div><div class="nm">WHO YOU ARE</div><div class="ct">bcrypt at cost 12, so one guess costs a quarter second. Five wrong tries lock the account for five minutes.</div><div class="ev">asserted against the stored expiry</div></div>
         <div class="wall"><div class="lv">L3 · the session</div><div class="nm">STILL YOU</div><div class="ct">Short-lived rotating tokens in an httpOnly, SameSite cookie. A replayed token revokes its whole family.</div><div class="ev">replay test in the suite</div></div>
         <div class="wall"><div class="lv">L4 · a guard on every route</div><div class="nm">WHAT YOU MAY SEE</div><div class="ct">Every route asks the role before it answers, and an export can only contain what the screen was already allowed to show.</div><div class="ev">117 checks call every route as every role</div></div>
-        <div class="wall"><div class="lv">L5 · nothing changes silently</div><div class="nm">THE RECORD</div><div class="ct">Queries are parameterised, money is voided rather than deleted, and the audit row is written inside the same transaction as the change.</div><div class="ev">the audit row shares the change&#x27;s transaction</div></div>
+        <div class="wall"><div class="lv">L5 · nothing changes silently</div><div class="nm">THE RECORD</div><div class="ct">Queries are parameterised, money is voided rather than deleted, a closed month refuses every write, and the audit row is written inside the same transaction as the change.</div><div class="ev">the audit row shares the change&#x27;s transaction</div></div>
         <div class="wall core"><div class="lv">L6 · every salary, every taka</div><div class="nm">THE DATA</div><div class="ct">Postgres. One transactions table, numeric(14,2), and the compensation table behind its own permission.</div><div class="ev">what all of the above is for</div></div>
       </div>
 
@@ -621,13 +621,13 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
           <div class="cell wallcol datacol"></div>
         </div>
         <div class="mxrow">
-          <div class="atk"><div class="n">Edit a month already signed off</div><div class="c">the closed-books lock on writes</div></div>
+          <div class="atk"><div class="n">Edit a month already signed off</div><div class="c">the closed-books lock, on every write path</div></div>
           <div class="cell wallcol pass"></div>
           <div class="cell wallcol pass"></div>
           <div class="cell wallcol pass"></div>
           <div class="cell wallcol pass"></div>
-          <div class="cell wallcol pass"><span class="stop open"></span></div>
-          <div class="cell wallcol datacol passed-amber"><span class="reach"></span></div>
+          <div class="cell wallcol pass"><span class="stop"></span></div>
+          <div class="cell wallcol datacol"></div>
         </div>
         </div></div>
         <div class="mxfoot">
@@ -683,23 +683,22 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
         <tr><td class="name">Money is voided, never deleted</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">the row stays, struck through, out of every total</td></tr>
         <tr><td class="name">Backups off-site, and proven</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">restored once for real; both sides tied to the paisa</td></tr>
         <tr><td class="name">Tests gate every release</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">a red run cannot reach the server</td></tr>
+        <tr><td class="name">Closed-books lock enforced on writes</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">12 call sites, 6 modules; a backdated edit is refused too</td></tr>
         <tr><td class="name">Change the passwords set at install</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">the one that makes all of the above count</td></tr>
         <tr><td class="name">Server hardening and uptime alerts</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">a 40-minute outage passed unnoticed</td></tr>
         <tr><td class="name">Two-factor sign-in</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">one leaked password is currently enough</td></tr>
         <tr><td class="name">Idle timeout</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">figures stay on an unattended screen</td></tr>
-        <tr><td class="name">Closed-books lock enforced on writes</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">the column exists; no write path reads it</td></tr>
         <tr><td class="name">Backup credentials off the server</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">a stolen box can currently delete them</td></tr>
       </tbody></table></div></div>
 
     <h3 style="margin-top:34px">What is still open, in the order it matters</h3>
-    <p class="lede" style="margin-bottom:16px">Six items. Each line says which wall it finishes.</p>
+    <p class="lede" style="margin-bottom:16px">Five items. Each line says which wall it finishes.</p>
     <div class="road">
       <div class="ritem"><div class="no">01</div><div><div class="ti">Change the passwords set at install</div><div class="de">the one that makes all of the above count</div><div class="cl"><b>Closes:</b> Nothing on this page counts while an install default is still live.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
       <div class="ritem"><div class="no">02</div><div><div class="ti">Server hardening and uptime alerts</div><div class="de">a 40-minute outage passed unnoticed</div><div class="cl"><b>Closes:</b> The floor every wall stands on, and the outage nobody was told about.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
       <div class="ritem"><div class="no">03</div><div><div class="ti">Two-factor sign-in</div><div class="de">one leaked password is currently enough</div><div class="cl"><b>Closes:</b> Closes the second wall for a password that is already known.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
       <div class="ritem"><div class="no">04</div><div><div class="ti">Idle timeout</div><div class="de">figures stay on an unattended screen</div><div class="cl"><b>Closes:</b> Closes the third wall against a screen left open.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">05</div><div><div class="ti">Closed-books lock enforced on writes</div><div class="de">the column exists; no write path reads it</div><div class="cl"><b>Closes:</b> Closes the fifth wall against edits to a month already signed off.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">06</div><div><div class="ti">Backup credentials off the server</div><div class="de">a stolen box can currently delete them</div><div class="cl"><b>Closes:</b> Keeps the last copy alive when the box itself is lost.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
+      <div class="ritem"><div class="no">05</div><div><div class="ti">Backup credentials off the server</div><div class="de">a stolen box can currently delete them</div><div class="cl"><b>Closes:</b> Keeps the last copy alive when the box itself is lost.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
     </div>
   </div>
 </section>

@@ -576,11 +576,11 @@ made a new copy and nobody could say which was current.
 
 **Behind the login, deliberately.** The proxy matcher covers `.html`, so a
 signed-out visitor is redirected. This is worth not undoing by accident: the
-page names four defences that are designed and not yet built — two-factor, idle
-timeout, the closed-books lock, and backup credentials kept off the box — next
-to the live domain. Making it public is a one-word change to the matcher, and
-should be a decision rather than a default. If a public version is wanted, cut
-the open items and publish that, not this file.
+page names the defences that are designed and not yet built — two-factor, idle
+timeout, and backup credentials kept off the box — next to the live domain.
+Making it public is a one-word change to the matcher, and should be a decision
+rather than a default. If a public version is wanted, cut the open items and
+publish that, not this file.
 
 Two things about the file itself:
 
@@ -595,6 +595,41 @@ Two things about the file itself:
   stripped down first. Edit the page in `apps/web/public/`, regenerate,
   republish. Only one of the two is ever written by a person, so they cannot
   drift.
+
+## The closed-books lock was never missing (2026-08-18)
+
+Worth writing down because it was got wrong twice, in opposite directions, and
+the wrong version was published.
+
+The claim in an earlier draft of the architecture page — "the column exists; no
+write path reads it" — was false. `settings.assertPeriodOpen` is called from
+**12 places across 6 modules**: transactions (create, update ×2, void,
+transfer), accounts (opening balance), payroll (mark paid), TDS (deposit),
+income tax (payment), and imports (preview and commit). None of them sit behind
+a condition.
+
+The subtle one is `transactions.update`, which checks *two* dates — the one the
+row currently sits on and the one it would move to. A guard on the incoming
+date alone would look correct and still let anybody backdate a payment into a
+signed-off month.
+
+What was actually missing was a **test**. Enforced-but-untested is the exact
+shape of thing this repository keeps getting bitten by: it looks finished from
+every angle until somebody adds a write path and forgets the line. That is now
+`apps/api/test/integration/13-closed-books.mjs`, which closes the books, tries
+each way of changing money against a row inside the period and a row outside
+it, and — the point of the suite — proves an open row cannot be backdated in.
+Every refusal is paired with the same call succeeding once the lock is lifted,
+so a passing run cannot come from a malformed payload.
+
+Note it clears the lock in a `finally`. The other suites restore their settings
+on the way out, which is fine for a cosmetic one; a suite that died holding
+*this* lock would leave every write in the app refused until somebody noticed.
+
+**It has not been run yet.** `apps/api/.env` points at Neon and the live VPS has
+its own Postgres, so until it is settled which database that is, closing the
+books against it is not something to do unattended. Run it with
+`npm run test:integration -- 13`.
 
 ## Decisions worth remembering
 
