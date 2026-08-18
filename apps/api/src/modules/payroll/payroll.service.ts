@@ -6,12 +6,14 @@ import {
 } from "@nestjs/common";
 import {
   formatMoney,
+  payslipBreakdownSchema,
   PAYSLIP_RUN_STATUSES,
   TDS_WARNING_RATIO,
   type CreatePayrollRunInput,
   type ListPayrollRunsQuery,
   type Paginated,
   type PayPayrollInput,
+  type PayslipBreakdown,
   type UpdatePayrollLineInput,
 } from "@finance/shared";
 import {
@@ -251,7 +253,10 @@ export class PayrollService {
         let added = 0;
         for (const employee of employees) {
           const [pay] = await tx
-            .select({ grossAmount: compensationHistory.grossAmount })
+            .select({
+              grossAmount: compensationHistory.grossAmount,
+              components: compensationHistory.components,
+            })
             .from(compensationHistory)
             .where(
               and(
@@ -272,6 +277,11 @@ export class PayrollService {
             payrollRunId: runId,
             teamMemberId: employee.id,
             grossAmount: pay.grossAmount,
+            // Frozen here rather than read at print time: this is what the
+            // split was in this month. When nobody has recorded one, the whole
+            // gross becomes a single Basic Salary line — true, and what
+            // somebody would have typed by hand anyway.
+            earningsBreakdown: seedBreakdown(pay.components, pay.grossAmount),
             snapshotDesignation: employee.designation,
             snapshotDepartment: employee.department,
             snapshotBankName: employee.bankName,
@@ -669,11 +679,24 @@ export class PayrollService {
         snapshotBankName: payrollLines.snapshotBankName,
         snapshotBankAccount: payrollLines.snapshotBankAccount,
         snapshotEtin: payrollLines.snapshotEtin,
+        earningsBreakdown: payrollLines.earningsBreakdown,
+        deductionsBreakdown: payrollLines.deductionsBreakdown,
+        paidDays: payrollLines.paidDays,
+        workingDays: payrollLines.workingDays,
         remarks: payrollLines.remarks,
         fullName: teamMembers.fullName,
+        // Live, not snapshot. A staff code and a joining date are facts about
+        // the person that do not change with the month — unlike the bank
+        // account above them, which does, and is therefore frozen.
+        employeeCode: teamMembers.employeeCode,
+        joinedOn: teamMembers.joinedOn,
+        engagementType: teamMembers.engagementType,
         runId: payrollRuns.id,
         runLabel: payrollRuns.label,
         runStatus: payrollRuns.status,
+        periodYear: payrollRuns.periodYear,
+        periodMonth: payrollRuns.periodMonth,
+        paymentDate: payrollRuns.paymentDate,
         paymentMethod: payrollRuns.paymentMethod,
       })
       .from(payrollLines)
@@ -788,6 +811,23 @@ export class PayrollService {
 
 function firstDayOf(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
+}
+
+/**
+ * The earnings table a freshly built line starts with.
+ *
+ * `compensation_history.components` is free-form jsonb, so it is read
+ * defensively: anything that is not a list of `{label, amount}` counts as
+ * nothing recorded. A payslip printing a malformed component as
+ * "[object Object]  0.00" would be worse than one printing a single line.
+ */
+function seedBreakdown(
+  components: unknown,
+  grossAmount: string,
+): PayslipBreakdown {
+  const parsed = payslipBreakdownSchema.safeParse(components);
+  if (parsed.success && parsed.data.length > 0) return parsed.data;
+  return [{ label: "Basic Salary", amount: grossAmount }];
 }
 
 function lastDayOf(year: number, month: number): string {

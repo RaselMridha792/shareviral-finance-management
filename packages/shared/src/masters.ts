@@ -388,6 +388,16 @@ export const updateSettingsSchema = z
     companyBin: optionalText(binSchema),
     companyAddress: optionalText(z.string().trim().max(300)),
 
+    // The payslip letterhead. Only the email is shape-checked, because a
+    // tagline is whatever marketing says it is and a job title is not
+    // validatable, but an address that will be printed as mailto: is.
+    companyTagline: optionalText(z.string().trim().max(120)),
+    companyLegalNote: optionalText(z.string().trim().max(200)),
+    companyWebsite: optionalText(z.string().trim().max(120)),
+    companyEmail: optionalText(z.email("Enter an email address").max(160)),
+    payslipSignatoryName: optionalText(z.string().trim().max(120)),
+    payslipSignatoryTitle: optionalText(z.string().trim().max(120)),
+
     fiscalYearMode: z.enum(["bd_july_june", "calendar"]).optional(),
     numberFormat: numberFormatSchema.optional(),
 

@@ -283,6 +283,52 @@ export const setCompensationSchema = z.strictObject({
 export type SetCompensationInput = z.infer<typeof setCompensationSchema>;
 
 /* -------------------------------------------------------------------------- */
+/*  What a payslip breaks down into                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One line on a payslip: a label and an amount.
+ *
+ * A list rather than fixed columns, because the company's own slip shows
+ * Basic, House Rent, Medical, Conveyance and Internet today and will show
+ * something else the first time somebody is given a location allowance.
+ * Columns would mean a migration for each; a labelled list means typing a new
+ * label.
+ *
+ * Frozen onto the payroll line when the run is built, not read from the
+ * person's current salary. A payslip is what was paid in August, and reading
+ * it back in December must not show December's structure.
+ */
+export const payslipLineSchema = z.strictObject({
+  label: z.string().trim().min(1).max(60),
+  amount: amountSchema,
+});
+export type PayslipLine = z.infer<typeof payslipLineSchema>;
+
+export const payslipBreakdownSchema = z.array(payslipLineSchema).max(20);
+export type PayslipBreakdown = z.infer<typeof payslipBreakdownSchema>;
+
+/**
+ * The headings the company's own payslip uses, offered as a starting point.
+ *
+ * Not an enum — see above. These are what the "add the usual lines" button
+ * fills in, and every one of them can be renamed or removed.
+ */
+export const USUAL_EARNINGS = [
+  "Basic Salary",
+  "House Rent Allowance",
+  "Medical Allowance",
+  "Conveyance Allowance",
+  "Internet / Mobile Allowance",
+] as const;
+
+export const USUAL_DEDUCTIONS = [
+  "Salary Advance",
+  "Leave Without Pay",
+] as const;
+
+
+/* -------------------------------------------------------------------------- */
 /*  Payroll                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -345,8 +391,25 @@ export const updatePayrollLineSchema = z
     otherDeductions: amountSchema.optional(),
     deductionNote: optionalText(200),
     remarks: optionalText(200),
+
+    // The payslip's middle. `null` clears a breakdown back to "just the gross",
+    // which is distinct from omitting the key and leaving what is there.
+    earningsBreakdown: payslipBreakdownSchema.nullable().optional(),
+    deductionsBreakdown: payslipBreakdownSchema.nullable().optional(),
+
+    // "24 of 26". Both or neither — a paid-days figure with nothing to be out
+    // of prints as a number nobody can read.
+    paidDays: z.number().int().min(0).max(31).nullable().optional(),
+    workingDays: z.number().int().min(1).max(31).nullable().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" })
+  .refine(
+    (v) =>
+      v.paidDays == null ||
+      v.workingDays == null ||
+      v.paidDays <= v.workingDays,
+    { message: "Paid days cannot be more than the working days", path: ["paidDays"] },
+  );
 export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
 
 export const payPayrollSchema = z.strictObject({

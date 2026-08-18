@@ -9,6 +9,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -70,6 +71,18 @@ export const teamMembers = pgTable(
       .default("employee"),
 
     department: text("department"),
+    /**
+     * The company's own number for somebody — SVBD-0012.
+     *
+     * There was one here and it went with the uniqueness rule that used it. It
+     * comes back because the payslip prints it, and the payslip's own number is
+     * built from it: PS-2026AUG-0012.
+     *
+     * Optional, because HR does not always have one on the day somebody
+     * starts, and therefore unique only among the people who do.
+     */
+    employeeCode: varchar("employee_code", { length: 40 }),
+
     designation: text("designation"),
     joinedOn: date("joined_on").notNull(),
     endedOn: date("ended_on"),
@@ -191,6 +204,12 @@ export const teamMembers = pgTable(
      * and phone, NID and email are all optional because HR does not have them
      * on the day somebody joins.
      */
+    // Unique among the people who have one. Postgres treats NULLs as distinct,
+    // which is exactly right here: everybody without a code is not a clash.
+    uniqueIndex("team_members_employee_code_idx").on(
+      entityKey(t.entityId),
+      t.employeeCode,
+    ),
     index("team_members_status_idx").on(t.status, t.engagementType),
     index("team_members_name_idx").on(t.fullName),
   ],
@@ -353,6 +372,31 @@ export const payrollLines = pgTable(
     snapshotBankName: text("snapshot_bank_name"),
     snapshotBankAccount: text("snapshot_bank_account"),
     snapshotEtin: varchar("snapshot_etin", { length: 12 }),
+
+    /**
+     * How the gross and the deductions were made up, frozen at run time.
+     *
+     * `[{ label, amount }]` — Basic, House Rent, Medical, Conveyance on one
+     * side; Salary Advance, Leave Without Pay on the other. A list rather than
+     * columns, because the next allowance somebody invents should cost a label
+     * and not a migration.
+     *
+     * Snapshots for the same reason as the bank details above them: a payslip
+     * is what was paid in August, and opening it in December must not show
+     * December's salary structure. `compensation_history.components` holds
+     * somebody's *current* split; these hold the one that was actually paid.
+     */
+    earningsBreakdown: jsonb("earnings_breakdown"),
+    deductionsBreakdown: jsonb("deductions_breakdown"),
+
+    /**
+     * "24 of 26" on the slip.
+     *
+     * Both nullable, because a full month needs neither — and a slip printing
+     * "26 of 26" on every line teaches people to stop reading it.
+     */
+    paidDays: smallint("paid_days"),
+    workingDays: smallint("working_days"),
 
     remarks: text("remarks"),
 

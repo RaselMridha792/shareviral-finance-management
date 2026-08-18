@@ -38,6 +38,25 @@ export const appSettings = pgTable(
     companyBin: varchar("company_bin", { length: 13 }),
     companyAddress: text("company_address"),
 
+    /**
+     * The letterhead. Read by the payslip and by nothing else.
+     *
+     * Six fields rather than one block of text, because each has its own place
+     * on the page: the tagline under the mark, the legal note beside the
+     * company name, the website and the email on the contact line, and the
+     * signatory in the block somebody signs above. A single blob would print
+     * in one place and could not be laid out.
+     *
+     * All optional. A company without a tagline gets a payslip without a
+     * tagline, not a payslip with an empty band where one would go.
+     */
+    companyTagline: varchar("company_tagline", { length: 120 }),
+    companyLegalNote: varchar("company_legal_note", { length: 200 }),
+    companyWebsite: varchar("company_website", { length: 120 }),
+    companyEmail: varchar("company_email", { length: 160 }),
+    payslipSignatoryName: varchar("payslip_signatory_name", { length: 120 }),
+    payslipSignatoryTitle: varchar("payslip_signatory_title", { length: 120 }),
+
     baseCurrency: text("base_currency").notNull().default("BDT"),
     secondaryCurrency: text("secondary_currency").notNull().default("USD"),
 

@@ -1,19 +1,38 @@
 "use client";
 
-import { PAYMENT_METHOD_LABELS, formatMoney } from "@finance/shared";
+import {
+  ENGAGEMENT_LABELS,
+  PAYMENT_METHOD_LABELS,
+  formatMoney,
+  fromMinorUnits,
+  toMinorUnits,
+} from "@finance/shared";
 import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 
 import type { AppSettingsDto } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
-import type { PayslipDto } from "@/lib/payroll";
+import type { PayslipDto, PayslipLineDto } from "@/lib/payroll";
 
 /**
- * One person's payslip, laid out to print on a single page.
+ * One person's payslip, drawn to the company's own design.
  *
- * `window.print()` rather than a PDF library: it needs no extra dependency in
- * the container, works offline, and produces a real PDF through the browser's
- * own "save as PDF".
+ * The measurements here are not invented. They are lifted from the PDF the
+ * company already issues — a 138pt black band, a 3.5pt lime rule under it, a
+ * card inset 46pt from each edge with a 3.5pt lime left border, two columns
+ * 238.6pt wide separated by 26pt, a 74pt net block, a 58pt footer. Everything
+ * is expressed in `pt` for that reason: CSS points and PDF points are the same
+ * unit, so what is on screen is what came off the printer.
+ *
+ * It carries its own palette rather than the app's tokens, and deliberately.
+ * A payslip is a document with the company's branding on it, not a screen —
+ * it must look the same to somebody reading it in dark mode, printing it, and
+ * opening the saved PDF a year later. Tokens that follow the viewer's theme
+ * would give all three different documents.
+ *
+ * `window.print()` rather than a PDF library: no extra dependency in the
+ * container, works offline, and the browser's own "Save as PDF" produces the
+ * real file.
  */
 export function PayslipView({
   payslip,
@@ -25,19 +44,35 @@ export function PayslipView({
   const money = (value: string) =>
     formatMoney(value, {
       currency: settings.baseCurrency,
+      // Always grouped the company's way on a document that leaves the
+      // building — the payslip is not somebody's screen preference.
       format: settings.numberFormat,
+      hideSymbol: true,
     });
 
-  const additions = [
-    ["Gross salary", payslip.grossAmount],
+  const earnings = breakdownOr(payslip.earningsBreakdown, [
+    ["Basic Salary", payslip.grossAmount],
     ["Bonus", payslip.bonusAmount],
     ["Other additions", payslip.otherAdditions],
-  ].filter(([, value]) => Number(value) !== 0);
+  ]);
 
-  const deductions = [
+  const deductions = breakdownOr(payslip.deductionsBreakdown, [
     ["Tax deducted at source", payslip.tdsAmount],
     [payslip.deductionNote ?? "Other deductions", payslip.otherDeductions],
-  ].filter(([, value]) => Number(value) !== 0);
+  ]);
+
+  // The two totals are the line's own figures, never the sum of the lists
+  // above. A breakdown is a description of the gross; if somebody types one
+  // that does not add up, the payslip must still agree with what was paid and
+  // with the salary sheet it came from.
+  const grossTotal = sum([
+    payslip.grossAmount,
+    payslip.bonusAmount,
+    payslip.otherAdditions,
+  ]);
+  const deductionTotal = sum([payslip.tdsAmount, payslip.otherDeductions]);
+
+  const payDate = payslip.paidOn ?? payslip.paymentDate;
 
   return (
     <>
@@ -56,161 +91,378 @@ export function PayslipView({
         </Button>
       </div>
 
-      <article className="mx-auto w-full max-w-3xl rounded-xl border border-border bg-surface p-8 shadow-e1 print:border-0 print:p-0 print:shadow-none">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-ink pb-5">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">
-              {settings.companyName}
-            </h1>
-            {settings.companyAddress ? (
-              <p className="mt-0.5 max-w-xs text-xs text-muted-foreground">
-                {settings.companyAddress}
-              </p>
-            ) : null}
-            {settings.companyEtin ? (
-              <p className="num mt-0.5 text-xs text-muted-foreground">
-                e-TIN {settings.companyEtin}
-              </p>
-            ) : null}
+      <style>{SHEET_CSS}</style>
+
+      <article className="slip" lang="en">
+        {/* ---------------------------------------------------------------- */}
+        <header className="slip-band">
+          <div className="slip-band-inner">
+            <div className="slip-brand">
+              <span className="slip-mark" aria-hidden="true">
+                {initials(settings.companyName)}
+              </span>
+              <span>
+                <span className="slip-brand-name">
+                  {settings.companyName}
+                </span>
+                {settings.companyTagline ? (
+                  <span className="slip-tagline">
+                    {settings.companyTagline}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+
+            <div className="slip-title">
+              <p className="slip-doc">Salary Payslip</p>
+              <p className="slip-month">{payslip.runLabel}</p>
+              <dl className="slip-meta">
+                <div>
+                  <dt>Payslip no</dt>
+                  <dd>{payslipNumber(payslip)}</dd>
+                </div>
+                <div>
+                  <dt>Pay date</dt>
+                  <dd>{payDate ? longDate(payDate) : "Not yet paid"}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              Payslip
-            </p>
-            <p className="mt-1 text-sm font-semibold">{payslip.runLabel}</p>
-          </div>
+
+          <p className="slip-legal">
+            {[settings.companyName, settings.companyLegalNote]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </p>
+          <p className="slip-contact">
+            {[
+              settings.companyAddress,
+              settings.companyWebsite,
+              settings.companyEmail,
+            ]
+              .filter(Boolean)
+              .join("   •   ")}
+          </p>
         </header>
 
-        <section className="grid gap-x-8 gap-y-2 border-b border-border py-5 text-sm sm:grid-cols-2">
-          <Line label="Name" value={payslip.fullName} />
-          <Line label="Designation" value={payslip.snapshotDesignation ?? "—"} />
-          <Line label="Department" value={payslip.snapshotDepartment ?? "—"} />
-          <Line label="e-TIN" value={payslip.snapshotEtin ?? "—"} mono />
-          <Line
-            label="Bank account"
-            value={
-              [payslip.snapshotBankName, payslip.snapshotBankAccount]
+        {/* ---------------------------------------------------------------- */}
+        <section className="slip-card">
+          <div className="slip-card-main">
+            <p className="slip-label">Employee</p>
+            <p className="slip-name">{payslip.fullName}</p>
+            <p className="slip-role">
+              {[payslip.snapshotDesignation, payslip.snapshotDepartment]
                 .filter(Boolean)
-                .join(" · ") || "—"
-            }
-            mono
+                .join("  ·  ") || "—"}
+            </p>
+            <p className="slip-codes">
+              {payslip.employeeCode ? (
+                <span className="slip-code">{payslip.employeeCode}</span>
+              ) : null}
+              <span className="slip-chip">
+                {ENGAGEMENT_LABELS[payslip.engagementType]}
+              </span>
+            </p>
+          </div>
+
+          <dl className="slip-card-facts">
+            <div>
+              <dt>Date of joining</dt>
+              <dd>{shortDate(payslip.joinedOn)}</dd>
+            </div>
+            <div>
+              <dt>Paid days</dt>
+              <dd>
+                {payslip.paidDays != null && payslip.workingDays != null
+                  ? `${payslip.paidDays} of ${payslip.workingDays}`
+                  : "Full month"}
+              </dd>
+            </div>
+            <div className="slip-card-wide">
+              <dt>Bank account</dt>
+              <dd>
+                {[payslip.snapshotBankName, payslip.snapshotBankAccount]
+                  .filter(Boolean)
+                  .join("  ·  ") || "—"}
+              </dd>
+            </div>
+            {payslip.snapshotEtin ? (
+              <div className="slip-card-wide">
+                <dt>e-TIN</dt>
+                <dd>{payslip.snapshotEtin}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        <section className="slip-columns">
+          <Column
+            heading="Earnings"
+            currency={settings.baseCurrency}
+            rows={earnings}
+            totalLabel="Gross earnings"
+            total={grossTotal}
+            money={money}
+          />
+          <Column
+            heading="Deductions"
+            currency={settings.baseCurrency}
+            rows={deductions}
+            totalLabel="Total deductions"
+            total={deductionTotal}
+            money={money}
+            negative
           />
         </section>
 
-        <section className="grid gap-8 py-5 sm:grid-cols-2">
+        {/* ---------------------------------------------------------------- */}
+        <section className="slip-net">
           <div>
-            <h2 className="mb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              Earnings
-            </h2>
-            <table className="table-data text-sm">
-              <tbody>
-                {additions.map(([label, value]) => (
-                  <tr key={label}>
-                    <td className="py-1">{label}</td>
-                    <td className="col-amount py-1">{money(value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div>
-            <h2 className="mb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              Deductions
-            </h2>
-            {deductions.length === 0 ? (
-              <p className="py-1 text-sm text-muted-foreground">None</p>
-            ) : (
-              <table className="table-data text-sm">
-                <tbody>
-                  {deductions.map(([label, value]) => (
-                    <tr key={label}>
-                      <td className="py-1">{label}</td>
-                      <td className="col-amount py-1">{money(value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section className="flex flex-wrap items-baseline justify-between gap-3 border-y-2 border-ink py-4">
-          <div>
-            <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              Net pay
+            <p className="slip-net-label">Net payable</p>
+            <p className="slip-net-words">
+              {settings.baseCurrency} {inWords(payslip.netAmount)}
             </p>
-            <p className="mt-1 max-w-md text-xs text-muted-foreground">
-              {inWords(Number(payslip.netAmount))}
+            <p className="slip-net-check">
+              Gross {money(grossTotal)}
+              {"   ·   "}
+              Deductions {money(deductionTotal)}
             </p>
           </div>
-          <p className="col-amount text-2xl font-semibold">
+          <p className="slip-net-figure">
+            <span className="slip-net-ccy">{settings.baseCurrency}</span>
             {money(payslip.netAmount)}
           </p>
         </section>
 
-        <section className="grid gap-x-8 gap-y-2 py-5 text-sm sm:grid-cols-2">
-          <Line
-            label="Paid on"
-            value={payslip.paidOn ?? "Not yet paid"}
-            mono={Boolean(payslip.paidOn)}
-          />
-          <Line
-            label="Method"
-            value={
-              PAYMENT_METHOD_LABELS[
-                payslip.paymentMethod as keyof typeof PAYMENT_METHOD_LABELS
-              ] ?? payslip.paymentMethod
-            }
-          />
+        {/* ---------------------------------------------------------------- */}
+        <section className="slip-payment">
+          <p className="slip-label">Payment details</p>
+          <dl className="slip-payment-grid">
+            <div>
+              <dt>Payment mode</dt>
+              <dd>
+                {PAYMENT_METHOD_LABELS[
+                  payslip.paymentMethod as keyof typeof PAYMENT_METHOD_LABELS
+                ] ?? payslip.paymentMethod}
+              </dd>
+            </div>
+            <div>
+              <dt>Credited to</dt>
+              <dd>
+                {[payslip.snapshotBankName, payslip.snapshotBankAccount]
+                  .filter(Boolean)
+                  .join(", A/C ") || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Value date</dt>
+              <dd>{payDate ? longDate(payDate) : "Not yet paid"}</dd>
+            </div>
+            {payslip.remarks ? (
+              <div className="slip-payment-wide">
+                <dt>Remarks</dt>
+                <dd>{payslip.remarks}</dd>
+              </div>
+            ) : null}
+          </dl>
         </section>
 
-        <footer className="mt-10 flex justify-between gap-8 text-xs text-muted-foreground">
-          <div className="flex-1 border-t border-border-strong pt-2">
-            Employee signature
+        <section className="slip-signatures">
+          <div>
+            <p className="slip-sign-rule" />
+            <p className="slip-label">Prepared by</p>
+            <p className="slip-sign-name">
+              Accounts &amp; Finance, {settings.companyName}
+            </p>
           </div>
-          <div className="flex-1 border-t border-border-strong pt-2 text-right">
-            For {settings.companyName}
+          <div>
+            <p className="slip-sign-rule" />
+            <p className="slip-label">Authorised signatory</p>
+            <p className="slip-sign-name">
+              {[settings.payslipSignatoryName, settings.payslipSignatoryTitle]
+                .filter(Boolean)
+                .join("  ·  ") || settings.companyName}
+            </p>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        <footer className="slip-footer">
+          <div>
+            <p className="slip-confidential">Confidential</p>
+            <p className="slip-foot-note">
+              Intended solely for the named employee. Report any discrepancy to
+              Accounts within 7 days.
+            </p>
+          </div>
+          <div className="slip-foot-right">
+            <p className="slip-foot-note">
+              Computer-generated payslip · no physical signature required.
+            </p>
+            {settings.companyWebsite ? (
+              <p className="slip-foot-site">{settings.companyWebsite}</p>
+            ) : null}
           </div>
         </footer>
-
-        <p className="mt-6 text-center text-[10px] text-muted-foreground">
-          Computer generated. Tax figures are as recorded by the company&apos;s
-          accountant.
-        </p>
       </article>
     </>
   );
 }
 
-function Line({
-  label,
-  value,
-  mono = false,
+/* -------------------------------------------------------------------------- */
+
+function Column({
+  heading,
+  currency,
+  rows,
+  totalLabel,
+  total,
+  money,
+  negative = false,
 }: {
-  label: string;
-  value: string;
-  mono?: boolean;
+  heading: string;
+  currency: string;
+  rows: PayslipLineDto[];
+  totalLabel: string;
+  total: string;
+  money: (value: string) => string;
+  negative?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? "num text-right" : "text-right"}>{value}</span>
+    <div className="slip-col">
+      <div className="slip-col-head">
+        <span>{heading}</span>
+        <span className="slip-col-ccy">{currency}</span>
+      </div>
+      {/* The lime stub and the grey remainder of the underline, as drawn. */}
+      <div className="slip-rule" aria-hidden="true">
+        <span />
+      </div>
+
+      <table className="slip-table">
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td className="slip-none" colSpan={2}>
+                None
+              </td>
+            </tr>
+          ) : (
+            rows.map((row, index) => (
+              <tr key={`${row.label}-${index}`}>
+                <th scope="row">{row.label}</th>
+                <td>{money(row.amount)}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+
+      <div className={negative ? "slip-total slip-total-out" : "slip-total"}>
+        <span>{totalLabel}</span>
+        <span>{money(total)}</span>
+      </div>
     </div>
   );
 }
 
-/**
- * "Taka forty-five thousand only" — a payslip states the amount in words so a
- * printed figure cannot be quietly altered.
- */
-function inWords(value: number): string {
-  const whole = Math.floor(value);
-  const paisa = Math.round((value - whole) * 100);
+/* -------------------------------------------------------------------------- */
+/*  Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
-  const words = numberToWords(whole);
-  const suffix = paisa > 0 ? ` and ${numberToWords(paisa)} paisa` : "";
-  return `Taka ${words}${suffix} only`;
+/**
+ * The stored breakdown, or the old three-figure shape rendered as one.
+ *
+ * Lines created before the breakdown columns existed have `null` here, and
+ * they must still print. The fallback is the same information the previous
+ * payslip showed, in the same place — not an empty table.
+ */
+function breakdownOr(
+  stored: PayslipLineDto[] | null,
+  fallback: [string, string][],
+): PayslipLineDto[] {
+  if (stored && stored.length > 0) {
+    return stored.filter((row) => Number(row.amount) !== 0);
+  }
+  return fallback
+    .filter(([, amount]) => Number(amount) !== 0)
+    .map(([label, amount]) => ({ label, amount }));
+}
+
+/**
+ * Paisa-exact, because these are money strings and not numbers.
+ *
+ * The shared minor-unit helpers rather than arithmetic here: 36000.00 +
+ * 18000.00 in floating point is not reliably 54000.00, and the two totals on a
+ * payslip have to match the salary sheet they came from to the paisa.
+ */
+function sum(values: string[]): string {
+  return fromMinorUnits(
+    values.reduce((total, value) => total + toMinorUnits(value), BigInt(0)),
+  );
+}
+
+/** `PS-2026AUG-0012` — the company's own numbering. */
+function payslipNumber(payslip: PayslipDto): string {
+  const month = MONTHS[payslip.periodMonth - 1] ?? "";
+  const tail = payslip.employeeCode
+    ? (payslip.employeeCode.match(/(\d+)\s*$/)?.[1] ?? payslip.employeeCode)
+    : payslip.id.slice(0, 4).toUpperCase();
+  return `PS-${payslip.periodYear}${month.slice(0, 3).toUpperCase()}-${tail}`;
+}
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** `31 August 2026`. Parsed by hand — an ISO date is not a moment in time. */
+function longDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+/** `15 Jun 2025`. */
+function shortDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${MONTHS[month - 1]?.slice(0, 3)} ${year}`;
+}
+
+/**
+ * The two letters in the tile at the corner of the band.
+ *
+ * A run-together name carries its own: "ShareViral" is SV, not S, and taking
+ * the first letter of each word would make "ShareViral Bangladesh" into SB —
+ * a different company's mark. So a capital inside the first word wins over the
+ * second word; only a plainly-spelled name falls back to one letter each.
+ */
+function initials(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  const inner = words[0]?.match(/[A-Z]/g) ?? [];
+  if (inner.length >= 2) return inner.slice(0, 2).join("");
+  return (
+    words
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .slice(0, 2)
+      .join("") || "•"
+  );
+}
+
+/**
+ * "Fifty Nine Thousand One Hundred Ninety Two only" — a payslip states the
+ * amount in words so a printed figure cannot be quietly altered.
+ */
+function inWords(value: string): string {
+  const [whole, fraction = "00"] = value.split(".");
+  const paisa = Number(fraction.padEnd(2, "0").slice(0, 2));
+  const words = titleCase(numberToWords(Math.abs(Number(whole))));
+  const suffix = paisa > 0 ? ` and ${titleCase(numberToWords(paisa))} Paisa` : "";
+  return `${words}${suffix} only`;
+}
+
+function titleCase(text: string): string {
+  return text.replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
 
 const ONES = [
@@ -247,7 +499,7 @@ function underThousand(value: number): string {
   if (value < 100) {
     const ten = Math.floor(value / 10);
     const one = value % 10;
-    return one ? `${TENS[ten]}-${ONES[one]}` : TENS[ten];
+    return one ? `${TENS[ten]} ${ONES[one]}` : TENS[ten];
   }
   const hundred = Math.floor(value / 100);
   const remainder = value % 100;
@@ -255,3 +507,431 @@ function underThousand(value: number): string {
     ? `${ONES[hundred]} hundred ${underThousand(remainder)}`
     : `${ONES[hundred]} hundred`;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  The sheet                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Scoped rather than in `globals.css`, and in `pt` rather than Tailwind's
+ * scale, because this is one printed document with fixed measurements taken
+ * off an existing PDF — not a screen that should follow the app's spacing
+ * system or the reader's theme.
+ */
+const SHEET_CSS = `
+.slip {
+  --slip-ink: #0B0D0A;
+  --slip-ink-2: #141713;
+  --slip-lime: #BFFF00;
+  --slip-paper: #FFFFFF;
+  --slip-card: #F7F9F5;
+  --slip-line: #E4E7E1;
+  --slip-line-2: #C6CCC1;
+  --slip-muted: #8A9186;
+  --slip-body: #3A3F39;
+  --slip-out: #C2410C;
+
+  width: 595.28pt;
+  max-width: 100%;
+  /* A4, so what is measured on screen is what comes out of the printer. */
+  min-height: 841.89pt;
+  margin-inline: auto;
+  padding-bottom: 58pt;
+  position: relative;
+  overflow: hidden;
+  background: var(--slip-paper);
+  color: var(--slip-body);
+  font-size: 8.5pt;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(11 13 10 / 0.08), 0 8px 24px rgb(11 13 10 / 0.10);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* --- the black band ----------------------------------------------------- */
+.slip-band {
+  min-height: 138pt;
+  background: var(--slip-ink);
+  color: #FFFFFF;
+  padding: 22pt 46pt 0;
+  border-bottom: 3.5pt solid var(--slip-lime);
+  display: flex;
+  flex-direction: column;
+}
+.slip-band-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24pt;
+  flex: 1;
+}
+.slip-brand { display: flex; align-items: center; gap: 10pt; }
+.slip-mark {
+  display: grid;
+  place-items: center;
+  width: 30pt;
+  height: 30pt;
+  flex: none;
+  border-radius: 6pt;
+  background: var(--slip-lime);
+  color: var(--slip-ink);
+  font-size: 12pt;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.slip-brand-name {
+  display: block;
+  font-size: 13pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+.slip-tagline {
+  display: block;
+  margin-top: 2pt;
+  font-size: 6pt;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--slip-lime);
+}
+.slip-title { text-align: right; }
+.slip-doc {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--slip-lime);
+}
+.slip-month {
+  margin-top: 2pt;
+  font-size: 15pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+}
+.slip-meta {
+  margin-top: 7pt;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16pt;
+  font-size: 6.5pt;
+}
+.slip-meta div { display: flex; gap: 5pt; align-items: baseline; }
+.slip-meta dt {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8A9186;
+}
+.slip-meta dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.slip-legal {
+  margin-top: 14pt;
+  font-size: 6.5pt;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #C9D2C2;
+}
+.slip-contact {
+  margin: 2pt 0 12pt;
+  font-size: 6.5pt;
+  letter-spacing: 0.04em;
+  color: #7C857A;
+}
+
+/* --- the employee card -------------------------------------------------- */
+.slip-card {
+  margin: 30pt 46pt 0;
+  min-height: 96pt;
+  background: var(--slip-card);
+  border: 0.75pt solid var(--slip-line);
+  border-left: 3.5pt solid var(--slip-lime);
+  padding: 14pt 18pt;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24pt;
+}
+.slip-label {
+  font-size: 6pt;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--slip-muted);
+}
+.slip-name {
+  margin-top: 4pt;
+  font-size: 14pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--slip-ink);
+}
+.slip-role { margin-top: 1pt; font-size: 8pt; color: var(--slip-body); }
+.slip-codes { margin-top: 8pt; display: flex; align-items: center; gap: 6pt; }
+.slip-code {
+  font-size: 7.5pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--slip-ink);
+}
+.slip-chip {
+  border: 0.75pt solid var(--slip-line-2);
+  border-radius: 999px;
+  padding: 1.5pt 6pt;
+  font-size: 5.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slip-body);
+}
+.slip-card-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8pt 20pt;
+  min-width: 220pt;
+  text-align: right;
+}
+.slip-card-wide { grid-column: 1 / -1; }
+.slip-card-facts dt {
+  font-size: 5.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slip-muted);
+}
+.slip-card-facts dd {
+  margin-top: 1pt;
+  font-size: 8pt;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--slip-ink);
+}
+
+/* --- earnings and deductions -------------------------------------------- */
+.slip-columns {
+  margin: 21.5pt 46pt 0;
+  display: grid;
+  grid-template-columns: 238.64pt 238.64pt;
+  justify-content: space-between;
+  gap: 26pt;
+}
+/* Both totals on one line, however many rows are above them — which is what
+   the original does, and what makes the two columns readable as a pair. */
+.slip-col { min-width: 0; display: flex; flex-direction: column; }
+.slip-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--slip-ink);
+}
+.slip-col-ccy { color: var(--slip-muted); letter-spacing: 0.14em; }
+.slip-rule {
+  margin-top: 5pt;
+  height: 2.4pt;
+  background: var(--slip-line);
+}
+.slip-rule span { display: block; width: 26pt; height: 100%; background: var(--slip-lime); }
+.slip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 3pt;
+  margin-bottom: 7pt;
+}
+.slip-table th {
+  text-align: left;
+  font-weight: 400;
+  padding: 4.5pt 0;
+  color: var(--slip-body);
+  border-bottom: 0.5pt solid var(--slip-line);
+}
+.slip-table td {
+  text-align: right;
+  padding: 4.5pt 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--slip-ink);
+  border-bottom: 0.5pt solid var(--slip-line);
+  white-space: nowrap;
+}
+.slip-none { text-align: left !important; font-weight: 400 !important; color: var(--slip-muted) !important; }
+.slip-total {
+  /* Auto rather than a fixed gap: it drops the total to the foot of whichever
+     column is taller, without stretching the rows above it apart. */
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-top: 1pt solid var(--slip-ink);
+  align-self: stretch;
+  padding-top: 5pt;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slip-ink);
+}
+.slip-total span:last-child {
+  font-size: 9.5pt;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.slip-total-out span:last-child { color: var(--slip-out); }
+
+/* --- net payable -------------------------------------------------------- */
+.slip-net {
+  margin: 22pt 46pt 0;
+  min-height: 74pt;
+  background: var(--slip-ink-2);
+  border-left: 3.5pt solid var(--slip-lime);
+  padding: 14pt 20pt;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20pt;
+  color: #FFFFFF;
+}
+.slip-net-label {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--slip-lime);
+}
+.slip-net-words {
+  margin-top: 5pt;
+  max-width: 300pt;
+  font-size: 8pt;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.slip-net-check {
+  margin-top: 4pt;
+  font-size: 6.5pt;
+  font-variant-numeric: tabular-nums;
+  color: #8A9186;
+  white-space: pre;
+}
+.slip-net-figure {
+  font-size: 24pt;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #FFFFFF;
+}
+.slip-net-ccy {
+  display: block;
+  text-align: right;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--slip-lime);
+}
+
+/* --- payment details and signatures ------------------------------------- */
+.slip-payment { margin: 24pt 46pt 0; }
+.slip-payment-grid {
+  margin-top: 8pt;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10pt 20pt;
+}
+.slip-payment-wide { grid-column: 1 / -1; }
+.slip-payment-grid dt {
+  font-size: 5.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slip-muted);
+}
+.slip-payment-grid dd {
+  margin-top: 2pt;
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--slip-ink);
+}
+.slip-signatures {
+  margin: 40pt 46pt 30pt;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40pt;
+}
+.slip-signatures > div:last-child { text-align: right; }
+.slip-sign-rule {
+  height: 0;
+  border-top: 0.75pt solid var(--slip-line-2);
+  margin-bottom: 5pt;
+}
+.slip-sign-name { margin-top: 2pt; font-size: 8pt; font-weight: 600; color: var(--slip-ink); }
+
+/* --- the footer band ---------------------------------------------------- */
+.slip-footer {
+  position: absolute;
+  inset: auto 0 0;
+  min-height: 58pt;
+  background: var(--slip-ink);
+  border-top: 2.5pt solid var(--slip-lime);
+  padding: 11pt 46pt;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20pt;
+}
+.slip-confidential {
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--slip-lime);
+}
+.slip-foot-note { margin-top: 2pt; font-size: 6pt; color: #7C857A; max-width: 260pt; }
+.slip-foot-right { text-align: right; }
+.slip-foot-site {
+  margin-top: 2pt;
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #C9D2C2;
+}
+
+/* --- narrow screens ----------------------------------------------------- */
+@media (max-width: 640px) {
+  .slip-band, .slip-card, .slip-columns, .slip-net,
+  .slip-payment, .slip-signatures, .slip-footer {
+    padding-inline: 20pt;
+  }
+  .slip-card, .slip-columns, .slip-net, .slip-signatures, .slip-footer {
+    margin-inline: 0;
+  }
+  .slip-band-inner, .slip-card, .slip-net, .slip-footer { flex-direction: column; }
+  .slip-title, .slip-card-facts, .slip-foot-right,
+  .slip-signatures > div:last-child { text-align: left; }
+  .slip-meta { justify-content: flex-start; }
+  .slip-columns { grid-template-columns: minmax(0, 1fr); }
+  .slip-payment-grid, .slip-signatures { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --- print -------------------------------------------------------------- */
+@media print {
+  @page { size: A4; margin: 0; }
+  .slip {
+    width: 100%;
+    min-height: 297mm;
+    border-radius: 0;
+    box-shadow: none;
+    padding-bottom: 58pt;
+  }
+  .slip-footer { position: fixed; }
+}
+`;

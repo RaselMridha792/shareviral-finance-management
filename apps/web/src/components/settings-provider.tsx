@@ -13,6 +13,12 @@ export type AppSettingsDto = {
   companyEtin: string | null;
   companyBin: string | null;
   companyAddress: string | null;
+  companyTagline: string | null;
+  companyLegalNote: string | null;
+  companyWebsite: string | null;
+  companyEmail: string | null;
+  payslipSignatoryName: string | null;
+  payslipSignatoryTitle: string | null;
   baseCurrency: string;
   secondaryCurrency: string;
   fiscalYearMode: FiscalYearMode;

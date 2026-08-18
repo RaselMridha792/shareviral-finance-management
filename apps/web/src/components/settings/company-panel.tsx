@@ -38,6 +38,12 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
         companyEtin: String(data.get("companyEtin") ?? ""),
         companyBin: String(data.get("companyBin") ?? ""),
         companyAddress: String(data.get("companyAddress") ?? ""),
+        companyTagline: String(data.get("companyTagline") ?? ""),
+        companyLegalNote: String(data.get("companyLegalNote") ?? ""),
+        companyWebsite: String(data.get("companyWebsite") ?? ""),
+        companyEmail: String(data.get("companyEmail") ?? ""),
+        payslipSignatoryName: String(data.get("payslipSignatoryName") ?? ""),
+        payslipSignatoryTitle: String(data.get("payslipSignatoryTitle") ?? ""),
         fiscalYearMode: String(data.get("fiscalYearMode") ?? "") as
           "bd_july_june" | "calendar",
         numberFormat: String(data.get("numberFormat") ?? "") as NumberFormat,
@@ -113,6 +119,94 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
                 disabled={!canWrite}
               />
             </Field>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Payslip letterhead"
+            description="What prints across the top and bottom of a payslip"
+          />
+          <CardBody className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Tagline"
+                error={fieldErrors.companyTagline}
+                hint="Under the company mark, in capitals"
+              >
+                <Input
+                  name="companyTagline"
+                  maxLength={120}
+                  placeholder="Connect fans. Empower brands."
+                  defaultValue={settings.companyTagline ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+
+              <Field
+                label="Legal note"
+                error={fieldErrors.companyLegalNote}
+                hint="Beside the company name, on the line under the band"
+              >
+                <Input
+                  name="companyLegalNote"
+                  maxLength={200}
+                  placeholder="Technical branch of ..."
+                  defaultValue={settings.companyLegalNote ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+
+              <Field label="Website" error={fieldErrors.companyWebsite}>
+                <Input
+                  name="companyWebsite"
+                  maxLength={120}
+                  placeholder="example.com"
+                  defaultValue={settings.companyWebsite ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+
+              <Field
+                label="Accounts email"
+                error={fieldErrors.companyEmail}
+                hint="Where an employee writes about a mistake on their slip"
+              >
+                <Input
+                  name="companyEmail"
+                  type="email"
+                  maxLength={160}
+                  placeholder="accounts@example.com"
+                  defaultValue={settings.companyEmail ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+
+              <Field
+                label="Signatory"
+                error={fieldErrors.payslipSignatoryName}
+                hint="Signs every payslip"
+              >
+                <Input
+                  name="payslipSignatoryName"
+                  maxLength={120}
+                  defaultValue={settings.payslipSignatoryName ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+
+              <Field
+                label="Signatory's title"
+                error={fieldErrors.payslipSignatoryTitle}
+              >
+                <Input
+                  name="payslipSignatoryTitle"
+                  maxLength={120}
+                  defaultValue={settings.payslipSignatoryTitle ?? ""}
+                  disabled={!canWrite}
+                />
+              </Field>
+            </div>
           </CardBody>
         </Card>
 

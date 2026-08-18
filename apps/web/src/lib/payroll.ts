@@ -146,14 +146,33 @@ export type PayrollLineDto = {
   snapshotBankName: string | null;
   snapshotBankAccount: string | null;
   snapshotEtin: string | null;
+  /**
+   * How the gross and the deductions were made up, frozen when the run was
+   * built. `null` on lines created before the breakdown existed, which the
+   * payslip renders as a single Basic Salary row rather than an empty table.
+   */
+  earningsBreakdown: PayslipLineDto[] | null;
+  deductionsBreakdown: PayslipLineDto[] | null;
+  paidDays: number | null;
+  workingDays: number | null;
   remarks: string | null;
 };
+
+/** A labelled amount on the payslip's earnings or deductions side. */
+export type PayslipLineDto = { label: string; amount: string };
 
 export type PayslipDto = PayrollLineDto & {
   runId: string;
   runLabel: string;
   runStatus: PayrollStatus;
+  periodYear: number;
+  periodMonth: number;
+  paymentDate: string | null;
   paymentMethod: string;
+  /** Live from the person, not frozen — a staff code does not change monthly. */
+  employeeCode: string | null;
+  joinedOn: string;
+  engagementType: EngagementType;
 };
 
 /**

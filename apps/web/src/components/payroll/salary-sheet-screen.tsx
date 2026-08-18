@@ -12,6 +12,7 @@ import {
   Download,
   LoaderCircle,
   Lock,
+  ListTree,
   Printer,
   RefreshCw,
   Save,
@@ -23,7 +24,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
 import { Amount } from "@/components/money/amount";
+import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
@@ -447,6 +450,8 @@ function LineRow({
   editable: boolean;
   onSaved: () => void;
 }) {
+  const settings = useSettings();
+  const [breakdown, setBreakdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -489,18 +494,42 @@ function LineRow({
       <td className="px-4 py-2">
         <Amount value={line.netAmount} tone="neutral" className="block font-semibold" />
       </td>
-      <td className="px-4 py-2 text-right">
-        {saving ? (
-          <LoaderCircle className="ml-auto size-3.5 animate-spin text-muted-foreground" />
-        ) : line.isPaid ? (
-          <Link
-            href={`/payroll/${line.id}/payslip`}
-            prefetch={false}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <Printer className="size-3" />
-            Payslip
-          </Link>
+      <td className="px-4 py-2">
+        <div className="flex items-center justify-end gap-3">
+          {saving ? (
+            <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
+          ) : null}
+          {editable ? (
+            <button
+              type="button"
+              onClick={() => setBreakdown(true)}
+              className="cursor-pointer text-xs text-muted-foreground transition hover:text-foreground"
+            >
+              <ListTree className="mr-1 inline size-3" />
+              Breakdown
+            </button>
+          ) : null}
+          {line.isPaid ? (
+            <Link
+              href={`/payroll/${line.id}/payslip`}
+              prefetch={false}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Printer className="size-3" />
+              Payslip
+            </Link>
+          ) : null}
+        </div>
+
+        {breakdown ? (
+          <BreakdownDrawer
+            line={line}
+            currency={settings.baseCurrency}
+            numberFormat={settings.numberFormat}
+            open={breakdown}
+            onClose={() => setBreakdown(false)}
+            onSaved={onSaved}
+          />
         ) : null}
       </td>
     </tr>

@@ -418,6 +418,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 | `sql/2026-08-16-files.sql` | `files` | before the code |
 | `sql/2026-08-18-two-factor.sql` | `user_two_factor`, `recovery_codes` | before the code |
 | `sql/2026-08-18-two-accounts.sql` | Master card + Standard Chartered Bank | any time |
+| `sql/2026-08-19-payslip-fields.sql` | `team_members.employee_code`, and the payslip breakdown + paid-days snapshots on `payroll_lines` | **before the code — columns on existing tables, so without it every read of the team directory and the salary sheet 500s** |
 | `sql/2026-08-19-tax-policy.sql` | `tax_policies` + `tax_policy_bands`, with FY 2026-27 seeded | before the code, so Settings opens on a policy rather than an empty form |
 | `sql/2026-08-18-file-kinds.sql` | `invoice` + `bank_statement` file kinds | before the code — but a wrong order breaks only the two upload buttons, not reads |
 | `sql/2026-08-18-invoice-no.sql` | `transactions.invoice_no` | **before the code — it adds a column to `transactions`, so without it every read of the ledger 500s, not just the new field** |
