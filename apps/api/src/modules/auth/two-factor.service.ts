@@ -7,6 +7,7 @@ import {
 import bcrypt from "bcryptjs";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import qrcode from "qrcode-generator";
 
 import { AuditService } from "../../common/audit/audit.service";
 import { open, seal } from "../../common/crypto/secret-box";
@@ -131,14 +132,13 @@ export class TwoFactorService {
       actorRole: actor.role,
     });
 
-    return {
+    const url = otpauthUrl({
       secret,
-      otpauthUrl: otpauthUrl({
-        secret,
-        account: actor.email,
-        issuer: "ShareViral Finance",
-      }),
-    };
+      account: actor.email,
+      issuer: "ShareViral Finance",
+    });
+
+    return { secret, otpauthUrl: url, qrSvg: qrSvgFor(url) };
   }
 
   /**
@@ -462,6 +462,34 @@ export class TwoFactorService {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The QR, drawn on the server.
+ *
+ * Server-side so the browser bundle carries nothing extra for a screen almost
+ * nobody opens twice, and so the page never has to hold the secret in
+ * JavaScript in order to render it.
+ *
+ * The output is pure geometry — a white rect and one path, no text, no script,
+ * no `foreignObject`, and the URL appears nowhere in the markup. That is what
+ * makes it safe to put straight into the DOM, and it is asserted in the tests
+ * rather than assumed, because "it is only an image" is how markup gets in.
+ *
+ * The white background is fixed rather than themed. A QR needs light quiet
+ * zones to scan; one that follows a dark page is a better-looking screen that
+ * phones cannot read.
+ *
+ * Error correction M — around 15% of the symbol can be obscured and still
+ * decode, which covers a fingerprint on a screen without making the pattern
+ * denser than a phone camera is happy with.
+ */
+export function qrSvgFor(url: string): string {
+  // 0 means "smallest version this data fits in".
+  const qr = qrcode(0, "M");
+  qr.addData(url);
+  qr.make();
+  return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+}
 
 /**
  * Crockford's base32 without 0 and 1.
