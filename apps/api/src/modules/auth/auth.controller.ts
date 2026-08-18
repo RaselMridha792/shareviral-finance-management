@@ -10,12 +10,19 @@ import { ACCESS_COOKIE } from "../../common/guards/jwt-auth.guard";
 import { ZodBody } from "../../common/pipes/zod-validation.pipe";
 import { AuthService } from "./auth.service";
 import {
+  beginTwoFactorSetupSchema,
   changePasswordSchema,
+  confirmTwoFactorSchema,
   loginSchema,
+  twoFactorPasswordAndCodeSchema,
+  type BeginTwoFactorSetupInput,
   type ChangePasswordInput,
+  type ConfirmTwoFactorInput,
   type LoginInput,
+  type TwoFactorPasswordAndCodeInput,
 } from "./auth.schemas";
 import type { IssuedTokens } from "./token.service";
+import { TwoFactorService } from "./two-factor.service";
 
 export const REFRESH_COOKIE = "sfm_refresh";
 /**
@@ -40,7 +47,10 @@ const LEGACY_REFRESH_PATH = "/api/auth";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly twoFactor: TwoFactorService,
+  ) {}
 
   @Public()
   @Post("login")
@@ -109,6 +119,62 @@ export class AuthController {
     // Every session was revoked, including this one.
     clearAuthCookies(response);
     return { changed: true };
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /*  Two-factor — enrolment only. Sign-in does not ask for a code yet.        */
+  /* ------------------------------------------------------------------------ */
+
+  @Get("2fa")
+  twoFactorStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.twoFactor.status(user.id);
+  }
+
+  /**
+   * Returns the secret in the response body, once, and that is the only way it
+   * ever leaves the server — there is no endpoint that reads it back. Somebody
+   * who closes the page before scanning starts again.
+   */
+  @Post("2fa/setup")
+  @HttpCode(200)
+  beginTwoFactorSetup(
+    @CurrentUser() user: AuthenticatedUser,
+    @ZodBody(beginTwoFactorSetupSchema) body: BeginTwoFactorSetupInput,
+  ) {
+    return this.twoFactor.beginSetup(user, body.password);
+  }
+
+  @Post("2fa/confirm")
+  @HttpCode(200)
+  confirmTwoFactor(
+    @CurrentUser() user: AuthenticatedUser,
+    @ZodBody(confirmTwoFactorSchema) body: ConfirmTwoFactorInput,
+  ) {
+    return this.twoFactor.confirmSetup(user, body.code);
+  }
+
+  @Post("2fa/disable")
+  @HttpCode(200)
+  disableTwoFactor(
+    @CurrentUser() user: AuthenticatedUser,
+    @ZodBody(twoFactorPasswordAndCodeSchema)
+    body: TwoFactorPasswordAndCodeInput,
+  ) {
+    return this.twoFactor.disable(user, body.password, body.code);
+  }
+
+  @Post("2fa/recovery-codes")
+  @HttpCode(200)
+  regenerateRecoveryCodes(
+    @CurrentUser() user: AuthenticatedUser,
+    @ZodBody(twoFactorPasswordAndCodeSchema)
+    body: TwoFactorPasswordAndCodeInput,
+  ) {
+    return this.twoFactor.regenerateRecoveryCodes(
+      user,
+      body.password,
+      body.code,
+    );
   }
 }
 

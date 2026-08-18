@@ -20,3 +20,43 @@ export const changePasswordSchema = z
     path: ["confirmPassword"],
   });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Two-factor                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Six digits from the phone, or a sixteen-character recovery code.
+ *
+ * Kept loose on purpose — the service decides which it is. Pinning the shape
+ * here would mean a recovery code typed into the box marked "code" is rejected
+ * by validation with a message about digits, at exactly the moment somebody has
+ * lost their phone and is already having a bad day.
+ */
+export const twoFactorCodeSchema = z
+  .string()
+  .trim()
+  .min(6, "Enter the code from your authenticator app")
+  .max(40, "That is too long to be a code");
+
+/** The password again, because re-enrolling silently is an attack. */
+export const beginTwoFactorSetupSchema = z.strictObject({
+  password: z.string().min(1, "Enter your password"),
+});
+export type BeginTwoFactorSetupInput = z.infer<
+  typeof beginTwoFactorSetupSchema
+>;
+
+export const confirmTwoFactorSchema = z.strictObject({
+  code: twoFactorCodeSchema,
+});
+export type ConfirmTwoFactorInput = z.infer<typeof confirmTwoFactorSchema>;
+
+/** Both, for anything that weakens the account or reissues its codes. */
+export const twoFactorPasswordAndCodeSchema = z.strictObject({
+  password: z.string().min(1, "Enter your password"),
+  code: twoFactorCodeSchema,
+});
+export type TwoFactorPasswordAndCodeInput = z.infer<
+  typeof twoFactorPasswordAndCodeSchema
+>;
