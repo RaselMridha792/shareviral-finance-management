@@ -191,41 +191,40 @@ export function CashInScreen({
     <>
       <PageHeader
         title="Cash in"
-        description="Money received from abroad, and the rate each transfer landed at."
         actions={
-          canWrite ? (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setRecording(true)}
-            >
-              <Plus className="size-4" />
-              Record cash in
-            </Button>
-          ) : null
+          <>
+            <input
+              type="month"
+              value={month}
+              onChange={(event) =>
+                setMonth(event.target.value || todayInDhaka().slice(0, 7))
+              }
+              // Named for a screen reader rather than by a caption above it:
+              // this row is one line of h-9 controls, and a stacked label
+              // would be the only thing in it standing two rows tall.
+              aria-label="Month"
+              className={cn(controlClass, "num h-9 w-44")}
+            />
+            {canWrite ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setRecording(true)}
+              >
+                <Plus className="size-4" />
+                Add cash
+              </Button>
+            ) : null}
+          </>
         }
       />
-
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Month</span>
-          <input
-            type="month"
-            value={month}
-            onChange={(event) =>
-              setMonth(event.target.value || todayInDhaka().slice(0, 7))
-            }
-            className={cn(controlClass, "num w-44")}
-          />
-        </label>
-      </div>
 
       <div
         className={cn(
           "grid grid-cols-1 gap-4",
           // The rate card is not shown to a reader who cannot be told it, and
-          // two cards spread across three columns look like one went missing.
-          rateStatus === "hidden" ? "sm:grid-cols-2" : "sm:grid-cols-3",
+          // one card spread across two columns looks like one went missing.
+          rateStatus === "hidden" ? null : "sm:grid-cols-2",
         )}
       >
         <Card className="p-5">
@@ -281,27 +280,6 @@ export function CashInScreen({
             </p>
           </Card>
         )}
-
-        <Card className="p-5">
-          {/*
-            "Transfers" alone said nothing about direction, on a page whose
-            whole subject is money arriving. Read quickly it could as easily
-            have been transfers made.
-
-            Not "Money received": the figure is a count, and the card to its
-            left is the amount. Two cards labelled as money, one holding 5,
-            would be worse than the ambiguity being fixed.
-          */}
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Transfers received
-          </p>
-          <span className="num mt-3 block text-2xl font-semibold tracking-tight">
-            {received.length}
-          </span>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Moves between our own accounts are not counted here.
-          </p>
-        </Card>
       </div>
 
       {error ? (
@@ -336,7 +314,7 @@ export function CashInScreen({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="table-data min-w-[1080px] text-sm">
+            <table className="table-data min-w-[1220px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
@@ -349,6 +327,11 @@ export function CashInScreen({
                   <Th>Transaction id</Th>
                   <Th>Description</Th>
                   <Th>Sent from</Th>
+                  {/* The other end of the transfer in the column before it, so
+                      it sits next to it. Named "our" because both columns are
+                      a bank account and nothing but the wording says which
+                      side of the wire each one is. */}
+                  <Th>Our account</Th>
                   <Th className="text-right">Amount, BDT</Th>
                   <Th className="text-right">Amount, USD</Th>
                   <Th className="text-right">Rate</Th>
@@ -379,9 +362,6 @@ export function CashInScreen({
                       </DocumentCell>
                       <td className="max-w-[22rem] px-4 py-2.5">
                         <span className="font-medium">{row.description}</span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {row.accountName ?? "—"}
-                        </span>
                         {/* The optional note, on the row rather than behind a
                             click. It is the only one of the thirteen fields
                             that is not required, and a note nobody sees is a
@@ -399,6 +379,11 @@ export function CashInScreen({
                       </td>
                       <td className="px-4 py-2.5">
                         <Sender row={row} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {row.accountName ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Amount

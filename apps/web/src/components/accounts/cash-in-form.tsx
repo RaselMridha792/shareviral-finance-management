@@ -6,7 +6,6 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
-import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
 import { useToast } from "@/components/ui/toast";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -20,6 +19,7 @@ import {
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
+import { CategorySelect } from "@/components/ledger/category-select";
 import {
   categoriesApi,
   type AccountDto,
@@ -179,8 +179,21 @@ export function CashInForm({
    */
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
 
-  /** Refetched when a category is added from inside this form. */
+  /**
+   * The heading this files under — settled here rather than asked.
+   *
+   * A transfer from abroad is funding, every time. A select with one right
+   * answer and a dozen wrong ones only ever costs somebody a miscategorised
+   * month. The API still wants the id, so it is looked up instead of dropped:
+   * by slug, off the tree this screen already loaded, because the ids are
+   * different in every database and the slugs are not.
+   */
+  /** Refetched when a heading is added from inside this form. */
   const [tree, setTree] = useState(categories);
+  const [categoryId, setCategoryId] = useState(() =>
+    fundingCategoryId(categories),
+  );
+
   async function onCategoryCreated() {
     try {
       setTree(await categoriesApi.tree());
@@ -193,11 +206,6 @@ export function CashInForm({
   // Money in can only be filed under a money-in heading.
   const usable = tree.filter(
     (group) => group.kind === "in" || group.kind === "both",
-  );
-  const [categoryId, setCategoryId] = useState(() =>
-    fundingCategoryId(
-      categories.filter((g) => g.kind === "in" || g.kind === "both"),
-    ),
   );
 
   /**
@@ -219,6 +227,20 @@ export function CashInForm({
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    /**
+     * No money-in heading anywhere in the tree, which happens on a database
+     * the category seed never ran against. Caught here rather than sent,
+     * because the select would be empty and a 400 saying "Choose a category"
+     * over a list with nothing in it reads as the form being broken.
+     */
+    if (!categoryId) {
+      setError(
+        "There is no money-in category to file this under. Add one in Settings → Categories first.",
+      );
+      return;
+    }
+
     setPending(true);
     setError(null);
     setFieldErrors({});
@@ -233,10 +255,15 @@ export function CashInForm({
       const created = await ledgerApi.recordCashIn({
         txnDate: String(data.get("txnDate")),
         reference: text("reference"),
+        // The company's own number for the transfer, as against `reference`,
+        // which is the bank's. It was on screen, marked required, and never
+        // sent — so every one typed since this form shipped was dropped on the
+        // way out, and the column that shows it would have read blank forever.
+        invoiceNo: text("invoiceNo"),
         description: String(data.get("description")),
         accountId: String(data.get("accountId")),
         amount: String(data.get("amount")),
-        categoryId: String(data.get("categoryId")),
+        categoryId,
         usdRate: String(data.get("usdRate")).trim(),
         // Blank on a local receipt, and then this row is exactly what it was
         // before: an ordinary money-in with a reference rate on it. Given, the
@@ -271,7 +298,7 @@ export function CashInForm({
     <Drawer
       open={open}
       onClose={close}
-      title="Record cash in"
+      title="Add cash"
       description="Money received from abroad, as the remittance advice states it."
     >
       {saved ? (
@@ -329,254 +356,260 @@ export function CashInForm({
           </div>
         </div>
       ) : (
-      <form
-        id="cash-in-form"
-        onSubmit={onSubmit}
-        className="flex flex-col gap-4"
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Date" required error={fieldErrors.txnDate}>
-            <DateInput name="txnDate" required defaultValue={todayInDhaka()} />
-          </Field>
-          <Field
-            label="Landed in"
-            required
-            error={fieldErrors.accountId}
-            hint="Our account the transfer arrived in"
-          >
-            <SearchableSelect
-              name="accountId"
-              value={accountId}
-              onChange={setAccountId}
-              invalid={Boolean(fieldErrors.accountId?.length)}
-              options={accounts.map((account) => ({
-                value: account.id,
-                label: account.name,
-                hint: account.bankName ?? undefined,
-              }))}
-              placeholder="Choose an account"
-              searchPlaceholder="Type to find an account…"
-            />
-          </Field>
-        </div>
+        <form
+          id="cash-in-form"
+          onSubmit={onSubmit}
+          className="flex flex-col gap-4"
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Date" required error={fieldErrors.txnDate}>
+              <DateInput
+                name="txnDate"
+                required
+                defaultValue={todayInDhaka()}
+              />
+            </Field>
+            <Field
+              label="Landed in"
+              required
+              error={fieldErrors.accountId}
+              hint="Our account the transfer arrived in"
+            >
+              <SearchableSelect
+                name="accountId"
+                value={accountId}
+                onChange={setAccountId}
+                invalid={Boolean(fieldErrors.accountId?.length)}
+                options={accounts.map((account) => ({
+                  value: account.id,
+                  label: account.name,
+                  hint: account.bankName ?? undefined,
+                }))}
+                placeholder="Choose an account"
+                searchPlaceholder="Type to find an account…"
+              />
+            </Field>
+          </div>
 
-        {/* The dollar side first, because that is the side the money starts
+          {/* The dollar side first, because that is the side the money starts
             on and the side nobody can reconstruct afterwards. The rate is
             asked at the only moment anybody knows it: it is read back all
             month, since every taka figure is shown in dollars at the rate the
             month's funding arrived at, and a rate looked up later is the rate
             on the day of the lookup. */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            label="USD sent"
-            error={fieldErrors.usdSent}
-            hint="What the sender sent. Blank for a local receipt."
-          >
-            <MoneyInput
-              name="usdSent"
-              placeholder="0.00"
-              value={usdSent}
-              onChange={(event) => setUsdSent(event.target.value)}
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="USD sent"
+              error={fieldErrors.usdSent}
+              hint="What the sender sent. Blank for a local receipt."
+            >
+              <MoneyInput
+                name="usdSent"
+                placeholder="0.00"
+                value={usdSent}
+                onChange={(event) => setUsdSent(event.target.value)}
+              />
+            </Field>
+
+            <Field
+              label="Dollar rate"
+              required
+              error={fieldErrors.usdRate}
+              hint={
+                latestRate
+                  ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
+                  : "What a dollar was worth on the day. It governs the whole month."
+              }
+            >
+              <Input
+                name="usdRate"
+                required
+                inputMode="decimal"
+                className="col-amount"
+                placeholder="122.77"
+                value={usdRate}
+                onChange={(event) => setUsdRate(event.target.value)}
+              />
+            </Field>
+          </div>
 
           <Field
-            label="Dollar rate"
+            label="Amount received"
             required
-            error={fieldErrors.usdRate}
+            error={fieldErrors.amount}
             hint={
-              latestRate
-                ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
-                : "What a dollar was worth on the day. It governs the whole month."
+              amountTyped
+                ? "What landed, in taka — as you typed it"
+                : "Worked out from the two above. Change it to what the bank actually credited."
             }
           >
-            <Input
-              name="usdRate"
+            <MoneyInput
+              name="amount"
               required
-              inputMode="decimal"
-              className="col-amount"
-              placeholder="122.77"
-              value={usdRate}
-              onChange={(event) => setUsdRate(event.target.value)}
+              placeholder="0.00"
+              value={amount}
+              onChange={(event) => {
+                setTypedAmount(event.target.value);
+                // From here on this box is the person's, not the arithmetic's.
+                setAmountTyped(true);
+              }}
             />
           </Field>
-        </div>
 
-        <Field
-          label="Amount received"
-          required
-          error={fieldErrors.amount}
-          hint={
-            amountTyped
-              ? "What landed, in taka — as you typed it"
-              : "Worked out from the two above. Change it to what the bank actually credited."
-          }
-        >
-          <MoneyInput
-            name="amount"
-            required
-            placeholder="0.00"
-            value={amount}
-            onChange={(event) => {
-              setTypedAmount(event.target.value);
-              // From here on this box is the person's, not the arithmetic's.
-              setAmountTyped(true);
-            }}
-          />
-        </Field>
-
-        {/* The arithmetic, back in front of the person who typed it. A digit
+          {/* The arithmetic, back in front of the person who typed it. A digit
             too many in either box turns a plausible rate into an absurd one,
             and that is obvious here and nearly invisible in a report next
             quarter. This is also the figure the funding report will show for
             this transfer — it divides the same two numbers rather than
             trusting the rate that was typed. */}
-        {realised ? (
-          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
-            <span className="num">
-              {money(realised.bdt, { hideDecimals: true })} ÷{" "}
-              {money(realised.usd, { currency: "USD", hideDecimals: true })} ={" "}
-              <strong className="font-semibold text-foreground">
-                {money(realised.rate)}
-              </strong>
-            </span>{" "}
-            per USD — the rate this transfer actually achieved.
-            {drifted ? (
-              <>
-                {" "}
-                That is not {trimRate(usdRate)}, which is normal when the bank
-                takes a charge — the funding report will show{" "}
-                {money(realised.rate)}.
-              </>
-            ) : null}
-          </p>
-        ) : usdSent.trim() ? (
-          <p className="text-xs text-muted-foreground">
-            Enter the rate and the taka figure fills itself in.
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Leave <span className="font-medium">USD sent</span> blank for a
-            local receipt and type the taka directly. Filled in, this transfer
-            appears in the funding report with the rate it achieved.
-          </p>
-        )}
+          {realised ? (
+            <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
+              <span className="num">
+                {money(realised.bdt, { hideDecimals: true })} ÷{" "}
+                {money(realised.usd, { currency: "USD", hideDecimals: true })} ={" "}
+                <strong className="font-semibold text-foreground">
+                  {money(realised.rate)}
+                </strong>
+              </span>{" "}
+              per USD — the rate this transfer actually achieved.
+              {drifted ? (
+                <>
+                  {" "}
+                  That is not {trimRate(usdRate)}, which is normal when the bank
+                  takes a charge — the funding report will show{" "}
+                  {money(realised.rate)}.
+                </>
+              ) : null}
+            </p>
+          ) : usdSent.trim() ? (
+            <p className="text-xs text-muted-foreground">
+              Enter the rate and the taka figure fills itself in.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Leave <span className="font-medium">USD sent</span> blank for a
+              local receipt and type the taka directly. Filled in, this transfer
+              appears in the funding report with the rate it achieved.
+            </p>
+          )}
 
-        <Field label="Category" required error={fieldErrors.categoryId}>
-          <CategorySelect
-            name="categoryId"
-            value={categoryId}
-            onChange={setCategoryId}
-            categories={usable}
-            // Money arriving, so a category added from here belongs on the
-            // money-in side. Getting this wrong would file a heading where
-            // this very form could never offer it again.
-            kind="in"
-            invalid={Boolean(fieldErrors.categoryId?.length)}
-            onCreated={onCategoryCreated}
-          />
-        </Field>
-
-        {/*
+          {/*
           Two reference numbers, because the paperwork has two and they answer
           different questions. The invoice is ours — what the transfer was
           against. The transaction id is the bank's — what to quote when asking
           them about it. One field would hold whichever was typed first.
         */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            label="Invoice no."
-            required
-            error={fieldErrors.invoiceNo}
-            hint="The invoice this transfer settles"
-          >
-            <Input
-              name="invoiceNo"
-              required
-              className="num"
-              placeholder="INV-002"
+          <Field label="Category" required error={fieldErrors.categoryId}>
+            <CategorySelect
+              name="categoryId"
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={usable}
+              // Money arriving, so a heading added from here belongs on the
+              // money-in side. Getting this wrong would file a heading where
+              // this very form could never offer it again.
+              kind="in"
+              invalid={Boolean(fieldErrors.categoryId?.length)}
+              onCreated={onCategoryCreated}
             />
           </Field>
 
-          <Field
-            label="Transaction id"
-            required
-            error={fieldErrors.reference}
-            hint="The bank's reference for this transfer"
-          >
-            <Input
-              name="reference"
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Invoice no."
               required
-              className="num"
-              placeholder="FT26081200412"
+              error={fieldErrors.invoiceNo}
+              hint="The invoice this transfer settles"
+            >
+              <Input
+                name="invoiceNo"
+                required
+                className="num"
+                placeholder="INV-002"
+              />
+            </Field>
+
+            <Field
+              label="Transaction id"
+              required
+              error={fieldErrors.reference}
+              hint="The bank's reference for this transfer"
+            >
+              <Input
+                name="reference"
+                required
+                className="num"
+                placeholder="FT26081200412"
+              />
+            </Field>
+          </div>
+
+          <Field label="Description" required error={fieldErrors.description}>
+            <Input
+              name="description"
+              required
+              placeholder="August funding from ShareViral Corp"
             />
           </Field>
-        </div>
 
-        <Field label="Description" required error={fieldErrors.description}>
-          <Input
-            name="description"
-            required
-            placeholder="August funding from ShareViral Corp"
-          />
-        </Field>
-
-        {/* The sending side, kept together because it is copied off one
+          {/* The sending side, kept together because it is copied off one
             document in one go. Every field optional: an advice without a
             SWIFT is still a transfer that happened, and losing the whole
             record over a line the bank did not print helps nobody. */}
-        <fieldset className="grid gap-4 rounded-lg bg-surface-muted p-4">
-          <legend className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Sent from
-          </legend>
+          <fieldset className="grid gap-4 rounded-lg bg-surface-muted p-4">
+            <legend className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Sent from
+            </legend>
 
-          <Field label="Account number" error={fieldErrors.senderAccountNumber}>
-            <Input
-              name="senderAccountNumber"
-              className="num"
-              placeholder="0123456789"
-            />
+            <Field
+              label="Account number"
+              error={fieldErrors.senderAccountNumber}
+            >
+              <Input
+                name="senderAccountNumber"
+                className="num"
+                placeholder="0123456789"
+              />
+            </Field>
+
+            <Field
+              label="Account name"
+              error={fieldErrors.senderAccountName}
+              hint="The name the sending account is held in"
+            >
+              <Input name="senderAccountName" placeholder="ShareViral Corp" />
+            </Field>
+
+            <Field label="Bank name" error={fieldErrors.senderBankName}>
+              <Input name="senderBankName" placeholder="Bank of America" />
+            </Field>
+
+            <Field
+              label="SWIFT code"
+              error={fieldErrors.senderSwiftCode}
+              hint="Optional — leave it blank if the advice does not say"
+            >
+              <Input
+                name="senderSwiftCode"
+                className="num uppercase"
+                placeholder="BOFAUS3N"
+              />
+            </Field>
+          </fieldset>
+
+          <Field label="Notes" error={fieldErrors.notes}>
+            <Textarea name="notes" />
           </Field>
 
-          <Field
-            label="Account name"
-            error={fieldErrors.senderAccountName}
-            hint="The name the sending account is held in"
-          >
-            <Input name="senderAccountName" placeholder="ShareViral Corp" />
-          </Field>
-
-          <Field label="Bank name" error={fieldErrors.senderBankName}>
-            <Input name="senderBankName" placeholder="Bank of America" />
-          </Field>
-
-          <Field
-            label="SWIFT code"
-            error={fieldErrors.senderSwiftCode}
-            hint="Optional — leave it blank if the advice does not say"
-          >
-            <Input
-              name="senderSwiftCode"
-              className="num uppercase"
-              placeholder="BOFAUS3N"
-            />
-          </Field>
-        </fieldset>
-
-
-        <Field label="Notes" error={fieldErrors.notes}>
-          <Textarea name="notes" />
-        </Field>
-
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
-          >
-            {error}
-          </p>
-        ) : null}
-      </form>
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+            >
+              {error}
+            </p>
+          ) : null}
+        </form>
       )}
 
       {/* The footer belongs to the form step only — the attach step carries
@@ -594,7 +627,7 @@ export function CashInForm({
             disabled={pending}
           >
             {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            Record it
+            Add it
           </Button>
         </div>
       )}
@@ -636,20 +669,38 @@ function realisedRate(
 }
 
 /**
- * Where a transfer from the parent company belongs, if the heading exists.
+ * Where a transfer from abroad belongs.
  *
- * A guess at the common case, not a rule — the select is right there. Falls
- * back to the first money-in category so the field is never blank, since a
- * blank required select is a failed save waiting to happen.
+ * "CEO funding" under "Money in" is what the category seed writes, and it is
+ * the answer for every row this form has ever produced. Matched on slug and
+ * not on a pasted uuid — the ids are per-database, the slugs are per-seed —
+ * and under its parent, because a slug is only unique within one.
+ *
+ * Then two fallbacks, because the seed is a script somebody has to remember to
+ * run and a database that never saw it must still be able to take a transfer:
+ * any active money-in heading named like funding, then simply the first one.
+ * Empty only when there is no money-in side at all, which `onSubmit` refuses
+ * rather than sending — the API would reject it anyway, without saying why in
+ * terms anybody could act on.
  */
 function fundingCategoryId(groups: CategoryNode[]): string {
-  for (const group of groups) {
+  const moneyIn = groups.filter(
+    (group) => group.kind === "in" || group.kind === "both",
+  );
+
+  const seeded = moneyIn
+    .find((group) => group.slug === "money-in")
+    ?.children.find((child) => child.slug === "ceo-funding" && child.isActive);
+  if (seeded) return seeded.id;
+
+  for (const group of moneyIn) {
     const funding = group.children.find(
       (child) => child.isActive && /funding/i.test(child.name),
     );
     if (funding) return funding.id;
   }
-  const first = groups[0];
+
+  const first = moneyIn[0];
   if (!first) return "";
   return first.children.find((child) => child.isActive)?.id ?? first.id;
 }
