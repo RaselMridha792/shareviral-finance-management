@@ -60,6 +60,20 @@ export function TransactionForm({
   onSaved: () => Promise<void> | void;
 }) {
   const editing = Boolean(transaction);
+
+  /**
+   * A just-created entry, while its document is being attached.
+   *
+   * Documents were asked for on every entry, and a file needs a row to hang on
+   * — so the entry has to exist first. The drawer therefore does not close on a
+   * create: it becomes the attach step, with the entry already safe in the
+   * ledger. Somebody who leaves at that point has a recorded entry and no
+   * document, which the table marks in amber.
+   *
+   * Editing is unaffected. That row already exists, so its uploader sits in the
+   * form where it always has.
+   */
+  const [saved, setSaved] = useState<TransactionDto | null>(null);
   const toast = useToast();
   const [direction, setDirection] = useState<TxnDirection>(
     transaction?.direction ?? defaultDirection,
@@ -148,6 +162,8 @@ export function TransactionForm({
       return value === "" ? undefined : value;
     };
 
+    let created: TransactionDto | null = null;
+
     try {
       if (transaction) {
         await ledgerApi.update(transaction.id, {
@@ -159,6 +175,7 @@ export function TransactionForm({
           // instead of quietly clearing it.
           paymentMethod: text("paymentMethod") as never,
           reference: text("reference"),
+          invoiceNo: text("invoiceNo"),
           description: text("description"),
           notes: text("notes"),
           receiptUrl: text("receiptUrl"),
@@ -166,7 +183,7 @@ export function TransactionForm({
           withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
         });
       } else {
-        await ledgerApi.create({
+        created = await ledgerApi.create({
           direction,
           txnDate: String(data.get("txnDate")),
           accountId: String(data.get("accountId")),
@@ -174,6 +191,7 @@ export function TransactionForm({
           categoryId: String(data.get("categoryId")),
           paymentMethod: (text("paymentMethod") ?? "bank_transfer") as never,
           reference: text("reference"),
+          invoiceNo: text("invoiceNo"),
           description: String(data.get("description")),
           notes: text("notes"),
           receiptUrl: text("receiptUrl"),
@@ -185,9 +203,15 @@ export function TransactionForm({
           fxRate: showFx ? text("fxRate") : undefined,
         } as never);
       }
-      toast.show(editing ? `${transaction?.refNo} updated.` : "Entry recorded.");
       await onSaved();
-      onClose();
+
+      if (created) {
+        toast.show(`${created.refNo} recorded. Attach the document to finish.`);
+        setSaved(created);
+      } else {
+        toast.show(`${transaction?.refNo} updated.`);
+        onClose();
+      }
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -211,6 +235,48 @@ export function TransactionForm({
           : undefined
       }
     >
+      {saved ? (
+        <div className="flex flex-col gap-4">
+          <p className="rounded-lg bg-positive/10 px-4 py-3 text-sm">
+            <span className="font-medium">Recorded as</span>{" "}
+            <span className="num">{saved.refNo}</span>. It is in the ledger
+            already — the document is the last step.
+          </p>
+
+          <Field
+            label="Receipt or screenshot"
+            required
+            hint="Proof this movement happened. Kept on this company's own server."
+          >
+            <FileManager
+              owner="transaction"
+              ownerId={saved.id}
+              kinds={["receipt", "invoice", "bank_statement", "other"]}
+              canWrite
+              emptyLabel="Nothing attached yet."
+            />
+          </Field>
+
+          <p className="text-xs text-muted-foreground">
+            Closing without attaching leaves the entry recorded and undocumented.
+            The table marks those rows in amber so they can be found and
+            finished later.
+          </p>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => {
+                setSaved(null);
+                onClose();
+              }}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
       <form id="txn-form" onSubmit={onSubmit} className="flex flex-col gap-4">
         {!editing && !lockDirection ? (
           <div
@@ -320,7 +386,7 @@ export function TransactionForm({
           <Field
             label="Reference"
             error={fieldErrors.reference}
-            hint="Cheque or bank reference"
+            hint="Cheque or bank reference — theirs"
           >
             <Input
               name="reference"
@@ -329,6 +395,25 @@ export function TransactionForm({
             />
           </Field>
         </div>
+
+        {/*
+          Two reference numbers, because the paperwork has two. The one above
+          is the bank's — a cheque number, a wire reference. This one is the
+          company's own: the number on the invoice or the payroll sheet the
+          money was against. A single box would hold whichever was typed first.
+        */}
+        <Field
+          label="Invoice no."
+          error={fieldErrors.invoiceNo}
+          hint="The document this was against — INV-002, SAL-JUL. Ours."
+        >
+          <Input
+            name="invoiceNo"
+            className="num"
+            placeholder="INV-002"
+            defaultValue={transaction?.invoiceNo ?? ""}
+          />
+        </Field>
 
         <Field
           label="Receipt link"
@@ -486,16 +571,26 @@ export function TransactionForm({
           </p>
         ) : null}
       </form>
+      )}
 
-      <div className="mt-6 flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" form="txn-form" variant="primary" disabled={pending}>
-          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          {editing ? "Save changes" : "Record it"}
-        </Button>
-      </div>
+      {/* The attach step carries its own Done. A Cancel beside an entry that
+          is already in the ledger would read as if it could undo it. */}
+      {saved ? null : (
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="txn-form"
+            variant="primary"
+            disabled={pending}
+          >
+            {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {editing ? "Save changes" : "Record it"}
+          </Button>
+        </div>
+      )}
     </Drawer>
   );
 }
