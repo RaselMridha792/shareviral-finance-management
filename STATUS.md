@@ -550,6 +550,52 @@ Then, when you want off Vercel and Render, `DEPLOYMENT.md` has the VPS move.
    set". Re-entering it in Settings fixes it. Set `SECRET_ENCRYPTION_KEY` so
    rotating a JWT secret cannot orphan it again.
 
+## Next: which tools each person uses (asked for 2026-08-18)
+
+**Not built yet — waiting on the data.** The owner will send the AI & tools
+data and the changes to that page; the shape of the link should be obvious
+from it. Recorded now so it is not re-derived from scratch later.
+
+**What was asked for.** A section on a team member's page listing the paid
+tools that person uses, with tabs for Active / Cancelled / Paused / All, and
+every tool they have *ever* been on — history, not just what is live today.
+
+**What exists.** `vendors` already carries the subscription itself:
+`billingCycle`, `billingAmount`, `billingCurrency`, `nextRenewalOn`,
+`billingAccountId`. What it does not carry is anybody's name.
+
+**Three things the current schema cannot express, and they decide the design:**
+
+1. **A tool has two states, and this needs four.** `vendors.isActive` is a
+   boolean and it means archived-or-not, which is a different question from
+   whether a subscription is running. Paused and cancelled both land on
+   `false` today and cannot be told apart.
+
+2. **A column would be wrong; this is many-to-many.** One Claude or ChatGPT
+   Team seat is used by several people, and one person uses several tools. A
+   `team_member_id` on `vendors` can only say "this tool belongs to one
+   person", which is false the first time two people share a seat.
+
+3. **"Every tool they have ever used" means the link needs dates.** A row that
+   only says "Mirza uses Claude" cannot answer "what was Mirza on in June".
+   The link needs a start, an end, and its own status — which is *not* the
+   tool's status: a subscription can be perfectly active while one person's
+   access to it was cancelled in July.
+
+So the likely shape is a join table — person, tool, from, until, status — and
+the tabs read from the link's status rather than the vendor's. That also gives
+"what does this tool cost us per person" for free, which nothing answers today.
+
+**What to send, so the first version is right rather than a guess:**
+
+- For each tool: is it running, paused or cancelled, and since when?
+- Who is on each tool right now?
+- Anybody removed from a tool earlier — who, which tool, roughly when? (This
+  is the part that cannot be reconstructed later; the rest can be read off a
+  bill.)
+- Whether seats are counted per person or the tool is one flat cost, since
+  that decides whether a per-person figure is real or a division.
+
 ## Still waiting on answers
 
 1. **The category list** — 39 are seeded as a proposal. Which headings are wrong
