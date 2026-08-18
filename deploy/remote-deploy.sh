@@ -136,17 +136,41 @@ docker compose exec -T nginx nginx -s reload
 # marker from the repo against that dump is the one check that would have caught
 # it. A silent no-op deploy is worse than a failed one: a red run gets fixed, a
 # green one gets trusted.
-marker=$(grep -o 'zone=sfm_login[^ ;]*' nginx/conf.d/sfm.conf | head -1)
-if [ -z "$marker" ]; then
-  echo "Could not find the marker in the repo's nginx config." >&2
+# The whole file, compared byte for byte - not a marker.
+#
+# This used to grep the live dump for `zone=sfm_login:10m`, which was in the
+# repository's config and also in every older version of it. So the check
+# passed against a config from three deploys ago and reported success. A
+# verification that cannot fail is not a verification, and this one had already
+# been shipped as the fix for exactly this problem.
+#
+# `nginx -T` prints each file after a `# configuration file <path>:` header, so
+# the block can be pulled out and diffed against what git has. Anything that
+# differs - stale mount, half-written file, an edit made on the box and
+# forgotten - is a difference, and there is nothing left to be clever about.
+live=$(mktemp)
+if ! docker compose exec -T nginx nginx -T 2>/dev/null   | awk '/^# configuration file .*\/conf\.d\/sfm\.conf:$/{on=1;next} /^# configuration file /{on=0} on'   > "$live"; then
+  echo "Could not read the live nginx configuration." >&2
+  rm -f "$live"
   exit 1
 fi
-if ! docker compose exec -T nginx nginx -T 2>/dev/null | grep -q "$marker"; then
+
+if [ ! -s "$live" ]; then
+  echo "nginx is not serving conf.d/sfm.conf at all." >&2
+  rm -f "$live"
+  exit 1
+fi
+
+# Trailing whitespace and a final newline are the only things allowed to differ.
+if ! diff -q <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf)              <(sed -e 's/[[:space:]]*$//' "$live") >/dev/null; then
   echo "nginx is NOT running the config that is in git." >&2
-  echo "Looked for '${marker}' in the live configuration and did not find it." >&2
+  echo "--- what differs (git on the left, live on the right) ---" >&2
+  diff <(sed -e 's/[[:space:]]*$//' nginx/conf.d/sfm.conf)        <(sed -e 's/[[:space:]]*$//' "$live") | head -40 >&2
+  rm -f "$live"
   exit 1
 fi
-echo "nginx is running the config from git (found ${marker})."
+rm -f "$live"
+echo "nginx is running exactly the config that is in git."
 
 # --------------------------------------------------------------------------
 # And prove the site answers, which is the only thing anybody actually wants.
