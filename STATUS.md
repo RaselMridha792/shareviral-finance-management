@@ -724,6 +724,8 @@ Claude is one vendor and nine of these.
 | `plan_name` | text | "Max Plan 5x", "Professional Full seats" |
 | `category` | enum | the sheet's ten, as an enum so it cannot drift |
 | `cost_usd` | numeric(14,2) | the price as billed |
+| `cost_bdt` | numeric(14,2) | what the card was actually charged |
+| `usd_rate` | numeric(18,6) | the rate that charge worked out at |
 | `billing_cycle` | existing enum | none / monthly / quarterly / yearly - already in the app |
 | `start_date` | date | |
 | `next_renewal_on` | date, nullable | nullable is what "Credit Base" needs |
@@ -743,18 +745,27 @@ needs it: Clickup is one row and twelve users, Github one row and nine. Picking
 one name from the dropdown is the same gesture as picking twelve, and it is
 what makes "which tools is this person on" answerable for shared seats too.
 
-**No BDT column, and no rate column.** They are empty in all 32 rows, and the
-app already has the rule: a subscription is priced in dollars, so the dollars
-are the fact and taka is a reading of it, shown translated with its rate named
-like every other figure here. What was actually paid in taka is a ledger row,
-at the rate that day really achieved - which is a different and better number
-than a rate typed into a sheet.
+**All three money columns are stored, on the owner's instruction.** I argued
+for dropping BDT and the rate - they are empty in all 32 rows, and the app's
+usual rule is that a dollar price is the fact and taka is a reading of it. The
+owner needs all three, which is their call, and it is recorded here as theirs
+rather than re-argued later.
 
-**Two enums the app already has** and this reuses rather than duplicates:
-`billing_cycle` (none/monthly/quarterly/yearly) and `payment_method`
-(bank_transfer/cash/cheque/mobile_banking/card/other). The sheet's `paypneer`
-is Payoneer and needs adding to the second; its `Annually` is the existing
-`yearly`.
+They come with one thing attached, because the alternative is the fault already
+found in the Cash In sheet: **the form takes two and computes the third.** Type
+USD and BDT and the rate appears; type USD and the rate and BDT appears. All
+three are stored, and none of them can disagree with the other two - which is
+exactly what INV-002 does today, off by ৳27,612 with nothing to say which
+column was wrong.
+
+### Enums — the sheet's values are final, so missing ones get created
+
+| set | decision |
+|---|---|
+| `subscription_category` | **new** - the sheet's ten, exactly |
+| `subscription_status` | **new** - active, paused, canceled, expired |
+| `payment_method` | **extend** the existing one with `paypal` and `payoneer` (the sheet's `paypneer`) |
+| `billing_cycle` | **reuse**. The sheet's Monthly / quarterly / Annually are the existing monthly / quarterly / yearly; the screen shows the sheet's wording, which is all anybody sees. A second value meaning "yearly" alongside `yearly` would be two words for one thing in a schema that already uses the first. |
 
 ### Also asked for### Also asked for
 
