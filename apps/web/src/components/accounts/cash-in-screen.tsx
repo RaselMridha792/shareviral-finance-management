@@ -6,7 +6,7 @@ import {
   monthRange,
   todayInDhaka,
 } from "@finance/shared";
-import { Landmark, LoaderCircle, Plus } from "lucide-react";
+import { Landmark, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -21,6 +21,7 @@ import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { reportsApi } from "@/lib/reports";
 import { cn } from "@/lib/utils";
+import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { CashInForm } from "./cash-in-form";
 
 /**
@@ -60,6 +61,7 @@ export function CashInScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
 
   /** The month's rate, straight from the API. Null when there is none. */
   const [rate, setRate] = useState<string | null>(null);
@@ -69,7 +71,10 @@ export function CashInScreen({
 
   const requestRef = useRef(0);
   const rateRequestRef = useRef(0);
-  const range = monthRange(Number(month.slice(0, 4)), Number(month.slice(5, 7)));
+  const range = monthRange(
+    Number(month.slice(0, 4)),
+    Number(month.slice(5, 7)),
+  );
 
   const from = range.start;
   const to = range.end;
@@ -171,15 +176,14 @@ export function CashInScreen({
     .reduce((sum, row) => sum + Number(row.amount), 0)
     .toFixed(2);
 
-  // Each row at the rate it was recorded at, falling back to the month's own.
-  // Dividing the total by one rate would quietly restate a transfer that
-  // arrived at a different one.
+  // The same rule as the column below, through the same function. Dividing the
+  // total by one rate would quietly restate a transfer that arrived at a
+  // different one — and two implementations of "how many dollars was that"
+  // would disagree on exactly the rows where the bank took a charge, which is
+  // most of them.
   const totalUsd = rate
     ? received
-        .reduce(
-          (sum, row) => sum + Number(inDollars(row.amount, rateOf(row) ?? rate)),
-          0,
-        )
+        .reduce((sum, row) => sum + Number(dollarsOf(row, rate) ?? 0), 0)
         .toFixed(2)
     : null;
 
@@ -254,7 +258,11 @@ export function CashInScreen({
               Rate this month
             </p>
             <span className="col-amount mt-3 block text-2xl font-semibold tracking-tight">
-              {rateStatus === "loading" ? "…" : rate ? `৳${trimRate(rate)}` : "—"}
+              {rateStatus === "loading"
+                ? "…"
+                : rate
+                  ? `৳${trimRate(rate)}`
+                  : "—"}
             </span>
             <p className="mt-1.5 text-xs text-muted-foreground">
               {rateStatus === "loading" ? (
@@ -328,36 +336,66 @@ export function CashInScreen({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="table-data min-w-[880px] text-sm">
+            <table className="table-data min-w-[1080px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted/50 text-left">
+                  {/* Row order, like the sheet's own SL — not a stored number.
+                      Every entry already carries `ref_no`, and a second
+                      identity that renumbers itself when a row is voided would
+                      be one people quote at each other and get wrong. */}
+                  <Th className="text-right">SL</Th>
                   <Th>Date</Th>
+                  <Th>Invoice no</Th>
                   <Th>Transaction id</Th>
                   <Th>Description</Th>
                   <Th>Sent from</Th>
-                  <Th className="text-right">Amount</Th>
+                  <Th className="text-right">Amount, BDT</Th>
+                  <Th className="text-right">Amount, USD</Th>
                   <Th className="text-right">Rate</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {received.map((row) => {
-                  const rowRate = rateOf(row) ?? rate;
+                {received.map((row, index) => {
+                  // What was actually sent, when the entry recorded it. Only
+                  // divided out when it did not: a derived figure is the app's
+                  // arithmetic, and the stored one is the remittance advice.
+                  const sentUsd = dollarsOf(row, rate);
                   return (
                     <tr
                       key={row.id}
                       className="row-finance hover:bg-surface-muted/50"
                     >
+                      <td className="num px-4 py-2.5 text-right text-muted-foreground">
+                        {index + 1}
+                      </td>
                       <td className="num px-4 py-2.5 whitespace-nowrap">
                         {row.txnDate}
                       </td>
-                      <td className="num px-4 py-2.5 text-muted-foreground">
-                        {row.reference ?? "—"}
-                      </td>
-                      <td className="px-4 py-2.5">
+                      <DocumentCell row={row} onOpen={setDocumentsFor}>
+                        {row.invoiceNo}
+                      </DocumentCell>
+                      <DocumentCell row={row} onOpen={setDocumentsFor}>
+                        {row.reference}
+                      </DocumentCell>
+                      <td className="max-w-[22rem] px-4 py-2.5">
                         <span className="font-medium">{row.description}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">
                           {row.accountName ?? "—"}
                         </span>
+                        {/* The optional note, on the row rather than behind a
+                            click. It is the only one of the thirteen fields
+                            that is not required, and a note nobody sees is a
+                            note nobody writes. Clamped, with the whole of it
+                            on hover, because one long note must not set the
+                            height of every row above it. */}
+                        {row.notes ? (
+                          <span
+                            title={row.notes}
+                            className="mt-0.5 block truncate text-xs text-muted-foreground italic"
+                          >
+                            {row.notes}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2.5">
                         <Sender row={row} />
@@ -369,20 +407,30 @@ export function CashInScreen({
                           showCounterpart={false}
                           className="block"
                         />
-                        {rowRate ? (
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {sentUsd ? (
                           <Amount
-                            value={inDollars(row.amount, rowRate)}
+                            value={sentUsd}
                             currency="USD"
-                            tone="neutral"
-                            approximate
-                            className="mt-0.5 block text-xs text-muted-foreground"
+                            tone="in"
+                            showCounterpart={false}
+                            approximate={
+                              row.originalCurrency !== "USD" ||
+                              !row.originalAmount
+                            }
+                            className="block"
                           />
-                        ) : null}
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="col-amount px-4 py-2.5 text-muted-foreground">
                         {/* The rate this row was recorded at — not the month's,
                             unless this row is the one that set it. */}
-                        {rateOf(row) ? `৳${trimRate(rateOf(row) as string)}` : "—"}
+                        {rateOf(row)
+                          ? `৳${trimRate(rateOf(row) as string)}`
+                          : "—"}
                       </td>
                     </tr>
                   );
@@ -392,6 +440,18 @@ export function CashInScreen({
           </div>
         </Card>
       )}
+
+      {documentsFor ? (
+        <DocumentsDialog
+          transactionId={documentsFor.id}
+          refNo={
+            [documentsFor.invoiceNo, documentsFor.reference]
+              .filter(Boolean)
+              .join("  ·  ") || documentsFor.refNo
+          }
+          onClose={() => setDocumentsFor(null)}
+        />
+      ) : null}
 
       <CashInForm
         open={recording}
@@ -409,6 +469,52 @@ export function CashInScreen({
 }
 
 /** The sending bank and the account it left, when the advice named them. */
+/**
+ * A number on the sheet that opens what it refers to.
+ *
+ * The invoice number and the transaction id both point at paper — the invoice
+ * itself and the bank's statement — and both were asked to be clickable. They
+ * open the same panel because they are attached to the same entry; which one
+ * was clicked is not a filter on what comes back.
+ *
+ * The amber mark is for an entry with a number and nothing attached to it. A
+ * remittance whose advice was never uploaded is exactly the row somebody has
+ * to chase, and it is invisible unless the table says so.
+ */
+function DocumentCell({
+  row,
+  children,
+  onOpen,
+}: {
+  row: TransactionDto;
+  children: string | null;
+  onOpen: (row: TransactionDto) => void;
+}) {
+  if (!children) {
+    return <td className="px-4 py-2.5 text-muted-foreground">—</td>;
+  }
+
+  return (
+    <td className="px-4 py-2.5">
+      <button
+        type="button"
+        onClick={() => onOpen(row)}
+        title={
+          row.documentCount > 0
+            ? `${row.documentCount} attached`
+            : "Nothing attached to this entry"
+        }
+        className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
+      >
+        {row.documentCount === 0 ? (
+          <TriangleAlert className="size-3 shrink-0 text-warning" />
+        ) : null}
+        {children}
+      </button>
+    </td>
+  );
+}
+
 function Sender({ row }: { row: TransactionDto }) {
   const account = [row.senderAccountName, row.senderAccountNumber]
     .filter(Boolean)
@@ -472,6 +578,28 @@ function firstFunded(rows: TransactionDto[]): TransactionDto | null {
 }
 
 /** Taka read in dollars. A translation, never a recorded figure. */
+/**
+ * How many dollars a row is, in one place.
+ *
+ * The stored figure when there is one — that is what the sender actually sent,
+ * off the remittance advice. Divided out only when there is not, and the
+ * approximate mark on screen says which of the two a reader is looking at.
+ *
+ * One function because the column and the total above it must agree. They are
+ * the same question asked twice, and two implementations would differ on
+ * exactly the rows where the bank took a charge.
+ */
+function dollarsOf(
+  row: TransactionDto,
+  monthRate: string | null,
+): string | null {
+  if (row.originalCurrency === "USD" && row.originalAmount) {
+    return row.originalAmount;
+  }
+  const rate = rateOf(row) ?? monthRate;
+  return rate ? inDollars(row.amount, rate) : null;
+}
+
 function inDollars(amountBdt: string, rate: string): string {
   return (Number(amountBdt) / Number(rate)).toFixed(2);
 }
