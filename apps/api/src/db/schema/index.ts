@@ -24,6 +24,7 @@ export * from "./transactions";
 export * from "./imports";
 export * from "./team";
 export * from "./tax";
+export * from "./tax-policy";
 export * from "./fx";
 export * from "./statements";
 export * from "./files";
