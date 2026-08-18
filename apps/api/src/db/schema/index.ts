@@ -13,6 +13,7 @@
 
 export * from "./enums";
 export * from "./users";
+export * from "./two-factor";
 export * from "./audit";
 export * from "./accounts";
 export * from "./categories";
