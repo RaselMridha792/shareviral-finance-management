@@ -1097,3 +1097,50 @@ requests; neither is worth forcing.
   through, and out of the totals.
 - **The app records tax, it does not calculate it.** The accountant supplies the
   numbers.
+
+## Next: Statement is really Reports, and Reports becomes a bank statement (asked 2026-08-19)
+
+**Not built.** To be picked up only after the All Transactions and TDS work is
+pushed — the owner was explicit about the order.
+
+### The rename
+
+`/statement` is named wrong. Its contents are right — the owner said so — but a
+reconciled period position with an executive summary and a sign-off is a
+**report**, not a statement. It takes the name Reports.
+
+What is called Reports today gives up that name and becomes **Bank statement**:
+the actual movements on the bank's own ledger, which is the thing an accountant
+means by the word.
+
+### What a bank statement is here
+
+The columns, from the sheet the owner sent:
+
+```
+SL | Date | Description | Debit | Credit | Balance
+```
+
+It is another view of the same ledger All Transactions reads — in and out split
+into two money columns instead of one signed one, with the running balance
+after each line. The register at `/accounts/[id]/register` already computes a
+running balance the same way; this is that, without being tied to one account.
+
+Plus one column the sheet does not have and the owner asked for by name: the
+transaction's own id, clickable, opening whatever is attached to it. Their
+reasoning is worth keeping: *"we are uploading a document on every transaction,
+aren't we?"* — so the statement is where somebody goes to check that.
+
+### Filtering
+
+Deliberately almost none: a start date and an end date. Nothing else.
+
+And the dollar/taka switcher comes off, matching every other screen — taka
+large, dollars underneath it, always both, never a toggle.
+
+### One thing to ask before building
+
+*"table er khetre usd and bdt er jonne only new row add hote pare"* — for USD
+and BDT only a new row may be added. That reads two ways: a second **column**
+for the dollar figure, or the dollar figure on a second **line inside the same
+cell**, which is what every other table on this app does. Ask rather than guess.
