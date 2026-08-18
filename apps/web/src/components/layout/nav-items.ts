@@ -15,7 +15,6 @@ import {
   Settings,
   ShoppingBag,
   Sparkles,
-  Store,
   UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -111,19 +110,14 @@ export const NAV_GROUPS: NavGroup[] = [
           },
           {
             // The register of plans: what is bought, who is on it, which card
-            // renews it. /vendors is still there and still answers a different
-            // question — what was actually *paid*, to whom, in a month.
+            // renews it. The supplier-and-spend screen that used to sit beside
+            // it is gone — it answered "what was paid to whom this month",
+            // which the expense screens already answer, and having both meant
+            // two places to look for one number.
             key: "expenses-subscriptions",
             href: "/subscriptions",
             label: "AI tools and subscriptions",
             icon: Sparkles,
-            permission: "vendors.read",
-          },
-          {
-            key: "expenses-vendors",
-            href: "/vendors",
-            label: "Suppliers and spend",
-            icon: Store,
             permission: "vendors.read",
           },
           {

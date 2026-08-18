@@ -84,7 +84,7 @@ const ROUTE_PERMISSIONS: Array<[string, Permission]> = [
   ["/accounts", "accounts.read"],
   ["/transactions", "transactions.read"],
   ["/expenses", "transactions.read"],
-  ["/vendors", "vendors.read"],
+  ["/subscriptions", "vendors.read"],
   ["/team", "team.read"],
   ["/payroll", "payroll.read"],
   ["/tax/withholding", "tds.read"],
