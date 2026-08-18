@@ -631,6 +631,81 @@ its own Postgres, so until it is settled which database that is, closing the
 books against it is not something to do unattended. Run it with
 `npm run test:integration -- 13`.
 
+## Two-step sign-in, and the screen left open (2026-08-18)
+
+Both shipped, and the architecture page's roadmap is down to two items, neither
+of which is in the application.
+
+**Two-factor.** TOTP written out rather than installed, because RFC 6238
+publishes test vectors and that makes the tests a check against the standard
+instead of a recording of whatever the code does. Enrolment shipped a deploy
+ahead of the check at sign-in, so nobody could be locked out by the feature
+arriving — and the check is per account, not a switch, so anybody who has not
+enrolled still signs in as before.
+
+The thing worth remembering is the trap it nearly walked into. `JwtAuthGuard`
+verifies a JWT, reads `sub` and `tv`, and lets the request through; it never
+asked what the token was minted *for*, because until now this application only
+made one kind. A sign-in challenge signed with `JWT_ACCESS_SECRET` would have
+been a complete bypass — password, challenge, send it as the access token, skip
+the phone. It is signed with a domain-separated key so it cannot verify as an
+access token at all, and it carries a `typ` claim the guard now refuses. The
+bypass is written out as a test in `challenge.spec.ts`.
+
+Break-glass is in DEPLOYMENT.md: recovery codes first, then deleting the
+enrolment with psql. Deliberately not possible from inside the app — an
+administrator who can switch off somebody else's second factor is a way around
+it.
+
+**Idle timeout.** Twenty minutes, a minute's warning, then out. Three details
+that the obvious implementation gets wrong: it compares timestamps rather than
+using `setTimeout` (a closed lid suspends timers, so a laptop shut at six and
+opened at nine would sign out twenty minutes into the morning); the last
+activity is shared between tabs through localStorage; and once the countdown is
+up only a click dismisses it, because a knocked desk should not keep a finance
+system signed in all night.
+
+## The rate limiter was charging six seconds for every sign-in (2026-08-18)
+
+Reported as "login is slow". It was not the server.
+
+The app and API are on different hostnames, so the browser sends a CORS
+preflight before the POST. Both matched the exact-match login location, so one
+sign-in spent two tokens from a budget of ten a minute — and the preflight went
+first, taking the available one and leaving the real request to wait. Preflights
+are excluded now with an empty limit key, which is nginx's own idiom for "not
+this request". Adminer, which had been sharing the sign-in zone and draining it,
+has its own.
+
+**The part worth keeping.** The fix deployed four times and took effect zero
+times, and every check said fine:
+
+```
+[emerg] limit_req "sfm_login" uses the "$login_limit_key" key
+        while previously it used the "$binary_remote_addr" key
+```
+
+A `limit_req` shared memory zone survives a reload — that is how the counters
+are not wiped every time — and nginx will only reuse one whose key still
+matches. The key changed, the name did not, so the master read the new config,
+refused it, and carried on with the old one. The site stayed up, `nginx -t`
+passed, `nginx -s reload` returned success, the deploy went green. Renaming the
+zone fixed it.
+
+Three ways of checking were blind to this, and two of them were mine:
+
+- `nginx -t` parses the files from disk in a fresh process.
+- `nginx -T` does the same and prints them. **It does not report what the
+  running master is serving**, which is the opposite of what was claimed when
+  it replaced the old marker check. It is still worth having — it catches a
+  stale mount, which has happened here — but it could never have caught this.
+- `docker compose logs --tail 40` buries the reload under access logs.
+
+`remote-deploy.sh` now reads the error log from the moment of the reload and
+fails on `[emerg]` or `[alert]`. The only thing that told the truth throughout
+was measuring behaviour: 5.97s is exactly 10r/m however confidently a file says
+20.
+
 ## Decisions worth remembering
 
 - **One ledger, not two.** Expenses and bank entries are the same table viewed

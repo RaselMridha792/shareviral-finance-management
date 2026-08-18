@@ -354,30 +354,30 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
       <div class="fact"><div class="k">Public ports</div><div class="v">2</div><div class="s">443 and 80 only</div></div>
       <div class="fact"><div class="k">Ledger tables</div><div class="v">1</div><div class="s">every taka, one place</div></div>
       <div class="fact"><div class="k">Roles</div><div class="v">5</div><div class="s">the CEO reads only</div></div>
-      <div class="fact"><div class="k">Checks before a push</div><div class="v">518</div><div class="s">190 gate the deploy</div></div>
+      <div class="fact"><div class="k">Tests that gate a deploy</div><div class="v">292</div><div class="s">a red run never reaches the server</div></div>
     </div>
 
     <div class="statehead">
       <div class="card">
         <div class="barhead">
-          <div class="n">14 <span>/ 16</span></div>
+          <div class="n">16 <span>/ 16</span></div>
           <div class="t">Attacks stopped by a finished wall</div>
         </div>
-        <div class="seg" aria-label="14 of 16 attacks stopped">
-          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="warn"></i><i class="warn"></i>
+        <div class="seg" aria-label="16 of 16 attacks stopped">
+          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
         </div>
         <div class="legend">
           <b><span class="dot g"></span> stops at a built wall</b>
-          <b><span class="dot a"></span> wall drawn, not finished</b>
+          <b><span class="dot a"></span> what is left is the machine, not the app</b>
         </div>
       </div>
       <div class="card">
         <div class="barhead">
-          <div class="n">12 <span>/ 17</span></div>
+          <div class="n">15 <span>/ 17</span></div>
           <div class="t">Hardening commitments shipped</div>
         </div>
-        <div class="seg" aria-label="12 of 17 shipped">
-          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i>
+        <div class="seg" aria-label="15 of 17 shipped">
+          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i>
         </div>
         <div class="legend">
           <b><span class="dot g"></span> shipped and evidenced</b>
@@ -460,14 +460,14 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
   <div class="wrap">
     <div class="eyebrow"><b>02</b> Security <s></s></div>
     <h2>How far anybody actually gets</h2>
-    <p class="lede">Six walls stand between the internet and a salary figure. Sixteen ways in were written down, then each one was walked to the wall that stops it. <b>Fourteen stop at a wall that is built and tested. Two stop at a wall that is drawn but not finished</b>, and until it is, those two reach the data.</p>
+    <p class="lede">Six walls stand between the internet and a salary figure. Sixteen ways in were written down, then each one was walked to the wall that stops it. <b>All sixteen now stop at a wall that is built and tested.</b> The two that did not — a password already known, and a screen left open — were closed on 18 August by a second factor and an idle timeout. What is still open is about the machine underneath rather than the application on it.</p>
 
     <div class="panel">
       <div class="figcap">The six walls, outermost first</div>
       <div class="walls">
         <div class="wall"><div class="lv">L1 · one door, rate limited</div><div class="nm">THE EDGE</div><div class="ct">nginx on 443 and 80 is the only listener. 20 requests a minute per address; one sign-in per six seconds.</div><div class="ev">measured on the live site</div></div>
-        <div class="wall"><div class="lv">L2 · password, lock, bcrypt</div><div class="nm">WHO YOU ARE</div><div class="ct">bcrypt at cost 12, so one guess costs a quarter second. Five wrong tries lock the account for five minutes.</div><div class="ev">asserted against the stored expiry</div></div>
-        <div class="wall"><div class="lv">L3 · the session</div><div class="nm">STILL YOU</div><div class="ct">Short-lived rotating tokens in an httpOnly, SameSite cookie. A replayed token revokes its whole family.</div><div class="ev">replay test in the suite</div></div>
+        <div class="wall"><div class="lv">L2 · password, code, lock</div><div class="nm">WHO YOU ARE</div><div class="ct">bcrypt at cost 12, so one guess costs a quarter second. Five wrong tries lock the account for five minutes — and then a six-digit code from your own phone.</div><div class="ev">TOTP checked against the RFC&#x27;s published vectors</div></div>
+        <div class="wall"><div class="lv">L3 · the session</div><div class="nm">STILL YOU</div><div class="ct">Short-lived rotating tokens in an httpOnly, SameSite cookie. A replayed token revokes its whole family, and twenty idle minutes end it.</div><div class="ev">replay test in the suite</div></div>
         <div class="wall"><div class="lv">L4 · a guard on every route</div><div class="nm">WHAT YOU MAY SEE</div><div class="ct">Every route asks the role before it answers, and an export can only contain what the screen was already allowed to show.</div><div class="ev">117 checks call every route as every role</div></div>
         <div class="wall"><div class="lv">L5 · nothing changes silently</div><div class="nm">THE RECORD</div><div class="ct">Queries are parameterised, money is voided rather than deleted, a closed month refuses every write, and the audit row is written inside the same transaction as the change.</div><div class="ev">the audit row shares the change&#x27;s transaction</div></div>
         <div class="wall core"><div class="lv">L6 · every salary, every taka</div><div class="nm">THE DATA</div><div class="ct">Postgres. One transactions table, numeric(14,2), and the compensation table behind its own permission.</div><div class="ev">what all of the above is for</div></div>
@@ -531,13 +531,13 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
           <div class="cell wallcol datacol"></div>
         </div>
         <div class="mxrow">
-          <div class="atk"><div class="n">Use a password that has leaked</div><div class="c">two-factor sign-in</div></div>
+          <div class="atk"><div class="n">Use a password that has leaked</div><div class="c">a code from the phone, and nothing else will do</div></div>
           <div class="cell wallcol pass"></div>
-          <div class="cell wallcol pass"><span class="stop open"></span></div>
-          <div class="cell wallcol passed-amber"></div>
-          <div class="cell wallcol passed-amber"></div>
-          <div class="cell wallcol passed-amber"></div>
-          <div class="cell wallcol datacol passed-amber"><span class="reach"></span></div>
+          <div class="cell wallcol pass"><span class="stop"></span></div>
+          <div class="cell wallcol"></div>
+          <div class="cell wallcol"></div>
+          <div class="cell wallcol"></div>
+          <div class="cell wallcol datacol"></div>
         </div>
         <div class="mxrow">
           <div class="atk"><div class="n">Read the session cookie from a script</div><div class="c">the cookie is httpOnly, so no script can read it</div></div>
@@ -567,13 +567,13 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
           <div class="cell wallcol datacol"></div>
         </div>
         <div class="mxrow">
-          <div class="atk"><div class="n">Sit down at a screen left open</div><div class="c">idle timeout</div></div>
+          <div class="atk"><div class="n">Sit down at a screen left open</div><div class="c">twenty idle minutes and the session is gone</div></div>
           <div class="cell wallcol pass"></div>
           <div class="cell wallcol pass"></div>
-          <div class="cell wallcol pass"><span class="stop open"></span></div>
-          <div class="cell wallcol passed-amber"></div>
-          <div class="cell wallcol passed-amber"></div>
-          <div class="cell wallcol datacol passed-amber"><span class="reach"></span></div>
+          <div class="cell wallcol pass"><span class="stop"></span></div>
+          <div class="cell wallcol"></div>
+          <div class="cell wallcol"></div>
+          <div class="cell wallcol datacol"></div>
         </div>
         <div class="mxrow">
           <div class="atk"><div class="n">Read what your role may not</div><div class="c">a guard on every route, asserted 117 times</div></div>
@@ -649,9 +649,9 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
         <div class="arw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></div>
         <div class="step hot"><div class="k">so six characters take</div><div class="v">centuries</div><div class="s">not an afternoon</div></div>
       </div>
-      <div class="callout red">
-        <div class="h">What the arithmetic does not cover</div>
-        <p>Somebody who already knows the password. Every figure above assumes it is still a secret, which is what two-factor is for, and why the five passwords set at install must change.</p>
+      <div class="callout lime">
+        <div class="h">And the case the arithmetic never covered</div>
+        <p>Somebody who already knows the password. Every figure above assumed it was still a secret; since 18 August it does not have to be. A leaked password now buys the first step and nothing else — the second is a code on a phone, or one of ten recovery codes held by its owner. The five passwords set at install have also been changed.</p>
       </div>
       <p class="note"><b>Before the rate limit existed, forty attempts in a row all reached the API.</b> Measured, not assumed. The account lock never fired on them, because the address they targeted had no account: that is the attack a per-account lock cannot see.</p>
     </div>
@@ -684,21 +684,18 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime); outline-offs
         <tr><td class="name">Backups off-site, and proven</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">restored once for real; both sides tied to the paisa</td></tr>
         <tr><td class="name">Tests gate every release</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">a red run cannot reach the server</td></tr>
         <tr><td class="name">Closed-books lock enforced on writes</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">12 call sites, 6 modules; a backdated edit is refused too</td></tr>
-        <tr><td class="name">Change the passwords set at install</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">the one that makes all of the above count</td></tr>
+        <tr><td class="name">The passwords set at install are gone</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">all five changed, 18 Aug</td></tr>
+        <tr><td class="name">Two-factor sign-in</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">TOTP against the RFC's own vectors; ten recovery codes each</td></tr>
+        <tr><td class="name">Idle timeout</td><td class="st"><span class="pill g"><span class="dot g"></span>Shipped</span></td><td class="ev2">20 minutes, warned, and it survives a closed lid</td></tr>
         <tr><td class="name">Server hardening and uptime alerts</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">a 40-minute outage passed unnoticed</td></tr>
-        <tr><td class="name">Two-factor sign-in</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">one leaked password is currently enough</td></tr>
-        <tr><td class="name">Idle timeout</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">figures stay on an unattended screen</td></tr>
         <tr><td class="name">Backup credentials off the server</td><td class="st"><span class="pill a"><span class="dot o"></span>Open</span></td><td class="ev2">a stolen box can currently delete them</td></tr>
       </tbody></table></div></div>
 
     <h3 style="margin-top:34px">What is still open, in the order it matters</h3>
-    <p class="lede" style="margin-bottom:16px">Five items. Each line says which wall it finishes.</p>
+    <p class="lede" style="margin-bottom:16px">Two items, and both are about the machine rather than the application. Each line says which wall it finishes.</p>
     <div class="road">
-      <div class="ritem"><div class="no">01</div><div><div class="ti">Change the passwords set at install</div><div class="de">the one that makes all of the above count</div><div class="cl"><b>Closes:</b> Nothing on this page counts while an install default is still live.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">02</div><div><div class="ti">Server hardening and uptime alerts</div><div class="de">a 40-minute outage passed unnoticed</div><div class="cl"><b>Closes:</b> The floor every wall stands on, and the outage nobody was told about.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">03</div><div><div class="ti">Two-factor sign-in</div><div class="de">one leaked password is currently enough</div><div class="cl"><b>Closes:</b> Closes the second wall for a password that is already known.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">04</div><div><div class="ti">Idle timeout</div><div class="de">figures stay on an unattended screen</div><div class="cl"><b>Closes:</b> Closes the third wall against a screen left open.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
-      <div class="ritem"><div class="no">05</div><div><div class="ti">Backup credentials off the server</div><div class="de">a stolen box can currently delete them</div><div class="cl"><b>Closes:</b> Keeps the last copy alive when the box itself is lost.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
+      <div class="ritem"><div class="no">01</div><div><div class="ti">Server hardening and uptime alerts</div><div class="de">a 40-minute outage passed unnoticed</div><div class="cl"><b>Closes:</b> The floor every wall stands on, and the outage nobody was told about.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
+      <div class="ritem"><div class="no">02</div><div><div class="ti">Backup credentials off the server</div><div class="de">a stolen box can currently delete them</div><div class="cl"><b>Closes:</b> Keeps the last copy alive when the box itself is lost.</div></div><div><span class="pill a"><span class="dot o"></span>Open</span></div></div>
     </div>
   </div>
 </section>
