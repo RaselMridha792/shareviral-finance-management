@@ -15,10 +15,40 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { accounts, transactions, type Account } from "../../db/schema";
+import {
+  accounts,
+  incomeTaxRecords,
+  payrollRuns,
+  tdsDeposits,
+  transactions,
+  type Account,
+} from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 
 export type AccountDto = Omit<Account, "deletedAt" | "entityId">;
+
+/**
+ * What is hanging off an account, counted before anyone is asked to confirm
+ * anything.
+ *
+ * Four tables point at `accounts`, and a warning that says "this may have
+ * related records" is not a warning - it is a shrug. This is what the dialog
+ * shows instead: how many, worth how much, and over what span.
+ */
+export type AccountAttachments = {
+  transactions: number;
+  /** Live rows only. A voided entry is struck through, not gone. */
+  liveTransactions: number;
+  firstTxnDate: string | null;
+  lastTxnDate: string | null;
+  /** Signed, so it reads the same way the register does. */
+  net: string;
+  tdsDeposits: number;
+  incomeTaxPayments: number;
+  payrollRuns: number;
+  /** Nothing at all points at it, so deleting is only tidying up. */
+  deletable: boolean;
+};
 
 /**
  * An account as the Accounts screen needs it: what it holds *now*.
@@ -323,6 +353,146 @@ export class AccountsService {
     });
   }
 
+  /**
+   * Everything that points at this account, counted.
+   *
+   * Read before the confirmation dialog is drawn, so the warning can name
+   * figures instead of gesturing at "related records". It is also what decides
+   * whether Delete is offered at all.
+   */
+  async attachments(id: string): Promise<AccountAttachments> {
+    await this.findOne(id);
+
+    const [txn] = await this.db.client
+      .select({
+        total: sql<number>`count(*)::int`,
+        live: sql<number>`count(*) filter (where ${transactions.voidedAt} is null)::int`,
+        first: sql<string | null>`min(${transactions.txnDate})::text`,
+        last: sql<string | null>`max(${transactions.txnDate})::text`,
+        // Voided rows are excluded here for the same reason every other total
+        // in this application excludes them: they are struck through, not real.
+        net: sql<string>`coalesce(sum(${transactions.signedAmount}) filter (where ${transactions.voidedAt} is null), 0)::text`,
+      })
+      .from(transactions)
+      .where(eq(transactions.accountId, id));
+
+    // Three separate queries rather than one helper: drizzle types a column to
+    // its own table, so a generic "count rows in this table" does not typecheck
+    // across three of them, and the workaround is worse than the repetition.
+    const [tds] = await this.db.client
+      .select({ n: sql<number>`count(*)::int` })
+      .from(tdsDeposits)
+      .where(eq(tdsDeposits.accountId, id));
+
+    const [incomeTax] = await this.db.client
+      .select({ n: sql<number>`count(*)::int` })
+      .from(incomeTaxRecords)
+      .where(eq(incomeTaxRecords.accountId, id));
+
+    const [payroll] = await this.db.client
+      .select({ n: sql<number>`count(*)::int` })
+      .from(payrollRuns)
+      .where(eq(payrollRuns.accountId, id));
+
+    const total = txn?.total ?? 0;
+
+    return {
+      transactions: total,
+      liveTransactions: txn?.live ?? 0,
+      firstTxnDate: txn?.first ?? null,
+      lastTxnDate: txn?.last ?? null,
+      net: txn?.net ?? "0",
+      tdsDeposits: tds?.n ?? 0,
+      incomeTaxPayments: incomeTax?.n ?? 0,
+      payrollRuns: payroll?.n ?? 0,
+      deletable:
+        total === 0 &&
+        (tds?.n ?? 0) === 0 &&
+        (incomeTax?.n ?? 0) === 0 &&
+        (payroll?.n ?? 0) === 0,
+    };
+  }
+
+  /**
+   * Deletes an archived account that nothing points at.
+   *
+   * The request was for a delete that could optionally take the related
+   * records with it, and that second half is not built - deliberately, and
+   * this is the place to say why rather than in a commit message nobody will
+   * find.
+   *
+   * `transactions.account_id` is NOT NULL with `on delete restrict`. That is
+   * not an oversight to work around; it is the shape of the promise this
+   * application makes. Every entry belongs to an account, the register's
+   * closing balance is the account's opening balance plus everything that
+   * moved through it, and "the register equals the bank statement" is true
+   * because there is nowhere else for a figure to live. An entry with no
+   * account cannot be shown on any screen in this app.
+   *
+   * So "delete the account, keep the entries" is not a feature that was
+   * skipped. It is a sentence with no meaning here.
+   *
+   * That leaves deleting the entries too, and this application does not delete
+   * money. Records are voided - struck through, out of every total, still
+   * there. A finance system whose history can be removed is one whose history
+   * cannot be relied on, and the deletion would silently rewrite every report
+   * that period ever appeared in.
+   *
+   * What is left is the case that actually happens: an account added by
+   * mistake, or one that never got used. Nothing points at it, nothing is
+   * lost, and it goes. Anything else stays archived, which costs nothing - an
+   * archived account is already out of every picker and every total.
+   */
+  async remove(id: string, actor: AuthenticatedUser) {
+    const existing = await this.findOne(id);
+
+    if (existing.isActive) {
+      throw new BadRequestException(
+        "Archive the account first. Deleting one that is still in use is not something to do in a single click.",
+      );
+    }
+
+    const held = await this.attachments(id);
+    if (!held.deletable) {
+      throw new BadRequestException({
+        message: describeWhyItStays(existing.name, held),
+        errors: { account: [describeWhyItStays(existing.name, held)] },
+      });
+    }
+
+    return this.audit.mutate({
+      action: "delete",
+      entityTable: "accounts",
+      entityId: id,
+      // Named in the summary, because a deletion is the one entry in the
+      // trail with no "after" state to inspect later.
+      summary: `${actor.fullName} deleted the empty archived account "${existing.name}"`,
+      module: "accounts",
+      read: async (tx) => {
+        const [row] = await tx
+          .select(projection)
+          .from(accounts)
+          .where(eq(accounts.id, id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        // Conditioned on the account still being archived, so a restore racing
+        // this cannot leave a live account deleted.
+        const [row] = await tx
+          .delete(accounts)
+          .where(and(eq(accounts.id, id), eq(accounts.isActive, false)))
+          .returning(projection);
+        if (!row) {
+          throw new BadRequestException(
+            "The account changed while this was being confirmed. Look at it again.",
+          );
+        }
+        return row;
+      },
+    });
+  }
+
   private async assertNameFree(name: string, exceptId?: string) {
     const [clash] = await this.db.client
       .select({ id: accounts.id })
@@ -396,4 +566,41 @@ function describeUpdate(
   }
   const detail = parts.length ? parts.join(", ") : "details updated";
   return `Account "${existing.name}": ${detail}`;
+}
+
+/**
+ * Why an account is staying, in the numbers the person is looking at.
+ *
+ * Written as a sentence rather than a code the screen has to translate,
+ * because the screen is where somebody is deciding whether they have lost
+ * something.
+ */
+function describeWhyItStays(name: string, held: AccountAttachments): string {
+  const parts: string[] = [];
+  if (held.transactions > 0) {
+    parts.push(
+      `${held.transactions} entr${held.transactions === 1 ? "y" : "ies"}` +
+        (held.firstTxnDate
+          ? ` from ${held.firstTxnDate} to ${held.lastTxnDate}`
+          : ""),
+    );
+  }
+  if (held.payrollRuns > 0)
+    parts.push(
+      `${held.payrollRuns} payroll run${held.payrollRuns === 1 ? "" : "s"}`,
+    );
+  if (held.tdsDeposits > 0)
+    parts.push(
+      `${held.tdsDeposits} TDS challan${held.tdsDeposits === 1 ? "" : "s"}`,
+    );
+  if (held.incomeTaxPayments > 0)
+    parts.push(
+      `${held.incomeTaxPayments} income tax payment${held.incomeTaxPayments === 1 ? "" : "s"}`,
+    );
+
+  return (
+    `"${name}" still holds ${parts.join(", ")}. It stays archived rather than being deleted, ` +
+    `because every entry has to belong to an account — the register's balance is built from that link, ` +
+    `and this application voids money rather than deleting it. Archived is already out of every picker and every total.`
+  );
 }

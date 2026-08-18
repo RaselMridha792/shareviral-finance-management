@@ -417,6 +417,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 |---|---|---|
 | `sql/2026-08-16-files.sql` | `files` | before the code |
 | `sql/2026-08-18-two-factor.sql` | `user_two_factor`, `recovery_codes` | before the code |
+| `sql/2026-08-18-two-accounts.sql` | Master card + Standard Chartered Bank | any time |
 
 ### Files with no row, rows with no file
 

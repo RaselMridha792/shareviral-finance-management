@@ -1,4 +1,12 @@
-import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+} from "@nestjs/common";
 import {
   createAccountSchema,
   listAccountsQuerySchema,
@@ -73,5 +81,27 @@ export class AccountsController {
   @RequirePermission("accounts.write")
   archive(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.accounts.archive(uuidSchema.parse(id), actor);
+  }
+
+  /**
+   * What is hanging off this account. Read before the confirmation is drawn,
+   * so the warning can name figures rather than gesture at "related records".
+   */
+  @Get(":id/attachments")
+  @RequirePermission("accounts.read")
+  attachments(@Param("id") id: string) {
+    return this.accounts.attachments(uuidSchema.parse(id));
+  }
+
+  /**
+   * Only an archived account, and only one nothing points at. The service
+   * explains at length why the other cases are refused rather than offered
+   * behind a checkbox.
+   */
+  @Delete(":id")
+  @HttpCode(200)
+  @RequirePermission("accounts.write")
+  remove(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.accounts.remove(uuidSchema.parse(id), actor);
   }
 }

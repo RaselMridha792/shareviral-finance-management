@@ -14,6 +14,7 @@ import {
   Plus,
   Smartphone,
   SquarePen,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -26,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { DeleteAccountDialog } from "./delete-account-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
   accountsApi,
@@ -60,6 +62,8 @@ export function AccountsScreen({
   const settings = useSettings();
   const active = accounts.filter((a) => a.isActive);
   const archived = accounts.filter((a) => !a.isActive);
+  /** Only ever an archived one — the card offers no Delete otherwise. */
+  const [deleting, setDeleting] = useState<AccountWithBalance | null>(null);
 
   // Only the base currency. Adding a USD balance to a BDT one gives a figure
   // that is not money in either — and it would look completely ordinary.
@@ -230,6 +234,7 @@ export function AccountsScreen({
                 canWrite={canWrite}
                 onEdit={() => setEditing(account)}
                 onRestore={() => restore(account)}
+                onDelete={() => setDeleting(account)}
               />
             ))}
           </div>
@@ -241,6 +246,19 @@ export function AccountsScreen({
         onClose={() => setCreating(false)}
         onSaved={refresh}
       />
+      {deleting ? (
+        <DeleteAccountDialog
+          accountId={deleting.id}
+          accountName={deleting.name}
+          currency={deleting.currency}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            refresh();
+          }}
+        />
+      ) : null}
+
       <AccountForm
         key={editing?.id}
         open={Boolean(editing)}
@@ -335,6 +353,7 @@ function AccountCard({
   onEdit,
   onArchive,
   onRestore,
+  onDelete,
 }: {
   account: AccountWithBalance;
   /** Taka per dollar, or null when none has been recorded. */
@@ -345,6 +364,8 @@ function AccountCard({
   onEdit: () => void;
   onArchive?: () => void;
   onRestore?: () => void;
+  /** Archived cards only. An account in use is archived first. */
+  onDelete?: () => void;
 }) {
   const equivalent = otherCurrency(
     account.balance,
@@ -438,6 +459,17 @@ function AccountCard({
             <Button size="sm" variant="ghost" onClick={onRestore}>
               <ArchiveRestore className="size-3.5" />
               Restore
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto text-negative hover:bg-negative/10 hover:text-negative"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3.5" />
+              Delete
             </Button>
           ) : null}
         </div>

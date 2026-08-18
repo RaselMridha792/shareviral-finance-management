@@ -129,6 +129,26 @@ export const accountsApi = {
     apiFetch<AccountDto>(`/accounts/${id}/archive`, { method: "POST" }),
   restore: (id: string) =>
     apiFetch<AccountDto>(`/accounts/${id}/restore`, { method: "POST" }),
+  /** Read before the confirmation is drawn, so it can name figures. */
+  attachments: (id: string) =>
+    apiFetch<AccountAttachments>(`/accounts/${id}/attachments`, {
+      cache: "no-store",
+    }),
+  remove: (id: string) =>
+    apiFetch<AccountDto>(`/accounts/${id}`, { method: "DELETE" }),
+};
+
+/** What points at an account. Mirrors the API's own type. */
+export type AccountAttachments = {
+  transactions: number;
+  liveTransactions: number;
+  firstTxnDate: string | null;
+  lastTxnDate: string | null;
+  net: string;
+  tdsDeposits: number;
+  incomeTaxPayments: number;
+  payrollRuns: number;
+  deletable: boolean;
 };
 
 export const categoriesApi = {
