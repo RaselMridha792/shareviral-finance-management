@@ -37,8 +37,15 @@ export const userTwoFactor = pgTable(
      * a dump that hands over both the password hash and the second factor has
      * given away the whole point of having a second factor.
      *
-     * See `secret-box.ts`. The key lives in the environment, so restoring this
-     * table somewhere without it yields nothing.
+     * Sealed with `common/crypto/secret-box`, the same AES-256-GCM box the
+     * assistant's API key already uses. Its key lives in the environment, so
+     * this table restored anywhere else yields nothing.
+     *
+     * One inherited behaviour matters here and is handled at the call site,
+     * not by trusting it: `open()` returns null rather than throwing when the
+     * server secret has been rotated. For an API key that is right. For this
+     * column, null must be an error — read as "no second factor" it would turn
+     * two-factor off for everybody, silently, on the day a secret was rotated.
      */
     secretEncrypted: text("secret_encrypted").notNull(),
 
