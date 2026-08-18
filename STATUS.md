@@ -773,6 +773,54 @@ An upload field for a screenshot of the tool, viewable by clicking the tool's
 name in the table - the same pattern as the Cash In invoice and statement. The
 `files` machinery already covers it.
 
+## Next: the All Transactions table (asked 2026-08-18)
+
+Nine columns wanted: SL, Date, Type, Category, Description, Reference No.,
+Amount (BDT), Amount (USD), Rate. Reference No. opens the attached document.
+Money in shows `+` in green, money out `-` in red.
+
+**The sign and the colour are already built.** `transaction-table.tsx` renders
+`<Amount showSign tone={direction === "in" ? "in" : "out"} />` today. Nothing
+to do there.
+
+### What differs from the table as it stands
+
+| wanted | today |
+|---|---|
+| SL | not present; `Ref` is (`TXN-2026-000412`) |
+| Type | no column - the sign and colour carry it |
+| Reference No. | present, **not clickable** |
+| Amount (USD) | not a column - a second line under the taka |
+| Rate | not a column - a badge on rows that have one, plus the page-foot caption |
+
+And two columns exist that the sketch does not have: **Party** (vendor or
+counterparty) and **Account** (which bank or card).
+
+**To confirm before building:** whether SL is needed when `Ref` exists; whether
+Party and Account stay - dropping Account loses "which card did this leave
+from"; and whether Type earns its own column when the colour already says it.
+
+### One thing about the sketch itself
+
+The owner has said not to audit dummy data, and this is the last time it comes
+up - but it is a structural fault in the template rather than a typo, and it is
+in the column the request is about.
+
+**`Amount (USD)` is `Amount (BDT)` shifted up one row:**
+
+```
+row 1   BDT 18,87,619   USD  13,35,000   <- row 2's BDT
+row 2   BDT 13,35,000   USD   4,10,323   <- row 3's BDT
+row 3   BDT  4,10,323   USD   1,42,296   <- row 4's BDT
+```
+
+The USD column also carries the taka symbol. INV-002's real USD figure is
+$15,600.16 in the Cash In sheet, not 13,35,000.
+
+The app cannot reproduce this - the two amounts are separate stored columns and
+there is no operation that slides one against the other. It is noted only
+because starting the real books from this template would carry the error in.
+
 ## Still waiting on answers
 
 1. **The category list** — 39 are seeded as a proposal. Which headings are wrong
