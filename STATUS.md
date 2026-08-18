@@ -706,6 +706,37 @@ fails on `[emerg]` or `[alert]`. The only thing that told the truth throughout
 was measuring behaviour: 5.97s is exactly 10r/m however confidently a file says
 20.
 
+## The six npm advisories, and why they stay (2026-08-18)
+
+Dependabot is on now, so this will come up again. Both of `npm audit`'s
+proposed fixes are **major downgrades** that would break the application, and
+neither advisory is reachable from this code. Do not run `npm audit fix
+--force`.
+
+**esbuild — four of the six.** `drizzle-kit → @esbuild-kit/esm-loader →
+@esbuild-kit/core-utils → esbuild 0.18.20`, which is inside the affected range.
+The advisory is about esbuild's **dev server** letting any website read its
+responses. Nothing here starts one: drizzle-kit uses esbuild to transpile
+`drizzle.config.ts` and exits. It is also a devDependency, and the API image
+runs `npm prune --omit=dev` and copies only `dist`, so it is not in the
+deployed container at all. The root esbuild is 0.25.12 and already patched.
+
+npm's fix is drizzle-kit **0.18.1**, down from 0.31.10 — it would take the
+schema tooling with it.
+
+**uuid — the other two.** `exceljs → uuid 8.3.2`. The advisory is a missing
+buffer bounds check *in v3/v5/v6, when `buf` is provided*. exceljs calls
+`uuidv4()` at three sites, all with no arguments — wrong version, and not the
+vulnerable path either way.
+
+npm's fix is exceljs **3.4.0**, down from 4.4.0 — it would take every Excel
+download with it.
+
+**What would change this.** A newer drizzle-kit that drops `@esbuild-kit`
+(they moved to `tsx` at some point — worth checking when a major lands), or an
+exceljs that moves off uuid 8. Both arrive as ordinary Dependabot pull
+requests; neither is worth forcing.
+
 ## Decisions worth remembering
 
 - **One ledger, not two.** Expenses and bank entries are the same table viewed

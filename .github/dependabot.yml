@@ -14,6 +14,12 @@
 # tests, typecheck, lint, and an nginx config validated against the real image.
 # A dependency bump is not exempt from that and should not be merged on the
 # strength of the label.
+#
+# Before acting on an advisory, read the section in STATUS.md about the six
+# that were already here on 18 Aug 2026. Both fixes `npm audit` proposes for
+# them are major DOWNGRADES - drizzle-kit 0.31 to 0.18, exceljs 4.4 to 3.4 -
+# and neither advisory is reachable from this code. `npm audit fix --force`
+# would break the schema tooling and every Excel download to fix nothing.
 version: 2
 
 updates:
