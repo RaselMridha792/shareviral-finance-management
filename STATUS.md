@@ -596,6 +596,71 @@ the tabs read from the link's status rather than the vendor's. That also gives
 - Whether seats are counted per person or the tool is one flat cost, since
   that decides whether a per-person figure is real or a division.
 
+## Next: the Cash In form, as the spreadsheet actually needs it (asked 2026-08-18)
+
+**Not built yet.** Thirteen fields were specified, all required except the
+note, all shown in the table.
+
+**Already there:** date, landed-in account (dropdown, staying as it is), USD
+sent, dollar rate, amount received, transaction id, description, and the
+sender's bank name / account name / account number.
+
+**Missing:** serial number, invoice number, the invoice PDF, the bank
+statement screenshot, and an optional note separate from the required
+description.
+
+The uploads are less work than they look: the `files` table, the upload
+endpoint, the type sniffing and the private-serving rules all exist already —
+this is a second and third attachment point, not new machinery.
+
+### The one thing to get right: three money fields, two facts
+
+BDT, USD and the rate are given as three inputs, and any two of them decide the
+third. Three independent boxes means they can disagree, and **in the sheet that
+was sent, one row already does**:
+
+```
+INV-002   BDT 18,87,619.00   USD 15,600.16   rate 122.77
+          18,87,619 ÷ 15,600.16  =  121.00 exactly
+          15,600.16 × 122.77     =  19,15,231.64   ← ৳27,612.64 more
+```
+
+The other three rows are exact to the paisa at their stated rates. So INV-002's
+rate column is wrong, or its amounts are — and nothing in a spreadsheet says
+which.
+
+The remittance itself only has two facts: the CEO sent a number of dollars, and
+the bank landed a number of taka. **The rate is not a third fact, it is the
+result** — which is exactly how the funding report already treats it, showing
+"what was sent, what landed, and the rate that transfer really achieved". So
+the form should take USD and BDT and show the rate computed, read-only, as it
+is typed. INV-002 then cannot be entered at all, which is the point.
+
+Worth confirming with the owner before building, since it means one box on
+their sheet becomes an output.
+
+### Two smaller questions
+
+- **Serial number** — the sheet's SL is 1, 2, 3, 4, which is row order rather
+  than a value. Entries already carry `ref_no` (`TXN-2026-000412`). Is SL a
+  number to store, or the invoice number doing that job?
+- **Clickable cells** — transaction id and invoice number open the uploaded
+  documents; the BD bank opens that account's page. That last one needs the
+  section below to exist first.
+
+## Next: accounts and cards have no page of their own (asked 2026-08-18)
+
+**Not built yet.** `/accounts/[id]` exists but renders only the register — the
+running balance, entry by entry. Everything the account itself holds has a form
+to enter it and nowhere to read it back: bank name, branch, account number,
+routing number, SWIFT, currency, type, opening balance and its date, and notes.
+
+So: a View details button on every account and card, leading to a page that
+shows all of it. The register stays; this sits with it rather than replacing
+it.
+
+This is also what the Cash In table's bank link points at, so it comes first.
+
 ## Still waiting on answers
 
 1. **The category list** — 39 are seeded as a proposal. Which headings are wrong
