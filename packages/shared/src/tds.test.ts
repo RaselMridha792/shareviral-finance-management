@@ -5,6 +5,8 @@ import {
   DEFAULT_TDS_POLICY,
   calculateTds,
   proRataTds,
+  saveTdsPolicySchema,
+  tdsPolicySchema,
   type TdsPolicy,
 } from "./tds.ts";
 
@@ -244,5 +246,271 @@ describe("proRataTds", () => {
   it("does not use the calendar, so February pays the same daily rate", () => {
     assert.equal(proRataTds("3000.00", 28), proRataTds("3000.00", 28, 30));
     assert.notEqual(proRataTds("3000.00", 28, 28), proRataTds("3000.00", 28, 30));
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Gaps an adversarial review found, and what closes them                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Five agents were pointed at this file and the engine beside it, and a sixth
+ * tried to refute whatever they found. The tests below are the findings that
+ * survived. Each is here rather than in a note, because "somebody checked
+ * once" is not a property of code.
+ */
+
+describe("the shape of a slab table", () => {
+  /**
+   * Three files said "the last band has no width" and not one of them enforced
+   * it. Both tables below were accepted at every layer until the schema
+   * learned the rule.
+   */
+  it("refuses a table with no open band, which would stop taxing at the top", () => {
+    const closed = DEFAULT_TDS_POLICY.slabs.slice(0, 5);
+    assert.equal(
+      tdsPolicySchema.safeParse({ ...DEFAULT_TDS_POLICY, slabs: closed })
+        .success,
+      false,
+    );
+
+    // What it would have done: everything above the last finite band untaxed.
+    const bad = { ...DEFAULT_TDS_POLICY, slabs: closed };
+    assert.equal(calculateTds("6000000.00", bad).taxBeforeRebate, "690000.00");
+    assert.equal(
+      calculateTds("6000000.00", DEFAULT_TDS_POLICY).taxBeforeRebate,
+      "1290000.00",
+      "with the open band, the top of the income is taxed",
+    );
+  });
+
+  it("refuses an open band anywhere but last, which would swallow everything", () => {
+    const scrambled = [
+      { width: null, rate: 0.3 },
+      ...DEFAULT_TDS_POLICY.slabs.slice(0, 5),
+    ];
+    assert.equal(
+      tdsPolicySchema.safeParse({ ...DEFAULT_TDS_POLICY, slabs: scrambled })
+        .success,
+      false,
+    );
+
+    // A 5,40,000 salary owes nothing under the real rule. Under that table the
+    // whole taxable amount is taxed at 30%.
+    const bad = { ...DEFAULT_TDS_POLICY, slabs: scrambled };
+    assert.equal(calculateTds("540000.00", bad).taxBeforeRebate, "108000.00");
+    assert.equal(
+      calculateTds("540000.00", DEFAULT_TDS_POLICY).taxBeforeRebate,
+      "0.00",
+    );
+  });
+
+  it("refuses two open bands", () => {
+    assert.equal(
+      tdsPolicySchema.safeParse({
+        ...DEFAULT_TDS_POLICY,
+        slabs: [
+          { width: null, rate: 0.1 },
+          { width: null, rate: 0.3 },
+        ],
+      }).success,
+      false,
+    );
+  });
+});
+
+describe("money on a policy", () => {
+  /**
+   * A negative cap made taxable income exceed the salary: 16,00,000 taxable on
+   * a 12,00,000 wage, and a monthly deduction of 11,833 instead of 1,750.
+   */
+  it("refuses a negative exemption cap", () => {
+    assert.equal(
+      tdsPolicySchema.safeParse({
+        ...DEFAULT_TDS_POLICY,
+        exemptionCap: "-400000.00",
+      }).success,
+      false,
+    );
+
+    const bad = { ...DEFAULT_TDS_POLICY, exemptionCap: "-400000.00" };
+    assert.equal(calculateTds("1200000.00", bad).taxableIncome, "1600000.00");
+  });
+
+  it("refuses a negative rebate ceiling, which would add to the tax", () => {
+    assert.equal(
+      tdsPolicySchema.safeParse({
+        ...DEFAULT_TDS_POLICY,
+        rebate: { ...DEFAULT_TDS_POLICY.rebate, fixedCap: "-1.00" },
+      }).success,
+      false,
+    );
+  });
+
+  it("refuses a negative band width", () => {
+    const slabs = [...DEFAULT_TDS_POLICY.slabs];
+    slabs[1] = { ...slabs[1], width: "-300000.00" };
+    assert.equal(
+      tdsPolicySchema.safeParse({ ...DEFAULT_TDS_POLICY, slabs }).success,
+      false,
+    );
+  });
+
+  it("refuses a rate with more places than the column keeps", () => {
+    // numeric(6,4) rounds 0.12345 to 0.1235 without complaint, so the screen
+    // that saved it and the screen that reloads it show different rules.
+    const slabs = [...DEFAULT_TDS_POLICY.slabs];
+    slabs[1] = { ...slabs[1], rate: 0.12345 };
+    assert.equal(
+      tdsPolicySchema.safeParse({ ...DEFAULT_TDS_POLICY, slabs }).success,
+      false,
+    );
+    slabs[1] = { ...slabs[1], rate: 0.1234 };
+    assert.equal(
+      tdsPolicySchema.safeParse({ ...DEFAULT_TDS_POLICY, slabs }).success,
+      true,
+    );
+  });
+});
+
+describe("the default policy", () => {
+  /**
+   * Used everywhere and tested nowhere: mutating its fiscal year to 1999 left
+   * the whole suite green.
+   */
+  it("satisfies its own schema", () => {
+    const parsed = tdsPolicySchema.safeParse(DEFAULT_TDS_POLICY);
+    assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
+  });
+
+  it("is the rule the worksheets describe, and the SQL seeds", () => {
+    assert.equal(DEFAULT_TDS_POLICY.exemptionNumerator, 1);
+    assert.equal(DEFAULT_TDS_POLICY.exemptionDenominator, 3);
+    assert.equal(DEFAULT_TDS_POLICY.exemptionCap, "400000.00");
+    assert.deepEqual(
+      DEFAULT_TDS_POLICY.slabs.map((b) => [b.width, b.rate]),
+      [
+        ["400000.00", 0],
+        ["300000.00", 0.1],
+        ["400000.00", 0.15],
+        ["500000.00", 0.2],
+        ["2000000.00", 0.25],
+        [null, 0.3],
+      ],
+      "the same six rows are seeded by deploy/sql/2026-08-19-tax-policy.sql",
+    );
+    assert.equal(DEFAULT_TDS_POLICY.minimumTax, "5000.00");
+  });
+
+  it("is what the save contract accepts, minus the year", () => {
+    const { fiscalYear: _year, ...rest } = DEFAULT_TDS_POLICY;
+    assert.equal(saveTdsPolicySchema.safeParse(rest).success, true);
+  });
+});
+
+describe("the rebate limbs, each proved to bind", () => {
+  /**
+   * The ceiling was in the code and in no assertion. Deleting it from the
+   * comparison left every test green, because no fixture earned enough for it
+   * to be the lowest of the three.
+   */
+  it("the flat ceiling binds on a large enough income", () => {
+    const r = calculateTds("60000000.00", DEFAULT_TDS_POLICY);
+    assert.equal(r.rebate.fixedCap, "1000000.00");
+    assert.equal(r.rebate.applied, "1000000.00", "the ceiling is the lowest");
+    assert.ok(
+      Number(r.rebate.onInvestment) > 1000000,
+      "and the other two limbs are above it",
+    );
+    assert.ok(Number(r.rebate.onTaxableIncome) > 1000000);
+  });
+
+  it("the investment limb binds when the assumed rate is small", () => {
+    const stingy: TdsPolicy = {
+      ...DEFAULT_TDS_POLICY,
+      rebate: { ...DEFAULT_TDS_POLICY.rebate, investmentRate: 0.05 },
+    };
+    const r = calculateTds("1200000.00", stingy);
+    assert.equal(r.rebate.onInvestment, "6000.00");
+    assert.equal(r.rebate.onTaxableIncome, "24000.00");
+    assert.equal(r.rebate.applied, "6000.00", "the investment limb is lowest");
+  });
+
+  it("the taxable-income limb binds under the shipped rates", () => {
+    const r = calculateTds("1200000.00", DEFAULT_TDS_POLICY);
+    assert.equal(r.rebate.onInvestment, "30000.00");
+    assert.equal(r.rebate.applied, "24000.00", "3% of taxable is lowest");
+  });
+});
+
+describe("the minimum-tax threshold", () => {
+  /**
+   * No fixture landed on it, so `>` and `>=` were interchangeable as far as
+   * the suite could tell. Both sides are pinned now.
+   */
+  it("taxable exactly at the first band owes nothing", () => {
+    const r = calculateTds("600000.00", DEFAULT_TDS_POLICY);
+    assert.equal(r.taxableIncome, "400000.00");
+    assert.equal(r.minimumTaxApplied, null);
+    assert.equal(r.netAnnualTax, "0.00");
+  });
+
+  it("one paisa above it attaches the floor", () => {
+    const r = calculateTds("600000.01", DEFAULT_TDS_POLICY);
+    assert.equal(r.taxableIncome, "400000.01");
+    assert.equal(r.taxBeforeRebate, "0.00");
+    assert.equal(r.minimumTaxApplied, "5000.00");
+  });
+});
+
+describe("what the arithmetic does with remainders", () => {
+  /**
+   * Not a defect, but not obvious either, and undocumented until a review
+   * measured it.
+   */
+  it("twelve monthly deductions can fall a few paisa short of the year", () => {
+    const r = calculateTds("804000.00", DEFAULT_TDS_POLICY);
+    assert.equal(r.netAnnualTax, "5000.00");
+    assert.equal(r.monthlyTds, "416.66");
+    // 416.66 x 12 is 4,999.92. Eight paisa, which the advisor drops too -
+    // their page reads 417 flat.
+    assert.equal((41666n * 12n).toString(), "499992");
+  });
+
+  it("band amounts add up to the taxable income", () => {
+    for (const salary of [
+      "540000.00",
+      "1200000.00",
+      "2400000.00",
+      "60000000.00",
+    ]) {
+      const r = calculateTds(salary, DEFAULT_TDS_POLICY);
+      const sum = r.bands.reduce(
+        (total, b) => total + BigInt(b.amount.replace(".", "")),
+        0n,
+      );
+      assert.equal(
+        sum.toString(),
+        r.taxableIncome.replace(".", ""),
+        `the bands must account for all of ${salary}`,
+      );
+    }
+  });
+
+  it("band taxes add up to the tax before rebate", () => {
+    for (const salary of ["1200000.00", "2400000.00", "60000000.00"]) {
+      const r = calculateTds(salary, DEFAULT_TDS_POLICY);
+      const sum = r.bands.reduce(
+        (total, b) => total + BigInt(b.tax.replace(".", "")),
+        0n,
+      );
+      assert.equal(sum.toString(), r.taxBeforeRebate.replace(".", ""));
+    }
+  });
+});
+
+describe("proRataTds guards", () => {
+  it("returns nothing rather than dividing by zero", () => {
+    assert.equal(proRataTds("18250.00", 10, 0), "0.00");
   });
 });

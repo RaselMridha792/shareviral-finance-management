@@ -1,6 +1,23 @@
 import { z } from "zod";
 
-import { fromMinorUnits, toMinorUnits } from "./money.ts";
+import { fromMinorUnits, isValidAmount, toMinorUnits } from "./money.ts";
+
+/**
+ * A money figure on a policy: valid, and never negative.
+ *
+ * These were bare `z.string()`. An adversarial review put "-400000.00" in the
+ * exemption cap and watched taxable income come out larger than the salary —
+ * 16,00,000 taxable on a 12,00,000 wage, and a monthly deduction of 11,833
+ * instead of 1,750. It needs somebody with settings.write to do it, which is
+ * why it is not a hole so much as a missing seatbelt; a tax rule with a
+ * negative anything in it is not a rule, and the field should say so before
+ * the payroll does.
+ */
+const policyAmountSchema = z
+  .string()
+  .trim()
+  .refine(isValidAmount, "Enter an amount, like 400000 or 400000.00")
+  .refine((v) => !v.startsWith("-"), "This cannot be negative");
 
 /**
  * Salary TDS, worked out rather than typed in.
@@ -37,8 +54,22 @@ import { fromMinorUnits, toMinorUnits } from "./money.ts";
  * the tax would silently stop growing.
  */
 export const tdsBandSchema = z.strictObject({
-  width: z.string().nullable(),
-  rate: z.number().min(0).max(1),
+  width: policyAmountSchema.nullable(),
+  /**
+   * Four decimal places, because that is what the column keeps.
+   *
+   * `numeric(6,4)` silently rounds 0.12345 to 0.1235 on the way in, so a rate
+   * typed with five places showed one figure on the screen that saved it and a
+   * different one on the next page load. Refusing it is the smaller surprise.
+   */
+  rate: z
+    .number()
+    .min(0)
+    .max(1)
+    .refine(
+      (v) => Number.isInteger(Math.round(v * 10000)) && Math.abs(v * 10000 - Math.round(v * 10000)) < 1e-9,
+      "A rate carries at most four decimal places",
+    ),
 });
 export type TdsBand = z.infer<typeof tdsBandSchema>;
 
@@ -65,9 +96,31 @@ export const tdsPolicySchema = z.strictObject({
    */
   exemptionNumerator: z.number().int().min(0),
   exemptionDenominator: z.number().int().min(1),
-  exemptionCap: z.string(),
+  exemptionCap: policyAmountSchema,
 
-  slabs: z.array(tdsBandSchema).min(1),
+  /**
+   * The slab table, with the shape its own comments promise.
+   *
+   * Three files said "the last band has no width, meaning everything above" and
+   * not one of them enforced it. A review posted a table with a width on the
+   * last band and watched 60,00,000 of income fall off the end untaxed, and
+   * another with the open band FIRST, which swallowed a 3,60,000 salary at 30%.
+   * Both were accepted by every layer.
+   *
+   * So the invariant is a rule now rather than a sentence: exactly one open
+   * band, and it is the last one.
+   */
+  slabs: z
+    .array(tdsBandSchema)
+    .min(1)
+    .refine(
+      (bands) => bands.filter((b) => b.width === null).length === 1,
+      "Exactly one band must be left open, with no width",
+    )
+    .refine(
+      (bands) => bands[bands.length - 1]?.width === null,
+      "The open band must be the last one, or income above it is taxed at that band's rate",
+    ),
 
   rebate: z.strictObject({
     /**
@@ -84,7 +137,7 @@ export const tdsPolicySchema = z.strictObject({
     /** The other statutory limb: a share of taxable income. */
     taxableShareCap: z.number().min(0).max(1),
     /** And the flat ceiling over both. */
-    fixedCap: z.string(),
+    fixedCap: policyAmountSchema,
     assumeFullInvestment: z.boolean(),
   }),
 
@@ -96,7 +149,7 @@ export const tdsPolicySchema = z.strictObject({
    * sheets show: seven of the twelve are under the threshold and every one of
    * them is zero, not 5,000.
    */
-  minimumTax: z.string(),
+  minimumTax: policyAmountSchema,
   minimumTaxEnabled: z.boolean(),
 });
 export type TdsPolicy = z.infer<typeof tdsPolicySchema>;
@@ -327,15 +380,27 @@ export type SaveTdsPolicyInput = z.infer<typeof saveTdsPolicySchema>;
  * switching that off would do to somebody without changing the policy first.
  */
 export const calculateTdsSchema = z.strictObject({
+  /**
+   * Bounded to twelve whole digits, which is what `toMinorUnits` accepts.
+   *
+   * Unbounded, a slipped keystroke on a crore figure passed validation and
+   * then threw a plain Error inside the calculation — and a plain Error is
+   * neither a ZodError nor an HttpException, so the exception filter turned a
+   * typo into a 500 with a stack trace instead of the message this schema
+   * already had ready.
+   */
   annualSalary: z
     .string()
     .trim()
-    .regex(/^\d+(\.\d{1,2})?$/, "Enter an amount, like 1200000 or 1200000.00"),
+    .regex(
+      /^\d{1,12}(\.\d{1,2})?$/,
+      "Enter an amount, like 1200000 or 1200000.00",
+    ),
   fiscalYear: z.coerce.number().int().min(2000).max(2200),
   declaredInvestment: z
     .string()
     .trim()
-    .regex(/^\d+(\.\d{1,2})?$/)
+    .regex(/^\d{1,12}(\.\d{1,2})?$/)
     .optional(),
 });
 export type CalculateTdsInput = z.infer<typeof calculateTdsSchema>;
