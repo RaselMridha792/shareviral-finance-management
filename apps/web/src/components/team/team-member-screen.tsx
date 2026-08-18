@@ -33,6 +33,8 @@ import { ImageLightbox } from "@/components/ui/overlay";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useSettings } from "@/components/settings-provider";
+import { MemberTools } from "@/components/team/member-tools";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -82,6 +84,7 @@ export function TeamMemberScreen({
    */
   payslips: MemberPayslipDto[];
 }) {
+  const settings = useSettings();
   const router = useRouter();
   const canWrite = useCan("team.write");
   const canSeePay = useCan("team.compensation.read");
@@ -130,7 +133,9 @@ export function TeamMemberScreen({
               "rounded-xl",
               photoSrc ? "cursor-zoom-in" : "cursor-default",
             )}
-            aria-label={photoSrc ? `View ${member.fullName}'s photo` : undefined}
+            aria-label={
+              photoSrc ? `View ${member.fullName}'s photo` : undefined
+            }
           >
             <MemberPhoto
               // Resets the broken-image state when the picture itself changes,
@@ -364,6 +369,19 @@ export function TeamMemberScreen({
             </CardBody>
           </Card>
         ) : null}
+
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title="Paid tools"
+            description="What this person has a seat on, and what they used to"
+          />
+          <CardBody>
+            <MemberTools
+              memberId={member.id}
+              numberFormat={settings.numberFormat}
+            />
+          </CardBody>
+        </Card>
 
         <Card className="lg:col-span-2">
           <CardHeader title="Notes" />
