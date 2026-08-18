@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import { AccountDetails } from "./account-details";
 import {
   exportUrl,
   type RegisterResult,
@@ -33,20 +32,11 @@ import { cn } from "@/lib/utils";
  */
 export function RegisterScreen({
   register,
-  account: full,
   range,
   accounts,
   categories,
 }: {
   register: RegisterResult;
-  /**
-   * The whole account, as opposed to `register.account`, which is the handful
-   * of columns the register itself needs. Both are here rather than one
-   * replacing the other: the register's projection is what its own figures are
-   * computed against, and widening it would put branch and SWIFT into a query
-   * that has no use for them.
-   */
-  account: AccountDto;
   range: { from?: string; to?: string };
   accounts: AccountDto[];
   categories: CategoryNode[];
@@ -66,17 +56,17 @@ export function RegisterScreen({
     const params = new URLSearchParams();
     if (next.from) params.set("from", next.from);
     if (next.to) params.set("to", next.to);
-    router.push(`/accounts/${account.id}?${params}`);
+    router.push(`/accounts/${account.id}/register?${params}`);
   }
 
   return (
     <>
       <Link
-        href="/accounts"
+        href={`/accounts/${account.id}`}
         className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="size-3.5" />
-        All accounts
+        {account.name}
       </Link>
 
       <PageHeader
@@ -106,7 +96,11 @@ export function RegisterScreen({
               </Button>
             ) : null}
             {canWrite ? (
-              <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setCreating(true)}
+              >
                 <Plus className="size-4" />
                 Record
               </Button>
@@ -114,8 +108,6 @@ export function RegisterScreen({
           </>
         }
       />
-
-      <AccountDetails account={full} />
 
       {/*
         A tin of cash cannot hold less than nothing, and a bKash wallet cannot
@@ -136,8 +128,8 @@ export function RegisterScreen({
             {ACCOUNT_TYPE_LABELS[account.type as AccountType]} cannot hold less
             than nothing. Something is missing from the entries below — most
             often money put into this account that was never recorded. Work down
-            the list and find the day the balance first went under; whatever came
-            in around then is what has not been entered.
+            the list and find the day the balance first went under; whatever
+            came in around then is what has not been entered.
           </span>
         </p>
       ) : null}
