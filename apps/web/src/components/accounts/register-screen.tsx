@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { AccountDetails } from "./account-details";
 import {
   exportUrl,
   type RegisterResult,
@@ -32,11 +33,20 @@ import { cn } from "@/lib/utils";
  */
 export function RegisterScreen({
   register,
+  account: full,
   range,
   accounts,
   categories,
 }: {
   register: RegisterResult;
+  /**
+   * The whole account, as opposed to `register.account`, which is the handful
+   * of columns the register itself needs. Both are here rather than one
+   * replacing the other: the register's projection is what its own figures are
+   * computed against, and widening it would put branch and SWIFT into a query
+   * that has no use for them.
+   */
+  account: AccountDto;
   range: { from?: string; to?: string };
   accounts: AccountDto[];
   categories: CategoryNode[];
@@ -104,6 +114,8 @@ export function RegisterScreen({
           </>
         }
       />
+
+      <AccountDetails account={full} />
 
       {/*
         A tin of cash cannot hold less than nothing, and a bKash wallet cannot

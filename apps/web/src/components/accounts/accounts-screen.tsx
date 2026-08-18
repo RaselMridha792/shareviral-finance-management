@@ -14,9 +14,11 @@ import {
   Plus,
   Smartphone,
   SquarePen,
+  SquareArrowOutUpRight,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ComponentType } from "react";
 
@@ -443,8 +445,24 @@ function AccountCard({
 
       {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}
 
+      {/*
+        Outside the canWrite check, and that is the point of adding it.
+        Until now this card had no link to the account at all — the register
+        and everything the account holds were reachable only by typing a URL —
+        and reading is not writing. The CEO can read and never edit.
+      */}
+      <div className="mt-4 flex gap-2 border-t border-border pt-3">
+        <Link
+          href={`/accounts/${account.id}`}
+          className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-primary transition hover:bg-primary/10"
+        >
+          <SquareArrowOutUpRight className="size-3.5" />
+          View details
+        </Link>
+      </div>
+
       {canWrite ? (
-        <div className="mt-4 flex gap-2 border-t border-border pt-3">
+        <div className="mt-1 flex gap-2">
           <Button size="sm" variant="ghost" onClick={onEdit}>
             <SquarePen className="size-3.5" />
             Edit

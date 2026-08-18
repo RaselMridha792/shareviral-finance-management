@@ -118,6 +118,13 @@ export const accountsApi = {
     apiFetch<AccountWithBalance[]>(`/accounts?includeInactive=${includeInactive}`, {
       cache: "no-store",
     }),
+  /**
+   * One account, with every column - not the narrow projection the register
+   * returns. The register only ever needed a name and a currency; the details
+   * panel needs branch, routing, SWIFT and the rest.
+   */
+  get: (id: string) =>
+    apiFetch<AccountDto>(`/accounts/${id}`, { cache: "no-store" }),
   create: (input: CreateAccountInput) =>
     apiFetch<AccountDto>("/accounts", { method: "POST", ...json(input) }),
   update: (id: string, input: UpdateAccountInput) =>
