@@ -13,6 +13,7 @@ import { FxPanel } from "./fx-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
 import { SecurityPanel } from "./security-panel";
+import { TaxPanel } from "./tax-panel";
 import { UsersPanel } from "./users-panel";
 import { useCan } from "@/components/auth/session-provider";
 
@@ -20,6 +21,10 @@ const TABS = [
   { id: "company", label: "Company & formatting" },
   { id: "categories", label: "Categories" },
   { id: "fx", label: "Exchange rate" },
+  // Readable by anyone who can see the tax screens; only settings.write may
+  // save. The calculator is the reason it is not settings-only — checking a
+  // figure against the accountant's working is not an administrative act.
+  { id: "tax", label: "Salary TDS", permission: "tds.read" },
   // No permission. This is your own account's second factor, not an
   // administrator's view of anybody else's — there is nothing here that could
   // be gated, because everyone has exactly one account to look after.
@@ -52,10 +57,12 @@ export function SettingsScreen({
   const canManageUsers = useCan("users.manage");
   const canReadAudit = useCan("audit.read");
   const canWriteSettings = useCan("settings.write");
+  const canReadTds = useCan("tds.read");
   const allowed: Record<string, boolean> = {
     "users.manage": canManageUsers,
     "audit.read": canReadAudit,
     "settings.write": canWriteSettings,
+    "tds.read": canReadTds,
   };
   const tabs = TABS.filter(
     (entry) => !("permission" in entry) || allowed[entry.permission],
@@ -97,6 +104,7 @@ export function SettingsScreen({
         <CategoriesPanel initialTree={initialTree} />
       ) : null}
       {tab === "fx" ? <FxPanel settings={initialSettings} /> : null}
+      {tab === "tax" && canReadTds ? <TaxPanel /> : null}
       {tab === "security" ? <SecurityPanel /> : null}
       {tab === "users" && canManageUsers ? (
         <UsersPanel initialUsers={initialUsers} />
