@@ -1,0 +1,78 @@
+# Dependency updates, opened as pull requests.
+#
+# Turned on because this application holds a company's payroll and every
+# package in the tree runs with the same access the application has. Nobody
+# here reads npm advisories on a Tuesday, so the alternative to this file is
+# finding out from somebody else.
+#
+# Weekly rather than daily, and grouped rather than one pull request per
+# package. A stream of thirty individual bumps does not get reviewed; it gets a
+# filter rule in somebody's inbox, and then the one that mattered goes past
+# unread too.
+#
+# Every one of these still has to pass the same gate as any other change: 292
+# tests, typecheck, lint, and an nginx config validated against the real image.
+# A dependency bump is not exempt from that and should not be merged on the
+# strength of the label.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------
+  # The workspace root, which is where npm actually installs everything.
+  # ---------------------------------------------------------------------
+  # One entry, not four. This is an npm workspaces monorepo with a single
+  # lockfile at the root, so that is the only place a version can change - and
+  # pointing Dependabot at apps/api or apps/web would have it edit manifests
+  # whose resolutions live somewhere else.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Asia/Dhaka
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    groups:
+      # Security first and on its own, so it is never queued behind a
+      # cosmetic patch bump and never closed as part of a tidy-up.
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      # Everything else in two groups: the things that only run while
+      # building, and the things that run in front of the company's money.
+      development:
+        applies-to: version-updates
+        dependency-type: development
+        patterns:
+          - "*"
+      production:
+        applies-to: version-updates
+        dependency-type: production
+        patterns:
+          - "*"
+        # Majors excluded from the group deliberately. Next, NestJS and Drizzle
+        # have all shipped breaking changes this repository would have to read
+        # about first, and a major hidden inside a group of eleven bumps is a
+        # major nobody read about. They still arrive - as their own pull
+        # request, which is the point.
+        update-types:
+          - minor
+          - patch
+
+  # Actions get pinned by tag, and a tag is mutable. Worth watching for the
+  # same reason as the packages: this workflow holds the key to the server.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+      timezone: Asia/Dhaka
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"
