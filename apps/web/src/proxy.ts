@@ -89,6 +89,9 @@ const ROUTE_PERMISSIONS: Array<[string, Permission]> = [
   ["/payroll", "payroll.read"],
   ["/tax/withholding", "tds.read"],
   ["/reports", "reports.view"],
+  // The bank statement is the ledger line for line, not a figure derived from
+  // it — so it is gated like the ledger and not like a report.
+  ["/statement", "transactions.read"],
   ["/import", "imports.run"],
   ["/assistant", "ai.use"],
   ["/settings", "settings.read"],

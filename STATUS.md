@@ -1098,7 +1098,7 @@ requests; neither is worth forcing.
 - **The app records tax, it does not calculate it.** The accountant supplies the
   numbers.
 
-## Next: Statement is really Reports, and Reports becomes a bank statement (asked 2026-08-19)
+## Done: Statement is really Reports, and Reports becomes a bank statement (2026-08-19)
 
 **Not built.** To be picked up only after the All Transactions and TDS work is
 pushed — the owner was explicit about the order.

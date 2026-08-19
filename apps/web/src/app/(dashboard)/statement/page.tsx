@@ -1,46 +1,55 @@
-import { todayInDhaka, type FinancialStatement } from "@finance/shared";
+import { notFound } from "next/navigation";
 
-import { StatementScreen } from "@/components/reports/statement-screen";
-import { ApiError } from "@/lib/api-client";
-import { reportsApi } from "@/lib/reports";
+import { BankStatementScreen } from "@/components/reports/bank-statement-screen";
+import { ledgerApi } from "@/lib/ledger";
+import { accountsApi } from "@/lib/masters";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Statement · SFM" };
+export const metadata = { title: "Bank statement · SFM" };
 
-export default async function StatementPage() {
-  const periods = await reportsApi.periods("month");
+/**
+ * The bank's own ledger for one account.
+ *
+ * One account, because the running balance is the point and a balance across
+ * two accounts is the balance of nothing. Which one is in the URL rather than
+ * in component state, so a statement somebody is reading can be sent to
+ * somebody else and open on the same page.
+ *
+ * Voided rows are asked for on purpose: this is the page an auditor reads, and
+ * a correction that leaves no trace on it is exactly what an audit looks for.
+ * They do not touch the running balance — the window sum skips them.
+ */
+export default async function BankStatementPage({
+  searchParams,
+}: PageProps<"/statement">) {
+  const search = await searchParams;
+  const from = typeof search.from === "string" ? search.from : undefined;
+  const to = typeof search.to === "string" ? search.to : undefined;
 
-  // Open on the period we are actually in. Landing on July every August is the
-  // kind of small wrongness that makes people stop trusting a document.
-  const today = todayInDhaka();
-  const current = periods.periods.findIndex(
-    (p) => today >= p.start && today <= p.end,
-  );
-  const index = current >= 0 ? current + 1 : 1;
+  const accounts = await accountsApi.list();
+  if (accounts.length === 0) notFound();
 
-  /**
-   * A statement that cannot be built must not take the page down with it.
-   *
-   * The screen renders its own labelled sample in that case, loudly, rather
-   * than showing an error where a document should be — and the other three
-   * period lengths are still reachable from their tabs.
-   */
-  const statement = await reportsApi
-    .statement({ granularity: "month", fiscalYear: periods.years[1], index })
-    .catch((caught: unknown): FinancialStatement | null => {
-      // Only an API refusal is swallowed. `redirect()` throws a control-flow
-      // signal Next unwinds, and catching that would strand an expired session
-      // on a page it cannot render.
-      if (!(caught instanceof ApiError)) throw caught;
-      return null;
-    });
+  const asked = typeof search.account === "string" ? search.account : undefined;
+  const account =
+    accounts.find((entry) => entry.id === asked) ??
+    // A bank first when nothing is asked for: this is a bank statement, and
+    // opening on the petty cash tin would be answering a different question.
+    accounts.find((entry) => entry.type === "bank") ??
+    accounts[0];
+
+  const register = await ledgerApi.register(account.id, {
+    from,
+    to,
+    includeVoided: true,
+  });
 
   return (
-    <StatementScreen
-      initialStatement={statement}
-      initialPeriods={periods}
-      initialIndex={index}
+    <BankStatementScreen
+      register={register}
+      accounts={accounts}
+      accountId={account.id}
+      range={{ from, to }}
     />
   );
 }

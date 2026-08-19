@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: oklch(0.975 0.003 255); -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: oklch(0.52 0.10 258); text-decoration: none; }
+  a:hover { color: oklch(0.40 0.10 258); }
+  select, input { font-family: inherit; }
+  [data-theme="dark"] { color-scheme: dark; }
+  [data-theme="dark"][data-r="app"] { background: oklch(0.165 0.012 262) !important; }
+  [data-theme="dark"] [data-r="sidebar"] { background: oklch(0.145 0.011 262) !important; }
+  [data-theme="dark"] [data-r="topbar"] { background: oklch(0.212 0.013 262) !important; border-color: oklch(0.29 0.014 262) !important; }
+  [data-theme="dark"] [data-r="card"] { background: oklch(0.212 0.013 262) !important; border-color: oklch(0.29 0.014 262) !important; box-shadow: none !important; }
+  [data-theme="dark"] [data-r="cardalt"] { background: oklch(0.245 0.015 262) !important; border-color: oklch(0.29 0.014 262) !important; }
+  [data-theme="dark"] [data-r="thead"] { background: oklch(0.245 0.015 262) !important; border-color: oklch(0.31 0.015 262) !important; color: oklch(0.72 0.012 262) !important; }
+  [data-theme="dark"] [data-r="row"] { border-color: oklch(0.275 0.014 262) !important; }
+  [data-theme="dark"] [data-r="chip"], [data-theme="dark"] [data-r="field"], [data-theme="dark"] [data-r="btnghost"] { background: oklch(0.245 0.015 262) !important; border-color: oklch(0.31 0.015 262) !important; color: oklch(0.93 0.005 258) !important; }
+  [data-theme="dark"] [data-r="ink"], [data-theme="dark"] [data-r="num"] { color: oklch(0.965 0.003 258) !important; }
+  [data-theme="dark"] [data-r="muted"], [data-theme="dark"] [data-r="label"] { color: oklch(0.705 0.012 262) !important; }
+  [data-theme="dark"] [data-r="faint"] { color: oklch(0.62 0.012 262) !important; }
+  [data-theme="dark"] [data-r="pos"] { color: oklch(0.78 0.13 158) !important; }
+  [data-theme="dark"] [data-r="neg"] { color: oklch(0.74 0.14 27) !important; }
+  [data-theme="dark"] [data-r="tag"] { background: oklch(0.28 0.02 262) !important; color: oklch(0.80 0.02 262) !important; }
+  [data-theme="dark"] [data-r="tagpos"] { background: oklch(0.30 0.05 158) !important; color: oklch(0.86 0.11 158) !important; }
+  [data-theme="dark"] [data-r="tagneg"] { background: oklch(0.30 0.055 27) !important; color: oklch(0.85 0.11 27) !important; }
+  [data-theme="dark"] [data-r="link"] { color: oklch(0.78 0.10 258) !important; }
+  [data-theme="dark"] [data-r="track"] { background: oklch(0.31 0.015 262) !important; }
+  [data-theme="dark"] [data-r="foot"] { color: oklch(0.705 0.012 262) !important; border-color: oklch(0.29 0.014 262) !important; }
+</style>
+</helmet>
+<div data-r="app" data-theme="{{ theme }}" style="display: grid; grid-template-columns: 254px minmax(0, 1fr); min-height: 100vh; font-family: 'IBM Plex Sans', Helvetica, sans-serif; color: oklch(0.25 0.015 258); background: oklch(0.975 0.003 255);">
+
+  <aside data-r="sidebar" style="background: oklch(0.235 0.018 262); display: flex; flex-direction: column; padding: 24px 0 20px; position: sticky; top: 0; height: 100vh; overflow-y: auto;">
+    <div style="display: flex; align-items: center; gap: 11px; padding: 0 22px 26px;">
+      <div style="width: 30px; height: 30px; border-radius: 9px; background: oklch(0.62 0.13 258); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: oklch(0.99 0 0);">S</div>
+      <div style="display: flex; flex-direction: column; line-height: 1.25;">
+        <span style="font-size: 14px; font-weight: 600; color: oklch(0.97 0.003 258); letter-spacing: -0.01em;">ShareViral</span>
+        <span style="font-size: 11px; color: oklch(0.68 0.015 262); letter-spacing: 0.06em; text-transform: uppercase;">Finance</span>
+      </div>
+    </div>
+
+    <nav style="display: flex; flex-direction: column; gap: 2px; padding: 0 14px;">
+      <sc-for list="{{ nav }}" as="it" hint-placeholder-count="18">
+        <sc-if value="{{ it.isSection }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; color: oklch(0.56 0.015 262); padding: 18px 10px 8px;">{{ it.label }}</div>
+        </sc-if>
+        <sc-if value="{{ it.isLink }}" hint-placeholder-val="{{ false }}">
+          <a href="{{ it.href }}" style="display: block; padding: 9px 10px; border-radius: 8px; font-size: 13.5px; color: oklch(0.84 0.01 262);" style-hover="background: oklch(0.29 0.02 262); color: oklch(0.98 0.002 258);">{{ it.label }}</a>
+        </sc-if>
+        <sc-if value="{{ it.isItem }}" hint-placeholder-val="{{ true }}">
+          <div onClick="{{ it.go }}" style="padding: 9px 10px 9px {{ it.pad }}px; border-radius: 8px; font-size: 13.5px; font-weight: {{ it.fw }}; background: {{ it.bg }}; color: {{ it.fg }}; cursor: pointer;">{{ it.label }}</div>
+        </sc-if>
+      </sc-for>
+    </nav>
+
+    <div style="flex: 1; min-height: 24px;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 14px 16px;">
+      <div style="padding: 9px 10px; border-radius: 8px; font-size: 13.5px; color: oklch(0.84 0.01 262); cursor: pointer;" style-hover="background: oklch(0.29 0.02 262); color: oklch(0.98 0.002 258);">Imports</div>
+      <div style="padding: 9px 10px; border-radius: 8px; font-size: 13.5px; color: oklch(0.84 0.01 262); cursor: pointer;" style-hover="background: oklch(0.29 0.02 262); color: oklch(0.98 0.002 258);">Settings</div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 11px; margin: 0 14px; padding: 14px 10px 4px; border-top: 1px solid oklch(0.32 0.018 262);">
+      <div style="width: 30px; height: 30px; border-radius: 50%; background: oklch(0.35 0.03 262); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: oklch(0.90 0.01 258);">SA</div>
+      <div style="display: flex; flex-direction: column; line-height: 1.3; flex: 1; min-width: 0;">
+        <span style="font-size: 12.5px; font-weight: 500; color: oklch(0.95 0.003 258);">Super Admin</span>
+        <span style="font-size: 11px; color: oklch(0.62 0.015 262);">Owner access</span>
+      </div>
+      <div style="font-size: 13px; color: oklch(0.62 0.015 262); cursor: pointer; padding: 4px;" style-hover="color: oklch(0.92 0.01 258);">⏻</div>
+    </div>
+  </aside>
+
+  <main style="display: flex; flex-direction: column; min-width: 0;">
+    <div data-r="topbar" style="display: flex; align-items: center; justify-content: space-between; height: 58px; padding: 0 32px; border-bottom: 1px solid oklch(0.918 0.005 258); background: oklch(1 0 0); position: sticky; top: 0; z-index: 5;">
+      <div data-r="muted" style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: oklch(0.58 0.012 258);">
+        <span>Finance</span>
+        <span style="color: oklch(0.78 0.008 258);">/</span>
+        <span data-r="ink" style="color: oklch(0.30 0.015 258); font-weight: 500;">{{ crumb }}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div data-r="chip" style="display: flex; align-items: center; gap: 8px; padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.52 0.012 258);">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: oklch(0.62 0.11 158);"></span>
+          <span>FX locked</span>
+          <span style="font-family: 'IBM Plex Mono', monospace;">৳118.75 / $1</span>
+        </div>
+        <div data-r="chip" onClick="{{ toggleTheme }}" title="Toggle dark mode" style="width: 32px; height: 32px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: oklch(0.45 0.012 258); cursor: pointer; user-select: none;">{{ themeIcon }}</div>
+      </div>
+    </div>
+
+    <sc-if value="{{ isAccounts }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Accounts</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Bank accounts and cards.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+          <span style="font-size: 15px; line-height: 1;">+</span>
+          <span>Add account</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 20px; padding: 0 32px 40px;">
+        <div data-r="card" style="display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 24px;">
+          <div style="display: flex; flex-direction: column; gap: 6px; max-width: 620px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Total held</div>
+            <div data-r="muted" style="font-size: 12.5px; line-height: 1.5; color: oklch(0.55 0.012 258);">2 accounts in BDT, 1 in another currency — counted separately, because mixing them would give a figure that is money in neither.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(22px, 1.7vw, 28px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.20 0.015 258);">৳38,14,097.71</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $32,118.72</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px;">
+          <div data-r="card" style="display: flex; flex-direction: column; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 20px 14px;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <div style="width: 34px; height: 34px; border-radius: 9px; background: oklch(0.95 0.03 264); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: oklch(0.48 0.12 264);">C</div>
+                <div style="display: flex; flex-direction: column; line-height: 1.35;">
+                  <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.22 0.015 258);">Master card</span>
+                  <span data-r="muted" style="font-size: 12px; color: oklch(0.58 0.012 258);">Card · overdrawn</span>
+                </div>
+              </div>
+              <span data-r="tag" style="padding: 4px 8px; border-radius: 6px; background: oklch(0.96 0.004 258); font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.45 0.012 258);">Card</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 22px 0 14px;">
+              <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.48 0.13 27);">−৳59,031.29</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ −$497.11</div>
+            </div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258); padding-bottom: 14px;">Opened at ৳10,00,000.00 · 2026-05-01</div>
+            <div data-r="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid oklch(0.945 0.004 258); padding-top: 12px;">
+              <span data-r="link" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">View details →</span>
+              <div style="display: flex; gap: 7px;">
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Edit</span>
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Archive</span>
+              </div>
+            </div>
+          </div>
+
+          <div data-r="card" style="display: flex; flex-direction: column; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 20px 14px;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <div style="width: 34px; height: 34px; border-radius: 9px; background: oklch(0.95 0.03 200); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: oklch(0.45 0.10 220);">B</div>
+                <div style="display: flex; flex-direction: column; line-height: 1.35;">
+                  <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.22 0.015 258);">Standard Chartered Bank</span>
+                  <span data-r="muted" style="font-size: 12px; color: oklch(0.58 0.012 258);">Account · 1502734…</span>
+                </div>
+              </div>
+              <span data-r="tag" style="padding: 4px 8px; border-radius: 6px; background: oklch(0.96 0.004 258); font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.45 0.012 258);">Bank</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 22px 0 14px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳38,73,129.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $32,615.82</div>
+            </div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258); padding-bottom: 14px;">Opened at ৳18,50,000.00 · 2026-06-30</div>
+            <div data-r="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid oklch(0.945 0.004 258); padding-top: 12px;">
+              <span data-r="link" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">View details →</span>
+              <div style="display: flex; gap: 7px;">
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Edit</span>
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Archive</span>
+              </div>
+            </div>
+          </div>
+
+          <div data-r="card" style="display: flex; flex-direction: column; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 20px 14px;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 11px;">
+                <div style="width: 34px; height: 34px; border-radius: 9px; background: oklch(0.95 0.035 158); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: oklch(0.45 0.10 158);">$</div>
+                <div style="display: flex; flex-direction: column; line-height: 1.35;">
+                  <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.22 0.015 258);">USD card</span>
+                  <span data-r="muted" style="font-size: 12px; color: oklch(0.58 0.012 258);">Card · held in USD</span>
+                </div>
+              </div>
+              <span data-r="tag" style="padding: 4px 8px; border-radius: 6px; background: oklch(0.96 0.004 258); font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.45 0.012 258);">Card</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 22px 0 14px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">$152,062.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ ৳1,80,57,362.50</div>
+            </div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258); padding-bottom: 14px;">Opened at $187,083.00 · 2026-06-30</div>
+            <div data-r="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid oklch(0.945 0.004 258); padding-top: 12px;">
+              <span data-r="link" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">View details →</span>
+              <div style="display: flex; gap: 7px;">
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Edit</span>
+                <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Archive</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Archived</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px;">
+            <div data-r="cardalt" style="display: flex; flex-direction: column; background: oklch(0.983 0.003 258); border: 1px solid oklch(0.93 0.004 258); border-radius: 12px; padding: 20px 20px 14px;">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 11px;">
+                  <div style="width: 34px; height: 34px; border-radius: 9px; background: oklch(0.94 0.004 258); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: oklch(0.50 0.012 258);">P</div>
+                  <div style="display: flex; flex-direction: column; line-height: 1.35;">
+                    <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.30 0.015 258);">Petty cash (demo)</span>
+                    <span data-r="muted" style="font-size: 12px; color: oklch(0.58 0.012 258);">Cash · archived</span>
+                  </div>
+                </div>
+                <span data-r="tag" style="padding: 4px 8px; border-radius: 6px; background: oklch(0.94 0.004 258); font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.45 0.012 258);">Cash</span>
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 22px 0 14px;">
+                <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.35 0.015 258);">৳1,60,025.00</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $1,347.58</div>
+              </div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258); padding-bottom: 14px;">Opened at ৳40,000.00 · 2026-06-30</div>
+              <div data-r="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid oklch(0.93 0.004 258); padding-top: 12px;">
+                <span data-r="link" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">View details →</span>
+                <div style="display: flex; gap: 7px;">
+                  <span data-r="btnghost" style="padding: 6px 11px; border: 1px solid oklch(0.918 0.005 258); border-radius: 7px; font-size: 12px; color: oklch(0.35 0.012 258); cursor: pointer;">Restore</span>
+                  <span style="padding: 6px 11px; border: 1px solid oklch(0.88 0.05 27); border-radius: 7px; font-size: 12px; color: oklch(0.52 0.14 27); cursor: pointer;">Delete</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCashin }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Cash in</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Money received, and the rate each entry was read at.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div data-r="field" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.25 0.015 258); cursor: pointer;">
+            <span style="font-family: 'IBM Plex Mono', monospace;">August 2026</span>
+            <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+            <span style="font-size: 15px; line-height: 1;">+</span>
+            <span>Add cash</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 20px; padding: 0 32px 40px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 22px 24px 20px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Received in August 2026</div>
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+              <div data-r="pos" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(21px, 1.6vw, 27px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.46 0.10 158);">৳26,05,222.75</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $21,938.72 at the locked rate</div>
+            </div>
+            <div data-r="row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid oklch(0.945 0.004 258); padding-top: 12px; font-size: 12px;">
+              <span data-r="muted" style="color: oklch(0.55 0.012 258);">Dollars actually entered</span>
+              <span data-r="ink" style="font-family: 'IBM Plex Mono', monospace; color: oklch(0.30 0.015 258);">$21,665.65</span>
+            </div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 22px 24px 20px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Rate this month</div>
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(21px, 1.6vw, 27px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.20 0.015 258);">৳118.30</div>
+            <div data-r="muted" style="font-size: 12.5px; line-height: 1.55; color: oklch(0.55 0.012 258);">Set by <span data-r="link" style="font-family: 'IBM Plex Mono', monospace; color: oklch(0.52 0.10 258);">TXN-2026-000011</span> on 2026-08-01 — every taka figure this month is read in dollars at it.</div>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 17px 20px 15px;">
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+              <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Every entry this month</span>
+              <span data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">10 entries · scroll sideways for transaction id, bank and note</span>
+            </div>
+          </div>
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1420px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: 38px 110px minmax(210px, 1fr) 130px 110px 88px 168px 176px 150px 130px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-top: 1px solid oklch(0.93 0.004 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>SL</div>
+                <div>Invoice</div>
+                <div>Description</div>
+                <div style="text-align: right;">Amount (BDT)</div>
+                <div style="text-align: right;">Amount (USD)</div>
+                <div style="text-align: right;">Rate</div>
+                <div>Transaction id</div>
+                <div>Received bank</div>
+                <div>Sender</div>
+                <div>Note</div>
+              </div>
+              <sc-for list="{{ cashRows }}" as="r" hint-placeholder-count="10">
+                <div data-r="row" style="display: grid; grid-template-columns: 38px 110px minmax(210px, 1fr) 130px 110px 88px 168px 176px 150px 130px; gap: 14px; padding: 14px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">{{ r.sl }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.52 0.012 258);">{{ r.inv }}</div>
+                  <div data-r="ink" style="font-size: 13px; line-height: 1.45; color: oklch(0.26 0.015 258);">{{ r.desc }}</div>
+                  <div data-r="pos" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.46 0.10 158);">{{ r.bdt }}</div>
+                  <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.30 0.015 258);">{{ r.usd }}</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.60 0.012 258);">{{ r.rate }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.52 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.txn }}</div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258);">{{ r.bank }}</div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.52 0.012 258);">{{ r.sender }}</div>
+                  <div data-r="faint" style="font-size: 12px; color: oklch(0.60 0.012 258);">{{ r.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isExpOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Expenses</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">What the company spent, grouped by heading.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div data-r="field" style="display: flex; align-items: center; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); overflow: hidden;">
+            <span data-r="muted" style="padding: 9px 11px; font-size: 12px; color: oklch(0.52 0.012 258); cursor: pointer;">‹</span>
+            <span style="padding: 9px 4px; font-family: 'IBM Plex Mono', monospace; font-size: 13px;">August 2026</span>
+            <span data-r="muted" style="padding: 9px 11px; font-size: 12px; color: oklch(0.52 0.012 258); cursor: pointer;">›</span>
+          </div>
+          <div data-r="btnghost" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.32 0.015 258); cursor: pointer;">Excel</div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+            <span style="font-size: 15px; line-height: 1;">+</span>
+            <span>Add expense</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 20px; padding: 0 32px 40px;">
+        <div data-r="card" style="display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 24px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Spent in August 2026</div>
+            <div data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">Across 5 headings · 10 entries</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+            <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(22px, 1.7vw, 28px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.48 0.13 27);">৳24,02,775.04</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $20,233.90</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 16px;">
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 22px 18px;">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.60 0.12 220);"></span>
+              <span data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">People</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳21,78,700.04</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $18,346.95</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div data-r="track" style="height: 4px; border-radius: 2px; background: oklch(0.94 0.004 258); overflow: hidden;">
+                <div style="width: 91%; height: 100%; border-radius: 2px; background: oklch(0.60 0.12 220);"></div>
+              </div>
+              <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">91% of the month · 2 entries</div>
+            </div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 22px 18px;">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.55 0.15 275);"></span>
+              <span data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">Office &amp; premises</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳1,11,600.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $939.79</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div data-r="track" style="height: 4px; border-radius: 2px; background: oklch(0.94 0.004 258); overflow: hidden;">
+                <div style="width: 5%; height: 100%; border-radius: 2px; background: oklch(0.55 0.15 275);"></div>
+              </div>
+              <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">5% of the month · 4 entries</div>
+            </div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 22px 18px;">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.58 0.12 190);"></span>
+              <span data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">Technology</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳68,875.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $580.00</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div data-r="track" style="height: 4px; border-radius: 2px; background: oklch(0.94 0.004 258); overflow: hidden;">
+                <div style="width: 3%; height: 100%; border-radius: 2px; background: oklch(0.58 0.12 190);"></div>
+              </div>
+              <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">3% of the month · 2 entries</div>
+            </div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 22px 18px;">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.66 0.14 62);"></span>
+              <span data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">Marketing</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳38,000.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $320.00</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div data-r="track" style="height: 4px; border-radius: 2px; background: oklch(0.94 0.004 258); overflow: hidden;">
+                <div style="width: 2%; height: 100%; border-radius: 2px; background: oklch(0.66 0.14 62);"></div>
+              </div>
+              <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">2% of the month · 1 entry</div>
+            </div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 14px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 22px 18px;">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: oklch(0.60 0.16 8);"></span>
+              <span data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">Administrative</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳5,600.00</div>
+              <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $47.16</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div data-r="track" style="height: 4px; border-radius: 2px; background: oklch(0.94 0.004 258); overflow: hidden;">
+                <div style="width: 1%; height: 100%; border-radius: 2px; background: oklch(0.60 0.16 8);"></div>
+              </div>
+              <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">Under 1% · 1 entry</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column; gap: 3px; padding: 17px 20px 15px;">
+            <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Every expense this month</span>
+            <span data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">10 entries, newest first</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1080px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: 34px 100px 172px minmax(230px, 1fr) 176px 134px 100px 96px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-top: 1px solid oklch(0.93 0.004 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>SL</div>
+                <div>Date</div>
+                <div>Category</div>
+                <div>Description</div>
+                <div>Reference</div>
+                <div style="text-align: right;">Amount (BDT)</div>
+                <div style="text-align: right;">USD</div>
+                <div style="text-align: right;">Rate</div>
+              </div>
+              <sc-for list="{{ expRows }}" as="r" hint-placeholder-count="10">
+                <div data-r="row" style="display: grid; grid-template-columns: 34px 100px 172px minmax(230px, 1fr) 176px 134px 100px 96px; gap: 14px; padding: 14px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">{{ r.sl }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.45 0.012 258);">{{ r.date }}</div>
+                  <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; flex: none; background: {{ r.dot }};"></span>
+                    <span data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.cat }}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                    <span data-r="ink" style="font-size: 13px; font-weight: 500; color: oklch(0.24 0.015 258);">{{ r.desc }}</span>
+                    <span data-r="faint" style="font-size: 11.5px; color: oklch(0.60 0.012 258);">{{ r.meta }}</span>
+                    <sc-if value="{{ r.hasTag }}" hint-placeholder-val="{{ false }}">
+                      <span data-r="tag" style="align-self: flex-start; margin-top: 2px; padding: 3px 7px; border-radius: 5px; background: oklch(0.96 0.02 62); font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: oklch(0.48 0.10 62);">{{ r.tag }}</span>
+                    </sc-if>
+                  </div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.52 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.ref }}</div>
+                  <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.48 0.13 27);">{{ r.bdt }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">{{ r.usd }}</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.62 0.012 258);">{{ r.rate }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isOther }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Other expenses</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Everything spent that is not an AI tool or a subscription.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div data-r="field" style="display: flex; align-items: center; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); overflow: hidden;">
+            <span data-r="muted" style="padding: 9px 11px; font-size: 12px; color: oklch(0.52 0.012 258); cursor: pointer;">‹</span>
+            <span style="padding: 9px 4px; font-family: 'IBM Plex Mono', monospace; font-size: 13px;">August 2026</span>
+            <span data-r="muted" style="padding: 9px 11px; font-size: 12px; color: oklch(0.52 0.012 258); cursor: pointer;">›</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+            <span style="font-size: 15px; line-height: 1;">+</span>
+            <span>Add expense</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 20px; padding: 0 32px 40px;">
+        <div data-r="card" style="display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 24px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; max-width: 560px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Spent in August 2026</div>
+            <div data-r="muted" style="font-size: 12.5px; line-height: 1.5; color: oklch(0.55 0.012 258);">2 recurring payments are left out — they are counted on AI tools and subscriptions.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+            <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(22px, 1.7vw, 28px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.48 0.13 27);">৳23,33,900.04</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $19,653.90</div>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column; gap: 3px; padding: 17px 20px 15px;">
+            <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Every other expense in August 2026</span>
+            <span data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">The 8 most recent of 10 money-out entries — narrow the month, or open All transactions for the rest</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1180px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: 34px 100px 162px minmax(210px, 1fr) 134px 96px 124px 180px 96px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-top: 1px solid oklch(0.93 0.004 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>SL</div>
+                <div>Date</div>
+                <div>Category</div>
+                <div>Description</div>
+                <div style="text-align: right;">Amount (BDT)</div>
+                <div style="text-align: right;">USD</div>
+                <div>Method &amp; account</div>
+                <div>Reference</div>
+                <div style="text-align: right;">Rate</div>
+              </div>
+              <sc-for list="{{ otherRows }}" as="r" hint-placeholder-count="8">
+                <div data-r="row" style="display: grid; grid-template-columns: 34px 100px 162px minmax(210px, 1fr) 134px 96px 124px 180px 96px; gap: 14px; padding: 14px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">{{ r.sl }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.45 0.012 258);">{{ r.date }}</div>
+                  <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; flex: none; background: {{ r.dot }};"></span>
+                    <span data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.cat }}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                    <span data-r="ink" style="font-size: 13px; font-weight: 500; color: oklch(0.24 0.015 258);">{{ r.desc }}</span>
+                    <sc-if value="{{ r.hasTag }}" hint-placeholder-val="{{ false }}">
+                      <span data-r="tag" style="align-self: flex-start; margin-top: 2px; padding: 3px 7px; border-radius: 5px; background: oklch(0.96 0.02 62); font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: oklch(0.48 0.10 62);">{{ r.tag }}</span>
+                    </sc-if>
+                  </div>
+                  <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.48 0.13 27);">{{ r.bdt }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">{{ r.usd }}</div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.52 0.012 258);">{{ r.meta }}</div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.ref }}</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.62 0.012 258);">{{ r.rate }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSubs }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">AI tools and subscriptions</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Every paid plan — what it costs, who is on it, and which card renews it.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+          <span style="font-size: 15px; line-height: 1;">+</span>
+          <span>Add a subscription</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <div data-r="card" style="display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid oklch(0.918 0.005 258); border-radius: 9px; background: oklch(1 0 0);">
+            <span style="padding: 7px 13px; border-radius: 7px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 12.5px; font-weight: 500; cursor: pointer;">Active 2</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Paused</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Canceled</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Expired</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">All</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div data-r="field" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); min-width: 250px;">
+              <span data-r="faint" style="font-size: 12px; color: oklch(0.62 0.012 258);">⌕</span>
+              <span data-r="faint" style="font-size: 13px; color: oklch(0.62 0.012 258);">Tool, plan, team or login…</span>
+            </div>
+            <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; cursor: pointer;">
+              <span>Every category</span>
+              <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1720px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: 196px 96px 104px 128px 80px 112px 112px 118px 92px 120px 140px 176px 150px 190px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>Tool</div>
+                <div>Category</div>
+                <div style="text-align: right;">Cost (USD)</div>
+                <div style="text-align: right;">Equivalent (BDT)</div>
+                <div style="text-align: right;">Rate</div>
+                <div>Billing cycle</div>
+                <div>Start date</div>
+                <div>Next renewal</div>
+                <div>Status</div>
+                <div>Payment</div>
+                <div>Department</div>
+                <div>Users</div>
+                <div>Notes</div>
+                <div>Login account</div>
+              </div>
+              <div data-r="row" style="display: grid; grid-template-columns: 196px 96px 104px 128px 80px 112px 112px 118px 92px 120px 140px 176px 150px 190px; gap: 14px; padding: 15px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span data-r="ink" style="font-size: 13.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Claude AI</span>
+                  <span data-r="faint" style="font-size: 11.5px; color: oklch(0.60 0.012 258);">Max plan 5x</span>
+                </div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">AI tool</div>
+                <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.24 0.015 258);">$100.00</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">৳12,277.00</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; color: oklch(0.62 0.012 258);">122.77</div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Every month</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.48 0.012 258);">2026-08-19</div>
+                <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.28 0.015 258);">2026-08-19</div>
+                <div><span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Active</span></div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Master card</div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Engineering Core</div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258);">Amir Faysal, Emon Reja</div>
+                <div data-r="faint" style="font-size: 12px; color: oklch(0.60 0.012 258);">for developer team</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.48 0.012 258);">Mizra@shareviral.cash</div>
+              </div>
+              <div data-r="row" style="display: grid; grid-template-columns: 196px 96px 104px 128px 80px 112px 112px 118px 92px 120px 140px 176px 150px 190px; gap: 14px; padding: 15px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span data-r="ink" style="font-size: 13.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Anthropic</span>
+                  <span data-r="faint" style="font-size: 11.5px; color: oklch(0.60 0.012 258);">Max</span>
+                </div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">AI tool</div>
+                <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.24 0.015 258);">$100.00</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">৳12,277.00</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; color: oklch(0.62 0.012 258);">122.77</div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Every month</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.48 0.012 258);">2026-08-19</div>
+                <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.28 0.015 258);">2026-09-19</div>
+                <div><span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Active</span></div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Master card</div>
+                <div data-r="muted" style="font-size: 12.5px; color: oklch(0.48 0.012 258);">Engineering Core</div>
+                <div data-r="faint" style="font-size: 12.5px; color: oklch(0.60 0.012 258);">—</div>
+                <div data-r="faint" style="font-size: 12px; color: oklch(0.60 0.012 258);">—</div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.48 0.012 258);">mizra@shareviral.cash</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p data-r="muted" style="margin: 0; font-size: 12.5px; line-height: 1.6; color: oklch(0.55 0.012 258); max-width: 720px;">2 plans, 2 seats between them. What was actually paid for these sits on the Expenses screens — these are the plans, not the payments.</p>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTxns }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Transactions</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Every movement of money, in and out.</p>
+        </div>
+        <div data-r="btnghost" style="display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.32 0.015 258); cursor: pointer;">Excel</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; overflow: hidden;">
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(1 0 0);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Money in</div>
+            <div data-r="pos" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(19px, 1.5vw, 25px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.46 0.10 158);">৳37,85,222.75</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $31,875.56</div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(1 0 0);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Money out</div>
+            <div data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(19px, 1.5vw, 25px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.48 0.13 27);">৳27,36,121.04</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.62 0.012 258);">≈ $23,041.02</div>
+          </div>
+          <div data-r="cardalt" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(0.983 0.003 258);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.40 0.05 258);">Net</div>
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(19px, 1.5vw, 25px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.20 0.015 258);">৳10,49,101.71</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.60 0.012 258);">≈ $8,834.54 · 31 entries in this view</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
+          <div data-r="field" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); min-width: 260px; flex: 1;">
+            <span data-r="faint" style="font-size: 12px; color: oklch(0.62 0.012 258);">⌕</span>
+            <span data-r="faint" style="font-size: 13px; color: oklch(0.62 0.012 258);">Search description, reference or account…</span>
+          </div>
+          <div data-r="field" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: oklch(0.50 0.012 258);">2026-08-01 → 2026-08-31</div>
+          <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; cursor: pointer;">
+            <span>In and out</span>
+            <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+          </div>
+          <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; cursor: pointer;">
+            <span>All accounts</span>
+            <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+          </div>
+          <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; cursor: pointer;">
+            <span>All categories</span>
+            <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+          </div>
+          <div data-r="muted" style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: oklch(0.52 0.012 258); cursor: pointer;">
+            <span data-r="field" style="width: 15px; height: 15px; border: 1px solid oklch(0.86 0.006 258); border-radius: 4px; background: oklch(1 0 0);"></span>
+            <span>Show voided</span>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1240px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: 34px 100px 96px 148px minmax(230px, 1fr) 178px 142px 108px 100px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>SL</div>
+                <div>Date</div>
+                <div>Type</div>
+                <div>Category</div>
+                <div>Description</div>
+                <div>Reference</div>
+                <div style="text-align: right;">Amount (BDT)</div>
+                <div style="text-align: right;">USD</div>
+                <div style="text-align: right;">Rate</div>
+              </div>
+              <sc-for list="{{ txnRows }}" as="r" hint-placeholder-count="12">
+                <div data-r="row" style="display: grid; grid-template-columns: 34px 100px 96px 148px minmax(230px, 1fr) 178px 142px 108px 100px; gap: 14px; padding: 14px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">{{ r.sl }}</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.45 0.012 258);">{{ r.date }}</div>
+                  <div>
+                    <sc-if value="{{ r.isIn }}" hint-placeholder-val="{{ true }}">
+                      <span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Cash in</span>
+                    </sc-if>
+                    <sc-if value="{{ r.isOut }}" hint-placeholder-val="{{ false }}">
+                      <span data-r="tagneg" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.96 0.03 27); font-size: 11.5px; font-weight: 500; color: oklch(0.48 0.12 27);">Cash out</span>
+                    </sc-if>
+                  </div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.42 0.012 258);">{{ r.cat }}</div>
+                  <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                    <span data-r="ink" style="font-size: 13px; font-weight: 500; color: oklch(0.24 0.015 258);">{{ r.desc }}</span>
+                    <span data-r="faint" style="font-size: 11.5px; color: oklch(0.60 0.012 258);">{{ r.meta }}</span>
+                    <sc-if value="{{ r.hasFx }}" hint-placeholder-val="{{ false }}">
+                      <span data-r="tag" style="align-self: flex-start; margin-top: 2px; padding: 3px 7px; border-radius: 5px; background: oklch(0.96 0.004 258); font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: oklch(0.45 0.012 258);">{{ r.fx }}</span>
+                    </sc-if>
+                  </div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.52 0.012 258); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.ref }}</div>
+                  <div style="text-align: right;">
+                    <sc-if value="{{ r.isIn }}" hint-placeholder-val="{{ true }}">
+                      <span data-r="pos" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.46 0.10 158);">{{ r.bdt }}</span>
+                    </sc-if>
+                    <sc-if value="{{ r.isOut }}" hint-placeholder-val="{{ false }}">
+                      <span data-r="neg" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.48 0.13 27);">{{ r.bdt }}</span>
+                    </sc-if>
+                  </div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">{{ r.usd }}</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.62 0.012 258);">{{ r.rate }}</div>
+                </div>
+              </sc-for>
+              <div data-r="cardalt" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; background: oklch(0.983 0.003 258);">
+                <span data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">Showing 15 of 31 entries in this view</span>
+                <span data-r="link" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">Load the rest →</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTeam }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Team</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Everyone on the payroll, and everyone who bills.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div data-r="btnghost" style="display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.32 0.015 258); cursor: pointer;">Excel</div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+            <span style="font-size: 15px; line-height: 1;">+</span>
+            <span>Add person</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <div data-r="card" style="display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid oklch(0.918 0.005 258); border-radius: 9px; background: oklch(1 0 0);">
+            <span style="padding: 7px 13px; border-radius: 7px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 12.5px; font-weight: 500; cursor: pointer;">Current team 17</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Past team 1</span>
+          </div>
+          <div data-r="field" style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); min-width: 290px;">
+            <span data-r="faint" style="font-size: 12px; color: oklch(0.62 0.012 258);">⌕</span>
+            <span data-r="faint" style="font-size: 13px; color: oklch(0.62 0.012 258);">Search by name, designation or phone…</span>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column; gap: 3px; padding: 17px 20px 15px;">
+            <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Employees · 17</span>
+            <span data-r="muted" style="font-size: 12.5px; color: oklch(0.55 0.012 258);">Drawn on the monthly salary sheet</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1040px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: minmax(200px, 1fr) 250px 116px 116px 148px 100px 78px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-top: 1px solid oklch(0.93 0.004 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>Name</div>
+                <div>Designation</div>
+                <div>Department</div>
+                <div>Joined</div>
+                <div style="text-align: right;">Current salary</div>
+                <div>Status</div>
+                <div></div>
+              </div>
+              <sc-for list="{{ teamRows }}" as="r" hint-placeholder-count="17">
+                <div data-r="row" style="display: grid; grid-template-columns: minmax(200px, 1fr) 250px 116px 116px 148px 100px 78px; gap: 14px; padding: 13px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                    <span data-r="ink" style="font-size: 13.5px; font-weight: 600; color: oklch(0.24 0.015 258);">{{ r.name }}</span>
+                    <span data-r="faint" style="font-size: 11.5px; color: oklch(0.62 0.012 258);">Employee</span>
+                  </div>
+                  <div data-r="muted" style="font-size: 12.5px; color: oklch(0.45 0.012 258);">{{ r.desig }}</div>
+                  <div data-r="faint" style="font-size: 12.5px; color: oklch(0.62 0.012 258);">—</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.48 0.012 258);">{{ r.join }}</div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                    <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.24 0.015 258);">{{ r.bdt }}</span>
+                    <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ {{ r.usd }}</span>
+                  </div>
+                  <div><span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Working</span></div>
+                  <div data-r="link" style="font-size: 12.5px; font-weight: 500; text-align: right; color: oklch(0.52 0.10 258); cursor: pointer;">View</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isPayroll }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 34px 32px 22px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Payroll</h1>
+          <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">One run a month. Nothing leaves the bank until you say so.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-radius: 8px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;">
+          <span style="font-size: 15px; line-height: 1;">+</span>
+          <span>New month</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="overflow-x: auto;">
+            <div style="min-width: 980px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: minmax(180px, 1fr) 100px 176px 176px 176px 124px 112px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>Month</div>
+                <div>Status</div>
+                <div style="text-align: right;">Gross</div>
+                <div style="text-align: right;">Tax withheld</div>
+                <div style="text-align: right;">Net paid</div>
+                <div>Paid on</div>
+                <div></div>
+              </div>
+              <div data-r="row" style="display: grid; grid-template-columns: minmax(180px, 1fr) 100px 176px 176px 176px 124px 112px; gap: 14px; padding: 16px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                <div data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">September 2026</div>
+                <div><span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Paid</span></div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                  <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.24 0.015 258);">৳11,02,000.00</span>
+                  <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ $9,280.00</span>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                  <span data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.45 0.012 258);">৳25,299.96</span>
+                  <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ $213.05</span>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                  <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳10,76,700.04</span>
+                  <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ $9,066.95</span>
+                </div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.48 0.012 258);">2026-08-19</div>
+                <div data-r="link" onClick="{{ goSalarySheet }}" style="font-size: 12.5px; font-weight: 500; text-align: right; color: oklch(0.52 0.10 258); cursor: pointer;">Open sheet →</div>
+              </div>
+              <div data-r="row" style="display: grid; grid-template-columns: minmax(180px, 1fr) 100px 176px 176px 176px 124px 112px; gap: 14px; padding: 16px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                <div data-r="ink" style="font-size: 14px; font-weight: 600; color: oklch(0.24 0.015 258);">August 2026</div>
+                <div><span data-r="tagpos" style="padding: 4px 9px; border-radius: 999px; background: oklch(0.955 0.035 158); font-size: 11.5px; font-weight: 500; color: oklch(0.42 0.09 158);">Paid</span></div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                  <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.24 0.015 258);">৳11,02,000.00</span>
+                  <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ $9,280.00</span>
+                </div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.62 0.012 258);">৳0.00</div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                  <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳11,02,000.00</span>
+                  <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ $9,280.00</span>
+                </div>
+                <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.48 0.012 258);">2026-08-16</div>
+                <div data-r="link" onClick="{{ goSalarySheet }}" style="font-size: 12.5px; font-weight: 500; text-align: right; color: oklch(0.52 0.10 258); cursor: pointer;">Open sheet →</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSalarySheet }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 28px 32px 22px;">
+        <div data-r="link" onClick="{{ goPayroll }}" style="font-size: 12.5px; font-weight: 500; color: oklch(0.52 0.10 258); cursor: pointer;">← All payroll runs</div>
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Salary sheet — September 2026</h1>
+            <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">17 people · paid on 2026-08-19</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div data-r="btnghost" style="padding: 9px 14px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.32 0.015 258); cursor: pointer;">Excel</div>
+            <div data-r="btnghost" style="padding: 9px 14px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-size: 13px; color: oklch(0.32 0.015 258); cursor: pointer;">Edit</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div data-r="card" style="background: oklch(0.94 0.004 258); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(214px, 1fr)); gap: 1px; overflow: hidden;">
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(1 0 0);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Gross</div>
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(18px, 1.4vw, 23px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳11,02,000.00</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.62 0.012 258);">≈ $9,280.00</div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(1 0 0);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Additions</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(18px, 1.4vw, 23px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.62 0.012 258);">৳0.00</div>
+            <div data-r="muted" style="font-size: 12px; color: oklch(0.55 0.012 258);">No bonuses this run</div>
+          </div>
+          <div data-r="card" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(1 0 0);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Tax withheld</div>
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(18px, 1.4vw, 23px); font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.22 0.015 258);">৳25,299.96</div>
+            <div data-r="muted" style="font-size: 12px; line-height: 1.5; color: oklch(0.55 0.012 258);">Stays with you until the challan is deposited</div>
+          </div>
+          <div data-r="cardalt" style="display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; background: oklch(0.983 0.003 258);">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.40 0.05 258);">Net to pay</div>
+            <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(18px, 1.4vw, 23px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.20 0.015 258);">৳10,76,700.04</div>
+            <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: oklch(0.60 0.012 258);">≈ $9,066.95</div>
+          </div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="overflow-x: auto;">
+            <div style="min-width: 1080px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: minmax(200px, 1fr) 150px 100px 100px 140px 100px 160px 92px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>Name</div>
+                <div style="text-align: right;">Gross</div>
+                <div style="text-align: right;">Bonus</div>
+                <div style="text-align: right;">Other +</div>
+                <div style="text-align: right;">Tax</div>
+                <div style="text-align: right;">Other −</div>
+                <div style="text-align: right;">Net</div>
+                <div></div>
+              </div>
+              <sc-for list="{{ salaryRows }}" as="r" hint-placeholder-count="17">
+                <div data-r="row" style="display: grid; grid-template-columns: minmax(200px, 1fr) 150px 100px 100px 140px 100px 160px 92px; gap: 14px; padding: 13px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                    <span data-r="ink" style="font-size: 13.5px; font-weight: 600; color: oklch(0.24 0.015 258);">{{ r.name }}</span>
+                    <span data-r="faint" style="font-size: 11.5px; color: oklch(0.62 0.012 258);">{{ r.desig }}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                    <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.24 0.015 258);">{{ r.gross }}</span>
+                    <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ {{ r.grossUsd }}</span>
+                  </div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                  <div data-r="muted" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.45 0.012 258);">{{ r.tax }}</div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                  <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.22 0.015 258);">{{ r.net }}</div>
+                  <div data-r="link" style="font-size: 12.5px; font-weight: 500; text-align: right; color: oklch(0.52 0.10 258); cursor: pointer;">Payslip</div>
+                </div>
+              </sc-for>
+              <div data-r="cardalt" style="display: grid; grid-template-columns: minmax(200px, 1fr) 150px 100px 100px 140px 100px 160px 92px; gap: 14px; padding: 16px 20px; background: oklch(0.983 0.003 258); font-size: 13px; align-items: center;">
+                <div data-r="ink" style="font-size: 13px; font-weight: 600; color: oklch(0.24 0.015 258);">Total · 17 people</div>
+                <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.20 0.015 258);">৳11,02,000.00</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                <div data-r="ink" style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.30 0.015 258);">৳25,299.96</div>
+                <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; color: oklch(0.68 0.01 258);">৳0.00</div>
+                <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.20 0.015 258);">৳10,76,700.04</div>
+                <div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTds }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 34px 32px 20px;">
+        <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">Withholding tax</h1>
+        <p data-r="muted" style="margin: 0; font-size: 13.5px; color: oklch(0.55 0.012 258);">Tax deducted from salaries — whose, and how much.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 0 32px 40px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <div data-r="card" style="display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid oklch(0.918 0.005 258); border-radius: 9px; background: oklch(1 0 0);">
+            <span style="padding: 7px 13px; border-radius: 7px; background: oklch(0.52 0.13 264); color: oklch(0.99 0 0); font-size: 12.5px; font-weight: 500; cursor: pointer;">Salary deductions</span>
+            <span data-r="muted" style="padding: 7px 13px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Tax calculator</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
+            <div data-r="card" style="display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid oklch(0.918 0.005 258); border-radius: 9px; background: oklch(1 0 0);">
+              <span style="padding: 7px 12px; border-radius: 7px; background: oklch(0.94 0.008 264); font-size: 12.5px; font-weight: 500; color: oklch(0.30 0.02 264); cursor: pointer;">Monthly</span>
+              <span data-r="muted" style="padding: 7px 12px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Quarterly</span>
+              <span data-r="muted" style="padding: 7px 12px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Half year</span>
+              <span data-r="muted" style="padding: 7px 12px; border-radius: 7px; font-size: 12.5px; color: oklch(0.50 0.012 258); cursor: pointer;">Yearly</span>
+            </div>
+            <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; cursor: pointer;">
+              <span>August 2026</span>
+              <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+            </div>
+            <div data-r="field" style="display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid oklch(0.918 0.005 258); border-radius: 8px; background: oklch(1 0 0); font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; cursor: pointer;">
+              <span>FY 2026-27</span>
+              <span data-r="faint" style="font-size: 10px; color: oklch(0.62 0.012 258);">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div data-r="card" style="display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 20px 24px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; max-width: 520px;">
+            <div data-r="label" style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase; color: oklch(0.58 0.012 258);">Deducted in August 2026</div>
+            <div data-r="muted" style="font-size: 12.5px; line-height: 1.5; color: oklch(0.55 0.012 258);">The month we are in, for whichever period the table below shows.</div>
+          </div>
+          <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-size: clamp(22px, 1.7vw, 28px); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: oklch(0.20 0.015 258);">৳0.00</div>
+        </div>
+
+        <div data-r="card" style="background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column; gap: 4px; padding: 17px 20px 15px;">
+            <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">August 2026</span>
+            <span data-r="muted" style="font-size: 12.5px; line-height: 1.55; color: oklch(0.55 0.012 258); max-width: 760px;">Everyone on a finalised payroll run in this period. Somebody who owed no tax is listed at 0.00 rather than left out — this is who was paid, not only who was taxed.</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <div style="min-width: 760px;">
+              <div data-r="thead" style="display: grid; grid-template-columns: minmax(220px, 1fr) 200px 180px 96px; gap: 14px; padding: 11px 20px; background: oklch(0.983 0.003 258); border-top: 1px solid oklch(0.93 0.004 258); border-bottom: 1px solid oklch(0.93 0.004 258); font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: oklch(0.55 0.012 258);">
+                <div>Employee</div>
+                <div style="text-align: right;">Salary</div>
+                <div style="text-align: right;">Tax deducted</div>
+                <div></div>
+              </div>
+              <sc-for list="{{ tdsRows }}" as="r" hint-placeholder-count="17">
+                <div data-r="row" style="display: grid; grid-template-columns: minmax(220px, 1fr) 200px 180px 96px; gap: 14px; padding: 13px 20px; border-bottom: 1px solid oklch(0.955 0.004 258); font-size: 13px; align-items: center;">
+                  <div data-r="ink" style="font-size: 13.5px; font-weight: 500; color: oklch(0.24 0.015 258);">{{ r.name }}</div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px;">
+                    <span data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: oklch(0.24 0.015 258);">{{ r.bdt }}</span>
+                    <span data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: oklch(0.62 0.012 258);">≈ {{ r.usd }}</span>
+                  </div>
+                  <div data-r="faint" style="font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.62 0.012 258);">৳0.00</div>
+                  <div data-r="link" style="font-size: 12.5px; font-weight: 500; text-align: right; color: oklch(0.52 0.10 258); cursor: pointer;">Payslip</div>
+                </div>
+              </sc-for>
+              <div data-r="cardalt" style="display: grid; grid-template-columns: minmax(220px, 1fr) 200px 180px 96px; gap: 14px; padding: 16px 20px; background: oklch(0.983 0.003 258); font-size: 13px; align-items: center;">
+                <div data-r="ink" style="font-weight: 600; color: oklch(0.24 0.015 258);">Deducted in August 2026</div>
+                <div></div>
+                <div data-r="num" style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: oklch(0.20 0.015 258);">৳0.00</div>
+                <div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSoon }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 16px; padding: 34px 32px 40px;">
+        <h1 data-r="ink" style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: oklch(0.22 0.015 258);">{{ soonLabel }}</h1>
+        <div data-r="card" style="display: flex; flex-direction: column; gap: 8px; background: oklch(1 0 0); border: 1px solid oklch(0.918 0.005 258); border-radius: 12px; padding: 26px 24px; max-width: 640px;">
+          <span data-r="ink" style="font-size: 14.5px; font-weight: 600; color: oklch(0.24 0.015 258);">Not redesigned yet</span>
+          <span data-r="muted" style="font-size: 13px; line-height: 1.6; color: oklch(0.55 0.012 258);">Send me a screenshot of this screen and I will build it in the same system as the rest.</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <p data-r="foot" style="margin: 0 32px 32px; padding-top: 16px; border-top: 1px solid oklch(0.918 0.005 258); font-size: 12px; line-height: 1.6; color: oklch(0.58 0.012 258); max-width: 780px;">Every amount in this system is recorded in BDT. Dollar figures are indicative only, translated at ৳118.75 per USD as of 12 August 2026.</p>
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;accounts&quot;,&quot;cashin&quot;,&quot;expoverview&quot;,&quot;subs&quot;,&quot;other&quot;,&quot;txns&quot;,&quot;team&quot;,&quot;payroll&quot;,&quot;salarysheet&quot;,&quot;tds&quot;],&quot;default&quot;:&quot;accounts&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;},&quot;startDark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+const CASH = [
+  ['1', 'demo122', 'TDS deposit — challan A-2026071142 (July 2026) [demo]', '৳24,554.00', '$200.00', '122.77', 'A-2026071142', 'Standard Chartered Bank', 'shareviral US Account', 'shareviral add'],
+  ['2', '⚠ 4wdf43', 'august fund', '৳11,875.00', '$100.00', '118.75', '⚠ adfa345q34', 'Standard Chartered Bank', 'shareviral us bank', 'funding from usa'],
+  ['3', 'dfg34', 'TCP-All', '৳27,668.75', '$233.00', '118.75', 'Tempor qui fuga Eiu', 'Master card', 'Cassady Hebert', 'dfasd'],
+  ['4', '—', 'add funds to card', '৳8,57,500.00', '$7,000.00', '122.50', '⚠ Tempor qui fuga Eiu', 'Petty cash (demo)', 'Cassady Hebert', '—'],
+  ['5', '—', 'TCP-All', '৳1,22,500.00', '$1,000.00', '122.50', '—', 'USD card', 'Cassady Hebert', 'demo payment'],
+  ['6', '—', 'Aute voluptatem ull', '৳59,375.00', '$500.00', '118.75', '⚠ Tempor qui fuga Eiu', 'Petty cash (demo)', 'Cassady Hebert', '—'],
+  ['7', '—', 'CEO funding', '৳1,18,750.00', '$1,000.00', '118.75', '⚠ jgkuy6546754', 'Petty cash (demo)', 'shareviral US Account', '—'],
+  ['8', '—', 'August second funding', '৳1,00,000.00', '$816.32', '118.75', '⚠ jgkuy6546754', 'Petty cash (demo)', 'shareviral US Account', '—'],
+  ['9', '—', 'TDS deposit', '৳1,00,000.00', '$816.33', '122.50', '⚠ jgkuy6546754', 'Petty cash (demo)', 'shareviral US Account', '—'],
+  ['10', '—', 'Funding from CEO — August [demo]', '৳11,83,000.00', '$10,000.00', '118.30', '—', 'Standard Chartered Bank', '—', '—']
+];
+
+const TEAM = [
+  ['Amir Faysal', 'Product Executive', '2026-05-14', '৳30,000', '$252.63'],
+  ['Ashak Zahin Hasan', 'Backend Engineer L3', '2026-07-05', '৳80,000', '$673.68'],
+  ['Emon Reja', 'Technical Lead', '2026-05-14', '৳2,00,000', '$1,684.21'],
+  ['Ishtiaque Ahmed', 'HR Generalist', '2026-07-16', '৳55,000', '$463.16'],
+  ['Jasmine Akond', 'Social Media Executive', '2026-08-10', '৳30,000', '$252.63'],
+  ['Khairul Bashar', 'Senior Mobile App Developer L2', '2026-08-02', '৳95,000', '$800.00'],
+  ['MD. Yeasin Hossain', 'Chief Financial Officer', '2026-05-01', '৳1,00,000', '$842.11'],
+  ['Md Shahadat Hossain', 'Senior Product Associate', '2026-08-02', '৳57,000', '$480.00'],
+  ['Md. Mahadad Hossain', 'Backend Engineer L1', '2026-07-01', '৳55,000', '$463.16'],
+  ['Mehedi Mosharrof', 'Mobile App Developer L3', '2026-05-14', '৳62,000', '$522.11'],
+  ['Mirza Showvik', 'Senior Mobile App Developer L2 (Hybrid)', '2026-05-14', '৳90,000', '$757.89'],
+  ['Omar Ahammed', 'Senior Product Executive', '2026-05-14', '৳45,000', '$378.95'],
+  ['Rukiya Islam Tazin', 'Senior HR Executive', '2026-05-17', '৳40,000', '$336.84'],
+  ['S M Sowkot Hasan', 'UI/UX Designer', '2026-05-23', '৳43,000', '$362.11'],
+  ['Sagar Biswas', 'Mobile App Developer L3', '2026-05-14', '৳46,000', '$387.37'],
+  ['Shahriar Hossain', 'Mobile App Developer L2', '2026-05-14', '৳42,000', '$353.68'],
+  ['Z.H.M Khairul Basar', 'Senior Product Executive', '2026-05-14', '৳32,000', '$269.47']
+];
+
+const SALARY_TAX = ['৳0.00', '৳416.66', '৳19,166.66', '৳416.66', '৳0.00', '৳1,350.00', '৳1,750.00', '৳416.66', '৳416.66', '৳416.66', '৳950.00', '৳0.00', '৳0.00', '৳0.00', '৳0.00', '৳0.00', '৳0.00'];
+const SALARY_NET = ['৳30,000.00', '৳79,583.34', '৳1,80,833.34', '৳54,583.34', '৳30,000.00', '৳93,650.00', '৳98,250.00', '৳56,583.34', '৳54,583.34', '৳61,583.34', '৳89,050.00', '৳45,000.00', '৳40,000.00', '৳43,000.00', '৳46,000.00', '৳42,000.00', '৳32,000.00'];
+
+const EXPENSES = [
+  ['1', '2026-08-19', 'Electricity', 'oklch(0.55 0.15 275)', 'electricity bill', 'Bank transfer · Master card', 'TXN-2026-000030 ×2', '৳10,000.00', '$81.45', '122.770000', ''],
+  ['2', '2026-08-19', 'Salary', 'oklch(0.60 0.12 220)', 'Salary — September 2026', 'Bank transfer · Master card', 'TXN-2026-000031', '৳10,76,700.04', '—', '—', ''],
+  ['3', '2026-08-16', 'Salary', 'oklch(0.60 0.12 220)', 'Salary — August 2026', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000024', '৳11,02,000.00', '—', '—', ''],
+  ['4', '2026-08-12', 'Electricity', 'oklch(0.55 0.15 275)', 'Electricity — August [demo]', 'Bank transfer · Standard Chartered Bank', 'TXN-2026-000017', '৳10,400.00', '$87.91', '118.300000', ''],
+  ['5', '2026-08-11', 'Advertising', 'oklch(0.66 0.14 62)', 'Google ads — August [demo]', 'Card · Standard Chartered Bank', 'TXN-2026-000016', '৳38,000.00', '$321.22', '118.300000', ''],
+  ['6', '2026-08-09', 'Office supplies', 'oklch(0.60 0.16 8)', 'Tea, coffee and pantry [demo]', 'Cash · Petty cash (demo)', 'TXN-2026-000015', '৳5,600.00', '$47.34', '118.300000', ''],
+  ['7', '2026-08-06', 'Software & subscriptions', 'oklch(0.58 0.12 190)', 'AWS — July usage [demo]', 'Amazon Web Services · Card · Standard Chartered Bank', 'TXN-2026-000014', '৳28,900.00', '$244.29', '118.300000', ''],
+  ['8', '2026-08-06', 'Software & subscriptions', 'oklch(0.58 0.12 190)', 'AI tooling & subscriptions [demo]', 'Card · USD card', 'TXN-2026-000019', '৳39,975.00', '$325.00', '123.000000', ''],
+  ['9', '2026-08-05', 'Internet', 'oklch(0.55 0.15 275)', 'Office internet — August [demo]', 'Grameenphone · Bank transfer · Standard Chartered Bank', 'TXN-2026-000013', '৳6,200.00', '$52.41', '118.300000', ''],
+  ['10', '2026-08-03', 'Office rent', 'oklch(0.55 0.15 275)', 'Office rent — August [demo]', 'Beacon Properties Ltd · Bank transfer · Standard Chartered Bank', 'TXN-2026-000012', '৳85,000.00', '$718.51', '118.300000', 'tax withheld ৳4,500.00']
+];
+
+const TXNS = [
+  ['1', '2026-08-19', 'in', 'CEO funding', 'TDS deposit — challan A-2026071142 (July 2026) [demo]', 'Bank transfer · Standard Chartered Bank', 'TXN-2026-000028 ×2', '+ ৳24,554.00', '+ $200.00', '122.770000', 'USD 200.00 @ 122.770000'],
+  ['2', '2026-08-19', 'out', 'Electricity', 'electricity bill', 'Bank transfer · Master card', 'TXN-2026-000030 ×2', '− ৳10,000.00', '$81.45', '122.770000', ''],
+  ['3', '2026-08-19', 'out', 'Salary', 'Salary — September 2026', 'Bank transfer · Master card', 'TXN-2026-000031', '− ৳10,76,700.04', '—', '—', ''],
+  ['4', '2026-08-19', 'in', 'CEO funding', 'august fund', 'Bank transfer · Standard Chartered Bank', 'TXN-2026-000027', '+ ৳11,875.00', '+ $100.00', '118.750000', 'USD 100.00 @ 118.750000'],
+  ['5', '2026-08-19', 'in', 'CEO funding', 'TCP-All', 'Bank transfer · Master card', 'TXN-2026-000029 ×2', '+ ৳27,668.75', '+ $233.00', '118.750000', 'USD 233.00 @ 118.750000'],
+  ['6', '2026-08-17', 'in', 'CEO funding', 'add funds to card', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000025', '+ ৳8,57,500.00', '+ $7,000.00', '122.500000', 'USD 7000.00 @ 122.500000'],
+  ['7', '2026-08-17', 'in', 'CEO funding', 'TCP-All', 'Bank transfer · USD card', 'TXN-2026-000026', '+ ৳1,22,500.00', '+ $1,000.00', '122.500000', 'USD 1000.00 @ 122.500000'],
+  ['8', '2026-08-16', 'out', 'Salary', 'Salary — August 2026', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000024', '− ৳11,02,000.00', '—', '—', ''],
+  ['9', '2026-08-16', 'in', 'CEO funding', 'Aute voluptatem ull', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000022', '+ ৳59,375.00', '+ $500.00', '118.750000', 'USD 500.00 @ 118.750000'],
+  ['10', '2026-08-16', 'in', 'CEO funding', 'CEO funding', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000023', '+ ৳1,18,750.00', '+ $1,000.00', '118.750000', 'USD 1000.00 @ 118.750000'],
+  ['11', '2026-08-16', 'in', 'CEO funding', 'August second funding', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000020', '+ ৳1,00,000.00', '+ $816.32', '118.750000', 'USD 816.32 @ 118.750000'],
+  ['12', '2026-08-16', 'in', 'CEO funding', 'TDS deposit', 'Bank transfer · Petty cash (demo)', 'TXN-2026-000021', '+ ৳1,00,000.00', '+ $816.33', '122.500000', ''],
+  ['13', '2026-08-12', 'out', 'Electricity', 'Electricity — August [demo]', 'Bank transfer · Standard Chartered Bank', 'TXN-2026-000017', '− ৳10,400.00', '$87.91', '118.300000', ''],
+  ['14', '2026-08-11', 'out', 'Advertising', 'Google ads — August [demo]', 'Card · Standard Chartered Bank', 'TXN-2026-000016', '− ৳38,000.00', '$321.22', '118.300000', ''],
+  ['15', '2026-08-09', 'out', 'Office supplies', 'Tea, coffee and pantry [demo]', 'Cash · Petty cash (demo)', 'TXN-2026-000015', '− ৳5,600.00', '$47.34', '118.300000', '']
+];
+
+class Component extends DCLogic {
+  state = { screen: null, dark: null };
+
+  componentDidMount() {
+    let saved = null;
+    try { saved = localStorage.getItem('svf-theme'); } catch (e) {}
+    const dark = saved ? saved === 'dark' : !!(this.props || {}).startDark;
+    this.paintBody(dark);
+    this.setState({ dark: dark });
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.startDark !== this.props.startDark) this.applyTheme(!!this.props.startDark);
+  }
+
+  paintBody(dark) {
+    document.body.style.background = dark ? 'oklch(0.165 0.012 262)' : 'oklch(0.975 0.003 255)';
+  }
+
+  applyTheme(dark) {
+    try { localStorage.setItem('svf-theme', dark ? 'dark' : 'light'); } catch (e) {}
+    this.paintBody(dark);
+    this.setState({ dark: dark });
+  }
+
+  go(screen) {
+    this.setState({ screen: screen });
+    if (typeof window !== 'undefined') window.scrollTo(0, 0);
+  }
+
+  buildNav(screen, dark) {
+    const activeBg = dark ? 'oklch(0.265 0.02 262)' : 'oklch(0.30 0.022 262)';
+    const items = [
+      { section: 'Overview' },
+      { label: 'Dashboard', href: 'Finance Dashboard.dc.html' },
+      { section: 'Money' },
+      { key: 'accounts', label: 'Accounts' },
+      { key: 'cashin', label: 'Cash-In', pad: 26 },
+      { key: 'expenses', label: 'Expenses' },
+      { key: 'expoverview', label: 'Overview', pad: 26 },
+      { key: 'subs', label: 'AI tools and subscriptions', pad: 26 },
+      { key: 'other', label: 'Other expenses', pad: 26 },
+      { key: 'txns', label: 'All transactions' },
+      { section: 'People' },
+      { key: 'team', label: 'Team' },
+      { key: 'payroll', label: 'Payroll' },
+      { section: 'Tax' },
+      { key: 'tds', label: 'TDS' },
+      { section: 'Insight' },
+      { key: 'reports', label: 'Reports' },
+      { key: 'statement', label: 'Statement' },
+      { key: 'ai', label: 'AI Assistant' }
+    ];
+    return items.map((it) => {
+      if (it.section) return { isSection: true, label: it.section };
+      if (it.href) return { isLink: true, label: it.label, href: it.href };
+      const active = it.key === screen || (it.key === 'payroll' && screen === 'salarysheet');
+      return {
+        isItem: true,
+        label: it.label,
+        pad: it.pad || 10,
+        fw: active ? '500' : '400',
+        bg: active ? activeBg : 'transparent',
+        fg: active ? 'oklch(0.98 0.002 258)' : 'oklch(0.84 0.01 262)',
+        go: () => this.go(it.key)
+      };
+    });
+  }
+
+  renderVals() {
+    const p = this.props || {};
+    const dark = this.state.dark === null ? !!p.startDark : this.state.dark;
+    const screen = this.state.screen || p.startScreen || 'accounts';
+    const crumbs = {
+      accounts: 'Accounts', cashin: 'Cash in', expenses: 'Expenses', expoverview: 'Expenses',
+      subs: 'AI tools and subscriptions', other: 'Other expenses', txns: 'All transactions',
+      team: 'Team', payroll: 'Payroll', salarysheet: 'Salary sheet', tds: 'Withholding tax',
+      reports: 'Reports', statement: 'Statement', ai: 'AI Assistant'
+    };
+    return {
+      theme: dark ? 'dark' : 'light',
+      themeIcon: dark ? '☀' : '◑',
+      toggleTheme: () => this.applyTheme(!dark),
+      nav: this.buildNav(screen, dark),
+      crumb: crumbs[screen] || 'Overview',
+      isAccounts: screen === 'accounts',
+      isCashin: screen === 'cashin',
+      isExpOverview: screen === 'expoverview' || screen === 'expenses',
+      isSubs: screen === 'subs',
+      isOther: screen === 'other',
+      isTxns: screen === 'txns',
+      isTeam: screen === 'team',
+      isPayroll: screen === 'payroll',
+      isSalarySheet: screen === 'salarysheet',
+      isTds: screen === 'tds',
+      isSoon: screen === 'reports' || screen === 'statement' || screen === 'ai',
+      soonLabel: crumbs[screen] || '',
+      goPayroll: () => this.go('payroll'),
+      goSalarySheet: () => this.go('salarysheet'),
+      cashRows: CASH.map((r) => ({ sl: r[0], inv: r[1], desc: r[2], bdt: r[3], usd: r[4], rate: r[5], txn: r[6], bank: r[7], sender: r[8], note: r[9] })),
+      expRows: EXPENSES.map((r) => ({ sl: r[0], date: r[1], cat: r[2], dot: r[3], desc: r[4], meta: r[5], ref: r[6], bdt: '− ' + r[7], usd: r[8], rate: r[9], tag: r[10], hasTag: !!r[10] })),
+      otherRows: EXPENSES.filter((r) => r[2] !== 'Software & subscriptions').map((r, i) => ({ sl: String(i + 1), date: r[1], cat: r[2], dot: r[3], desc: r[4], meta: r[5], ref: r[6], bdt: '− ' + r[7], usd: r[8], rate: r[9], tag: r[10], hasTag: !!r[10] })),
+      txnRows: TXNS.map((r) => ({
+        sl: r[0], date: r[1], isIn: r[2] === 'in', isOut: r[2] === 'out', type: r[2] === 'in' ? 'Cash in' : 'Cash out',
+        cat: r[3], desc: r[4], meta: r[5], ref: r[6], bdt: r[7], usd: r[8], rate: r[9], fx: r[10], hasFx: !!r[10]
+      })),
+      teamRows: TEAM.map((r) => ({ name: r[0], desig: r[1], join: r[2], bdt: r[3], usd: r[4] })),
+      salaryRows: TEAM.map((r, i) => ({ name: r[0], desig: r[1], gross: r[3] + '.00', grossUsd: r[4], tax: SALARY_TAX[i], net: SALARY_NET[i] })),
+      tdsRows: TEAM.map((r) => ({ name: r[0], bdt: r[3] + '.00', usd: r[4] }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>

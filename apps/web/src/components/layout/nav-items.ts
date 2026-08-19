@@ -27,12 +27,7 @@ import type { ComponentType } from "react";
  * `sidebar.tsx`. Never a hex here: both themes swap these tokens.
  */
 export type NavAccent =
-  | "chart-1"
-  | "chart-2"
-  | "chart-3"
-  | "chart-4"
-  | "chart-5"
-  | "chart-6";
+  "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5" | "chart-6";
 
 export type NavItem = {
   /** Stable identity — the accordion's open/closed state is keyed by this. */
@@ -182,6 +177,14 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: "chart-4",
     items: [
       {
+        /**
+         * The reconciled position for a period, with its notes and who signed
+         * it off. It was called Statement and it is not one — a statement is
+         * the bank's own ledger, which is the screen below. This is read, and
+         * that is ticked off against paper.
+         *
+         * Still at /reports, which is the address the thing it replaced had.
+         */
         key: "reports",
         href: "/reports",
         label: "Reports",
@@ -190,22 +193,18 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         /**
-         * Its own screen, straight after Reports.
+         * One account's movements with the balance after each, which is what
+         * the word actually means and what gets ticked off against the bank's
+         * paper.
          *
-         * It was the fourth tab there, filed beside three reports — which made
-         * the one document somebody signs and sends out look like a fourth way
-         * of slicing the same figures. A report is read; a statement is
-         * issued.
-         *
-         * `reports.view` is the same permission: it is built from the same
-         * ledger by the same service, and the PDF inside asks for
-         * `dashboard.money` on top, which the screen checks for itself.
+         * `transactions.read` rather than `reports.view`: it is the ledger,
+         * line for line, not a figure derived from it.
          */
         key: "statement",
         href: "/statement",
-        label: "Statement",
+        label: "Bank statement",
         icon: FileText,
-        permission: "reports.view",
+        permission: "transactions.read",
       },
       {
         key: "assistant",
