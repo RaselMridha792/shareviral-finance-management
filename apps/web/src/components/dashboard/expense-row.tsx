@@ -223,7 +223,10 @@ export function ExpenseRow({
               ) : (
                 <>
                   <Settings2 className="size-3.5" />
-                  Choose cards
+                  {/* The owner's word. It both adds and removes, so "Add"
+                      undersells it — but the panel it opens says what it
+                      does, and this is the vocabulary they use. */}
+                  Add
                 </>
               )}
             </Button>

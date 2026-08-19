@@ -1,7 +1,7 @@
 "use client";
 
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
-import { ArrowLeft, Download, Plus, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -15,11 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import {
-  exportUrl,
-  type RegisterResult,
-  type TransactionDto,
-} from "@/lib/ledger";
+import { type RegisterResult, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +39,6 @@ export function RegisterScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("transactions.write");
-  const canExport = useCan("exports.run");
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
@@ -81,21 +76,6 @@ export function RegisterScreen({
           .join(" · ")}
         actions={
           <>
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  window.location.href = exportUrl(
-                    `register/${account.id}`,
-                    range,
-                  );
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
             {canWrite ? (
               <Button
                 variant="primary"

@@ -266,9 +266,10 @@ describe("what a period picker may offer", () => {
 
   it("starts the year list at 2026 and grows on its own", () => {
     assert.deepEqual(recordYears(AUG_2026), [2026]);
-    assert.deepEqual(recordYears(new Date("2028-03-01T12:00:00Z")), [
-      2028, 2027, 2026,
-    ]);
+    assert.deepEqual(
+      recordYears(new Date("2028-03-01T12:00:00Z")),
+      [2028, 2027, 2026],
+    );
   });
 
   it("refuses every month before the books begin", () => {
@@ -280,10 +281,18 @@ describe("what a period picker may offer", () => {
   });
 
   it("offers this month, and neither end beyond it", () => {
-    assert.equal(isSelectableMonth(2026, 8, AUG_2026), true, "the month running");
+    assert.equal(
+      isSelectableMonth(2026, 8, AUG_2026),
+      true,
+      "the month running",
+    );
     assert.equal(isSelectableMonth(2026, 7, AUG_2026), true);
     assert.equal(isSelectableMonth(2026, 5, AUG_2026), true, "the first month");
-    assert.equal(isSelectableMonth(2026, 4, AUG_2026), false, "before the books");
+    assert.equal(
+      isSelectableMonth(2026, 4, AUG_2026),
+      false,
+      "before the books",
+    );
     assert.equal(isSelectableMonth(2026, 9, AUG_2026), false, "not yet");
   });
 

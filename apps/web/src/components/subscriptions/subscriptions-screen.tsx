@@ -3,7 +3,7 @@
 import {
   BILLING_CYCLE_LABELS,
   SUBSCRIPTION_CATEGORY_LABELS,
-  SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_STATUS_TABS,
   SUBSCRIPTION_STATUS_LABELS,
   formatMoney,
   type SubscriptionCategory,
@@ -40,14 +40,6 @@ import { cn } from "@/lib/utils";
  * habit rather than a schedule, and a monthly total built from one would
  * assert spending that may never have happened.
  */
-const TABS: { id: SubscriptionStatus | "all"; label: string }[] = [
-  ...SUBSCRIPTION_STATUSES.map((status) => ({
-    id: status,
-    label: SUBSCRIPTION_STATUS_LABELS[status],
-  })),
-  { id: "all", label: "All" },
-];
-
 export function SubscriptionsScreen({
   accounts,
   members,
@@ -155,7 +147,7 @@ export function SubscriptionsScreen({
             the underline row it had — underlines are for switching between
             documents, which these five are not. */}
         <Segmented
-          options={TABS}
+          options={SUBSCRIPTION_STATUS_TABS}
           value={tab}
           onChange={setTab}
           label="Subscription status"
@@ -206,7 +198,7 @@ export function SubscriptionsScreen({
             title={
               tab === "all"
                 ? "No subscriptions yet"
-                : `Nothing is ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}`
+                : `Nothing is ${SUBSCRIPTION_STATUS_TABS.find((t) => t.id === tab)?.label.toLowerCase()}`
             }
           >
             {tab === "all"

@@ -1,10 +1,9 @@
 "use client";
 
 import type { TxnDirection } from "@finance/shared";
-import { Download, LoaderCircle, X } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,7 +14,6 @@ import { SearchField } from "@/components/ui/search-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import {
-  exportUrl,
   ledgerApi,
   type LedgerSummary,
   type TransactionDto,
@@ -61,8 +59,6 @@ export function TransactionsScreen({
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
-  const canExport = useCan("exports.run");
-
   const [filters, setFilters] = useState<LedgerFilters>({});
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<TransactionDto[]>([]);
@@ -123,22 +119,6 @@ export function TransactionsScreen({
         title="Transactions"
         icon="swap_vert"
         description="Every movement of money, in and out."
-        actions={
-          canExport ? (
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => {
-                // The filter only. The sheet is every matching row, not the
-                // page being looked at.
-                window.location.href = exportUrl("transactions", filters);
-              }}
-            >
-              <Download className="size-4" />
-              Excel
-            </Button>
-          ) : null
-        }
       />
 
       <StatStrip>

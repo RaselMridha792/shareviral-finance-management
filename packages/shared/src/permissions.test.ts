@@ -52,13 +52,7 @@ describe("the HR boundary", () => {
 
   it("grants compensation access to the money roles and to HR", () => {
     const allowed = ROLES.filter((role) => canSeeCompensation(role));
-    assert.deepEqual(allowed, [
-      "super_admin",
-      "ceo",
-      "admin",
-      "finance",
-      "hr",
-    ]);
+    assert.deepEqual(allowed, ["super_admin", "ceo", "admin", "finance", "hr"]);
   });
 
   it("leaves paying the payroll to the roles that hold the bank", () => {

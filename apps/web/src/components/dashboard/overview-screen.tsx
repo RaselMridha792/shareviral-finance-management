@@ -21,7 +21,6 @@ import {
   ShareBar,
   StatCell,
   StatStrip,
-  StatusPill,
 } from "@/components/ui/patterns";
 
 /**
@@ -109,14 +108,6 @@ export function OverviewScreen({
             />
             Overview, {firstName}
           </h1>
-          {/* What the page is, in one line — and which currency it is in, which
-              is the first thing anybody asks of a figure on a screen like
-              this. */}
-          <p className="mt-1 text-sm text-muted-foreground">
-            Consolidated cash position across{" "}
-            {report.groups.reduce((total, g) => total + g.accounts.length, 0)}{" "}
-            accounts · reported in {report.currency}
-          </p>
           {/*
             The rate line is gone when there is a rate, and stays when there is
             not.
@@ -187,7 +178,6 @@ export function OverviewScreen({
           key={group.key}
           group={group}
           ended={periodHasEnded}
-          monthName={MONTH_NAMES[month - 1]}
           // December's opening is carried from November, and January's from
           // December — hence the wrap rather than `month - 2`.
           previousMonthName={MONTH_NAMES[(month + 10) % 12]}
@@ -222,20 +212,19 @@ export function OverviewScreen({
 function AccountBlock({
   group,
   ended,
-  monthName,
   previousMonthName,
 }: {
   group: AccountGroup;
   /** True when the month on screen is over, so the figure is a close. */
   ended: boolean;
-  monthName: string;
   /** Where the opening figure came from — "Carried forward from July". */
   previousMonthName: string;
 }) {
   const inflow = Number(group.moneyIn);
   const outflow = Number(group.moneyOut);
+  // In plus out, not in minus out: this is the denominator the two share bars
+  // divide by, so it is how much moved rather than which way it went.
   const moved = inflow + outflow;
-  const net = inflow - outflow;
 
   return (
     <section className="flex flex-col gap-3">
@@ -258,14 +247,6 @@ function AccountBlock({
         icon={group.key === "card" ? "credit_card" : "account_balance"}
         iconTone="text-primary-text"
         qualifier={group.accounts.join(" · ")}
-        aside={
-          moved > 0 ? (
-            <StatusPill tone={net >= 0 ? "positive" : "negative"}>
-              Net for {monthName} {net >= 0 ? "+" : "−"}
-              {money(Math.abs(net).toFixed(2))}
-            </StatusPill>
-          ) : null
-        }
       />
 
       <StatStrip>

@@ -330,7 +330,6 @@ export const USUAL_DEDUCTIONS = [
   "Leave Without Pay",
 ] as const;
 
-
 /* -------------------------------------------------------------------------- */
 /*  Payroll                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -414,7 +413,10 @@ export const updatePayrollLineSchema = z
       v.paidDays == null ||
       v.workingDays == null ||
       v.paidDays <= v.workingDays,
-    { message: "Paid days cannot be more than the working days", path: ["paidDays"] },
+    {
+      message: "Paid days cannot be more than the working days",
+      path: ["paidDays"],
+    },
   );
 export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
 

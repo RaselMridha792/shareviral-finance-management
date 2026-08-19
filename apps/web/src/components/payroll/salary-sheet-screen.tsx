@@ -13,7 +13,6 @@ import {
   ArrowLeft,
   Calculator,
   CircleCheck,
-  Download,
   LoaderCircle,
   Lock,
   ListTree,
@@ -40,7 +39,6 @@ import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
-import { exportUrl } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import {
   payrollApi,
@@ -66,9 +64,6 @@ export function SalarySheetScreen({
   const canSetPay = useCan("team.compensation.write");
   // `exports.run` alone is not enough for a file of salary figures — HR holds
   // it and does not hold payroll.read.
-  const canRunExports = useCan("exports.run");
-  const canReadPayroll = useCan("payroll.read");
-  const canExport = canRunExports && canReadPayroll;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,18 +228,6 @@ export function SalarySheetScreen({
         description={`${lines.length} people · ${PAYROLL_STATUS_LABELS[run.status]}`}
         actions={
           <>
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  window.location.href = exportUrl(`payroll/${run.id}`, {});
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
             {canWrite && draft ? (
               <Button
                 variant="secondary"

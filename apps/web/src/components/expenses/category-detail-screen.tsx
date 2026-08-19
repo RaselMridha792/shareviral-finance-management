@@ -1,23 +1,17 @@
 "use client";
 
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { useCan } from "@/components/auth/session-provider";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import {
-  exportUrl,
-  type ExpenseSummary,
-  type TransactionDto,
-} from "@/lib/ledger";
+import { type ExpenseSummary, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { MonthPicker, type Range } from "./month-picker";
 
@@ -37,7 +31,6 @@ export function CategoryDetailScreen({
   categories: CategoryNode[];
 }) {
   const router = useRouter();
-  const canExport = useCan("exports.run");
 
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
@@ -65,23 +58,6 @@ export function CategoryDetailScreen({
         actions={
           <>
             <MonthPicker range={range} onChange={changeRange} />
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  window.location.href = exportUrl("transactions", {
-                    from: range.from,
-                    to: range.to,
-                    direction: "out",
-                    categorySlug: heading.slug,
-                  });
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
           </>
         }
       />

@@ -5,7 +5,7 @@ import {
   ENGAGEMENT_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Download, Eye, Plus, Users } from "lucide-react";
+import { Eye, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -19,7 +19,6 @@ import { DataPanel } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
-import { exportUrl } from "@/lib/ledger";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
@@ -32,23 +31,13 @@ export function TeamScreen({
   const router = useRouter();
   const canWrite = useCan("team.write");
   const canSeePay = useCan("team.compensation.read");
-  // Each read unconditionally: `exports.run` says this role may download
-  // things, `team.read` says it may see this.
-  const canRunExports = useCan("exports.run");
-  const canReadTeam = useCan("team.read");
-  const canExport = canRunExports && canReadTeam;
 
   const [page, setPage] = useState(initialPage);
   const [query, setQuery] = useState("");
-  // What the table is actually filtered by. The search box can hold text that
-  // has not been submitted yet, and the download has to match the rows on
-  // screen rather than the typing.
-  const [applied, setApplied] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function refresh(q = query) {
     setPage(await teamApi.list({ q: q || undefined }));
-    setApplied(q);
     router.refresh();
   }
 
@@ -111,22 +100,6 @@ export function TeamScreen({
         description="Everyone on the payroll, and everyone who bills."
         actions={
           <>
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  // The directory only. Pay is not in this DTO, so it cannot
-                  // be in this file.
-                  window.location.href = exportUrl("team-members", {
-                    q: applied || undefined,
-                  });
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
             {canWrite ? (
               <Button
                 variant="primary"

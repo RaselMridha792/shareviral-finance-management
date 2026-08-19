@@ -91,7 +91,10 @@ describe("paid days on a payroll line", () => {
    * there, rather than "24 of null".
    */
   it("takes one without the other", () => {
-    assert.equal(updatePayrollLineSchema.safeParse({ paidDays: 24 }).success, true);
+    assert.equal(
+      updatePayrollLineSchema.safeParse({ paidDays: 24 }).success,
+      true,
+    );
     assert.equal(
       updatePayrollLineSchema.safeParse({ workingDays: 26 }).success,
       true,

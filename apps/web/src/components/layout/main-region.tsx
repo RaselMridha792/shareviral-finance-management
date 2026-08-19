@@ -16,6 +16,19 @@ import { RateCaption } from "@/components/money/rate-caption";
  */
 const FULL_BLEED = ["/assistant"];
 
+/**
+ * Screens that do not carry the rate caption at their foot.
+ *
+ * The caption is this app's promise that a translated figure says what rate
+ * produced it, so taking it off a screen is not a cosmetic decision. It comes
+ * off the dashboard on the owner's instruction, and the promise still holds:
+ * the top bar states the same rate — "FX locked ৳118.75 / $1" — on every
+ * screen. If that chip ever goes, this list has to be emptied.
+ *
+ * Matched by equality, not prefix. "/" is a prefix of every route in the app.
+ */
+const NO_RATE_CAPTION = ["/"];
+
 export function MainRegion({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const fullBleed = FULL_BLEED.some((route) => pathname.startsWith(route));
@@ -46,13 +59,13 @@ export function MainRegion({ children }: { children: ReactNode }) {
       <div className="flex flex-col gap-5">
         {children}
         {/*
-          Under every screen, because every screen now shows dollar figures
+          Under nearly every screen, because a screen shows dollar figures
           translated from taka and a translated figure that does not say what
           rate produced it is a number nobody can check. Here rather than on
           each page: one rate governs the whole app, so the sentence belongs in
-          one place.
+          one place — including the decision about which screens skip it.
         */}
-        <RateCaption />
+        {NO_RATE_CAPTION.includes(pathname) ? null : <RateCaption />}
       </div>
     </main>
   );

@@ -67,7 +67,9 @@ export const tdsBandSchema = z.strictObject({
     .min(0)
     .max(1)
     .refine(
-      (v) => Number.isInteger(Math.round(v * 10000)) && Math.abs(v * 10000 - Math.round(v * 10000)) < 1e-9,
+      (v) =>
+        Number.isInteger(Math.round(v * 10000)) &&
+        Math.abs(v * 10000 - Math.round(v * 10000)) < 1e-9,
       "A rate carries at most four decimal places",
     ),
 });
@@ -356,8 +358,7 @@ export function calculateTds(
   const firstBand = toMinorUnits(policy.slabs[0]?.width ?? "0");
   const isTaxpayer = taxable > firstBand;
   const floor = toMinorUnits(policy.minimumTax);
-  const floored =
-    policy.minimumTaxEnabled && isTaxpayer && afterRebate < floor;
+  const floored = policy.minimumTaxEnabled && isTaxpayer && afterRebate < floor;
   const net = floored ? floor : afterRebate;
 
   return {

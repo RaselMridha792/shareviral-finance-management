@@ -46,22 +46,99 @@ describe("TDS, against the advisor's twelve handwritten calculations", () => {
     monthlyTds: string;
   }> = [
     // Under the first band: no tax, and no minimum tax either.
-    { name: "Omare Ahamed Sakib", monthly: 45000, taxable: "360000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "Khairul Bashar", monthly: 37000, taxable: "296000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "Amir Faysal", monthly: 30000, taxable: "240000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "Shahriar Hossain", monthly: 42000, taxable: "336000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "Sagar Biswas", monthly: 46000, taxable: "368000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "Rukiya Islam Tazin", monthly: 40000, taxable: "320000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
-    { name: "SM Showkot Hasan", monthly: 43000, taxable: "344000.00", beforeRebate: "0.00", net: "0.00", monthlyTds: "0.00" },
+    {
+      name: "Omare Ahamed Sakib",
+      monthly: 45000,
+      taxable: "360000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "Khairul Bashar",
+      monthly: 37000,
+      taxable: "296000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "Amir Faysal",
+      monthly: 30000,
+      taxable: "240000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "Shahriar Hossain",
+      monthly: 42000,
+      taxable: "336000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "Sagar Biswas",
+      monthly: 46000,
+      taxable: "368000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "Rukiya Islam Tazin",
+      monthly: 40000,
+      taxable: "320000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
+    {
+      name: "SM Showkot Hasan",
+      monthly: 43000,
+      taxable: "344000.00",
+      beforeRebate: "0.00",
+      net: "0.00",
+      monthlyTds: "0.00",
+    },
 
     // Over the threshold, but the rebate wipes the liability out — so the
     // floor lifts them back to 5,000.
-    { name: "Ibne Saleheen", monthly: 67000, taxable: "536000.00", beforeRebate: "13600.00", net: "5000.00", monthlyTds: "416.66" },
-    { name: "(unnamed, 62k)", monthly: 62000, taxable: "496000.00", beforeRebate: "9600.00", net: "5000.00", monthlyTds: "416.66" },
+    {
+      name: "Ibne Saleheen",
+      monthly: 67000,
+      taxable: "536000.00",
+      beforeRebate: "13600.00",
+      net: "5000.00",
+      monthlyTds: "416.66",
+    },
+    {
+      name: "(unnamed, 62k)",
+      monthly: 62000,
+      taxable: "496000.00",
+      beforeRebate: "9600.00",
+      net: "5000.00",
+      monthlyTds: "416.66",
+    },
 
     // Ordinary taxpayers.
-    { name: "MD. Yeasin Hossain", monthly: 100000, taxable: "800000.00", beforeRebate: "45000.00", net: "21000.00", monthlyTds: "1750.00" },
-    { name: "Emon Reja", monthly: 200000, taxable: "1950000.00", beforeRebate: "277500.00", net: "219000.00", monthlyTds: "18250.00" },
+    {
+      name: "MD. Yeasin Hossain",
+      monthly: 100000,
+      taxable: "800000.00",
+      beforeRebate: "45000.00",
+      net: "21000.00",
+      monthlyTds: "1750.00",
+    },
+    {
+      name: "Emon Reja",
+      monthly: 200000,
+      taxable: "1950000.00",
+      beforeRebate: "277500.00",
+      net: "219000.00",
+      monthlyTds: "18250.00",
+    },
   ];
 
   for (const c of cases) {
@@ -91,7 +168,11 @@ describe("TDS, against the advisor's twelve handwritten calculations", () => {
 
     assert.equal(r.taxableIncome, "720000.00");
     assert.equal(r.taxBeforeRebate, "33000.00", "the slabs give 33,000");
-    assert.notEqual(r.taxBeforeRebate, "32000.00", "the handwriting says 32,000");
+    assert.notEqual(
+      r.taxBeforeRebate,
+      "32000.00",
+      "the handwriting says 32,000",
+    );
 
     // Everything else on that page agrees, which is what makes it a slip
     // rather than a disagreement about the rule.
@@ -147,7 +228,11 @@ describe("the rebate, as a bracket", () => {
     // the figure has to follow. A hard-coded 3.75% would not.
     const generous: TdsPolicy = {
       ...DEFAULT_TDS_POLICY,
-      rebate: { ...DEFAULT_TDS_POLICY.rebate, investmentRate: 0.5, taxableShareCap: 1 },
+      rebate: {
+        ...DEFAULT_TDS_POLICY.rebate,
+        investmentRate: 0.5,
+        taxableShareCap: 1,
+      },
     };
     const r = calculateTds(annual(100000), generous);
     assert.equal(r.taxableIncome, "800000.00");
@@ -248,7 +333,10 @@ describe("proRataTds", () => {
 
   it("does not use the calendar, so February pays the same daily rate", () => {
     assert.equal(proRataTds("3000.00", 28), proRataTds("3000.00", 28, 30));
-    assert.notEqual(proRataTds("3000.00", 28, 28), proRataTds("3000.00", 28, 30));
+    assert.notEqual(
+      proRataTds("3000.00", 28, 28),
+      proRataTds("3000.00", 28, 30),
+    );
   });
 });
 
@@ -548,7 +636,10 @@ describe("monthlyTdsFor", () => {
   it("deducts nothing from a salary under the threshold", () => {
     // 45,000 a month is 5,40,000 a year: a 1,80,000 exemption leaves 3,60,000,
     // which is inside the first band.
-    const { monthlyTds, result } = monthlyTdsFor("45000.00", DEFAULT_TDS_POLICY);
+    const { monthlyTds, result } = monthlyTdsFor(
+      "45000.00",
+      DEFAULT_TDS_POLICY,
+    );
     assert.equal(result.taxableIncome, "360000.00");
     assert.equal(monthlyTds, "0.00");
   });
@@ -621,7 +712,10 @@ describe("the basis stored on a payroll line", () => {
     assert.equal(
       tdsBasisSchema.safeParse({
         ...basis,
-        policy: { ...DEFAULT_TDS_POLICY, slabs: DEFAULT_TDS_POLICY.slabs.slice(0, 5) },
+        policy: {
+          ...DEFAULT_TDS_POLICY,
+          slabs: DEFAULT_TDS_POLICY.slabs.slice(0, 5),
+        },
       }).success,
       false,
       "a slab table with no open band must not be storable as a basis either",
@@ -634,7 +728,8 @@ describe("the basis stored on a payroll line", () => {
       false,
     );
     assert.equal(
-      tdsBasisSchema.safeParse({ ...basis, declaredInvestment: "-1.00" }).success,
+      tdsBasisSchema.safeParse({ ...basis, declaredInvestment: "-1.00" })
+        .success,
       false,
     );
   });

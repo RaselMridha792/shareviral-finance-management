@@ -86,7 +86,9 @@ describe("readImageSize", () => {
    * The file is malformed either way; what matters is that it ends.
    */
   it("terminates on a segment with an impossible length", () => {
-    const bad = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x00, 0x00, 0x00]);
+    const bad = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe1, 0x00, 0x00, 0x00, 0x00,
+    ]);
     assert.equal(readImageSize(bad), null);
   });
 
@@ -111,7 +113,10 @@ describe("checkSignatureImage", () => {
   });
 
   it("refuses a PDF", () => {
-    const result = checkSignatureImage({ ...good, mimeType: "application/pdf" });
+    const result = checkSignatureImage({
+      ...good,
+      mimeType: "application/pdf",
+    });
     assert.equal(result.ok, false);
   });
 
@@ -125,7 +130,10 @@ describe("checkSignatureImage", () => {
   });
 
   it("refuses one too narrow to print", () => {
-    assert.equal(checkSignatureImage({ ...good, width: 200, height: 60 }).ok, false);
+    assert.equal(
+      checkSignatureImage({ ...good, width: 200, height: 60 }).ok,
+      false,
+    );
   });
 
   /** Nobody signs in a square, and a square scan is uncropped paper. */

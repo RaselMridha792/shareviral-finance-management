@@ -334,10 +334,13 @@ export const subscriptionsQuerySchema = z
     year: z.coerce.number().int().min(2020).max(2100).optional(),
     month: z.coerce.number().int().min(1).max(12).optional(),
   })
-  .refine((value) => (value.year === undefined) === (value.month === undefined), {
-    message: "Give both a year and a month, or neither.",
-    path: ["month"],
-  });
+  .refine(
+    (value) => (value.year === undefined) === (value.month === undefined),
+    {
+      message: "Give both a year and a month, or neither.",
+      path: ["month"],
+    },
+  );
 export type SubscriptionsQuery = z.infer<typeof subscriptionsQuerySchema>;
 
 /** The same month, plus the filters the list on screen is showing. */
@@ -348,10 +351,13 @@ export const exportSubscriptionsQuerySchema = z
     q: z.string().trim().max(120).optional(),
     includeInactive: boolish.default(false),
   })
-  .refine((value) => (value.year === undefined) === (value.month === undefined), {
-    message: "Give both a year and a month, or neither.",
-    path: ["month"],
-  });
+  .refine(
+    (value) => (value.year === undefined) === (value.month === undefined),
+    {
+      message: "Give both a year and a month, or neither.",
+      path: ["month"],
+    },
+  );
 export type ExportSubscriptionsQuery = z.infer<
   typeof exportSubscriptionsQuerySchema
 >;
@@ -527,3 +533,36 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   canceled: "Canceled",
   expired: "Expired",
 };
+
+/**
+ * The order a status filter reads in, wherever one appears.
+ *
+ * Deliberately not `SUBSCRIPTION_STATUSES` with "all" bolted on the end, which
+ * is what every screen was doing. That array is the *enum* — its order is the
+ * Postgres type's declaration order, and reordering it to make some tabs read
+ * better would mean a migration for a cosmetic reason, on a type that is also
+ * the shape of stored data.
+ *
+ * This is the reading order and nothing else. "All" leads because the
+ * unfiltered view is where somebody starts, and the rest run from the state a
+ * plan is in most often to the one it is in least.
+ */
+export const SUBSCRIPTION_STATUS_FILTERS = [
+  "all",
+  "active",
+  "paused",
+  "expired",
+  "canceled",
+] as const;
+
+export type SubscriptionStatusFilter =
+  (typeof SUBSCRIPTION_STATUS_FILTERS)[number];
+
+/** The tabs themselves, so two screens cannot build them differently. */
+export const SUBSCRIPTION_STATUS_TABS: ReadonlyArray<{
+  id: SubscriptionStatusFilter;
+  label: string;
+}> = SUBSCRIPTION_STATUS_FILTERS.map((id) => ({
+  id,
+  label: id === "all" ? "All" : SUBSCRIPTION_STATUS_LABELS[id],
+}));

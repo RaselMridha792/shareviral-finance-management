@@ -162,7 +162,10 @@ describe("formatMoney — the grouping setting governs the taka only", () => {
   });
 
   it("groups the taka in lakhs at the same moment", () => {
-    assert.equal(formatMoney("187083", { format: "bangladeshi" }), "৳1,87,083.00");
+    assert.equal(
+      formatMoney("187083", { format: "bangladeshi" }),
+      "৳1,87,083.00",
+    );
   });
 
   it("holds at a crore of dollars", () => {

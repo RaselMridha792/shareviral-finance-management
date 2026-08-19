@@ -91,7 +91,11 @@ export function isBeforeRecordYear(year: number): boolean {
 export function recordYears(now: Date = new Date()): number[] {
   const [thisYear] = todayInDhaka(now).split("-").map(Number);
   const years: number[] = [];
-  for (let year = Math.max(thisYear, RECORDS_START.year); year >= RECORDS_START.year; year--) {
+  for (
+    let year = Math.max(thisYear, RECORDS_START.year);
+    year >= RECORDS_START.year;
+    year--
+  ) {
     years.push(year);
   }
   return years;

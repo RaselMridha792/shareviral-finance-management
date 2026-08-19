@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, LoaderCircle, Plus, Receipt } from "lucide-react";
+import { LoaderCircle, Plus, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -15,7 +15,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SummaryBar } from "@/components/ui/patterns";
 import { ApiError } from "@/lib/api-client";
 import {
-  exportUrl,
   ledgerApi,
   type ExpenseSummary,
   type TransactionDto,
@@ -38,7 +37,6 @@ export function ExpensesScreen({
   categories: CategoryNode[];
 }) {
   const canWrite = useCan("transactions.write");
-  const canExport = useCan("exports.run");
 
   const [range, setRange] = useState(initialRange);
   const [summary, setSummary] = useState(initialSummary);
@@ -87,8 +85,6 @@ export function ExpensesScreen({
     void load();
   }, [load]);
 
-  const filters = { from: range.from, to: range.to, direction: "out" as const };
-
   const errorBanner = error ? (
     <p
       role="alert"
@@ -109,18 +105,6 @@ export function ExpensesScreen({
         actions={
           <>
             <MonthPicker range={range} onChange={setRange} />
-            {canExport ? (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => {
-                  window.location.href = exportUrl("transactions", filters);
-                }}
-              >
-                <Download className="size-4" />
-                Excel
-              </Button>
-            ) : null}
             {canWrite ? (
               <Button
                 variant="primary"

@@ -3,7 +3,7 @@
 import {
   BILLING_CYCLE_LABELS,
   SUBSCRIPTION_CATEGORY_LABELS,
-  SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_STATUS_TABS,
   SUBSCRIPTION_STATUS_LABELS,
   formatMoney,
   type SubscriptionStatus,
@@ -30,14 +30,6 @@ import { cn } from "@/lib/utils";
  * Five tabs, and the fifth is not a status — "All" is the absence of the
  * filter rather than a value of it.
  */
-const TABS: { id: SubscriptionStatus | "all"; label: string }[] = [
-  ...SUBSCRIPTION_STATUSES.map((status) => ({
-    id: status,
-    label: SUBSCRIPTION_STATUS_LABELS[status],
-  })),
-  { id: "all", label: "All" },
-];
-
 export function MemberTools({
   memberId,
   numberFormat,
@@ -129,7 +121,7 @@ export function MemberTools({
         aria-label="Tool status for this person"
         className="tabs-scroll flex gap-1 border-b border-border"
       >
-        {TABS.map((entry) => {
+        {SUBSCRIPTION_STATUS_TABS.map((entry) => {
           const count =
             entry.id === "all" ? rows.length : (counts.get(entry.id) ?? 0);
           return (
@@ -155,8 +147,11 @@ export function MemberTools({
 
       {shown.length === 0 ? (
         <p className="py-4 text-sm text-muted-foreground">
-          Nothing {TABS.find((t) => t.id === tab)?.label.toLowerCase()} for this
-          person.
+          Nothing{" "}
+          {SUBSCRIPTION_STATUS_TABS.find(
+            (t) => t.id === tab,
+          )?.label.toLowerCase()}{" "}
+          for this person.
         </p>
       ) : (
         <div className="table-scroll overflow-x-auto">
