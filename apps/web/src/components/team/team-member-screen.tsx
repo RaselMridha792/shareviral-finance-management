@@ -430,7 +430,12 @@ export function TeamMemberScreen({
 
                   {/* The four lines behind the one figure. On the person, not
                       on a month — this is what they are paid, and the payslip
-                      is where a particular month's version of it lives. */}
+                      is where a particular month's version of it lives.
+
+                      Each carries its share as well as its amount. The amount
+                      is the fact and the share is the rule, and somebody
+                      checking a payslip against the offer letter is reading
+                      for the rule. */}
                   {currentPay.components?.length ? (
                     <dl className="mt-3 flex flex-col gap-1 border-t border-border pt-3 text-sm">
                       {currentPay.components.map((part) => (
@@ -440,6 +445,9 @@ export function TeamMemberScreen({
                         >
                           <dt className="text-muted-foreground">
                             {part.label}
+                            <span className="num ml-1.5 text-xs text-faint">
+                              {shareOf(part.amount, currentPay.grossAmount)}
+                            </span>
                           </dt>
                           <dd>
                             <Amount
@@ -784,6 +792,22 @@ function DocumentLink({ href, label }: { href: string | null; label: string }) {
 }
 
 /** Only letters: a name like "HR (test)" must not render as "H(". */
+/**
+ * What share of the gross a component is, as the label states it.
+ *
+ * Worked out from the two figures rather than read from the rule in Settings.
+ * The components were frozen at the raise that set them, so a person hired
+ * under an older split still reads correctly — and if the rule changes
+ * tomorrow, this page goes on describing what this person is actually on.
+ */
+function shareOf(part: string, gross: string): string {
+  const whole = Number(gross);
+  if (!Number.isFinite(whole) || whole <= 0) return "";
+  const percent = (Number(part) / whole) * 100;
+  const rounded = Math.round(percent * 10) / 10;
+  return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
+}
+
 function initialsOf(fullName: string): string {
   return (
     fullName

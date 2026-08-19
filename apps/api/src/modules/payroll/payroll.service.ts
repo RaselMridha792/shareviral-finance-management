@@ -137,6 +137,21 @@ export class PayrollService {
         snapshotBankAccount: payrollLines.snapshotBankAccount,
         snapshotEtin: payrollLines.snapshotEtin,
         remarks: payrollLines.remarks,
+        /*
+         * The six the sheet reads and this query did not send.
+         *
+         * The web DTO has claimed them since the breakdown shipped, so the
+         * compiler was satisfied and every one of them arrived `undefined`:
+         * the Breakdown drawer opened empty on a line that had a stored
+         * breakdown, and the tax working had nothing to show. Nobody had seen
+         * it because both need a built sheet to reach.
+         */
+        earningsBreakdown: payrollLines.earningsBreakdown,
+        deductionsBreakdown: payrollLines.deductionsBreakdown,
+        tdsBasis: payrollLines.tdsBasis,
+        tdsDeclaredInvestment: payrollLines.tdsDeclaredInvestment,
+        paidDays: payrollLines.paidDays,
+        workingDays: payrollLines.workingDays,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))

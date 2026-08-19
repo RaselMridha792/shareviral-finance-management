@@ -16,6 +16,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { PayslipBreakdown } from "@finance/shared";
 
 import { accounts } from "./accounts";
 import { paymentMethodEnum, psrStatusEnum } from "./enums";
@@ -421,8 +422,19 @@ export const payrollLines = pgTable(
      * December's salary structure. `compensation_history.components` holds
      * somebody's *current* split; these hold the one that was actually paid.
      */
-    earningsBreakdown: jsonb("earnings_breakdown"),
-    deductionsBreakdown: jsonb("deductions_breakdown"),
+    /*
+     * Typed, so a reader gets `{label, amount}[]` rather than `{}`.
+     *
+     * Every write goes through `payslipBreakdownSchema` — the update endpoint
+     * validates it and the run builder produces it — so the shape is the
+     * app's to assert. Untyped, `select()`ing the column handed every caller
+     * an opaque object, and the two that use it worked only because the web
+     * DTO asserted a shape nothing checked.
+     */
+    earningsBreakdown: jsonb("earnings_breakdown").$type<PayslipBreakdown>(),
+    deductionsBreakdown: jsonb(
+      "deductions_breakdown",
+    ).$type<PayslipBreakdown>(),
 
     /**
      * "24 of 26" on the slip.

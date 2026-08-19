@@ -2,10 +2,12 @@
 
 import {
   calculateTds,
+  fromMinorUnits,
   PAYMENT_MODES,
   PAYMENT_MODE_LABELS,
   PAYROLL_STATUS_LABELS,
   todayInDhaka,
+  toMinorUnits,
 } from "@finance/shared";
 import {
   ArrowLeft,
@@ -23,7 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
@@ -77,6 +79,61 @@ export function SalarySheetScreen({
 
   const draft = run.status === "draft";
   const refresh = () => router.refresh();
+
+  /**
+   * The parts a gross is divided into, taken from the sheet rather than from
+   * Settings.
+   *
+   * Settings holds the rule as it is *today*; these lines were frozen when the
+   * month was built. Reading the columns off the lines means an old sheet keeps
+   * the headings it was made with, and a sheet where somebody has edited one
+   * person's breakdown by hand still shows every part that exists in it.
+   *
+   * First-seen order, so the columns run Basic, House Rent, Conveyance,
+   * Medical — the order the rule is written in — rather than alphabetically.
+   */
+  const splitLabels = useMemo(() => {
+    const seen: string[] = [];
+    for (const line of lines) {
+      for (const part of line.earningsBreakdown ?? []) {
+        if (!seen.includes(part.label)) seen.push(part.label);
+      }
+    }
+    return seen;
+  }, [lines]);
+
+  /** Each part summed down the sheet, for the heading's share and the total. */
+  const splitTotals = useMemo(() => {
+    const sums: Record<string, string> = {};
+    for (const label of splitLabels) {
+      let minor = BigInt(0);
+      for (const line of lines) {
+        const part = line.earningsBreakdown?.find((p) => p.label === label);
+        if (part) minor += toMinorUnits(part.amount);
+      }
+      sums[label] = fromMinorUnits(minor);
+    }
+    return sums;
+  }, [lines, splitLabels]);
+
+  /**
+   * The three columns the run does not carry a total for.
+   *
+   * `run` has gross, tax and net; bonus and the two "other" columns were left
+   * blank in the totals row. A column of figures with no total under it is a
+   * column somebody adds up by hand.
+   */
+  const totals = useMemo(() => {
+    const sum = (pick: (line: PayrollLineDto) => string) =>
+      fromMinorUnits(
+        lines.reduce((acc, line) => acc + toMinorUnits(pick(line)), BigInt(0)),
+      );
+    return {
+      bonus: sum((line) => line.bonusAmount),
+      otherAdditions: sum((line) => line.otherAdditions),
+      otherDeductions: sum((line) => line.otherDeductions),
+    };
+  }, [lines]);
 
   /**
    * Commits whatever is still being typed, and says so.
@@ -380,6 +437,22 @@ export function SalarySheetScreen({
                 <tr className="text-left">
                   <Th>Name</Th>
                   <Th className="w-28 text-right">Gross</Th>
+                  {/* The gross, opened up. Each heading carries the share it
+                      is of the month's gross, which is the thing the owner
+                      wants to read off the sheet — the amounts alone do not
+                      say whether this month followed the rule. */}
+                  {splitLabels.map((label) => (
+                    <Th key={label} className="w-24 text-right">
+                      {label}
+                      {/* Under the name, not beside it. Beside it, "House Rent
+                          30%" set the column's width from a heading rather
+                          than from the figures, and four of those pushed Net
+                          off the edge of the card. */}
+                      <span className="num block font-normal normal-case opacity-70">
+                        {shareOfGross(splitTotals[label], run.totalGross)}
+                      </span>
+                    </Th>
+                  ))}
                   <Th className="w-28 text-right">Bonus</Th>
                   <Th className="w-28 text-right">Other +</Th>
                   <Th className="w-28 text-right">Tax</Th>
@@ -393,39 +466,34 @@ export function SalarySheetScreen({
                   <LineRow
                     key={line.id}
                     line={line}
+                    splitLabels={splitLabels}
                     editable={canWrite && draft}
                     onSaved={refresh}
                   />
                 ))}
               </tbody>
+              {/*
+                One cell per column, in the columns' own order.
+
+                It was written as a run of colSpans that added up to nine cells
+                for an eight-column table, which put every total one column to
+                the right of the figures it totalled — the gross under Bonus,
+                the tax under Other −. Nobody had seen it because a sheet needs
+                a finalised run to exist. Spelled out now, so adding a column
+                cannot silently shift it again.
+              */}
               <tfoot>
                 <tr className="border-t border-border-strong bg-surface-muted">
-                  <td className="px-4 py-3 font-semibold" colSpan={2}>
-                    Total
-                  </td>
-                  <td className="px-4 py-3">
-                    <Amount
-                      value={run.totalGross}
-                      tone="neutral"
-                      className="block font-semibold"
-                    />
-                  </td>
-                  <td colSpan={2} />
-                  <td className="px-4 py-3">
-                    <Amount
-                      value={run.totalTds}
-                      tone="neutral"
-                      className="block font-semibold"
-                    />
-                  </td>
-                  <td />
-                  <td className="px-4 py-3">
-                    <Amount
-                      value={run.totalNet}
-                      tone="neutral"
-                      className="block font-semibold"
-                    />
-                  </td>
+                  <td className="font-semibold">Total</td>
+                  <FootAmount value={run.totalGross} />
+                  {splitLabels.map((label) => (
+                    <FootAmount key={label} value={splitTotals[label] ?? "0"} />
+                  ))}
+                  <FootAmount value={totals.bonus} />
+                  <FootAmount value={totals.otherAdditions} />
+                  <FootAmount value={run.totalTds} />
+                  <FootAmount value={totals.otherDeductions} />
+                  <FootAmount value={run.totalNet} />
                   <td />
                 </tr>
               </tfoot>
@@ -479,10 +547,13 @@ export function SalarySheetScreen({
 
 function LineRow({
   line,
+  splitLabels,
   editable,
   onSaved,
 }: {
   line: PayrollLineDto;
+  /** The sheet's columns, so every row puts its parts under the same ones. */
+  splitLabels: string[];
   editable: boolean;
   onSaved: () => void;
 }) {
@@ -529,6 +600,31 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
+
+      {/*
+        Read, not typed. The parts follow the gross by the rule the month was
+        built with; the way to change one is the Breakdown drawer, which is
+        where an edit gets recorded as an edit rather than as a figure that
+        silently stopped matching its own gross.
+      */}
+      {splitLabels.map((label) => {
+        const part = line.earningsBreakdown?.find((p) => p.label === label);
+        return (
+          <td key={label} className="py-2">
+            {part ? (
+              <Amount
+                value={part.amount}
+                tone="neutral"
+                showCounterpart={false}
+                className="block"
+              />
+            ) : (
+              <span className="block text-right text-faint">—</span>
+            )}
+          </td>
+        );
+      })}
+
       <Cell
         value={line.bonusAmount}
         field="bonusAmount"
@@ -749,6 +845,33 @@ function Cell({
           highlight && "font-medium",
         )}
       />
+    </td>
+  );
+}
+
+/**
+ * A part's share of the month's gross, as the heading states it.
+ *
+ * Derived from the figures rather than read from the rule in Settings, so it
+ * reports what this sheet actually does. If somebody edits one person's Basic
+ * by hand, the heading stops saying 60% — which is the honest answer and the
+ * one worth seeing.
+ */
+function shareOfGross(part: string | undefined, gross: string): string {
+  const whole = Number(gross);
+  if (part === undefined || !Number.isFinite(whole) || whole <= 0) return "";
+  const percent = (Number(part) / whole) * 100;
+  // One place only where it earns it: 60% reads better than 60.0%, and 33.3%
+  // has to stay distinguishable from a third of something else.
+  const rounded = Math.round(percent * 10) / 10;
+  return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
+}
+
+/** One money cell in the totals row. */
+function FootAmount({ value }: { value: string }) {
+  return (
+    <td className="py-3">
+      <Amount value={value} tone="neutral" className="block font-semibold" />
     </td>
   );
 }

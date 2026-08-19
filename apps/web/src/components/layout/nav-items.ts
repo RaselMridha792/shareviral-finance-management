@@ -60,17 +60,27 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Money",
     items: [
       {
+        // No href: the row opens the two screens under it. The bank position
+        // itself is "Accounts overview", the first child — a parent that is
+        // also a page makes the same row do two things depending on where in
+        // it you press.
         key: "accounts",
-        href: "/accounts",
         label: "Accounts",
         icon: "account_balance",
         hue: 205,
-        permission: "accounts.read",
         children: [
+          {
+            key: "accounts-overview",
+            href: "/accounts",
+            label: "Accounts overview",
+            icon: "account_balance_wallet",
+            hue: 205,
+            permission: "accounts.read",
+          },
           {
             key: "accounts-cash-in",
             href: "/accounts/cash-in",
-            label: "Cash-In",
+            label: "Cash In",
             icon: "savings",
             hue: 158,
             permission: "accounts.read",
@@ -78,21 +88,21 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
-        /**
-         * A page in its own right, and the heading for the two screens
-         * indented under it.
-         *
-         * It used to navigate nowhere and carry an "Overview" child pointing
-         * at /expenses — one more row in the rail for a destination the row
-         * above it could have been. The design has the parent be the page.
-         */
+        // As above: the row opens the three screens under it, and /expenses is
+        // reachable as "Expense overview".
         key: "expenses",
-        href: "/expenses",
         label: "Expenses",
         icon: "receipt_long",
         hue: 27,
-        permission: "transactions.read",
         children: [
+          {
+            key: "expenses-overview",
+            href: "/expenses",
+            label: "Expense overview",
+            icon: "grid_view",
+            hue: 27,
+            permission: "transactions.read",
+          },
           {
             // The register of plans: what is bought, who is on it, which card
             // renews it. The supplier-and-spend screen that used to sit beside

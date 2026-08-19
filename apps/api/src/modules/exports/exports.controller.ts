@@ -620,6 +620,22 @@ export class ExportsController {
 
     type Row = (typeof lines)[number];
 
+    /**
+     * The parts a gross divides into, read off this run's own lines.
+     *
+     * The same list the screen builds its columns from, and for the same
+     * reason: the rule in Settings is today's, while these lines were frozen
+     * when the month was built. Deriving both from the lines is what keeps the
+     * download and the sheet on screen saying the same thing — the promise
+     * every export in this app makes.
+     */
+    const splitLabels: string[] = [];
+    for (const line of lines) {
+      for (const part of line.earningsBreakdown ?? []) {
+        if (!splitLabels.includes(part.label)) splitLabels.push(part.label);
+      }
+    }
+
     const buffer = await this.excel.build<Row>({
       title: `Salary sheet — ${run.label}`,
       subtitle: [
@@ -653,6 +669,17 @@ export class ExportsController {
           kind: "money",
           value: (r) => r.grossAmount,
         },
+        // The gross opened up, in the order the rule writes it. A part a line
+        // does not carry stays empty rather than becoming a zero — absent and
+        // nil are different facts on a salary sheet.
+        ...splitLabels.map((label) => ({
+          header: label,
+          key: `split:${label}`,
+          kind: "money" as const,
+          value: (r: Row) =>
+            r.earningsBreakdown?.find((part) => part.label === label)?.amount ??
+            null,
+        })),
         {
           header: "Bonus",
           key: "bonus",

@@ -3,6 +3,7 @@
 import { hasPermission, type Role } from "@finance/shared";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
 import { BrandMark } from "@/components/layout/brand-mark";
@@ -12,7 +13,10 @@ import {
   type NavItem,
 } from "@/components/layout/nav-items";
 import { SidebarFooter } from "@/components/layout/sidebar-footer";
-import { useSidebarCollapsed } from "@/components/layout/sidebar-state";
+import {
+  toggleSidebar,
+  useSidebarCollapsed,
+} from "@/components/layout/sidebar-state";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
@@ -27,10 +31,12 @@ import { cn } from "@/lib/utils";
  *
  * The active row drops the hue and takes the brand lime, filled.
  *
- * Sub-items are always visible, indented to 24px. They used to be an accordion
- * — a chevron, an open/closed state, a guide line — which hid two of the six
- * money screens behind a click and made the rail change height as you moved
- * around it. The design simply indents them.
+ * Accounts and Expenses are accordions: the row opens the screens under it
+ * rather than going anywhere itself, and the group holding the page you are on
+ * starts open. Sub-items indent to 24px. This is what the owner asked for over
+ * the always-visible list the prototype draws — with eighteen destinations, a
+ * rail you can fold down to the part you are working in is the difference
+ * between a menu and a wall.
  */
 
 /** Width in the two states. The narrow one is icons only, centred. */
@@ -200,6 +206,104 @@ function NavRow({
   );
 }
 
+/**
+ * A parent that navigates nowhere: the row is a button that opens and closes
+ * the list under it.
+ *
+ * Only the chevron moves. Animating the panel's height would make every
+ * navigation feel slower than it is, and this list is opened and closed more
+ * often than anything else on the screen.
+ */
+function NavGroupRow({
+  item,
+  panelId,
+  open,
+  onToggle,
+  holdsCurrentPage,
+  activeHref,
+  collapsed,
+  onNavigate,
+}: {
+  item: NavItem;
+  panelId: string;
+  open: boolean;
+  onToggle: () => void;
+  holdsCurrentPage: boolean;
+  activeHref: string | null;
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
+  // Closed but holding the page you are on: the parent wears the marker, so
+  // the rail still answers "where am I" at a glance. Open, the child does.
+  const wearsActive = holdsCurrentPage && !open;
+
+  return (
+    <div className="flex flex-col gap-[3px]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        title={item.label}
+        className={cn(
+          "group relative flex w-full cursor-pointer items-center rounded-[9px] py-[11px] pr-3 text-left text-[15px] transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
+          collapsed ? "justify-center px-3" : "gap-3 pl-3",
+          wearsActive
+            ? "bg-sidebar-item-active-bg font-semibold text-sidebar-item-active"
+            : holdsCurrentPage
+              ? "font-semibold text-foreground hover:bg-sidebar-item-active-bg/40"
+              : "font-normal text-sidebar-item hover:bg-sidebar-item-active-bg/40 hover:text-foreground",
+        )}
+      >
+        {wearsActive ? <ActiveBar /> : null}
+        <Icon
+          name={item.icon}
+          size={21}
+          fill={holdsCurrentPage}
+          className="nav-icon shrink-0 transition-colors motion-reduce:transition-none"
+          style={{ "--nav-hue": item.hue } as React.CSSProperties}
+        />
+        {collapsed ? (
+          <span className="sr-only">{item.label}</span>
+        ) : (
+          <>
+            <span className="truncate">{item.label}</span>
+            <Icon
+              name="chevron_right"
+              size={17}
+              className={cn(
+                "ml-auto shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                open && "rotate-90",
+              )}
+            />
+          </>
+        )}
+      </button>
+
+      {/* There is nowhere to put an indented list sixteen pixels wide, so in
+          the narrow rail pressing the parent widens the rail and opens it. A
+          flyout would be a second navigation to build and keep working, for a
+          case that is one click away from the real one. */}
+      {collapsed ? null : (
+        <div
+          id={panelId}
+          className={cn("flex flex-col gap-[3px]", !open && "hidden")}
+        >
+          {(item.children ?? []).map((child) => (
+            <NavRow
+              key={child.key}
+              item={child}
+              active={Boolean(child.href) && child.href === activeHref}
+              indent
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  The rail                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -213,8 +317,70 @@ export function SidebarContent({
 }) {
   const pathname = usePathname();
   const user = useSession();
+  /**
+   * Two copies of this component exist at once — the rail and the mobile
+   * drawer — so the panel ids have to be unique per instance for
+   * `aria-controls` to point at anything.
+   */
+  const uid = useId();
+
+  /**
+   * Only groups the reader has pressed land here.
+   *
+   * Everything else falls back to "open if it holds the page you are on",
+   * which is what makes the rail arrive already showing where you are. Kept in
+   * component state rather than storage: the desktop rail is never unmounted,
+   * so a group stays as it was left for as long as the tab is open, and a
+   * fresh visit starts from the page instead of from a stale preference.
+   */
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
   const activeHref = activeHrefFor(pathname);
+
+  const holdsCurrentPage = (item: NavItem) =>
+    (item.children ?? []).some((child) => child.href === activeHref);
+
+  const renderItem = (item: NavItem) => {
+    // A parent with children and no destination of its own is the accordion.
+    if (item.children && !item.href) {
+      const holds = holdsCurrentPage(item);
+      return (
+        <NavGroupRow
+          key={item.key}
+          item={item}
+          panelId={`${uid}-${item.key}`}
+          open={toggled[item.key] ?? holds}
+          collapsed={collapsed}
+          onToggle={() => {
+            // Narrow: widen first, then open — otherwise the press appears to
+            // do nothing at all.
+            if (collapsed) {
+              toggleSidebar();
+              setToggled((current) => ({ ...current, [item.key]: true }));
+              return;
+            }
+            setToggled((current) => ({
+              ...current,
+              [item.key]: !(current[item.key] ?? holds),
+            }));
+          }}
+          holdsCurrentPage={holds}
+          activeHref={activeHref}
+          onNavigate={onNavigate}
+        />
+      );
+    }
+
+    return (
+      <NavRow
+        key={item.key}
+        item={item}
+        active={Boolean(item.href) && item.href === activeHref}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+      />
+    );
+  };
 
   // Imports and Settings are the SYSTEM section, in the flow with the rest —
   // not pinned to the bottom. The footer is what sits at the bottom.
@@ -269,26 +435,7 @@ export function SidebarContent({
               </p>
             )}
 
-            {group.items.map((item) => (
-              <div key={item.key} className="flex flex-col gap-[3px]">
-                <NavRow
-                  item={item}
-                  active={Boolean(item.href) && item.href === activeHref}
-                  collapsed={collapsed}
-                  onNavigate={onNavigate}
-                />
-                {(item.children ?? []).map((child) => (
-                  <NavRow
-                    key={child.key}
-                    item={child}
-                    active={Boolean(child.href) && child.href === activeHref}
-                    indent
-                    collapsed={collapsed}
-                    onNavigate={onNavigate}
-                  />
-                ))}
-              </div>
-            ))}
+            {group.items.map((item) => renderItem(item))}
           </div>
         ))}
       </nav>

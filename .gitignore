@@ -61,3 +61,6 @@ apps/api/test/integration/*.xlsx
 .cols.mjs
 .dollars.mjs
 .one.mjs
+.demo.mjs
+.cols2.mjs
+.navchk.mjs
