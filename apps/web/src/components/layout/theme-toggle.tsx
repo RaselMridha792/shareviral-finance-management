@@ -22,7 +22,9 @@ function getSnapshot(): Theme {
 }
 
 function getServerSnapshot(): Theme {
-  return "light";
+  // Dark, matching the bootstrap script. A server render that guessed light
+  // would flash white before hydration corrected it.
+  return "dark";
 }
 
 export function ThemeToggle() {
@@ -31,8 +33,12 @@ export function ThemeToggle() {
   function toggle() {
     const next: Theme = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
+    // The overscroll ground, so a dark app does not bounce against a white
+    // edge — the same thing the bootstrap script does on first paint.
+    document.documentElement.style.backgroundColor =
+      next === "dark" ? "#141417" : "#f7f7f8";
     try {
-      localStorage.setItem("theme", next);
+      localStorage.setItem("svf-theme-brand", next);
     } catch {
       // Private mode / storage disabled — the toggle still works this session.
     }
@@ -59,4 +65,17 @@ export function ThemeToggle() {
  * Applies the stored theme before first paint so a dark-mode user never sees
  * a light flash. Rendered in <head> as a blocking inline script.
  */
-export const themeScript = `(function(){try{var t=localStorage.getItem("theme");if(!t){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t}catch(e){}})();`;
+/**
+ * Dark unless somebody has said otherwise.
+ *
+ * Not the operating system's preference, which is what this used to read. The
+ * brand is a lime accent on near-black and it only works one way round: on a
+ * white ground the same lime is about 1.4:1 and disappears. Somebody opening
+ * the app for the first time should see the design, not a coin toss made by
+ * their laptop.
+ *
+ * The document background is painted here too, so the overscroll area matches
+ * before React has rendered anything — otherwise a dark app bounces against a
+ * white edge.
+ */
+export const themeScript = `(function(){try{var t=localStorage.getItem("svf-theme-brand");if(t!=="light"&&t!=="dark"){t="dark"}var d=document.documentElement;d.dataset.theme=t;d.style.backgroundColor=t==="dark"?"#141417":"#f7f7f8"}catch(e){document.documentElement.dataset.theme="dark"}})();`;

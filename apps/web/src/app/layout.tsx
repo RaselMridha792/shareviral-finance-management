@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
 
 // Self-hosted, not Google CDN: no third-party request at render time, and no
-// layout jump if a CDN is slow or blocked. Only 400/500/600 are loaded.
+// layout jump if a CDN is slow or blocked.
+//
+// Instrument Sans carries the prose. IBM Plex Sans carries every figure, date,
+// rate and id — as a proportional face with tabular figures, not a monospaced
+// one, because `tabular-nums` is what makes a money column align and a terminal
+// font on a payslip reads as somebody's developer tool.
+import "@fontsource/instrument-sans/400.css";
+import "@fontsource/instrument-sans/500.css";
+import "@fontsource/instrument-sans/600.css";
+import "@fontsource/instrument-sans/700.css";
 import "@fontsource/ibm-plex-sans/400.css";
 import "@fontsource/ibm-plex-sans/500.css";
 import "@fontsource/ibm-plex-sans/600.css";
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/500.css";
-import "@fontsource/jetbrains-mono/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+// The icon face. `index.css` is the outline axis at FILL 0, which is the
+// default the design asks for; the active nav item switches to FILL 1 through
+// `font-variation-settings` rather than a second file.
+import "@fontsource-variable/material-symbols-rounded";
 
 import { themeScript } from "@/components/layout/theme-toggle";
 
