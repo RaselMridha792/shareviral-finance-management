@@ -149,4 +149,6 @@ export const fxApi = {
     apiFetch<FxRateDto[]>(`/fx/rates?limit=${limit}`, fresh),
   set: (input: SetFxRateInput) =>
     apiFetch<FxRateDto>("/fx/rates", { method: "POST", ...json(input) }),
+  remove: (id: string) =>
+    apiFetch<FxRateDto>(`/fx/rates/${id}`, { method: "DELETE" }),
 };

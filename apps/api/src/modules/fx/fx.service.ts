@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   todayInDhaka,
   type FxContext,
@@ -109,6 +114,55 @@ export class FxService {
           )
           .returning();
         return replaced;
+      },
+    });
+  }
+
+  /**
+   * Remove a recorded rate.
+   *
+   * A real delete rather than a void, and the difference is deliberate: a
+   * voided ledger row stays visible because money moved and the record of it
+   * must survive being wrong. A rate is not a movement — it is a stated fact
+   * about a day, and a wrong one that stays on the page keeps translating
+   * figures at a number somebody has already disowned.
+   *
+   * The audit log keeps the before-image, so what the rate said is still
+   * answerable after it is gone.
+   *
+   * Nothing here re-translates history. Every transaction that carries its own
+   * `fx_rate` keeps it — that is a recorded fact about the day money moved,
+   * not a lookup — so deleting a rate changes what *future* reads translate at
+   * and leaves what actually happened alone.
+   */
+  // No `actor` parameter: `audit.mutate` reads who is acting from the request
+  // context, and this method writes no `updatedBy` of its own — the row is
+  // going away. `set` takes one because it stamps the row it keeps.
+  async remove(id: string) {
+    return this.audit.mutate({
+      action: "delete",
+      entityTable: "fx_rates",
+      entityId: id,
+      summary: "Removed a recorded USD rate",
+      module: "fx",
+      read: async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(fxRates)
+          .where(eq(fxRates.id, id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const [row] = await tx
+          .delete(fxRates)
+          .where(eq(fxRates.id, id))
+          .returning();
+
+        if (!row) {
+          throw new NotFoundException("That rate no longer exists.");
+        }
+        return row;
       },
     });
   }

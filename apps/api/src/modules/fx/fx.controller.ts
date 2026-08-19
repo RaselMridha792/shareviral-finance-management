@@ -1,4 +1,4 @@
-import { Controller, Get, Post } from "@nestjs/common";
+import { Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import {
   listFxRatesQuerySchema,
   setFxRateSchema,
@@ -32,5 +32,18 @@ export class FxController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.fx.set(body, actor);
+  }
+
+  /**
+   * Same permission as setting one: whoever may state the rate may unstate it.
+   *
+   * Delete rather than void — a rate is a claim about a day, not a movement of
+   * money, and a wrong claim left on the page goes on translating figures. The
+   * audit log keeps what it said.
+   */
+  @Delete("rates/:id")
+  @RequirePermission("settings.write")
+  remove(@Param("id") id: string) {
+    return this.fx.remove(id);
   }
 }
