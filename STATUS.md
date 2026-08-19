@@ -1146,3 +1146,55 @@ separate column for the dollar, it can go small underneath."*
 So the same treatment as everywhere else: taka on the line, dollars small
 beneath it, in the same cell. Six columns, not seven. `Amount` already renders
 exactly that and is what the other tables use — no new component.
+
+## Next: the salary split, and where it belongs (asked 2026-08-19)
+
+**Not built.** Queued behind the All Transactions and TDS work.
+
+The owner sent a handwritten sheet headed *Salary Statement*:
+
+```
+Basic         60,000
+House Rent    30,000
+Convence       6,000
+Medical        4,000
+             ---------
+             1,00,000
+```
+
+One lakh split 60 / 30 / 6 / 4. They asked where it should live — the team
+member's page, the TDS table, or somewhere else.
+
+### Where it goes, and why
+
+**The team member's page, under Current gross.** That is where they pointed, and
+it is the right place: the split is a fact about what somebody is paid, not
+about a month or a tax. Today that card shows one figure and nothing else, and
+the four numbers behind it exist nowhere a reader can see them.
+
+**The payslip already prints it** — `payroll_lines.earnings_breakdown`, frozen
+per month. Nothing to do there.
+
+**Not the TDS table.** The owner asked for that one to be *ekdom simple* two
+messages earlier, and four more money columns is the opposite. The payslip link
+on each row already opens the full split, which is the same information one
+click away rather than four columns wide.
+
+### No migration needed
+
+`compensation_history.components` is already there, jsonb, added for exactly
+this — the schema comment says *"Room for a basic / house rent / medical /
+conveyance split without a migration"*. What is missing is only that the API
+does not return it and `CompensationDto` does not carry it.
+
+### The percentages should be settings, not constants
+
+60 / 30 / 6 / 4 is this company's convention, not a law, and the same argument
+the owner made about TDS applies: they wanted the rule editable rather than
+buried. So the split lives in Settings with those four as defaults, the form
+computes each line as the gross changes, and every line stays overridable —
+because a salary that does not divide evenly should round somewhere a person
+chose rather than wherever the arithmetic landed.
+
+The stored components must add up to the gross. If they do not, the page says
+so rather than silently showing a total that disagrees with the figure above it.
