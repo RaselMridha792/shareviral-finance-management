@@ -109,6 +109,29 @@ export class FilesController {
     );
   }
 
+  /**
+   * The company's signature. One owner, one row, so the id is not in the path —
+   * `app_settings` has exactly one and putting a 1 in the URL would invite
+   * somebody to try a 2.
+   */
+  @Get("signature")
+  @RequirePermission("settings.read")
+  listSignature(@CurrentUser() actor: AuthenticatedUser) {
+    return this.files.listFor("settings", "1", actor);
+  }
+
+  @Post("signature")
+  @RequirePermission("settings.write")
+  @upload()
+  uploadSignature(
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload("settings", "1", body, file, actor);
+  }
+
   @Get("subscription/:id")
   @RequirePermission("vendors.read")
   listForSubscription(

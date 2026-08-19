@@ -418,6 +418,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 | `sql/2026-08-16-files.sql` | `files` | before the code |
 | `sql/2026-08-18-two-factor.sql` | `user_two_factor`, `recovery_codes` | before the code |
 | `sql/2026-08-18-two-accounts.sql` | Master card + Standard Chartered Bank | any time |
+| `sql/2026-08-21-signature.sql` | `files.settings_id` — the company's signature as the fifth thing a file can belong to, plus the `signature` kind | **before the code — without it every read of every attachment fails, not just signatures.** The one-owner check is replaced, not added to |
 | `sql/2026-08-21-exemption-mode.sql` | `tax_policies.exemption_mode` — whether the fraction, the cap, or the lower of the two is the salary exemption | **before the code — without it every read of the tax rule fails, which is Settings, the calculator and every payroll run.** Defaults to today's behaviour, so nobody's tax moves |
 | `sql/2026-08-21-salary-split.sql` | `app_settings.salary_split` — how a gross divides into Basic, House Rent and the rest | **before the code — `app_settings` is read on nearly every page, so without it the whole settings query fails, not one field** |
 | `sql/2026-08-20-subscriptions.sql` | The `subscriptions` register and its seats, plus `files.subscription_id` for the plan screenshot | **before the code — the new screen 500s on its first query without it, and the `files` owner check is replaced** |

@@ -45,6 +45,13 @@ export const FILE_KINDS = [
    * A year later "Max 5x" no longer means what it meant.
    */
   "subscription_screenshot",
+  /**
+   * The company's own signature, printed at the foot of a payslip.
+   *
+   * Belongs to the settings row rather than to a person: it is the company
+   * signing, and the same mark goes on everybody's slip.
+   */
+  "signature",
   "import_source",
   "other",
 ] as const;
@@ -58,6 +65,7 @@ export const FILE_OWNERS = [
   "transaction",
   "import_batch",
   "subscription",
+  "settings",
 ] as const;
 export const fileOwnerSchema = z.enum(FILE_OWNERS);
 export type FileOwner = z.infer<typeof fileOwnerSchema>;
@@ -73,6 +81,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   invoice: "Invoice",
   bank_statement: "Bank statement",
   subscription_screenshot: "Plan screenshot",
+  signature: "Signature",
   import_source: "Imported file",
   other: "Document",
 };
@@ -104,6 +113,9 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   transaction: ["receipt", "invoice", "bank_statement", "other"],
   // One kind, and that is the point: this is the plan page, not a folder.
   subscription: ["subscription_screenshot"],
+  // One kind, and there is one of it. Two signatures on file would mean a
+  // payslip had to pick.
+  settings: ["signature"],
   import_batch: ["import_source"],
 };
 
@@ -120,6 +132,15 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
  * SVG is deliberately absent everywhere. It is an image to a person and a
  * script host to a browser, and this app serves what it stores.
  */
+/**
+ * What a signature may be — narrower than an image in general.
+ *
+ * Declared up here with the other mime lists because the per-kind map below
+ * refers to it, and a constant used before its own line is a runtime error the
+ * compiler catches only some of the time.
+ */
+export const SIGNATURE_MIME_TYPES = ["image/png", "image/jpeg"] as const;
+
 export const IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -148,6 +169,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // A screenshot, overwhelmingly — but a PDF invoice for the plan is the same
   // evidence, so the wider list rather than images alone.
   subscription_screenshot: DOCUMENT_MIME_TYPES,
+  // Narrower than everything else here on purpose: a signature has to render
+  // over a printed rule, and a PDF cannot. See `checkSignatureImage`.
+  signature: SIGNATURE_MIME_TYPES,
   import_source: SPREADSHEET_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
@@ -179,6 +203,10 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   bank_statement: 10 * MB,
   // Same reasoning: a screen capture of a pricing page, not a document.
   subscription_screenshot: 10 * MB,
+  // The real limit is SIGNATURE_MAX_BYTES, which is far smaller. This one only
+  // has to stop a file before multer's generic refusal; the readable one comes
+  // from the shared check.
+  signature: 1 * MB,
   import_source: 15 * MB,
   other: 15 * MB,
 };
@@ -271,4 +299,160 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < MB) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / MB).toFixed(1)} MB`;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  What a signature has to be                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The shape and size a payslip signature is allowed to be.
+ *
+ * The owner asked for these to be *stated and required*, and the second half is
+ * the easy half — a rule nobody can read before they pick a file is a rule they
+ * meet by accident. Both the Settings screen and the upload endpoint go through
+ * `checkSignatureImage` below, so the words on screen and the refusal on the
+ * server cannot say different things.
+ *
+ * The numbers are chosen for what a signature is: a scan of ink on paper,
+ * cropped close. Wide and short — nobody signs in a square — which is what the
+ * ratio bounds express, and generously wide so a 3:1 and a 5:1 are both fine.
+ * The width floor exists because the payslip prints it about 110pt across; a
+ * 200px scan lands there as a smear.
+ */
+export const SIGNATURE_MAX_BYTES = 300 * 1024;
+export const SIGNATURE_MIN_WIDTH = 300;
+export const SIGNATURE_MAX_WIDTH = 2400;
+/** width ÷ height. */
+export const SIGNATURE_MIN_RATIO = 1.5;
+export const SIGNATURE_MAX_RATIO = 8;
+
+/**
+ * Said in one sentence, for the screen to print before a file is chosen.
+ *
+ * Built from the constants rather than typed out beside them, so the rule and
+ * its description cannot drift — which is exactly how a form comes to promise
+ * one limit and enforce another.
+ */
+export const SIGNATURE_RULE = `PNG or JPEG, under ${Math.round(
+  SIGNATURE_MAX_BYTES / 1024,
+)} KB, at least ${SIGNATURE_MIN_WIDTH}px wide, and between ${SIGNATURE_MIN_RATIO}:1 and ${SIGNATURE_MAX_RATIO}:1 — wider than it is tall.`;
+
+/**
+ * One rule, called from the browser and from the server.
+ *
+ * Returns the reason rather than a boolean, because every one of these is
+ * something a person can go and fix, and "invalid image" tells them none of it.
+ */
+export function checkSignatureImage(image: {
+  width: number;
+  height: number;
+  sizeBytes: number;
+  mimeType: string;
+}): { ok: true } | { ok: false; reason: string } {
+  if (!SIGNATURE_MIME_TYPES.includes(image.mimeType as "image/png")) {
+    return { ok: false, reason: "It has to be a PNG or a JPEG." };
+  }
+  if (image.sizeBytes > SIGNATURE_MAX_BYTES) {
+    return {
+      ok: false,
+      reason: `It is ${Math.round(image.sizeBytes / 1024)} KB. The limit is ${Math.round(
+        SIGNATURE_MAX_BYTES / 1024,
+      )} KB — a signature is ink on paper, so cropping it close usually gets there.`,
+    };
+  }
+  if (image.width <= 0 || image.height <= 0) {
+    return { ok: false, reason: "That file does not read as an image." };
+  }
+  if (image.width < SIGNATURE_MIN_WIDTH) {
+    return {
+      ok: false,
+      reason: `It is ${image.width}px wide. Under ${SIGNATURE_MIN_WIDTH}px it prints on the payslip as a smear.`,
+    };
+  }
+  if (image.width > SIGNATURE_MAX_WIDTH) {
+    return {
+      ok: false,
+      reason: `It is ${image.width}px wide, over the ${SIGNATURE_MAX_WIDTH}px limit. Scale it down first.`,
+    };
+  }
+
+  const ratio = image.width / image.height;
+  if (ratio < SIGNATURE_MIN_RATIO || ratio > SIGNATURE_MAX_RATIO) {
+    return {
+      ok: false,
+      reason: `It is ${image.width}×${image.height}, which is ${ratio.toFixed(
+        1,
+      )}:1. A signature wants ${SIGNATURE_MIN_RATIO}:1 to ${SIGNATURE_MAX_RATIO}:1 — crop away the space above and below the ink.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Width and height, read out of the bytes themselves.
+ *
+ * No dependency for this: PNG carries its size in the IHDR chunk, which is
+ * always the first one, and JPEG carries it in whichever start-of-frame marker
+ * comes first — which means walking the segments, because EXIF, ICC profiles
+ * and comments all sit before it and none of them are a fixed length.
+ *
+ * Returns null rather than throwing on anything it does not understand. A file
+ * whose dimensions cannot be read is refused by the caller with a reason, not
+ * by an exception from a parser.
+ */
+export function readImageSize(
+  bytes: Uint8Array,
+): { width: number; height: number } | null {
+  // PNG: 8-byte signature, then a length, then "IHDR", then width and height
+  // as big-endian 32-bit integers.
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length >= 24 && PNG.every((b, i) => bytes[i] === b)) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (String.fromCharCode(...bytes.slice(12, 16)) !== "IHDR") return null;
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+
+  // JPEG: 0xFFD8, then segments. Each is 0xFF, a marker, and a two-byte length
+  // that includes itself. The frame markers carry the size; the rest are
+  // skipped by their own length, which is what makes EXIF harmless.
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    // Bounded by the file, and every step moves forward by at least two bytes,
+    // so a malformed file ends the walk instead of spinning in it.
+    while (offset + 3 < bytes.length) {
+      if (bytes[offset] !== 0xff) return null;
+      const marker = bytes[offset + 1];
+      // Padding between segments, and the standalone markers that carry no
+      // length of their own.
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) {
+        offset += 2;
+        continue;
+      }
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (length < 2) return null;
+      // Start-of-frame, baseline through progressive, excluding the four that
+      // are not frames at all.
+      const isFrame =
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc;
+      if (isFrame) {
+        if (offset + 9 >= bytes.length) return null;
+        const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+        const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+        return { width, height };
+      }
+      offset += 2 + length;
+    }
+  }
+
+  return null;
 }

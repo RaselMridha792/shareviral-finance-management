@@ -98,7 +98,11 @@ async function toError(response: Response): Promise<ApiError> {
  * `/auth/refresh` is in the set for its own reason - refreshing after a failed
  * refresh is a loop.
  */
-const SIGNING_IN = new Set(["/auth/login", "/auth/2fa/verify", "/auth/refresh"]);
+const SIGNING_IN = new Set([
+  "/auth/login",
+  "/auth/2fa/verify",
+  "/auth/refresh",
+]);
 
 export async function apiFetch<T>(
   path: string,
@@ -138,7 +142,9 @@ async function goToLogin(): Promise<never> {
   if (typeof window !== "undefined") {
     const here = window.location.pathname + window.location.search;
     window.location.href =
-      here && here !== "/" ? `/login?next=${encodeURIComponent(here)}` : "/login";
+      here && here !== "/"
+        ? `/login?next=${encodeURIComponent(here)}`
+        : "/login";
     // The navigation is asynchronous; nothing after this should run.
     await new Promise(() => {});
   }
@@ -169,7 +175,7 @@ export type SessionUser = {
  * `verifySecondStep` along with the code.
  */
 export type LoginOutcome =
-  | { twoFactorRequired?: undefined } & SessionUser
+  | ({ twoFactorRequired?: undefined } & SessionUser)
   | { twoFactorRequired: true; challenge: string };
 
 export function login(email: string, password: string) {
@@ -262,10 +268,7 @@ export function fileHref(fileId: string): string {
  * default ceiling — a 15 MB CV sent that way is silently truncated. Going
  * direct means nginx's 25 MB limit is the only one in the path.
  */
-export async function apiUpload<T>(
-  path: string,
-  form: FormData,
-): Promise<T> {
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   const send = () =>
     fetch(`${PUBLIC_BASE_URL}${path}`, {
       method: "POST",
@@ -339,6 +342,21 @@ export function uploadTransactionFile(
   form.append("kind", kind);
   if (label) form.append("label", label);
   return apiUpload<StoredFile>(`/files/transaction/${transactionId}`, form);
+}
+
+/**
+ * The company's signature. No id in the path: there is one settings row, and a
+ * 1 in a URL is an invitation to try a 2.
+ */
+export function listSignature() {
+  return apiFetch<StoredFile[]>("/files/signature", { cache: "no-store" });
+}
+
+export function uploadSignature(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", "signature");
+  return apiUpload<StoredFile>("/files/signature", form);
 }
 
 export function deleteStoredFile(fileId: string) {

@@ -1,5 +1,7 @@
 import {
   ALLOWED_MIME_TYPES,
+  checkSignatureImage,
+  readImageSize,
   COMPENSATION_FILE_KINDS,
   FILE_KIND_LABELS,
   hasPermission,
@@ -46,6 +48,11 @@ const SINGULAR_KINDS: readonly FileKind[] = [
    * component was written last.
    */
   "subscription_screenshot",
+  /**
+   * And the signature, most of all. It is printed as *the* company's mark; two
+   * on file would mean a payslip had to choose one.
+   */
+  "signature",
 ];
 
 /** Which permission a file's owner demands, to read it and to change it. */
@@ -60,6 +67,9 @@ const OWNER_PERMISSIONS: Record<
   // the plan, and a second boundary around it would have to be granted to
   // exactly the same people.
   subscription: { read: "vendors.read", write: "vendors.write" },
+  // The company's signature is part of its letterhead, which is a setting —
+  // and everybody who can read a payslip can already see it printed on one.
+  settings: { read: "settings.read", write: "settings.write" },
 };
 
 @Injectable()
@@ -92,6 +102,8 @@ export class FilesService {
       return { owner: "import_batch", id: row.importBatchId };
     if (row.subscriptionId)
       return { owner: "subscription", id: row.subscriptionId };
+    if (row.settingsId)
+      return { owner: "settings", id: String(row.settingsId) };
     // The table has a check constraint making this unreachable. If it is ever
     // reached, refusing is the only safe reading of a file owned by nothing.
     throw new NotFoundException("This file is not attached to anything");
@@ -157,6 +169,7 @@ export class FilesService {
       transaction: files.transactionId,
       import_batch: files.importBatchId,
       subscription: files.subscriptionId,
+      settings: files.settingsId,
     } satisfies Record<FileOwner, unknown>;
     return columns[owner];
   }
@@ -276,6 +289,30 @@ export class FilesService {
       );
     }
 
+    /**
+     * A signature has to be the right shape, not merely the right format.
+     *
+     * The same function the Settings screen calls before it uploads, so the
+     * words on screen and this refusal cannot say different things — and the
+     * dimensions come from the bytes rather than from anything the browser
+     * claimed, because the browser is where the first check already ran.
+     */
+    if (kind === "signature") {
+      const size = readImageSize(upload.buffer);
+      const verdict = size
+        ? checkSignatureImage({
+            ...size,
+            sizeBytes: upload.buffer.byteLength,
+            mimeType,
+          })
+        : ({
+            ok: false,
+            reason: "That file does not read as an image.",
+          } as const);
+
+      if (!verdict.ok) throw new BadRequestException(verdict.reason);
+    }
+
     const stored = await this.storage.write(upload.buffer, mimeType);
 
     /**
@@ -332,6 +369,8 @@ export class FilesService {
               transactionId: owner === "transaction" ? ownerId : null,
               importBatchId: owner === "import_batch" ? ownerId : null,
               subscriptionId: owner === "subscription" ? ownerId : null,
+              // The one owner keyed by a number rather than a uuid.
+              settingsId: owner === "settings" ? Number(ownerId) : null,
               uploadedBy: actor.id,
             })
             .returning();

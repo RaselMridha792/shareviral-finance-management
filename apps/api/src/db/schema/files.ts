@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  smallint,
   pgEnum,
   pgTable,
   text,
@@ -13,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { importBatches } from "./imports";
+import { appSettings } from "./settings";
 import { subscriptions } from "./subscriptions";
 import { teamMembers } from "./team";
 import { transactions } from "./transactions";
@@ -85,6 +87,17 @@ export const files = pgTable(
     subscriptionId: uuid("subscription_id").references(() => subscriptions.id, {
       onDelete: "cascade",
     }),
+    /**
+     * The settings row, which is the company itself.
+     *
+     * A smallint and not a uuid, because `app_settings` is a single row keyed
+     * by one with `check (id = 1)`. It is an owner like the other four rather
+     * than an exception to the rule, so a signature is reachable and countable
+     * the same way every other file is.
+     */
+    settingsId: smallint("settings_id").references(() => appSettings.id, {
+      onDelete: "cascade",
+    }),
 
     uploadedBy: uuid("uploaded_by").references(() => users.id, {
       onDelete: "set null",
@@ -110,6 +123,7 @@ export const files = pgTable(
     index("files_transaction_idx").on(t.transactionId),
     index("files_import_batch_idx").on(t.importBatchId),
     index("files_subscription_idx").on(t.subscriptionId),
+    index("files_settings_idx").on(t.settingsId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     /**
@@ -123,7 +137,8 @@ export const files = pgTable(
       sql`(case when ${t.teamMemberId} is not null then 1 else 0 end
          + case when ${t.transactionId} is not null then 1 else 0 end
          + case when ${t.importBatchId} is not null then 1 else 0 end
-         + case when ${t.subscriptionId} is not null then 1 else 0 end) = 1`,
+         + case when ${t.subscriptionId} is not null then 1 else 0 end
+         + case when ${t.settingsId} is not null then 1 else 0 end) = 1`,
     ),
   ],
 );

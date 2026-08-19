@@ -9,6 +9,7 @@ import { useCan } from "@/components/auth/session-provider";
 import type { AppSettingsDto } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { SignatureField } from "@/components/settings/signature-field";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { settingsApi } from "@/lib/masters";
@@ -206,6 +207,12 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
                   disabled={!canWrite}
                 />
               </Field>
+            </div>
+
+            {/* Outside the form's own fields, because it saves itself: an
+                upload cannot wait for a Save button that posts JSON. */}
+            <div className="mt-2 border-t border-border pt-4">
+              <SignatureField canWrite={canWrite} />
             </div>
           </CardBody>
         </Card>

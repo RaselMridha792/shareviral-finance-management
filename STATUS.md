@@ -1199,9 +1199,9 @@ chose rather than wherever the arithmetic landed.
 The stored components must add up to the gross. If they do not, the page says
 so rather than silently showing a total that disagrees with the figure above it.
 
-## Next: a signature on the payslip (asked 2026-08-19)
+## Done: a signature on the payslip (2026-08-19)
 
-**Not built — deliberately paused.** The work was scoped and a workflow written
+**Built.** The plan below is what it turned out to be. The work was scoped and a workflow written
 for it; the owner stopped it to finish what was in flight first. The plan below
 is the thinking, so it does not have to be done twice.
 

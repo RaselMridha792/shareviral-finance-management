@@ -12,6 +12,7 @@ import Link from "next/link";
 
 import type { AppSettingsDto } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
+import { fileHref } from "@/lib/api-client";
 import type { PayslipDto, PayslipLineDto } from "@/lib/payroll";
 
 /**
@@ -37,9 +38,18 @@ import type { PayslipDto, PayslipLineDto } from "@/lib/payroll";
 export function PayslipView({
   payslip,
   settings,
+  signature,
 }: {
   payslip: PayslipDto;
   settings: AppSettingsDto;
+  /**
+   * The file id of the company's signature, or null.
+   *
+   * Fetched by the page rather than looked up here, so the image is in the
+   * markup the first time it renders — a signature that appears a moment after
+   * the rest is a signature somebody prints without.
+   */
+  signature: string | null;
 }) {
   const money = (value: string) =>
     formatMoney(value, {
@@ -115,9 +125,7 @@ export function PayslipView({
                 {initials(settings.companyName)}
               </span>
               <span>
-                <span className="slip-brand-name">
-                  {settings.companyName}
-                </span>
+                <span className="slip-brand-name">{settings.companyName}</span>
                 {settings.companyTagline ? (
                   <span className="slip-tagline">
                     {settings.companyTagline}
@@ -290,6 +298,22 @@ export function PayslipView({
             </p>
           </div>
           <div>
+            {/* Above the rule, where a person signs.
+                Fixed height with the width following, so a wide scan cannot
+                shove the block sideways and a tall one cannot grow the page.
+                26pt of ink plus its 2pt gap is what this costs: the content
+                currently ends 49.6pt above the footer, measured, so it stays on
+                one A4 sheet with about 21pt still clear. That headroom is the
+                reason the height is fixed here rather than left to the file. */}
+            {signature ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fileHref(signature)}
+                alt=""
+                aria-hidden="true"
+                className="slip-signature"
+              />
+            ) : null}
             <p className="slip-sign-rule" />
             <p className="slip-label">Authorised signatory</p>
             <p className="slip-sign-name">
@@ -426,8 +450,18 @@ function payslipNumber(payslip: PayslipDto): string {
 }
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 /** `31 August 2026`. Parsed by hand — an ISO date is not a moment in time. */
@@ -470,7 +504,8 @@ function inWords(value: string): string {
   const [whole, fraction = "00"] = value.split(".");
   const paisa = Number(fraction.padEnd(2, "0").slice(0, 2));
   const words = titleCase(numberToWords(Math.abs(Number(whole))));
-  const suffix = paisa > 0 ? ` and ${titleCase(numberToWords(paisa))} Paisa` : "";
+  const suffix =
+    paisa > 0 ? ` and ${titleCase(numberToWords(paisa))} Paisa` : "";
   return `${words}${suffix} only`;
 }
 
@@ -479,12 +514,37 @@ function titleCase(text: string): string {
 }
 
 const ONES = [
-  "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-  "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-  "seventeen", "eighteen", "nineteen",
+  "",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
 ];
 const TENS = [
-  "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty",
+  "",
+  "",
+  "twenty",
+  "thirty",
+  "forty",
+  "fifty",
+  "sixty",
+  "seventy",
+  "eighty",
   "ninety",
 ];
 
@@ -873,6 +933,15 @@ const SHEET_CSS = `
   font-size: 8pt;
   font-weight: 600;
   color: var(--slip-ink);
+}
+.slip-signature {
+  display: block;
+  height: 26pt;
+  width: auto;
+  max-width: 100%;
+  /* Rightward, over the rule it belongs to. */
+  margin: 0 0 2pt auto;
+  object-fit: contain;
 }
 .slip-signatures {
   margin: 40pt 46pt 30pt;
