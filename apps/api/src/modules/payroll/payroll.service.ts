@@ -5,8 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  DEFAULT_SALARY_SPLIT,
   formatMoney,
   monthlyTdsFor,
+  salarySplitSchema,
+  splitSalary,
   payslipBreakdownSchema,
   PAYSLIP_RUN_STATUSES,
   TDS_WARNING_RATIO,
@@ -15,6 +18,7 @@ import {
   type Paginated,
   type PayPayrollInput,
   type PayslipBreakdown,
+  type SalarySplit,
   type TdsBasis,
   type TdsPolicy,
   type UpdatePayrollLineInput,
@@ -37,6 +41,7 @@ import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import {
   accounts,
+  appSettings,
   categories,
   compensationHistory,
   payrollLines,
@@ -236,6 +241,18 @@ export class PayrollService {
     const withoutPay: string[] = [];
     let noTaxRule = false;
 
+    // Read once for the whole sheet rather than per person: it is one row, and
+    // the rule cannot change halfway through building a month.
+    const [settingsRow] = await this.db.client
+      .select({ salarySplit: appSettings.salarySplit })
+      .from(appSettings)
+      .limit(1);
+    const parsedSplit = salarySplitSchema.safeParse(settingsRow?.salarySplit);
+    const salarySplit =
+      parsedSplit.success && parsedSplit.data.length
+        ? parsedSplit.data
+        : DEFAULT_SALARY_SPLIT;
+
     const created = await this.audit.mutate({
       action: "update",
       entityTable: "payroll_runs",
@@ -300,7 +317,11 @@ export class PayrollService {
             // split was in this month. When nobody has recorded one, the whole
             // gross becomes a single Basic Salary line — true, and what
             // somebody would have typed by hand anyway.
-            earningsBreakdown: seedBreakdown(pay.components, pay.grossAmount),
+            earningsBreakdown: seedBreakdown(
+              pay.components,
+              pay.grossAmount,
+              salarySplit,
+            ),
             snapshotDesignation: employee.designation,
             snapshotDepartment: employee.department,
             snapshotBankName: employee.bankName,
@@ -997,10 +1018,24 @@ function firstDayOf(year: number, month: number): string {
 function seedBreakdown(
   components: unknown,
   grossAmount: string,
+  split: SalarySplit,
 ): PayslipBreakdown {
   const parsed = payslipBreakdownSchema.safeParse(components);
   if (parsed.success && parsed.data.length > 0) return parsed.data;
-  return [{ label: "Basic Salary", amount: grossAmount }];
+
+  /**
+   * No split on record, so the company's rule is applied instead.
+   *
+   * The alternative was one "Basic Salary" line for the whole gross, which is
+   * what this did before the rule existed — and it would have left every person
+   * hired before it printing a payslip with no breakdown at all, for no reason
+   * a reader could see. Their next raise writes a real split; until then this
+   * is the same arithmetic, done at build time rather than at hire time.
+   */
+  const derived = splitSalary(grossAmount, split);
+  return derived.length
+    ? derived
+    : [{ label: "Basic Salary", amount: grossAmount }];
 }
 
 function lastDayOf(year: number, month: number): string {
