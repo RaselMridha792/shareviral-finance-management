@@ -8,11 +8,7 @@ import {
 import {
   Archive,
   ArchiveRestore,
-  Banknote,
-  CreditCard,
-  Landmark,
   Plus,
-  Smartphone,
   SquarePen,
   SquareArrowOutUpRight,
   Trash2,
@@ -20,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ComponentType } from "react";
+import { useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { useSettings } from "@/components/settings-provider";
@@ -29,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Icon } from "@/components/ui/icon";
+import { SummaryBar } from "@/components/ui/patterns";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -38,11 +36,12 @@ import {
 } from "@/lib/masters";
 import { AccountForm } from "./account-form";
 
-const ICONS: Record<AccountType, ComponentType<{ className?: string }>> = {
-  bank: Landmark,
-  cash: Banknote,
-  mobile_wallet: Smartphone,
-  card: CreditCard,
+/** The handoff's own four, by name. */
+const ICONS: Record<AccountType, string> = {
+  bank: "account_balance",
+  cash: "payments",
+  mobile_wallet: "smartphone",
+  card: "credit_card",
 };
 
 export function AccountsScreen({
@@ -154,7 +153,11 @@ export function AccountsScreen({
       {active.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Landmark className="size-5" />
+            <Icon
+              name="account_balance"
+              size={22}
+              className="text-primary-text"
+            />
           </span>
           <div>
             <p className="text-sm font-semibold">No accounts yet</p>
@@ -176,34 +179,30 @@ export function AccountsScreen({
         </Card>
       ) : (
         <>
-          <Card className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4">
-            <div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Total held
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {otherCurrencies > 0 ? (
-                  <>
-                    {inBase.length} account{inBase.length === 1 ? "" : "s"} in{" "}
-                    {base}. {otherCurrencies} in another currency, counted
-                    separately — mixing them would give a figure that is money
-                    in neither.
-                  </>
-                ) : (
-                  <>
-                    {active.length} active account
-                    {active.length === 1 ? "" : "s"} · opening balance plus every
-                    entry since, voided rows excluded
-                  </>
-                )}
-              </p>
-            </div>
-            <Amount
-              value={total}
-              currency={base}
-              className="text-2xl font-semibold"
-            />
-          </Card>
+          <SummaryBar
+            label="Total held"
+            icon="savings"
+            iconTone="text-primary-text"
+            description={
+              otherCurrencies > 0 ? (
+                <>
+                  {inBase.length} account{inBase.length === 1 ? "" : "s"} in{" "}
+                  {base}. {otherCurrencies} in another currency, counted
+                  separately — mixing them would give a figure that is money in
+                  neither.
+                </>
+              ) : (
+                <>
+                  {active.length} active account
+                  {active.length === 1 ? "" : "s"} · opening balance plus every
+                  entry since, voided rows excluded
+                </>
+              )
+            }
+            // `Amount` draws its own dollar line underneath, so the bar's
+            // secondary slot would be a second one saying the same thing.
+            value={<Amount value={total} currency={base} />}
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {active.map((account) => (
@@ -376,13 +375,13 @@ function AccountCard({
     usdRate,
   );
 
-  const Icon = ICONS[account.type];
+  const symbol = ICONS[account.type];
 
   return (
     <Card className={account.isActive ? "p-5" : "p-5 opacity-60"}>
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-5" />
+        <span className="flex size-[42px] shrink-0 items-center justify-center rounded-xl bg-primary/15">
+          <Icon name={symbol} size={21} className="text-primary-text" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{account.name}</p>
@@ -408,11 +407,13 @@ function AccountCard({
         converted figure look like a recorded one, and a balance is exactly
         where that would matter.
       */}
+      {/* Right-aligned, so a column of cards lines its figures up against one
+          edge instead of leaving the eye to find each one. */}
       <Amount
         value={account.balance}
         currency={account.currency}
         showCounterpart={false}
-        className="mt-5 block text-xl font-semibold tracking-tight"
+        className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
       />
 
       {equivalent ? (
@@ -421,26 +422,25 @@ function AccountCard({
           currency={equivalent.currency}
           approximate
           showCounterpart={false}
-          className="num block text-sm text-muted-foreground"
+          className="num block text-right text-sm text-faint"
         />
       ) : (
         <span
-          className="num block text-sm text-muted-foreground"
+          className="num block text-right text-sm text-faint"
           title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
         >
           —
         </span>
       )}
 
-      <p className="num mt-1.5 text-xs text-muted-foreground">
+      <p className="num mt-3 border-t border-border-soft pt-3 text-xs text-muted-foreground">
         Opened at{" "}
         <Amount
           value={account.openingBalance}
           currency={account.currency}
           showCounterpart={false}
         />{" "}
-        on{" "}
-        {account.openingBalanceOn}
+        on {account.openingBalanceOn}
       </p>
 
       {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}
