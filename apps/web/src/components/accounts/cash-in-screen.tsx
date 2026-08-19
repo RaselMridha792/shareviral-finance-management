@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
@@ -316,27 +317,28 @@ export function CashInScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table-data min-w-[1220px] text-sm">
+          <TableScroll>
+            <table className="table-data min-w-[1320px] text-sm">
               <thead>
                 <tr className="text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
                       Every entry already carries `ref_no`, and a second
                       identity that renumbers itself when a row is voided would
                       be one people quote at each other and get wrong. */}
-                  <Th className="text-right">SL</Th>
-                  <Th>Invoice No.</Th>
+                  <SerialHead />
+                  <Th width="w-28">Date</Th>
                   <Th>Description</Th>
-                  <Th className="text-right">Amount (BDT)</Th>
-                  <Th className="text-right">Amount (USD)</Th>
-                  <Th className="text-right">Rate</Th>
-                  <Th>Transaction ID</Th>
+                  <Th align="right">Amount (BDT)</Th>
+                  <Th align="right">Amount (USD)</Th>
+                  <Th align="right">USD rate</Th>
                   {/* Ours — the account the money landed in. The column after
                       it is the other end of the wire, and both of them are a
                       bank account: only the two headings say which side each
                       one is. */}
                   <Th>Received Bank Name</Th>
                   <Th>Sender</Th>
+                  <Th>Invoice No.</Th>
+                  <Th>Transaction ID</Th>
                   <Th>Note</Th>
                 </tr>
               </thead>
@@ -348,20 +350,12 @@ export function CashInScreen({
                   const sentUsd = dollarsOf(row, rate);
                   return (
                     <tr key={row.id} className="row-finance">
-                      <td className="num px-4 py-2.5 text-right text-muted-foreground">
-                        {index + 1}
-                      </td>
-                      <DocumentCell
-                        row={row}
-                        kind="invoice"
-                        onOpen={setDocumentsFor}
-                      >
-                        {row.invoiceNo}
-                      </DocumentCell>
-                      <td className="cell-prose px-4 py-2.5">
+                      <SerialCell n={index + 1} />
+                      <td className="num">{row.txnDate}</td>
+                      <td className="cell-prose">
                         <span className="font-medium">{row.description}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="text-right">
                         <Amount
                           value={row.amount}
                           tone="in"
@@ -369,7 +363,7 @@ export function CashInScreen({
                           className="block"
                         />
                       </td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="text-right">
                         {sentUsd ? (
                           <Amount
                             value={sentUsd}
@@ -386,21 +380,14 @@ export function CashInScreen({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="col-amount px-4 py-2.5 text-muted-foreground">
+                      <td className="col-amount text-muted-foreground">
                         {/* The rate this row was recorded at — not the month's,
                             unless this row is the one that set it. */}
                         {rateOf(row)
                           ? `৳${trimRate(rateOf(row) as string)}`
                           : "—"}
                       </td>
-                      <DocumentCell
-                        row={row}
-                        kind="bank_statement"
-                        onOpen={setDocumentsFor}
-                      >
-                        {row.reference}
-                      </DocumentCell>
-                      <td className="px-4 py-2.5">
+                      <td>
                         {/* Opens the account itself — its bank, branch, number
                             and what it holds now — rather than this screen's
                             own list. "Which account did that land in, and what
@@ -416,7 +403,7 @@ export function CashInScreen({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td>
                         {/* One name, the way the sheet has it. The advice also
                             gives the sending bank, the account number and a
                             SWIFT code; those stay on the entry rather than
@@ -425,7 +412,21 @@ export function CashInScreen({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="max-w-[18rem] px-4 py-2.5 text-muted-foreground">
+                      <DocumentCell
+                        row={row}
+                        kind="invoice"
+                        onOpen={setDocumentsFor}
+                      >
+                        {row.invoiceNo}
+                      </DocumentCell>
+                      <DocumentCell
+                        row={row}
+                        kind="bank_statement"
+                        onOpen={setDocumentsFor}
+                      >
+                        {row.reference}
+                      </DocumentCell>
+                      <td className="max-w-[18rem] text-muted-foreground">
                         {/* The only one of the thirteen fields that is not
                             required, and a note nobody sees is a note nobody
                             writes — so it is on the row, cut to the column
@@ -443,7 +444,7 @@ export function CashInScreen({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </Card>
       )}
 
@@ -504,11 +505,11 @@ function DocumentCell({
   }) => void;
 }) {
   if (!children) {
-    return <td className="px-4 py-2.5 text-muted-foreground">—</td>;
+    return <td className="text-muted-foreground">—</td>;
   }
 
   return (
-    <td className="px-4 py-2.5">
+    <td>
       <button
         type="button"
         onClick={() => onOpen({ row, kind })}
@@ -595,23 +596,4 @@ function inDollars(amountBdt: string, rate: string): string {
 function trimRate(rate: string): string {
   const trimmed = rate.includes(".") ? rate.replace(/0+$/, "") : rate;
   return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
 }

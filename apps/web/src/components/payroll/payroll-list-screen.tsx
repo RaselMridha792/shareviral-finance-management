@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { payrollApi, type PayrollRunDto } from "@/lib/payroll";
 
@@ -83,34 +84,33 @@ export function PayrollListScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table-data min-w-[760px] text-sm">
+          <TableScroll>
+            <table className="table-data min-w-[820px] text-sm">
               <thead>
                 <tr className="text-left">
-                  <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    Month
-                  </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    Status
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <SerialHead />
+                  <Th width="w-28">Paid on</Th>
+                  <Th width="w-40">Month</Th>
+                  <Th width="w-32" align="right">
                     Gross
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  </Th>
+                  <Th width="w-32" align="right">
                     Tax withheld
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  </Th>
+                  <Th width="w-32" align="right">
                     Net paid
-                  </th>
-                  <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    Paid on
-                  </th>
+                  </Th>
+                  <Th width="w-28">Status</Th>
                 </tr>
               </thead>
               <tbody>
-                {initialPage.items.map((run) => (
+                {initialPage.items.map((run, index) => (
                   <tr key={run.id} className="row-finance">
-                    <td className="px-4 py-2.5">
+                    <SerialCell n={index + 1} />
+                    <td className="num text-muted-foreground">
+                      {run.paymentDate ?? "—"}
+                    </td>
+                    <td>
                       {/* One link per row — see the note in team-screen.tsx. */}
                       <Link
                         href={`/payroll/${run.id}`}
@@ -120,7 +120,28 @@ export function PayrollListScreen({
                         {run.label}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="text-right">
+                      <Amount
+                        value={run.totalGross}
+                        tone="neutral"
+                        className="block"
+                      />
+                    </td>
+                    <td className="text-right">
+                      <Amount
+                        value={run.totalTds}
+                        tone="neutral"
+                        className="block"
+                      />
+                    </td>
+                    <td className="text-right">
+                      <Amount
+                        value={run.totalNet}
+                        tone="neutral"
+                        className="block font-medium"
+                      />
+                    </td>
+                    <td>
                       <Badge
                         tone={
                           run.status === "paid"
@@ -133,35 +154,11 @@ export function PayrollListScreen({
                         {PAYROLL_STATUS_LABELS[run.status]}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={run.totalGross}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={run.totalTds}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount
-                        value={run.totalNet}
-                        tone="neutral"
-                        className="block font-medium"
-                      />
-                    </td>
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {run.paymentDate ?? "—"}
-                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </Card>
       )}
 

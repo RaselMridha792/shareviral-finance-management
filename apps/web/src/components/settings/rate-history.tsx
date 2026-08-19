@@ -8,6 +8,13 @@ import { useCan } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { DateInput, Field, Input } from "@/components/ui/field";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { fxApi, type FxRateDto } from "@/lib/reports";
 
@@ -155,58 +162,37 @@ export function RateHistory() {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto">
-        <table className="table-data min-w-[420px] text-sm">
+      <TableScroll>
+        <table className="table-data min-w-[480px] text-sm">
           <thead>
             <tr className="text-left">
-              <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Date
-              </th>
-              <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Rate
-              </th>
-              <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Note
-              </th>
+              <SerialHead />
+              <Th>Date</Th>
+              <Th align="right">USD rate</Th>
+              <Th>Note</Th>
             </tr>
           </thead>
           <tbody>
             {loadError ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  className="px-4 py-8 text-center text-sm text-negative"
-                >
-                  {loadError}
-                </td>
-              </tr>
+              <TableMessageRow colSpan={4} tone="error">
+                {loadError}
+              </TableMessageRow>
             ) : rates === null ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  className="px-4 py-8 text-center text-sm text-muted-foreground"
-                >
-                  Loading…
-                </td>
-              </tr>
+              <TableMessageRow colSpan={4}>Loading…</TableMessageRow>
             ) : rates.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  className="px-4 py-8 text-center text-sm text-muted-foreground"
-                >
-                  No rates recorded. Until one is, USD reports show taka and say
-                  so rather than guessing.
-                </td>
-              </tr>
+              <TableMessageRow colSpan={4}>
+                No rates recorded. Until one is, USD reports show taka and say
+                so rather than guessing.
+              </TableMessageRow>
             ) : (
-              rates.map((rate) => (
+              rates.map((rate, index) => (
                 <tr key={rate.id} className="row-finance">
-                  <td className="num px-4 py-2.5">{rate.rateDate}</td>
-                  <td className="num px-4 py-2.5 text-right font-medium">
+                  <SerialCell n={index + 1} />
+                  <td className="num">{rate.rateDate}</td>
+                  <td className="num text-right font-medium">
                     {Number(rate.rate).toFixed(2)}
                   </td>
-                  <td className="cell-prose px-4 py-2.5 text-muted-foreground">
+                  <td className="cell-prose text-muted-foreground">
                     {rate.notes ?? "—"}
                   </td>
                 </tr>
@@ -214,7 +200,7 @@ export function RateHistory() {
             )}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </Card>
   );
 }

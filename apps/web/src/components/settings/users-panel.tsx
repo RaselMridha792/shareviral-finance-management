@@ -26,11 +26,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { usersApi } from "@/lib/users";
-
-const th =
-  "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
 
 /** What each role can actually do, in one line, at the moment you assign it. */
 const ROLE_SUMMARY: Record<Role, string> = {
@@ -68,86 +72,96 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[760px] text-sm">
+        <TableScroll>
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
-              <tr className="text-left">
-                <th className={th}>Name</th>
-                <th className={th}>Email</th>
-                <th className={th}>Role</th>
-                <th className={th}>Status</th>
-                <th className={th}>Last signed in</th>
-                <th className={th} />
+              <tr>
+                <SerialHead />
+                <Th>Name</Th>
+                <Th>Role</Th>
+                <Th>Status</Th>
+                <Th>Last signed in</Th>
+                <Th>Email</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="row-finance">
-                  <td className="px-4 py-2.5">
-                    <span className="font-medium">{user.fullName}</span>
-                    {user.id === me?.id ? (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        you
-                      </span>
-                    ) : null}
-                    {user.mustChangePassword ? (
-                      <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
-                        <ShieldAlert className="size-3" />
-                        must change password
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {user.email}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={user.role === "super_admin" ? "primary" : "neutral"}
-                    >
-                      {ROLE_LABELS[user.role]}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={
-                        user.status === "active"
-                          ? "positive"
-                          : user.status === "disabled"
-                            ? "negative"
-                            : "warning"
-                      }
-                    >
-                      {USER_STATUS_LABELS[user.status]}
-                    </Badge>
-                  </td>
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {user.lastLoginAt ? user.lastLoginAt.slice(0, 10) : "never"}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditing(user)}
-                        aria-label={`Edit ${user.fullName}`}
+              {users.length === 0 ? (
+                <TableMessageRow colSpan={7}>
+                  Nobody can sign in yet.
+                </TableMessageRow>
+              ) : (
+                users.map((user, index) => (
+                  <tr key={user.id} className="row-finance">
+                    <SerialCell n={index + 1} />
+                    <td>
+                      <span className="font-medium">{user.fullName}</span>
+                      {user.id === me?.id ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          you
+                        </span>
+                      ) : null}
+                      {user.mustChangePassword ? (
+                        <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
+                          <ShieldAlert className="size-3" />
+                          must change password
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>
+                      <Badge
+                        tone={
+                          user.role === "super_admin" ? "primary" : "neutral"
+                        }
                       >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setResetting(user)}
+                        {ROLE_LABELS[user.role]}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge
+                        tone={
+                          user.status === "active"
+                            ? "positive"
+                            : user.status === "disabled"
+                              ? "negative"
+                              : "warning"
+                        }
                       >
-                        <KeyRound className="size-3.5" />
-                        Password
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {USER_STATUS_LABELS[user.status]}
+                      </Badge>
+                    </td>
+                    <td className="num text-muted-foreground">
+                      {user.lastLoginAt
+                        ? user.lastLoginAt.slice(0, 10)
+                        : "never"}
+                    </td>
+                    <td className="text-muted-foreground">{user.email}</td>
+                    <td>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(user)}
+                          aria-label={`Edit ${user.fullName}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setResetting(user)}
+                        >
+                          <KeyRound className="size-3.5" />
+                          Password
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </Card>
 
       <CreateUserForm

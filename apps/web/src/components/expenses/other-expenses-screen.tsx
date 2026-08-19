@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SummaryBar } from "@/components/ui/patterns";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
@@ -249,7 +250,7 @@ export function OtherExpensesScreen({
               are one thought, and because the owner asked for the account name
               to open the account.
             */
-            <div className="overflow-x-auto">
+            <TableScroll>
               <table className="table-data min-w-[1180px] text-sm">
                 <thead>
                   <tr className="text-left">
@@ -258,21 +259,27 @@ export function OtherExpensesScreen({
                         second identity that renumbers itself when the month
                         changes is one people would quote at each other and get
                         wrong. */}
-                    <Th className="w-12 text-right">SL</Th>
-                    <Th className="w-24">Date</Th>
-                    <Th className="w-40">Category</Th>
+                    <SerialHead />
+                    <Th width="w-24">Date</Th>
                     <Th>Description</Th>
-                    <Th className="w-32 text-right">Amount (BDT)</Th>
-                    <Th className="w-28 text-right">Amount (USD)</Th>
-                    <Th className="w-32">Payment Method</Th>
-                    <Th className="w-36">Account</Th>
+                    <Th width="w-40">Category</Th>
+                    <Th width="w-32" align="right">
+                      Amount (BDT)
+                    </Th>
+                    <Th width="w-28" align="right">
+                      Amount (USD)
+                    </Th>
+                    <Th width="w-24" align="right">
+                      USD Rate
+                    </Th>
+                    <Th width="w-36">Account</Th>
+                    <Th width="w-32">Payment Method</Th>
                     {/* The company's own document number — the invoice the
                         money went against. The bank's number is a different
                         fact under a different name, Transaction ID, and the
                         sheet has one reference column: this is the one it
                         means. */}
-                    <Th className="w-32">Reference No.</Th>
-                    <Th className="w-24 text-right">USD Rate</Th>
+                    <Th width="w-32">Reference No.</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -292,30 +299,9 @@ export function OtherExpensesScreen({
                         key={row.id}
                         className={cn("row-finance", voided && "opacity-55")}
                       >
-                        <td className="num px-4 py-2.5 text-right text-xs text-muted-foreground">
-                          {index + 1}
-                        </td>
-                        <td className="num px-4 py-2.5 whitespace-nowrap">
-                          {row.txnDate}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {row.categoryName ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <span
-                                className="size-2 shrink-0 rounded-full"
-                                style={{
-                                  background: row.categoryColor ?? undefined,
-                                }}
-                              />
-                              {row.categoryName}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className="cell-prose px-4 py-2.5">
+                        <SerialCell n={index + 1} />
+                        <td className="num whitespace-nowrap">{row.txnDate}</td>
+                        <td className="cell-prose">
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <span
@@ -389,11 +375,28 @@ export function OtherExpensesScreen({
                             </div>
                           </div>
                         </td>
+                        <td>
+                          {row.categoryName ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span
+                                className="size-2 shrink-0 rounded-full"
+                                style={{
+                                  background: row.categoryColor ?? undefined,
+                                }}
+                              />
+                              {row.categoryName}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
                         {/* Every row on this screen is money leaving, so the
                             figure is red and signed on all of them. No dollar
                             line underneath it: the next column is the
                             dollars. */}
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="text-right">
                           <Amount
                             value={row.signedAmount}
                             showSign
@@ -406,7 +409,7 @@ export function OtherExpensesScreen({
                             )}
                           />
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="text-right">
                           {usd ? (
                             <Amount
                               value={usd}
@@ -426,10 +429,10 @@ export function OtherExpensesScreen({
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                          {PAYMENT_METHOD_LABELS[row.paymentMethod]}
+                        <td className="col-amount text-xs text-muted-foreground">
+                          {rate ? trimRate(rate) : "—"}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td>
                           {/* Opens the account itself — its bank, its number,
                               what is in it now — rather than filtering this
                               list. The same link the Cash In sheet's bank
@@ -445,7 +448,10 @@ export function OtherExpensesScreen({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="text-xs text-muted-foreground">
+                          {PAYMENT_METHOD_LABELS[row.paymentMethod]}
+                        </td>
+                        <td>
                           {/* The number opens what it refers to. The amber
                               mark is an entry that has a reference and nothing
                               attached to it — the row somebody has to chase,
@@ -470,15 +476,12 @@ export function OtherExpensesScreen({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="col-amount px-4 py-2.5 text-xs text-muted-foreground">
-                          {rate ? trimRate(rate) : "—"}
-                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
           )}
         </CardBody>
       </Card>
@@ -568,23 +571,4 @@ function dollarsOf(row: TransactionDto): string | null {
 function trimRate(rate: string): string {
   const trimmed = rate.includes(".") ? rate.replace(/0+$/, "") : rate;
   return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
 }

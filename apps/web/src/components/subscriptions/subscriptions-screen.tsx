@@ -10,6 +10,7 @@ import {
   type SubscriptionStatus,
 } from "@finance/shared";
 import { Image as ImageIcon, Pencil, Plus } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -22,6 +23,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
 import { EmptyState } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
@@ -186,10 +194,10 @@ export function SubscriptionsScreen({
       {!loading && rows.length === 0 ? (
         /*
           Outside the table, not a cell inside it.
-          
-          A colSpan row centres itself in the table's 1760px min-width, which
+
+          A colSpan row centres itself in the table's 1808px min-width, which
           put "Nothing is active." three hundred pixels off the right edge of
-          the screen — a message nobody could read, under fourteen empty
+          the screen — a message nobody could read, under sixteen empty
           columns.
         */
         <Card>
@@ -208,41 +216,35 @@ export function SubscriptionsScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="table-scroll overflow-x-auto">
-            {/* Fourteen columns in the order the owner reads them, then one
-              unnamed cell for the pencil. */}
-            <table className="table-data w-full min-w-[1760px]">
+          <TableScroll>
+            {/* SL, then fourteen columns in the order the owner reads them,
+              then one unnamed cell for the pencil. */}
+            <table className="table-data w-full min-w-[1808px]">
               <thead>
                 <tr>
+                  <SerialHead />
+                  <Th>Start Date</Th>
                   <Th>Tool Name</Th>
                   <Th>Category</Th>
-                  <Th align="right">Cost (USD)</Th>
                   <Th align="right">Equivalent (BDT)</Th>
+                  <Th align="right">Cost (USD)</Th>
                   <Th align="right">USD Rate</Th>
-                  <Th>Billing Cycle</Th>
-                  <Th>Start Date</Th>
-                  <Th>Next Renewal Date</Th>
-                  <Th>Status</Th>
                   <Th>Payment Method</Th>
-                  <Th>User Department</Th>
-                  <Th>User Name</Th>
                   <Th>Notes</Th>
                   <Th>Login accounts</Th>
+                  <Th>User Name</Th>
+                  <Th>User Department</Th>
+                  <Th>Billing Cycle</Th>
+                  <Th>Next Renewal Date</Th>
+                  <Th>Status</Th>
                   <Th align="right"> </Th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td
-                      colSpan={15}
-                      className="px-4 py-8 text-center text-sm text-muted-foreground"
-                    >
-                      Loading…
-                    </td>
-                  </tr>
+                  <TableMessageRow colSpan={16}>Loading…</TableMessageRow>
                 ) : (
-                  rows.map((row) => {
+                  rows.map((row, index) => {
                     // Names rather than a headcount: the column is asked "who is
                     // on this", and a number does not answer it.
                     const seatNames = row.users
@@ -251,7 +253,11 @@ export function SubscriptionsScreen({
 
                     return (
                       <tr key={row.id} className="row-finance">
-                        <td className="px-4 py-2">
+                        <SerialCell n={index + 1} />
+                        <td className="text-sm">
+                          <span className="num">{row.startDate}</span>
+                        </td>
+                        <td>
                           {/* The name opens the screenshot — the request was that
                             clicking the tool shows the plan as it was bought. */}
                           <button
@@ -271,46 +277,53 @@ export function SubscriptionsScreen({
                             {row.planName}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                        <td className="text-sm text-muted-foreground">
                           {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
                         </td>
-                        <td className="col-amount px-4 py-2">
-                          {money(row.costUsd, "USD")}
-                        </td>
-                        <td className="col-amount px-4 py-2">
+                        <td className="col-amount">
                           {row.costBdt ? money(row.costBdt, "BDT") : "—"}
                         </td>
-                        <td className="col-amount px-4 py-2 text-sm text-muted-foreground">
+                        <td className="col-amount">
+                          {money(row.costUsd, "USD")}
+                        </td>
+                        <td className="col-amount text-sm text-muted-foreground">
                           {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {BILLING_CYCLE_LABELS[row.billingCycle]}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
-                          <span className="num">{row.startDate}</span>
-                        </td>
-                        <td className="px-4 py-2 text-sm">
-                          {row.nextRenewalOn ? (
-                            <span className="num">{row.nextRenewalOn}</span>
+                        <td className="text-sm text-muted-foreground">
+                          {/* Opens the account itself — the card, its balance and
+                            what else it pays for — rather than leaving the
+                            reader to go and find it on the accounts list. */}
+                          {row.accountName ? (
+                            row.accountId ? (
+                              <Link
+                                href={`/accounts/${row.accountId}`}
+                                className="transition hover:text-primary hover:underline"
+                              >
+                                {row.accountName}
+                              </Link>
+                            ) : (
+                              row.accountName
+                            )
                           ) : (
-                            /* The note cannot be typed any more, but rows written
-                             while it could still carry one, and it is the only
-                             thing this column has to say about them. */
-                            <span className="text-muted-foreground">
-                              {row.renewalNote ?? "—"}
-                            </span>
+                            "—"
                           )}
                         </td>
-                        <td className="px-4 py-2">
-                          <StatusPill status={row.status} />
+                        <td className="text-sm text-muted-foreground">
+                          {row.notes ? (
+                            <span
+                              title={row.notes}
+                              className="block max-w-[16rem] truncate"
+                            >
+                              {row.notes}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {row.accountName ?? "—"}
+                        <td className="text-sm text-muted-foreground">
+                          {row.loginEmail ?? "—"}
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {row.boughtFor ?? "—"}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
+                        <td className="text-sm">
                           {seatNames ? (
                             // Clamped, with the whole list on hover, so a plan
                             // with six seats does not stretch every row past it.
@@ -324,22 +337,28 @@ export function SubscriptionsScreen({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {row.notes ? (
-                            <span
-                              title={row.notes}
-                              className="block max-w-[16rem] truncate"
-                            >
-                              {row.notes}
-                            </span>
+                        <td className="text-sm text-muted-foreground">
+                          {row.boughtFor ?? "—"}
+                        </td>
+                        <td className="text-sm text-muted-foreground">
+                          {BILLING_CYCLE_LABELS[row.billingCycle]}
+                        </td>
+                        <td className="text-sm">
+                          {row.nextRenewalOn ? (
+                            <span className="num">{row.nextRenewalOn}</span>
                           ) : (
-                            "—"
+                            /* The note cannot be typed any more, but rows written
+                             while it could still carry one, and it is the only
+                             thing this column has to say about them. */
+                            <span className="text-muted-foreground">
+                              {row.renewalNote ?? "—"}
+                            </span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {row.loginEmail ?? "—"}
+                        <td>
+                          <StatusPill status={row.status} />
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="text-right">
                           {canWrite ? (
                             <button
                               type="button"
@@ -357,7 +376,7 @@ export function SubscriptionsScreen({
                 )}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </Card>
       )}
 
@@ -408,26 +427,6 @@ export function SubscriptionsScreen({
         />
       ) : null}
     </>
-  );
-}
-
-function Th({
-  children,
-  align = "left",
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-}) {
-  return (
-    <th
-      scope="col"
-      className={cn(
-        "px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        align === "right" ? "text-right" : "text-left",
-      )}
-    >
-      {children}
-    </th>
   );
 }
 

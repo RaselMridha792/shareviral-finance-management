@@ -394,6 +394,18 @@ tr.row-finance > th {
   text-align: right;
 }
 
+/*
+ * The "nothing here" row, which needs room a utility class cannot give it.
+ *
+ * Same trap as the headings above: `.table-data tbody td` is a class plus two
+ * elements, so the `px-6 py-10` on the message cell loses to it and the row
+ * comes out the height of an ordinary one. An empty table that looks like a
+ * table with one blank row in it is worse than either.
+ */
+.table-data tbody td.table-message {
+  padding: 2.5rem 1.4375rem;
+}
+
 .table-data tbody td {
   padding: 0.9375rem 0.4375rem;
   /*

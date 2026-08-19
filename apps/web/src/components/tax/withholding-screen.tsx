@@ -28,6 +28,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { tdsApi } from "@/lib/tax";
 import { cn } from "@/lib/utils";
@@ -68,9 +69,15 @@ const PERIOD_NAMES: Record<Granularity, string> = {
   year: "Yearly",
 };
 
-const th =
-  "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
-const thRight = `${th} text-right`;
+/**
+ * SL, Month, Employee, Salary, Tax deducted, and the payslip link.
+ *
+ * The month used to be drawn only when the table crossed one, which made the
+ * count a variable feeding three separate spans — the empty state, the footer
+ * label and the cell padding the footer out to the edge. A date column is not
+ * optional, so the count is not either, and the three cannot disagree.
+ */
+const COLUMNS = 6;
 
 export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
   const { fiscalYearMode: mode } = useSettings();
@@ -170,13 +177,6 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
 
   const period = register.period;
   const rows = register.rows;
-  /**
-   * The month column earns its place only when the table crosses one. A column
-   * repeating "August 2026" on every row of an August table says nothing.
-   */
-  const showMonth =
-    new Set(rows.map((row) => `${row.periodYear}-${row.periodMonth}`)).size > 1;
-  const columns = showMonth ? 5 : 4;
 
   return (
     <>
@@ -301,15 +301,22 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
               title={period.label}
               description="Everyone on a finalised payroll run in this period. Somebody who owed no tax is listed at 0.00 rather than left out — this is who was paid, not only who was taxed."
             />
-            <div className="overflow-x-auto">
-              <table className="table-data min-w-160 text-sm">
+            <TableScroll>
+              <table className="table-data min-w-172 text-sm">
                 <thead>
                   <tr className="text-left">
-                    <th className={th}>Employee</th>
-                    {showMonth ? <th className={th}>Month</th> : null}
-                    <th className={thRight}>Salary</th>
-                    <th className={thRight}>Tax deducted</th>
-                    <th className={th} />
+                    <SerialHead />
+                    {/*
+                      The month the pay was for, which is this table's date —
+                      not the period the filter above asked for. A quarter's
+                      table holds three of them, and the payslip each row points
+                      at is one month's.
+                    */}
+                    <Th width="w-32">Month</Th>
+                    <Th>Employee</Th>
+                    <Th align="right">Salary</Th>
+                    <Th align="right">Tax deducted</Th>
+                    <Th align="right" />
                   </tr>
                 </thead>
                 <tbody>
@@ -322,8 +329,8 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                         company.
                       */}
                       <td
-                        colSpan={columns}
-                        className="cell-prose px-4 py-10 text-center text-sm text-muted-foreground"
+                        colSpan={COLUMNS}
+                        className="cell-prose text-center text-sm text-muted-foreground"
                       >
                         <p>No finalised payroll run in {period.label}.</p>
                         <p className="mt-1">
@@ -334,10 +341,20 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    rows.map((row, position) => (
                       <tr key={row.payrollLineId} className="row-finance">
-                        <td className="px-4 py-2.5 font-medium">
-                          {row.fullName}
+                        <SerialCell n={position + 1} />
+                        <td className="num text-muted-foreground">
+                          {row.periodLabel}
+                        </td>
+                        <td>
+                          <Link
+                            href={`/team/${row.teamMemberId}`}
+                            prefetch={false}
+                            className="font-medium hover:text-primary hover:underline"
+                          >
+                            {row.fullName}
+                          </Link>
                           {/*
                             The run is finalised, so the deduction is settled —
                             but the salary has not gone out, so nothing has
@@ -345,31 +362,26 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                             only when it is true, which is rarely.
                           */}
                           {!row.isPaid ? (
-                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
                               Salary not paid yet
                             </span>
                           ) : null}
                         </td>
-                        {showMonth ? (
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {row.periodLabel}
-                          </td>
-                        ) : null}
-                        <td className="px-4 py-2.5">
+                        <td>
                           <Amount
                             value={row.grossAmount}
                             tone="neutral"
                             className="block"
                           />
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td>
                           <Amount
                             value={row.tdsAmount}
                             tone="neutral"
                             className="block font-medium"
                           />
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="text-right">
                           {canSeePayslips ? (
                             <Link
                               href={`/payroll/${row.payrollLineId}/payslip`}
@@ -388,10 +400,9 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                 {rows.length > 0 ? (
                   <tfoot>
                     <tr className="border-t border-border bg-surface-muted/40">
-                      <td
-                        className="px-4 py-2.5 font-medium"
-                        colSpan={showMonth ? 3 : 2}
-                      >
+                      {/* Everything to the left of the tax column, so the
+                          total sits under the figures it is the total of. */}
+                      <td className="font-medium" colSpan={COLUMNS - 2}>
                         Deducted in {period.label}
                       </td>
                       {/*
@@ -399,7 +410,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                         Adding the rows up here would be the same question put
                         to floating point, and it would answer differently.
                       */}
-                      <td className="px-4 py-2.5">
+                      <td>
                         <Amount
                           value={register.periodTotal}
                           tone="neutral"
@@ -411,7 +422,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                   </tfoot>
                 ) : null}
               </table>
-            </div>
+            </TableScroll>
           </Card>
         </>
       )}

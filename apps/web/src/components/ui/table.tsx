@@ -71,11 +71,7 @@ export function TableScroll({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={cn("table-scroll overflow-x-auto", className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn("overflow-x-auto", className)}>{children}</div>;
 }
 
 /**
@@ -103,8 +99,10 @@ export function TableMessageRow({
     <tr>
       <td
         colSpan={colSpan}
+        // `table-message` is what carries the height — see globals.css. The
+        // padding cannot live here: `.table-data tbody td` outranks a utility.
         className={cn(
-          "px-6 py-10 text-center text-sm",
+          "table-message text-center text-sm",
           tone === "error" ? "text-negative" : "text-muted-foreground",
         )}
       >

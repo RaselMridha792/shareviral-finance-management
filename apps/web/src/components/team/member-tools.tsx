@@ -12,6 +12,7 @@ import { ExternalLink, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import {
   subscriptionsApi,
   type MemberSubscriptionDto,
@@ -154,73 +155,48 @@ export function MemberTools({
           for this person.
         </p>
       ) : (
-        <div className="table-scroll overflow-x-auto">
+        <TableScroll>
           <table className="table-data w-full">
             <thead>
               <tr>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  Tool
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  Category
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  Plan cost
-                </th>
-                {hasOwnDates ? (
-                  <th
-                    scope="col"
-                    className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                  >
-                    Their own dates
-                  </th>
-                ) : null}
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                  Their access
-                </th>
-                <th scope="col" className="px-3 py-2" />
+                <SerialHead />
+                <Th>Tool</Th>
+                <Th>Category</Th>
+                <Th align="right">Plan cost</Th>
+                {hasOwnDates ? <Th>Their own dates</Th> : null}
+                <Th>Their access</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
-              {shown.map((row) => (
+              {shown.map((row, index) => (
                 <tr key={row.subscriptionId} className="row-finance">
-                  <td className="px-3 py-2">
+                  <SerialCell n={index + 1} />
+                  <td>
                     <span className="font-medium">{row.toolName}</span>
                     <span className="block text-xs text-muted-foreground">
                       {row.planName} ·{" "}
                       {BILLING_CYCLE_LABELS[row.billingCycle].toLowerCase()}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-sm text-muted-foreground">
+                  <td className="text-muted-foreground">
                     {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
                   </td>
-                  <td className="col-amount px-3 py-2">
+                  <td className="col-amount">
                     {formatMoney(row.costUsd, {
                       currency: "USD",
                       format: numberFormat,
                     })}
                   </td>
                   {hasOwnDates ? (
-                    <td className="px-3 py-2 text-sm">
+                    <td>
                       <OwnDates from={row.fromDate} until={row.untilDate} />
                     </td>
                   ) : null}
-                  <td className="px-3 py-2">
+                  <td>
                     <AccessPill status={row.planStatus} />
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="text-right">
                     <Link
                       href="/subscriptions"
                       className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -233,7 +209,7 @@ export function MemberTools({
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
 
       <p className="text-xs text-muted-foreground">

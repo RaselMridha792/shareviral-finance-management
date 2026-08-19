@@ -5,7 +5,7 @@ import {
   ENGAGEMENT_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Eye, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -19,8 +19,8 @@ import { DataPanel } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
+import { SerialCell, SerialHead, Th } from "@/components/ui/table";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
-import { cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
 
 export function TeamScreen({
@@ -248,22 +248,32 @@ function Section({
       <table className="table-data min-w-[860px] text-sm">
         <thead>
           <tr className="text-left">
+            {/*
+              SL counts this section, not the page. Employees and Contractors
+              are two tables that happen to sit under one heading, so both
+              start at 1 — one run of numbers across them would say they are
+              one list, and the salary sheet treats them as anything but.
+            */}
+            <SerialHead />
+            <Th width="w-28">Date of Joining</Th>
             <Th>Name</Th>
-            <Th className="w-40">Designation</Th>
-            <Th className="w-32">Department</Th>
-            <Th className="w-28">Date of Joining</Th>
-            {past ? <Th className="w-28">Last day</Th> : null}
+            {past ? <Th width="w-28">Last day</Th> : null}
             {showPay ? (
-              <Th className="w-36 text-right">Current salary</Th>
+              <Th width="w-36" align="right">
+                Current salary
+              </Th>
             ) : null}
-            <Th className="w-28">Status</Th>
-            <Th className="w-24 text-right" />
+            <Th width="w-40">Designation</Th>
+            <Th width="w-32">Department</Th>
+            <Th width="w-28">Status</Th>
           </tr>
         </thead>
         <tbody>
-          {members.map((member) => (
+          {members.map((member, index) => (
             <tr key={member.id} className="row-finance">
-              <td className="px-4 py-2.5">
+              <SerialCell n={index + 1} />
+              <td className="num text-muted-foreground">{member.joinedOn}</td>
+              <td>
                 {/*
                       prefetch={false} on every link that repeats per row.
 
@@ -289,15 +299,6 @@ function Section({
                   {ENGAGEMENT_LABELS[member.engagementType]}
                 </span>
               </td>
-              <td className="px-4 py-2.5 text-muted-foreground">
-                {member.designation ?? "—"}
-              </td>
-              <td className="px-4 py-2.5 text-muted-foreground">
-                {member.department ?? "—"}
-              </td>
-              <td className="num px-4 py-2.5 text-muted-foreground">
-                {member.joinedOn}
-              </td>
               {/*
                     Must appear under exactly the same condition as its header.
                     It did not, for one deploy: the header was added and this
@@ -308,7 +309,7 @@ function Section({
                     rather than as a broken table.
                   */}
               {past ? (
-                <td className="num px-4 py-2.5 text-muted-foreground">
+                <td className="num text-muted-foreground">
                   {member.endedOn ?? "—"}
                 </td>
               ) : null}
@@ -326,7 +327,7 @@ function Section({
                     shows up before payroll day rather than on it.
                   */}
               {showPay ? (
-                <td className="col-amount px-4 py-2.5">
+                <td className="col-amount">
                   {salaries.get(member.id) ? (
                     <Amount value={salaries.get(member.id)!} hideDecimals />
                   ) : (
@@ -336,49 +337,23 @@ function Section({
                   )}
                 </td>
               ) : null}
-              <td className="px-4 py-2.5">
+              <td className="text-muted-foreground">
+                {member.designation ?? "—"}
+              </td>
+              <td className="text-muted-foreground">
+                {member.department ?? "—"}
+              </td>
+              <td>
                 <Badge
                   tone={member.status === "active" ? "positive" : "neutral"}
                 >
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
                 </Badge>
               </td>
-              <td className="px-4 py-2.5 text-right">
-                {/* A link, not a Button with a router push: <button> inside
-                        <a> is invalid, so this borrows the secondary/sm look
-                        and stays a real link — middle-click still opens it. */}
-                <Link
-                  href={`/team/${member.id}`}
-                  prefetch={false}
-                  className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground transition hover:bg-surface-muted"
-                >
-                  <Eye className="size-3.5" />
-                  View
-                </Link>
-              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </DataPanel>
-  );
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
   );
 }

@@ -45,6 +45,13 @@ import {
   MoneyInput,
   Select,
 } from "@/components/ui/field";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { ApiError, fileHref } from "@/lib/api-client";
 import {
   teamApi,
@@ -489,41 +496,74 @@ export function TeamMemberScreen({
               description="Every month they appear on a finalised salary sheet"
             />
             <CardBody className="p-0">
-              {payslips.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-muted-foreground">
-                  No payslips yet — one appears here for each month whose salary
-                  sheet has been finalised.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="table-data min-w-[620px] text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        <Th>Month</Th>
-                        <Th>Salary sheet</Th>
-                        <Th className="text-right">Gross</Th>
-                        <Th className="text-right">Tax</Th>
-                        <Th className="text-right">Net</Th>
-                        <Th className="w-24" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payslips.map((slip) => (
+              <TableScroll>
+                <table className="table-data min-w-[780px] text-sm">
+                  <thead>
+                    <tr className="text-left">
+                      <SerialHead />
+                      <Th>Paid on</Th>
+                      <Th>Salary sheet</Th>
+                      <Th align="right">Gross</Th>
+                      <Th align="right">Tax</Th>
+                      <Th align="right">Net</Th>
+                      <Th>Status</Th>
+                      <Th width="w-24" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payslips.length === 0 ? (
+                      <TableMessageRow colSpan={8}>
+                        No payslips yet — one appears here for each month whose
+                        salary sheet has been finalised.
+                      </TableMessageRow>
+                    ) : (
+                      payslips.map((slip, index) => (
                         <tr key={slip.id} className="row-finance">
-                          <td className="px-5 py-2.5">
-                            <span className="font-medium">{slip.runLabel}</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {slip.paidOn ? (
-                                <>
-                                  Paid{" "}
-                                  <span className="num">{slip.paidOn}</span>
-                                </>
-                              ) : (
-                                "Not paid yet"
-                              )}
-                            </span>
+                          <SerialCell n={index + 1} />
+                          {/* A sheet can be finalised before it is paid, and
+                              then there is no date to show. The dash is the
+                              honest answer — Status is where the reason is. */}
+                          <td
+                            className={cn(
+                              "num",
+                              !slip.paidOn && "text-muted-foreground",
+                            )}
+                          >
+                            {slip.paidOn ?? "—"}
                           </td>
-                          <td className="px-5 py-2.5">
+                          <td>
+                            {/* One link per row — see the note in
+                                team-screen.tsx. */}
+                            <Link
+                              href={`/payroll/${slip.runId}`}
+                              prefetch={false}
+                              className="font-medium hover:text-primary hover:underline"
+                            >
+                              {slip.runLabel}
+                            </Link>
+                          </td>
+                          <td>
+                            <Amount
+                              value={slip.grossAmount}
+                              tone="neutral"
+                              className="block"
+                            />
+                          </td>
+                          <td>
+                            <Amount
+                              value={slip.tdsAmount}
+                              tone="neutral"
+                              className="block"
+                            />
+                          </td>
+                          <td>
+                            <Amount
+                              value={slip.netAmount}
+                              tone="neutral"
+                              className="block font-medium"
+                            />
+                          </td>
+                          <td>
                             <Badge
                               tone={
                                 slip.runStatus === "paid"
@@ -536,28 +576,7 @@ export function TeamMemberScreen({
                               {PAYROLL_STATUS_LABELS[slip.runStatus]}
                             </Badge>
                           </td>
-                          <td className="px-5 py-2.5">
-                            <Amount
-                              value={slip.grossAmount}
-                              tone="neutral"
-                              className="block"
-                            />
-                          </td>
-                          <td className="px-5 py-2.5">
-                            <Amount
-                              value={slip.tdsAmount}
-                              tone="neutral"
-                              className="block"
-                            />
-                          </td>
-                          <td className="px-5 py-2.5">
-                            <Amount
-                              value={slip.netAmount}
-                              tone="neutral"
-                              className="block font-medium"
-                            />
-                          </td>
-                          <td className="px-5 py-2.5 text-right">
+                          <td className="text-right">
                             {/*
                                 The route's segment is named runId but carries
                                 the payroll line id — one payslip is one line.
@@ -572,11 +591,11 @@ export function TeamMemberScreen({
                             </Link>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </TableScroll>
             </CardBody>
           </Card>
         </>
@@ -833,29 +852,6 @@ function ageInYears(dateOfBirth: string): number | null {
   let age = thisYear - year;
   if (thisMonth < month || (thisMonth === month && thisDay < day)) age -= 1;
   return age >= 0 && age < 130 ? age : null;
-}
-
-/**
- * A column heading, defined once so the two tables on the Pay tab cannot drift
- * apart — they sit one above the other, where any difference is obvious.
- */
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
 }
 
 /**
