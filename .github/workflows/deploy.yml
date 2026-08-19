@@ -184,17 +184,34 @@ jobs:
       # private too.
       packages: read
     steps:
-      # Two attempts, because a deploy that fails on a momentary network blip
-      # teaches people that a red run means nothing — and this pipeline has
-      # spent a whole evening proving how expensive that lesson is.
+      # Does the box answer at all?
       #
-      # `dial tcp ***:22: i/o timeout` after exactly 30 seconds is the action's
-      # default connect timeout giving up. The box was reachable minutes later
-      # by hand; it had simply been too busy to answer while a crash-looping
-      # container churned on its single core. 90 seconds is patience for a box
-      # under load, not a mask for one that is gone.
+      # Purely diagnostic, and it never fails the run — but when a deploy dies
+      # with `dial tcp ***:22: i/o timeout` the first question is always whether
+      # the server was reachable at that minute or whether SSH itself was the
+      # problem, and the log has never been able to answer it. Now it can.
+      - name: Is the server answering on port 22
+        continue-on-error: true
+        run: |
+          for i in 1 2 3; do
+            if timeout 10 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VPS_HOST }}/22" 2>/dev/null; then
+              echo "probe $i: port 22 answered"
+              exit 0
+            fi
+            echo "probe $i: no answer"
+            sleep 10
+          done
+          echo "port 22 did not answer in three probes over 30s"
+
+      # Three attempts, and — the part that was missing — a wait between them.
+      #
+      # There were two before, back to back. Run #107 failed both inside about
+      # three minutes, which is the same minute as far as a box under load is
+      # concerned: retrying immediately after a timeout asks the same question
+      # of the same overloaded machine and gets the same answer. A minute, then
+      # two, gives whatever was churning a chance to finish.
       - name: Deploy over SSH
-        id: deploy
+        id: attempt1
         continue-on-error: true
         uses: appleboy/ssh-action@v1
         env:
@@ -209,8 +226,14 @@ jobs:
           command_timeout: 15m
           script: ${{ env.REMOTE }}
 
+      - name: Wait a minute
+        if: steps.attempt1.outcome == 'failure'
+        run: sleep 60
+
       - name: Deploy over SSH — second attempt
-        if: steps.deploy.outcome == 'failure'
+        id: attempt2
+        if: steps.attempt1.outcome == 'failure'
+        continue-on-error: true
         uses: appleboy/ssh-action@v1
         env:
           GHCR_USER: ${{ github.actor }}
@@ -223,3 +246,56 @@ jobs:
           timeout: 90s
           command_timeout: 15m
           script: ${{ env.REMOTE }}
+
+      - name: Wait two minutes
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        run: sleep 120
+
+      # No `continue-on-error`: if this one fails, the run is red.
+      - name: Deploy over SSH — third attempt
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN
+          timeout: 90s
+          command_timeout: 15m
+          script: ${{ env.REMOTE }}
+
+      # The deploy script exiting 0 means the commands ran. It does not mean the
+      # site came back up — a container that starts and then crash-loops leaves
+      # `docker compose up -d` perfectly happy and the site down, which is how
+      # this repository once spent an evening green and broken.
+      #
+      # `/api/health` is `@Public()` and says nothing but "the process is up",
+      # which is exactly what is being asked here.
+      - name: The site has to answer before this run goes green
+        run: |
+          set -uo pipefail
+          origin="${{ vars.API_ORIGIN }}"
+          if [ -z "$origin" ]; then
+            echo "API_ORIGIN is not set, so there is nothing to check."
+            exit 1
+          fi
+
+          for i in $(seq 1 12); do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}'               --max-time 10 "$origin/api/health" || echo 000)
+            if [ "$code" = "200" ] && grep -q '"status":"ok"' /tmp/health.json; then
+              echo "healthy after $i check(s):"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "check $i: HTTP $code"
+            sleep 10
+          done
+
+          echo
+          echo "The deploy ran, but $origin/api/health never came back ok."
+          echo "main is now ahead of what is actually serving."
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
