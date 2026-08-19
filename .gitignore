@@ -60,3 +60,4 @@ apps/api/test/integration/*.xlsx
 .cell.mjs
 .cols.mjs
 .dollars.mjs
+.one.mjs
