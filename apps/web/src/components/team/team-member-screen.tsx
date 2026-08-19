@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { DocumentSlots } from "@/components/files/document-slots";
 import { PhotoUpload } from "@/components/files/file-manager";
@@ -84,6 +85,9 @@ export function TeamMemberScreen({
    */
   payslips: MemberPayslipDto[];
 }) {
+  // The rail knows the ancestors; only this page knows the record.
+  useNameThisPage(member.fullName);
+
   const settings = useSettings();
   const router = useRouter();
   const canWrite = useCan("team.write");

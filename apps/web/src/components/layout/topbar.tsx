@@ -2,17 +2,15 @@
 
 import { usePathname } from "next/navigation";
 
+import Link from "next/link";
+
+import { trailFor, useLeafCrumb } from "@/components/layout/breadcrumb";
 import { MobileSidebar } from "@/components/layout/sidebar";
 import {
   toggleSidebar,
   useSidebarCollapsed,
 } from "@/components/layout/sidebar-state";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import {
-  NAV_GROUPS,
-  SECONDARY_NAV,
-  type NavItem,
-} from "@/components/layout/nav-items";
 import { useUsdRateContext } from "@/components/money/rate-provider";
 import { Icon } from "@/components/ui/icon";
 import { useState } from "react";
@@ -42,7 +40,14 @@ const TOGGLE =
 export function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
-  const screen = screenNameFor(pathname);
+  /*
+    The rail knows the ancestors; only the page knows the record. A team
+    member's name is not in `nav-items.ts` and never will be, so the screen
+    supplies it and it lands here as the last crumb.
+  */
+  const trail = trailFor(pathname);
+  const leaf = useLeafCrumb();
+  const crumbs = leaf ? [...trail, { label: leaf }] : trail;
   const collapsed = useSidebarCollapsed();
 
   /**
@@ -87,15 +92,44 @@ export function Topbar() {
         {/* Finance / <screen>. The first half never changes and is not a link:
             it says which product you are in, which matters when this sits in a
             browser beside four other tabs. */}
+        {/*
+          Finance, then every level down to here.
+
+          "Finance" is not a link: it names the product, and a link that goes
+          nowhere in particular is what teaches people to stop trusting a
+          breadcrumb. Everything between it and the last crumb is, because
+          climbing one level is the whole reason this row exists. The last
+          crumb is where you already are, so it stays plain.
+        */}
         <nav aria-label="Breadcrumb" className="min-w-0">
           <p className="truncate text-sm">
             <span className="text-muted-foreground">Finance</span>
-            {screen ? (
-              <>
-                <span className="mx-1.5 text-faint">/</span>
-                <span className="font-medium text-foreground">{screen}</span>
-              </>
-            ) : null}
+            {crumbs.map((crumb, i) => {
+              const last = i === crumbs.length - 1;
+              return (
+                <span key={`${crumb.label}-${i}`}>
+                  <span className="mx-1.5 text-faint">/</span>
+                  {crumb.href && !last ? (
+                    <Link
+                      href={crumb.href}
+                      className="rounded-sm text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    >
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span
+                      className={
+                        last
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {crumb.label}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </p>
         </nav>
 
@@ -120,33 +154,4 @@ export function Topbar() {
       <MobileSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
     </>
   );
-}
-
-/**
- * The deepest nav item whose href this path sits under.
- *
- * Deepest, not first: /accounts/cash-in must read "Cash-In" and not "Accounts",
- * and a longest-prefix match is the only rule that gets that right without a
- * second table of names to keep in step with the rail.
- */
-function screenNameFor(pathname: string): string | null {
-  let best: { label: string; length: number } | null = null;
-
-  const walk = (items: NavItem[]) => {
-    for (const item of items) {
-      if (
-        item.href &&
-        (pathname === item.href || pathname.startsWith(item.href + "/")) &&
-        (!best || item.href.length > best.length)
-      ) {
-        best = { label: item.label, length: item.href.length };
-      }
-      if (item.children) walk(item.children);
-    }
-  };
-
-  for (const group of NAV_GROUPS) walk(group.items);
-  walk(SECONDARY_NAV);
-
-  return best ? (best as { label: string }).label : null;
 }

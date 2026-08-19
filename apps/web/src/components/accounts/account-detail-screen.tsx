@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,9 @@ export function AccountDetailScreen({
 }: {
   account: AccountWithBalance;
 }) {
+  // The rail knows the ancestors; only this page knows the record.
+  useNameThisPage(account.name);
+
   const router = useRouter();
   const canWrite = useCan("accounts.write");
   const [editing, setEditing] = useState(false);

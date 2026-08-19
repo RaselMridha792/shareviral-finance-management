@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
 import { TdsWorking } from "@/components/tds/tds-working";
@@ -57,6 +58,9 @@ export function SalarySheetScreen({
   lines: PayrollLineDto[];
   accounts: AccountDto[];
 }) {
+  // The rail knows the ancestors; only this page knows the record.
+  useNameThisPage(run.label);
+
   const router = useRouter();
   const canWrite = useCan("payroll.write");
   const canPay = useCan("payroll.pay");

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
@@ -45,6 +46,11 @@ export function RegisterScreen({
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
   const { account } = register;
+
+  // The rail knows the ancestors; only this page knows the record. After the
+  // destructure, not before it — `account` comes out of `register`.
+  useNameThisPage(`${account.name} — register`);
+
   const refresh = () => router.refresh();
 
   function setRange(next: { from?: string; to?: string }) {

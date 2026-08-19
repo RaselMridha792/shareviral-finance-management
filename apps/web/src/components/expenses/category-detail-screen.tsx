@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
@@ -30,6 +31,9 @@ export function CategoryDetailScreen({
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
+  // The rail knows the ancestors; only this page knows the record.
+  useNameThisPage(heading.name);
+
   const router = useRouter();
 
   const [editing, setEditing] = useState<TransactionDto | null>(null);
