@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
@@ -230,52 +231,42 @@ export function CashInScreen({
         }
       />
 
-      <div
-        className={cn(
-          "grid grid-cols-1 gap-4",
-          // The rate card is not shown to a reader who cannot be told it, and
-          // one card spread across two columns looks like one went missing.
-          rateStatus === "hidden" ? null : "sm:grid-cols-2",
-        )}
-      >
-        <Card className="p-5">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Received in {range.label}
-          </p>
-          <Amount
-            value={totalBdt}
-            tone="in"
-            className="mt-3 block text-2xl font-semibold tracking-tight"
-          />
-          {totalUsd ? (
-            <Amount
-              value={totalUsd}
-              currency="USD"
-              tone="neutral"
-              approximate
-              className="mt-0.5 block text-xs text-muted-foreground"
-            />
-          ) : rateStatus === "ready" ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              No rate on record for this month
-            </p>
-          ) : null}
-        </Card>
+      {/* One strip rather than two cards. They are two figures about the same
+          month, and a strip is how every other screen here says that. */}
+      <StatStrip min={280}>
+        <StatCell
+          label={`Received in ${range.label}`}
+          icon="south_west"
+          iconTone="text-positive"
+          value={<Amount value={totalBdt} tone="in" showCounterpart={false} />}
+          secondary={
+            totalUsd ? (
+              <Amount
+                value={totalUsd}
+                currency="USD"
+                tone="neutral"
+                approximate
+                showCounterpart={false}
+              />
+            ) : rateStatus === "ready" ? (
+              "No rate on record for this month"
+            ) : null
+          }
+        />
 
+        {/* Not shown to a reader who cannot be told it — and when it is hidden
+            the strip has one cell, which fills the row rather than leaving a
+            gap where the second used to be. */}
         {rateStatus === "hidden" ? null : (
-          <Card className={cn("p-5", rate && "border-primary/40")}>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Rate this month
-            </p>
-            <span className="col-amount mt-3 block text-2xl font-semibold tracking-tight">
-              {rateStatus === "loading"
-                ? "…"
-                : rate
-                  ? `৳${trimRate(rate)}`
-                  : "—"}
-            </span>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {rateStatus === "loading" ? (
+          <StatCell
+            label="Rate this month"
+            icon="currency_exchange"
+            iconTone="text-chart-5"
+            value={
+              rateStatus === "loading" ? "…" : rate ? `৳${trimRate(rate)}` : "—"
+            }
+            footnote={
+              rateStatus === "loading" ? (
                 "Asking the API what rate this month is running at."
               ) : !rate ? (
                 "Nothing funded yet this month, and no rate set in Settings."
@@ -287,11 +278,11 @@ export function CashInScreen({
                 </>
               ) : (
                 "Nothing funded this month — this is the fallback rate reports use."
-              )}
-            </p>
-          </Card>
+              )
+            }
+          />
         )}
-      </div>
+      </StatStrip>
 
       {error ? (
         <p

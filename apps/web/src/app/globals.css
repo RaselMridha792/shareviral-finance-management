@@ -339,6 +339,21 @@ tr.row-finance > th {
 }
 
 /* A table that must not be squeezed below the width its columns need. */
+/* --------------------------------------------------------------------------
+   Data tables
+   --------------------------------------------------------------------------
+   Said once here rather than on eighteen screens. Every table in this app is
+   the same object — a header band, rows separated by a softer rule than the
+   card's own edge, and a lime tint under the pointer — and eighteen hand-built
+   versions of that is eighteen chances for one to come out slightly different.
+
+   The vertical rules are the part worth explaining. A hairline on every cell
+   but the first, pulled half the column gap to the left, puts the rule in the
+   MIDDLE of the gap instead of hard against the next column's text — and it
+   does it without shifting that text, because the padding it adds is taken
+   straight back by the negative margin.
+   -------------------------------------------------------------------------- */
+
 .table-data {
   width: 100%;
   border-collapse: collapse;
@@ -347,6 +362,63 @@ tr.row-finance > th {
 .table-data th,
 .table-data td {
   white-space: nowrap;
+}
+
+.table-data thead tr {
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.table-data thead th {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding: 0.75rem 1.4375rem;
+  text-align: left;
+}
+
+.table-data tbody td {
+  padding: 0.9375rem 1.4375rem;
+}
+
+.table-data tbody tr {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* The last row's rule would sit against the card's own edge, doubling it. */
+.table-data tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.table-data tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.table-data tfoot tr {
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border);
+}
+
+.table-data tfoot td {
+  padding: 0.9375rem 1.4375rem;
+}
+
+/**
+ * One rule per column boundary.
+ *
+ * The handoff pulls the rule into the middle of the gap with a negative margin,
+ * which works on the grid rows it was drawn as and not here: a table cell
+ * ignores margin. Overriding the padding instead is what a first attempt does,
+ * and it silently halved the left padding on every column but the first — the
+ * rule landed right against the next column's text. So the rule sits on the
+ * cell edge and the padding is left alone.
+ */
+.table-data th + th,
+.table-data td + td {
+  border-left: 1px solid var(--border-strong);
 }
 
 .table-data .cell-prose {
