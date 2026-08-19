@@ -1,21 +1,6 @@
 "use client";
 
 import type { OverviewReport } from "@finance/shared";
-import {
-  Banknote,
-  CalendarClock,
-  Coins,
-  HandCoins,
-  Landmark,
-  Receipt,
-  Scale,
-  Sparkles,
-  Tag,
-  TrendingDown,
-  Users,
-  Wallet,
-} from "lucide-react";
-import type { ComponentType } from "react";
 
 /**
  * What a card on the expense row can show.
@@ -31,7 +16,16 @@ export type CardSpec = {
   label: string;
   /** For the chooser, which groups options under a heading. */
   group: "Spending" | "Tax" | "Position" | "By category";
-  icon: ComponentType<{ className?: string }>;
+  /**
+   * A Material Symbols name, and the colour its meaning gives it.
+   *
+   * Coloured by what the figure IS — green for money arriving, red for money
+   * leaving, amber for tax, lime for a balance — rather than to decorate. A row
+   * of four identically grey icons tells a reader nothing they could not get
+   * from the labels.
+   */
+  symbol: string;
+  iconTone: string;
   accent?: "muted" | "primary" | "positive" | "negative" | "warning";
   tone?: "in" | "out" | "neutral";
   value: string;
@@ -108,7 +102,8 @@ export function buildCatalogue(
       key: "salaryPaid",
       label: "Salary paid",
       group: "Spending",
-      icon: Users,
+      symbol: "groups",
+      iconTone: "text-chart-1",
       value: expense.salaryPaid,
       usd: usd.salaryPaid,
       change: percentChange(expense.salaryPaid, previous?.salaryPaid),
@@ -119,7 +114,8 @@ export function buildCatalogue(
       key: "tools",
       label: "AI & other tools",
       group: "Spending",
-      icon: Sparkles,
+      symbol: "auto_awesome",
+      iconTone: "text-chart-6",
       value: expense.toolsAndSubscriptions,
       usd: usd.toolsAndSubscriptions,
       hint: "subscriptions and the card",
@@ -128,7 +124,8 @@ export function buildCatalogue(
       key: "moneyOut",
       label: "Total spent",
       group: "Spending",
-      icon: TrendingDown,
+      symbol: "trending_down",
+      iconTone: "text-negative",
       tone: "out",
       accent: "negative",
       value: totals.moneyOut,
@@ -141,7 +138,8 @@ export function buildCatalogue(
       key: "moneyIn",
       label: "Money in",
       group: "Position",
-      icon: HandCoins,
+      symbol: "savings",
+      iconTone: "text-positive",
       tone: "in",
       accent: "positive",
       value: totals.moneyIn,
@@ -152,7 +150,8 @@ export function buildCatalogue(
       key: "net",
       label: "Net for the period",
       group: "Position",
-      icon: Scale,
+      symbol: "balance",
+      iconTone: "text-chart-5",
       value: totals.net,
       usd: dollars(totals.net),
       change: percentChange(totals.net, previous?.net),
@@ -162,7 +161,8 @@ export function buildCatalogue(
       key: "cashInHand",
       label: "Cash in hand",
       group: "Position",
-      icon: Wallet,
+      symbol: "account_balance_wallet",
+      iconTone: "text-primary-text",
       accent: "primary",
       value: totals.cashInHand,
       usd: dollars(totals.cashInHand),
@@ -174,7 +174,8 @@ export function buildCatalogue(
       key: "funding",
       label: "Funding received",
       group: "Position",
-      icon: Landmark,
+      symbol: "account_balance",
+      iconTone: "text-chart-1",
       tone: "in",
       accent: "positive",
       value: totals.fundingReceived,
@@ -186,7 +187,8 @@ export function buildCatalogue(
       key: "tdsWithheld",
       label: "TDS withheld",
       group: "Tax",
-      icon: Receipt,
+      symbol: "receipt_long",
+      iconTone: "text-negative",
       value: expense.taxWithheld,
       usd: usd.taxWithheld,
       hint: `${money(totals.taxDeposited, { hideDecimals: true })} deposited`,
@@ -195,7 +197,8 @@ export function buildCatalogue(
       key: "tdsDeposited",
       label: "TDS deposited",
       group: "Tax",
-      icon: Banknote,
+      symbol: "payments",
+      iconTone: "text-chart-1",
       value: totals.taxDeposited,
       usd: dollars(totals.taxDeposited),
       hint: "by challan, this period",
@@ -204,7 +207,8 @@ export function buildCatalogue(
       key: "tdsOutstanding",
       label: "TDS still held",
       group: "Tax",
-      icon: CalendarClock,
+      symbol: "event_upcoming",
+      iconTone: "text-warning",
       value: expense.taxOutstanding,
       usd: usd.taxOutstanding,
       accent: Number(expense.taxOutstanding) > 0 ? "warning" : "muted",
@@ -233,7 +237,8 @@ export function buildCatalogue(
       key: `category:${line.id}`,
       label: line.name,
       group: "By category" as const,
-      icon: Tag,
+      symbol: "sell",
+      iconTone: "text-faint",
       tone: "out" as const,
       value: line.total,
       usd: inUsd(line.total, usdRate),
@@ -262,7 +267,8 @@ export function placeholderFor(key: string, label?: string): CardSpec | null {
     key,
     label: label ?? "A category with nothing in it",
     group: "By category",
-    icon: Coins,
+    symbol: "sell",
+    iconTone: "text-faint",
     value: "0.00",
     hint: "nothing under this heading in this period",
   };

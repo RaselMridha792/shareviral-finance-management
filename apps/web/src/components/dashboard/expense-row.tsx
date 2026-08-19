@@ -11,8 +11,10 @@ import {
   placeholderFor,
   type CardSpec,
 } from "@/components/dashboard/expense-cards";
-import { StatTile } from "@/components/dashboard/stat-tile";
+import { formatMoney } from "@finance/shared";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { SectionHeading, StatCell, StatStrip } from "@/components/ui/patterns";
 import { Card } from "@/components/ui/card";
 import { useDismissable } from "@/components/ui/overlay";
 import { cn } from "@/lib/utils";
@@ -193,37 +195,36 @@ export function ExpenseRow({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 className="text-sm font-semibold tracking-tight">
-          Expense overview
-        </h2>
-
-        <span className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {report.period.label}
+      <SectionHeading
+        title="Expense overview"
+        icon="receipt_long"
+        iconTone="text-negative"
+        qualifier={report.period.label}
+        aside={
+          <span className="flex items-center gap-3">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setEditing((was) => !was);
+                setAdding(false);
+              }}
+            >
+              {editing ? (
+                <>
+                  <Check className="size-3.5" />
+                  Done
+                </>
+              ) : (
+                <>
+                  <Settings2 className="size-3.5" />
+                  Choose cards
+                </>
+              )}
+            </Button>
           </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setEditing((was) => !was);
-              setAdding(false);
-            }}
-          >
-            {editing ? (
-              <>
-                <Check className="size-3.5" />
-                Done
-              </>
-            ) : (
-              <>
-                <Settings2 className="size-3.5" />
-                Choose cards
-              </>
-            )}
-          </Button>
-        </span>
-      </div>
+        }
+      />
 
       {editing ? (
         <p className="text-xs text-muted-foreground">
@@ -233,19 +234,27 @@ export function ExpenseRow({
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* The same strip the account blocks use. It was a grid of separate
+          cards, which read as a different kind of thing on a page where the
+          two above it are strips — and they are all four-figures-in-a-row. */}
+      <StatStrip>
         {cards.map((card) => (
-          <div key={card.key} className="relative">
-            <StatTile
+          <div key={card.key} className="relative bg-surface">
+            <StatCell
               label={card.label}
-              value={card.value}
-              usd={card.usd}
-              icon={card.icon}
-              accent={card.accent}
-              tone={card.tone}
-              hint={card.hint}
-              change={card.change}
-              risingIsGood={card.risingIsGood}
+              icon={card.symbol}
+              iconTone={card.iconTone}
+              // Formatted here, where the cell only renders what it is given.
+              // Passing the raw string printed "68875.00" under a heading whose
+              // neighbours read ৳11,83,000.00 — the same figures, one of them
+              // looking like a database column.
+              value={money(card.value)}
+              secondary={
+                card.usd
+                  ? `≈ ${formatMoney(card.usd, { currency: "USD" })}`
+                  : null
+              }
+              footnote={card.hint}
             />
             {editing ? (
               <button
@@ -260,7 +269,7 @@ export function ExpenseRow({
                     ? "The row cannot be empty"
                     : `Remove ${card.label}`
                 }
-                className="absolute -top-2 -right-2 flex size-7 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-e1 transition hover:border-negative hover:bg-negative/10 hover:text-negative disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-muted-foreground"
+                className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-e1 transition hover:border-negative hover:bg-negative/10 hover:text-negative disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-muted-foreground"
               >
                 <X className="size-3.5" />
               </button>
@@ -272,13 +281,13 @@ export function ExpenseRow({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground transition hover:border-primary hover:text-primary"
+            className="flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-2 bg-surface text-sm text-muted-foreground transition hover:text-primary-text"
           >
             <Plus className="size-5" />
             Add a card
           </button>
         ) : null}
-      </div>
+      </StatStrip>
 
       {editing ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -381,7 +390,11 @@ function CardChooser({
                       )}
                     >
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-muted-foreground">
-                        <card.icon className="size-4" />
+                        <Icon
+                          name={card.symbol}
+                          size={18}
+                          className={card.iconTone}
+                        />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">

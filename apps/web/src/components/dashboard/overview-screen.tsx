@@ -9,20 +9,20 @@ import {
   type AccountGroup,
   type OverviewReport,
 } from "@finance/shared";
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  CreditCard,
-  History,
-  Wallet,
-} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { ExpenseRow } from "@/components/dashboard/expense-row";
-import { StatTile } from "@/components/dashboard/stat-tile";
 import { useSettings } from "@/components/settings-provider";
 import { Select } from "@/components/ui/field";
+import { Icon } from "@/components/ui/icon";
+import {
+  SectionHeading,
+  ShareBar,
+  StatCell,
+  StatStrip,
+  StatusPill,
+} from "@/components/ui/patterns";
 
 /**
  * The screen somebody opens first, and often the only one they open.
@@ -71,7 +71,8 @@ export function OverviewScreen({
    * call a finished month current for six hours a month.
    */
   const [nowYear, nowMonth] = todayInDhaka().split("-").map(Number);
-  const periodHasEnded = year < nowYear || (year === nowYear && month < nowMonth);
+  const periodHasEnded =
+    year < nowYear || (year === nowYear && month < nowMonth);
 
   // Both go in the URL, so a chosen month survives a refresh and can be sent
   // to somebody else and open on the same figures.
@@ -95,13 +96,17 @@ export function OverviewScreen({
     startTransition(() => router.push(`/?${params.toString()}`));
   }
 
-
   return (
     <>
       {/* --- heading and controls ------------------------------------- */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
+            <Icon
+              name="space_dashboard"
+              size={27}
+              className="text-muted-foreground opacity-75"
+            />
             Overview, {firstName}
           </h1>
           {/*
@@ -165,7 +170,6 @@ export function OverviewScreen({
               </option>
             ))}
           </Select>
-
         </div>
       </div>
 
@@ -194,9 +198,10 @@ export function OverviewScreen({
  * One account group: where it started, what moved, where it stands.
  *
  * The four read left to right as a sentence, and they tie —
- * opening + in − out is exactly current. Four figures in a box that do not
- * add up are four unrelated numbers, and a reader who checks once and finds
- * they disagree stops trusting the whole screen.
+ * opening + in − out is exactly current. Four figures in a box that do not add
+ * up are four unrelated numbers, and a reader who checks once and finds they
+ * disagree stops trusting the whole screen. The footnote under the last cell
+ * says the arithmetic out loud so nobody has to work out whether it holds.
  */
 function AccountBlock({
   group,
@@ -206,78 +211,118 @@ function AccountBlock({
   /** True when the month on screen is over, so the figure is a close. */
   ended: boolean;
 }) {
+  const inflow = Number(group.moneyIn);
+  const outflow = Number(group.moneyOut);
+  const moved = inflow + outflow;
+  const net = inflow - outflow;
+
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        {/*
-          The accounts name themselves.
+      {/*
+        The accounts name themselves.
 
-          It read "BD Bank overview" in the heading with "Petty cash (demo) ·
-          Standard Chartered Bank" in grey beside it — a fixed label saying
-          less than the line next to it, and the same names twice on the row.
-          The names are the heading now.
+        It read "BD Bank overview" with the account names in grey beside it — a
+        fixed label saying less than the line next to it, and the same names
+        twice on one row. The names are the heading now.
 
-          `group.label` remains the fallback. It cannot currently be reached —
-          a group with no accounts is never built — but a heading that renders
-          as an empty string would be a worse way to find that out.
-        */}
-        <h2 className="text-sm font-semibold tracking-tight">
-          {group.accounts.join(" · ") || group.label}
-        </h2>
-      </div>
+        `group.label` remains the fallback. It cannot currently be reached — a
+        group with no accounts is never built — but a heading that rendered as
+        an empty string would be a worse way to find that out.
+      */}
+      <SectionHeading
+        title={group.accounts.join(" · ") || group.label}
+        icon={group.key === "card" ? "credit_card" : "account_balance"}
+        iconTone="text-primary-text"
+        aside={
+          moved > 0 ? (
+            <StatusPill tone={net >= 0 ? "positive" : "negative"}>
+              {net >= 0 ? "Up" : "Down"}{" "}
+              {money(Math.abs(net).toFixed(2), group)} this month
+            </StatusPill>
+          ) : null
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {/* "Opening balance", not "Opening bank balance": the section heading
-            above already says which account this is, and the longer label was
-            the one that wrapped. */}
-        <StatTile
+      <StatStrip>
+        {/* "Opening balance", not "Opening bank balance": the heading above
+            already says which account this is, and the longer label was the one
+            that wrapped. */}
+        <StatCell
           label="Opening balance"
-          value={group.opening}
-          usd={group.usd.opening}
-          icon={History}
-          hint="carried forward"
+          icon="history"
+          value={money(group.opening, group)}
+          secondary={usd(group.usd.opening)}
+          footnote="carried forward"
         />
-        <StatTile
+
+        <StatCell
           label="Cash inflow"
-          value={group.moneyIn}
-          usd={group.usd.moneyIn}
-          tone="in"
-          icon={ArrowDownLeft}
-          accent="positive"
-        />
-        <StatTile
+          icon="south_west"
+          iconTone="text-positive"
+          value={money(group.moneyIn, group)}
+          secondary={usd(group.usd.moneyIn)}
+        >
+          {/* How the month split between arriving and leaving. Drawn only when
+              something moved: a full-width bar over two zeroes reads as a
+              hundred per cent of nothing. */}
+          {moved > 0 ? (
+            <ShareBar share={inflow / moved} tone="bg-positive" />
+          ) : null}
+        </StatCell>
+
+        <StatCell
           label="Cash outflow"
-          value={group.moneyOut}
-          usd={group.usd.moneyOut}
-          tone="out"
-          icon={ArrowUpRight}
-          accent="negative"
-        />
+          icon="north_east"
+          iconTone="text-negative"
+          value={money(group.moneyOut, group)}
+          secondary={usd(group.usd.moneyOut)}
+        >
+          {moved > 0 ? (
+            <ShareBar share={outflow / moved} tone="bg-negative" />
+          ) : null}
+        </StatCell>
+
         {/*
           The same figure under two names, and both are accurate.
 
           It has always been the *period's* close — opening as at the first of
-          the month, plus what moved during it. On the month in progress that
-          is what the accounts hold right now, so "Current balance" is the
-          honest word. Look back at July from August and the number does not
-          change meaning, but the word does: it is what July closed at, which
-          is exactly what August opened with. Calling that "current" invites
+          the month, plus what moved during it. On the month in progress that is
+          what the accounts hold right now, so "Current balance" is the honest
+          word. Look back at July from August and the number does not change
+          meaning, but the word does: it is what July closed at, which is
+          exactly what August opened with. Calling that "current" invites
           somebody to read a two-month-old figure as today's cash.
         */}
-        <StatTile
+        <StatCell
+          emphasis
           label={ended ? "Closing balance" : "Current balance"}
-          value={group.closing}
-          usd={group.usd.closing}
-          icon={group.key === "card" ? CreditCard : Wallet}
-          accent="primary"
-          hint={
+          icon="account_balance_wallet"
+          iconTone="text-primary-text"
+          value={money(group.closing, group)}
+          secondary={usd(group.usd.closing)}
+          footnote={
             ended
               ? "what the month closed at, and what the next opened with"
               : "opening + in − out"
           }
         />
-      </div>
+      </StatStrip>
     </section>
   );
 }
 
+/**
+ * The dollar line under a figure.
+ *
+ * Grouped and marked approximate. It was printing the raw string, so a
+ * thirty-two-thousand-dollar balance read as "$32579.88" — the one number on
+ * the screen with no separators, directly under one that had them.
+ */
+function usd(value: string | null): string | null {
+  return value === null ? null : `≈ ${formatMoney(value, { currency: "USD" })}`;
+}
+
+/** The group's own currency, not the report's — a card may be held in dollars. */
+function money(value: string, group: AccountGroup): string {
+  return formatMoney(value, { currency: group.currency });
+}
