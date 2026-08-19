@@ -3,6 +3,7 @@ import {
   check,
   date,
   integer,
+  jsonb,
   numeric,
   pgTable,
   smallint,
@@ -56,6 +57,20 @@ export const appSettings = pgTable(
     companyEmail: varchar("company_email", { length: 160 }),
     payslipSignatoryName: varchar("payslip_signatory_name", { length: 120 }),
     payslipSignatoryTitle: varchar("payslip_signatory_title", { length: 120 }),
+
+    /**
+     * How a gross salary divides — Basic 60%, House Rent 30%, and so on.
+     *
+     * `[{ label, percent }]`, and jsonb rather than four columns for the same
+     * reason the payslip's own breakdown is a list: the next allowance somebody
+     * invents should cost a label, not a migration.
+     *
+     * Null means the shared default, which is the company's own convention off
+     * a handwritten sheet. Stored here rather than in code because the owner
+     * asked for the rule to be somewhere they could change it — the same
+     * argument they made about the tax bands.
+     */
+    salarySplit: jsonb("salary_split"),
 
     baseCurrency: text("base_currency").notNull().default("BDT"),
     secondaryCurrency: text("secondary_currency").notNull().default("USD"),

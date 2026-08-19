@@ -186,6 +186,7 @@ function describeChange(input: UpdateSettingsInput): string {
     companyEmail: "company email",
     payslipSignatoryName: "payslip signatory",
     payslipSignatoryTitle: "payslip signatory's title",
+    salarySplit: "how a salary divides",
     fiscalYearMode: "financial year",
     numberFormat: "number format",
     fxMode: "exchange rate source",

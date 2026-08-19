@@ -5,7 +5,10 @@ import {
 } from "@nestjs/common";
 import {
   canSeeCompensation,
+  DEFAULT_SALARY_SPLIT,
   formatMoney,
+  salarySplitSchema,
+  splitSalary,
   todayInDhaka,
   type CreateTeamMemberInput,
   type ListTeamQuery,
@@ -18,7 +21,12 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { compensationHistory, files, teamMembers } from "../../db/schema";
+import {
+  appSettings,
+  compensationHistory,
+  files,
+  teamMembers,
+} from "../../db/schema";
 
 /**
  * What anyone who can read the team may see about a person.
@@ -431,6 +439,24 @@ export class TeamMembersService {
       });
     }
 
+    /**
+     * The split, worked out once and frozen with the figure.
+     *
+     * Not computed when a payslip is drawn: the rule lives in Settings and can
+     * change, and a payslip for March must go on showing March's split. This is
+     * the same reason the payroll line snapshots its own breakdown — that one
+     * is per month, this one is per raise.
+     */
+    const [settings] = await this.db.client
+      .select({ salarySplit: appSettings.salarySplit })
+      .from(appSettings)
+      .limit(1);
+    const parsed = salarySplitSchema.safeParse(settings?.salarySplit);
+    const components = splitSalary(
+      input.grossAmount,
+      parsed.success && parsed.data.length ? parsed.data : DEFAULT_SALARY_SPLIT,
+    );
+
     return this.audit.mutate({
       action: "update",
       entityTable: "compensation_history",
@@ -469,6 +495,7 @@ export class TeamMembersService {
           .values({
             teamMemberId,
             grossAmount: input.grossAmount,
+            components,
             effectiveFrom: input.effectiveFrom,
             changeReason: input.changeReason,
             createdBy: actor.id,

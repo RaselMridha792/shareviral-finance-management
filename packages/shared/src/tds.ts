@@ -73,6 +73,25 @@ export const tdsBandSchema = z.strictObject({
 });
 export type TdsBand = z.infer<typeof tdsBandSchema>;
 
+/**
+ * The three readings of the salary exemption.
+ *
+ * `lower` — a fraction of the salary or the cap, whichever is smaller. What the
+ * company's accountant works to, and what eleven of their twelve handwritten
+ * examples come out to.
+ * `fraction` — the fraction alone, however large it gets.
+ * `cap` — the flat figure, whatever the salary is.
+ */
+export const TDS_EXEMPTION_MODES = ["lower", "fraction", "cap"] as const;
+export const tdsExemptionModeSchema = z.enum(TDS_EXEMPTION_MODES);
+export type TdsExemptionMode = z.infer<typeof tdsExemptionModeSchema>;
+
+export const TDS_EXEMPTION_MODE_LABELS: Record<TdsExemptionMode, string> = {
+  lower: "The fraction or the cap, whichever is lower",
+  fraction: "The fraction only",
+  cap: "The cap only",
+};
+
 export const tdsPolicySchema = z.strictObject({
   /** 2026 means the income year 2026-27. */
   fiscalYear: z.number().int().min(2000).max(2200),
@@ -97,6 +116,13 @@ export const tdsPolicySchema = z.strictObject({
   exemptionNumerator: z.number().int().min(0),
   exemptionDenominator: z.number().int().min(1),
   exemptionCap: policyAmountSchema,
+  /**
+   * Whether the fraction, the cap, or the lower of the two is the exemption.
+   *
+   * Defaulted rather than required, so a policy row written before this existed
+   * keeps behaving exactly as it did.
+   */
+  exemptionMode: tdsExemptionModeSchema.default("lower"),
 
   /**
    * The slab table, with the shape its own comments promise.
@@ -167,6 +193,7 @@ export const DEFAULT_TDS_POLICY: TdsPolicy = {
   exemptionNumerator: 1,
   exemptionDenominator: 3,
   exemptionCap: "400000.00",
+  exemptionMode: "lower",
   slabs: [
     { width: "400000.00", rate: 0 },
     { width: "300000.00", rate: 0.1 },
@@ -205,7 +232,9 @@ export type TdsResult = {
   exemption: {
     byFraction: string;
     cap: string;
-    /** The lower of the two, which is what applies. */
+    /** Which of the two the policy says to use. */
+    mode: TdsExemptionMode;
+    /** What actually applies, after the mode has chosen. */
     applied: string;
   };
   taxableIncome: string;
@@ -264,7 +293,21 @@ export function calculateTds(
     (salary * BigInt(policy.exemptionNumerator)) /
     BigInt(policy.exemptionDenominator);
   const cap = toMinorUnits(policy.exemptionCap);
-  const exemption = minOf(byFraction, cap);
+  /**
+   * Which of the two applies.
+   *
+   * `lower` is the rule the accountant's own worksheets use and the default.
+   * The other two exist because the owner asked to be able to run it one way or
+   * the other — the Finance Act changes this wording most years, and an app
+   * that can only express one reading of it is an app that goes wrong quietly
+   * the year the wording moves.
+   */
+  const exemption =
+    policy.exemptionMode === "fraction"
+      ? byFraction
+      : policy.exemptionMode === "cap"
+        ? cap
+        : minOf(byFraction, cap);
   const taxable = salary - exemption > 0n ? salary - exemption : 0n;
 
   /* ------------------------------------------------------------- the slabs */
@@ -322,6 +365,7 @@ export function calculateTds(
     exemption: {
       byFraction: fromMinorUnits(byFraction),
       cap: fromMinorUnits(cap),
+      mode: policy.exemptionMode,
       applied: fromMinorUnits(exemption),
     },
     taxableIncome: fromMinorUnits(taxable),

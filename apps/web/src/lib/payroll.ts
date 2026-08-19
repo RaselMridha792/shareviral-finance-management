@@ -102,6 +102,15 @@ export type TeamMemberDto = {
 export type CompensationDto = {
   id: string;
   grossAmount: string;
+  /**
+   * How that gross divides — Basic, House Rent, Conveyance, Medical.
+   *
+   * Frozen when the figure was set, not worked out when it is read: the rule
+   * lives in Settings and can change, and a raise recorded in March should go
+   * on showing the split it was given. Null on rows written before the split
+   * existed, which the screen shows as a gross and nothing else.
+   */
+  components: PayslipLineDto[] | null;
   currency: string;
   effectiveFrom: string;
   effectiveTo: string | null;

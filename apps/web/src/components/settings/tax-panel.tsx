@@ -1,6 +1,11 @@
 "use client";
 
-import type { TdsPolicy } from "@finance/shared";
+import {
+  TDS_EXEMPTION_MODES,
+  TDS_EXEMPTION_MODE_LABELS,
+  type TdsExemptionMode,
+  type TdsPolicy,
+} from "@finance/shared";
 import { Calculator, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -9,7 +14,7 @@ import { TdsWorking } from "@/components/tds/tds-working";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Field, Input } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { taxPolicyApi, type TdsCalculation } from "@/lib/tax-policy";
@@ -67,7 +72,9 @@ export function TaxPanel() {
       .catch((caught) => {
         if (!live) return;
         setError(
-          caught instanceof ApiError ? caught.message : "Could not read the rule.",
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not read the rule.",
         );
       });
     return () => {
@@ -87,6 +94,7 @@ export function TaxPanel() {
         exemptionNumerator: policy.exemptionNumerator,
         exemptionDenominator: policy.exemptionDenominator,
         exemptionCap: policy.exemptionCap,
+        exemptionMode: policy.exemptionMode,
         slabs: policy.slabs,
         rebate: policy.rebate,
         minimumTax: policy.minimumTax,
@@ -99,7 +107,9 @@ export function TaxPanel() {
       setYears((list) => (list.includes(year) ? list : [year, ...list]));
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Could not save the rule.",
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not save the rule.",
       );
     } finally {
       setSaving(false);
@@ -123,8 +133,7 @@ export function TaxPanel() {
     );
   }
 
-  const set = (patch: Partial<TdsPolicy>) =>
-    setPolicy({ ...policy, ...patch });
+  const set = (patch: Partial<TdsPolicy>) => setPolicy({ ...policy, ...patch });
   const setRebate = (patch: Partial<TdsPolicy["rebate"]>) =>
     setPolicy({ ...policy, rebate: { ...policy.rebate, ...patch } });
 
@@ -206,7 +215,16 @@ export function TaxPanel() {
                   }
                 />
               </Field>
-              <Field label="Cap" hint="Whichever is lower applies">
+              <Field
+                label="Cap"
+                hint={
+                  policy.exemptionMode === "fraction"
+                    ? "Not used while the fraction alone applies"
+                    : policy.exemptionMode === "cap"
+                      ? "This is the exemption, whatever the salary"
+                      : "Whichever is lower applies"
+                }
+              >
                 <Input
                   className="col-amount"
                   value={policy.exemptionCap}
@@ -215,14 +233,43 @@ export function TaxPanel() {
                 />
               </Field>
             </div>
+
+            {/*
+              Which of the two applies.
+              The Act's wording on this moves most years, and an app that can
+              only express one reading of it is one that goes quietly wrong the
+              year it changes. The default is what the company's accountant
+              works to.
+            */}
+            <Field
+              label="Which one applies"
+              className="mt-4 max-w-md"
+              hint="Change this only against the year's own rule"
+            >
+              <Select
+                value={policy.exemptionMode}
+                disabled={!canWrite}
+                onChange={(e) =>
+                  set({
+                    exemptionMode: e.target.value as TdsExemptionMode,
+                  })
+                }
+              >
+                {TDS_EXEMPTION_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {TDS_EXEMPTION_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </section>
 
           {/* ----------------------------------------------------- slabs */}
           <section>
             <h3 className="text-sm font-semibold">Slabs</h3>
             <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
-              Applied in order to the taxable income. The last band has no
-              width and takes everything above.
+              Applied in order to the taxable income. The last band has no width
+              and takes everything above.
             </p>
             <div className="flex flex-col gap-2">
               {policy.slabs.map((band, index) => (
@@ -352,8 +399,14 @@ export function TaxPanel() {
 
           {canWrite ? (
             <div className="flex justify-end border-t border-border pt-4">
-              <Button variant="primary" disabled={saving} onClick={() => void save()}>
-                {saving ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              <Button
+                variant="primary"
+                disabled={saving}
+                onClick={() => void save()}
+              >
+                {saving ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : null}
                 Save the rule for {label(year ?? 0)}
               </Button>
             </div>

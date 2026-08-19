@@ -178,10 +178,6 @@ export function TransactionsScreen({
           // Both directions appear here, so which one a row is has to be
           // readable rather than inferred from a colour.
           showType
-          // The sheet this screen replaces has nine columns and Account is not
-          // one of them: every row here is already identified by its category
-          // and reference, and the account is what the Register screen is for.
-          showAccount={false}
           emptyMessage={
             Object.keys(filters).length
               ? "Nothing matches these filters."

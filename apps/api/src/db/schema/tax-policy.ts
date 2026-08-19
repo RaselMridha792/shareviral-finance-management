@@ -5,6 +5,7 @@ import {
   numeric,
   pgTable,
   smallint,
+  text,
   timestamp,
   uniqueIndex,
   uuid,
@@ -46,6 +47,14 @@ export const taxPolicies = pgTable(
      */
     exemptionNumerator: integer("exemption_numerator").notNull().default(1),
     exemptionDenominator: integer("exemption_denominator").notNull().default(3),
+    /**
+     * Whether the fraction, the cap, or the lower of the two applies.
+     *
+     * Text with a default rather than an enum: the Finance Act rewords this
+     * most years, and adding a fourth reading should not need a type migration
+     * on a table with one row per year.
+     */
+    exemptionMode: text("exemption_mode").notNull().default("lower"),
     exemptionCap: numeric("exemption_cap", { precision: 14, scale: 2 })
       .notNull()
       .default("400000.00"),

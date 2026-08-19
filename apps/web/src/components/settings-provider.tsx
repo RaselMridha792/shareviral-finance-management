@@ -5,6 +5,7 @@ import {
   type FiscalYearMode,
   type FormatMoneyOptions,
   type NumberFormat,
+  type SalarySplit,
 } from "@finance/shared";
 import { createContext, useContext, type ReactNode } from "react";
 
@@ -19,6 +20,7 @@ export type AppSettingsDto = {
   companyEmail: string | null;
   payslipSignatoryName: string | null;
   payslipSignatoryTitle: string | null;
+  salarySplit: SalarySplit | null;
   baseCurrency: string;
   secondaryCurrency: string;
   fiscalYearMode: FiscalYearMode;

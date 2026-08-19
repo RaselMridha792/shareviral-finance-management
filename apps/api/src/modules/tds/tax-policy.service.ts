@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   DEFAULT_TDS_POLICY,
+  tdsExemptionModeSchema,
   calculateTds,
   type TdsPolicy,
   type TdsResult,
@@ -77,6 +78,9 @@ export class TaxPolicyService {
         exemptionNumerator: usable.exemptionNumerator,
         exemptionDenominator: usable.exemptionDenominator,
         exemptionCap: usable.exemptionCap,
+        exemptionMode: tdsExemptionModeSchema
+          .catch("lower")
+          .parse(usable.exemptionMode),
         // An empty band list would mean no tax at any income, silently. The
         // shared default is a rule somebody wrote down rather than the absence
         // of one, and the `exact` flag above is how a screen knows to worry.
@@ -161,6 +165,7 @@ export class TaxPolicyService {
           exemptionNumerator: input.exemptionNumerator,
           exemptionDenominator: input.exemptionDenominator,
           exemptionCap: input.exemptionCap,
+          exemptionMode: input.exemptionMode,
           rebateInvestmentRate: String(input.rebate.investmentRate),
           rebateRate: String(input.rebate.rebateRate),
           rebateTaxableShare: String(input.rebate.taxableShareCap),

@@ -22,16 +22,17 @@ import { DocumentsDialog } from "./documents-dialog";
  * method; Other Expenses wants the payment method and no Type, every row there
  * being money out. One table with two flags beats two tables that drift.
  *
- * What is left when nothing is switched on is the sheet All Transactions is
- * read from, less its Type column: SL, Date, Category, Description,
- * Reference No., Amount (BDT), Amount (USD), Rate. The account is not among
- * the sheet's nine, so it is opt-in rather than opt-out — see `showAccount`.
+ * The account is on by default, and the one screen that tried living without
+ * it asked for it back the same day. Which account a movement touched turns out
+ * to be part of reading the row, not a detail belonging only to the register —
+ * so it is opt-out, and only the register turns it off, because a register is
+ * one account and names it in its heading.
  */
 export function TransactionTable({
   rows,
   onEdit,
   onVoid,
-  showAccount = false,
+  showAccount = true,
   showBalance = false,
   showType = false,
   showPaymentMethod = false,
@@ -78,7 +79,6 @@ export function TransactionTable({
     hand, so a page that turns out to be one account does not repeat its name
     down the whole page.
   */
-  const accountsDiffer = new Set(rows.map((row) => row.accountId)).size > 1;
 
   return (
     <Card className="overflow-hidden">
@@ -185,15 +185,6 @@ export function TransactionTable({
                       {row.vendorName ?? row.counterparty ?? null}
                       {!showPaymentMethod ? (
                         <span>{PAYMENT_METHOD_LABELS[row.paymentMethod]}</span>
-                      ) : null}
-                      {/*
-                        The account came down here the same way party did, when
-                        the sheet turned out to list nine columns and not this
-                        one. Printed only where the rows disagree about it — a
-                        register is one account and names it in its heading.
-                      */}
-                      {!showAccount && accountsDiffer && row.accountName ? (
-                        <span>{row.accountName}</span>
                       ) : null}
                       {row.transferGroupId ? <Badge>transfer</Badge> : null}
                       {Number(row.withheldTaxAmount) > 0 ? (

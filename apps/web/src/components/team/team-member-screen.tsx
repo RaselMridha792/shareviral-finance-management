@@ -427,6 +427,30 @@ export function TeamMemberScreen({
                   <p className="num mt-1 text-xs text-muted-foreground">
                     Since {currentPay.effectiveFrom}
                   </p>
+
+                  {/* The four lines behind the one figure. On the person, not
+                      on a month — this is what they are paid, and the payslip
+                      is where a particular month's version of it lives. */}
+                  {currentPay.components?.length ? (
+                    <dl className="mt-3 flex flex-col gap-1 border-t border-border pt-3 text-sm">
+                      {currentPay.components.map((part) => (
+                        <div
+                          key={part.label}
+                          className="flex items-baseline justify-between gap-3"
+                        >
+                          <dt className="text-muted-foreground">
+                            {part.label}
+                          </dt>
+                          <dd>
+                            <Amount
+                              value={part.amount}
+                              showCounterpart={false}
+                            />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
                 </>
               ) : (
                 <p className="mt-2 text-sm text-muted-foreground">

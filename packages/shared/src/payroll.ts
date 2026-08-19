@@ -3,11 +3,14 @@ import { patchOf } from "./patch.ts";
 
 import {
   amountSchema,
+  DEFAULT_SALARY_SPLIT,
   assessmentYearSchema,
   etinSchema,
   isoDateSchema,
   psrStatusSchema,
+  type SalarySplit,
 } from "./masters.ts";
+import { fromMinorUnits, toMinorUnits } from "./money.ts";
 import { paginationQuerySchema } from "./pagination.ts";
 import { paymentMethodSchema } from "./transactions.ts";
 
@@ -434,3 +437,54 @@ export type ListPayrollRunsQuery = z.infer<typeof listPayrollRunsQuerySchema>;
  * 25000 was meant. The app does not calculate tax, but it can notice that.
  */
 export const TDS_WARNING_RATIO = 0.3;
+
+/* -------------------------------------------------------------------------- */
+/*  How a gross salary is split                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The company's own convention, on a handwritten sheet: a one lakh salary is
+ * Basic 60,000, House Rent 30,000, Conveyance 6,000, Medical 4,000.
+ *
+ * Percentages rather than amounts, because that is what makes it a rule and not
+ * one person's figures — and a list rather than four fields, because the next
+ * allowance somebody invents should cost a label, exactly as it does on the
+ * payslip's own breakdown.
+ *
+ * A default, not a law. It lives in Settings for the same reason the tax bands
+ * do: the owner asked for the rule to be somewhere they could change it rather
+ * than buried in code.
+ */
+
+/**
+ * A gross, divided.
+ *
+ * Exact in paisa, and the rounding is not left to land wherever the arithmetic
+ * drops it: every part is floored, and whatever pennies are over go to the
+ * FIRST part. That keeps the total equal to the gross — a split that adds to
+ * one paisa less than the salary is the kind of thing an auditor finds and
+ * nobody can explain — and it puts the odd paisa on Basic, which is both the
+ * largest line and the one a payslip reader expects to carry it.
+ */
+export function splitSalary(
+  grossAmount: string,
+  split: SalarySplit = DEFAULT_SALARY_SPLIT,
+): PayslipBreakdown {
+  if (split.length === 0) return [];
+
+  const gross = toMinorUnits(grossAmount);
+  // Percent to four places as an integer, so 33.33% is exact and no float
+  // multiplication touches the money itself.
+  const parts = split.map((part) => ({
+    label: part.label,
+    minor: (gross * BigInt(Math.round(part.percent * 100))) / 10000n,
+  }));
+
+  const allocated = parts.reduce((sum, part) => sum + part.minor, 0n);
+  parts[0].minor += gross - allocated;
+
+  return parts.map((part) => ({
+    label: part.label,
+    amount: fromMinorUnits(part.minor),
+  }));
+}

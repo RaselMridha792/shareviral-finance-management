@@ -381,6 +381,31 @@ export const FX_REPORT_BASIS_LABELS: Record<FxReportBasis, string> = {
 export const NUMBER_FORMATS = ["bangladeshi", "western"] as const;
 export const numberFormatSchema = z.enum(NUMBER_FORMATS);
 
+export const salarySplitPartSchema = z.strictObject({
+  label: z.string().trim().min(1).max(60),
+  /** 0–100, to two places. 33.33 has to be expressible. */
+  percent: z.number().min(0).max(100),
+});
+export type SalarySplitPart = z.infer<typeof salarySplitPartSchema>;
+
+export const salarySplitSchema = z
+  .array(salarySplitPartSchema)
+  .max(20)
+  .refine(
+    (parts) =>
+      parts.length === 0 ||
+      Math.abs(parts.reduce((sum, p) => sum + p.percent, 0) - 100) < 0.005,
+    { message: "The parts have to add up to 100%" },
+  );
+export type SalarySplit = z.infer<typeof salarySplitSchema>;
+
+export const DEFAULT_SALARY_SPLIT: SalarySplit = [
+  { label: "Basic", percent: 60 },
+  { label: "House Rent", percent: 30 },
+  { label: "Conveyance", percent: 6 },
+  { label: "Medical", percent: 4 },
+];
+
 export const updateSettingsSchema = z
   .strictObject({
     companyName: z.string().trim().min(2).max(120).optional(),
@@ -397,6 +422,10 @@ export const updateSettingsSchema = z
     companyEmail: optionalText(z.email("Enter an email address").max(160)),
     payslipSignatoryName: optionalText(z.string().trim().max(120)),
     payslipSignatoryTitle: optionalText(z.string().trim().max(120)),
+
+    // Sent whole or not at all: a split is only meaningful as a set that adds
+    // up to 100, so there is nothing to patch one part of.
+    salarySplit: salarySplitSchema.nullable().optional(),
 
     fiscalYearMode: z.enum(["bd_july_june", "calendar"]).optional(),
     numberFormat: numberFormatSchema.optional(),
