@@ -8,6 +8,7 @@ import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -101,12 +102,14 @@ export function BankStatementScreen({
         <TableScroll>
           <table className="table-data min-w-[900px] text-sm">
             <thead>
-              {/* Seven columns: SL, Date, Description, then this table's own
-                  subject — the two figures and the total they move — and the
-                  reference last. Debit, Credit and Balance sit together
-                  because that is the arithmetic a reader checks in one glance;
-                  the Transaction ID used to be wedged between the description
-                  and the debit, which broke that line of figures in half. */}
+              {/* Eight columns: SL, Date, Description, then this table's own
+                  subject — the two figures and the total they move — the
+                  reference, and the actions. Debit, Credit and Balance sit
+                  together because that is the arithmetic a reader checks in one
+                  glance; the Transaction ID used to be wedged between the
+                  description and the debit, which broke that line of figures in
+                  half. The action pair goes last, where it goes on every
+                  table. */}
               <tr className="text-left">
                 <SerialHead />
                 <Th width="w-28">Date</Th>
@@ -118,6 +121,7 @@ export function BankStatementScreen({
                     them, not what you read the statement by, so it sits after
                     the figures. It still opens the row's documents. */}
                 <Th>Transaction ID</Th>
+                <RowActionsHead />
               </tr>
             </thead>
             <tbody>
@@ -141,14 +145,17 @@ export function BankStatementScreen({
                     className="block font-medium"
                   />
                 </td>
-                {/* Transaction ID: an opening balance is not a movement, so it
-                    has no reference of its own. */}
+                {/* Transaction ID and actions: an opening balance is not a
+                    movement, so it has neither a reference of its own nor
+                    anything to edit or void. */}
+                <td />
                 <td />
               </tr>
 
               {register.rows.length === 0 ? (
-                // 7: SL, Date, Description, Debit, Credit, Balance, Txn ID.
-                <TableMessageRow colSpan={7}>
+                // 8: SL, Date, Description, Debit, Credit, Balance, Txn ID,
+                // actions.
+                <TableMessageRow colSpan={8}>
                   Nothing on this account in that period.
                 </TableMessageRow>
               ) : (
@@ -205,6 +212,11 @@ export function BankStatementScreen({
                         {row.reference ?? row.refNo}
                       </button>
                     </td>
+                    {/* The statement is read-only today — nothing on this
+                        screen edits or voids a movement. The pair still renders,
+                        disabled, so the column reads as "not from here" rather
+                        than as a cell that failed to draw. */}
+                    <RowActions second="void" />
                   </tr>
                 ))
               )}
@@ -241,7 +253,9 @@ export function BankStatementScreen({
                     className="block font-semibold"
                   />
                 </td>
-                {/* Transaction ID: a total has no reference of its own. */}
+                {/* Transaction ID and actions: a total has no reference of its
+                    own, and nothing about it is editable. */}
+                <td />
                 <td />
               </tr>
             </tfoot>

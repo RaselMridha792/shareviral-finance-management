@@ -8,6 +8,8 @@ import { useCan } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { DateInput, Field, Input } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/overlay";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -33,6 +35,10 @@ export function RateHistory() {
   const [adding, setAdding] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The row being asked about, not a boolean — the dialog names the day. */
+  const [deleting, setDeleting] = useState<FxRateDto | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -86,121 +92,199 @@ export function RateHistory() {
     }
   }
 
+  /**
+   * A refusal keeps the dialog open and says why inside it. Closing on failure
+   * would look like the rate had gone, and the next report to translate that
+   * period would disagree with the screen.
+   */
+  async function onDelete() {
+    const rate = deleting;
+    if (!rate) return;
+
+    setDeletePending(true);
+    setDeleteError(null);
+    try {
+      await fxApi.remove(rate.id);
+      setDeleting(null);
+      await load();
+    } catch (caught) {
+      setDeleteError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not delete that rate.",
+      );
+    } finally {
+      setDeletePending(false);
+    }
+  }
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader
-        title="Rate history"
-        description="One rate per day. A report is translated at the rate that applied to its period, not today's."
-        action={
-          canWrite ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => setAdding(!adding)}
-            >
-              <Plus className="size-3.5" />
-              Record a rate
-            </Button>
-          ) : null
+    <>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Rate history"
+          description="One rate per day. A report is translated at the rate that applied to its period, not today's."
+          action={
+            canWrite ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setAdding(!adding)}
+              >
+                <Plus className="size-3.5" />
+                Record a rate
+              </Button>
+            ) : null
+          }
+        />
+
+        {adding ? (
+          <form
+            onSubmit={onSubmit}
+            className="flex flex-col gap-4 border-b border-border bg-surface-muted/30 px-4 py-4"
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="Date" required>
+                <DateInput
+                  name="rateDate"
+                  defaultValue={todayInDhaka()}
+                  max={todayInDhaka()}
+                />
+              </Field>
+              <Field label="BDT for one USD" required>
+                <Input
+                  name="rate"
+                  className="num"
+                  placeholder="118.40"
+                  autoFocus
+                />
+              </Field>
+              <Field label="Note">
+                <Input name="notes" placeholder="Where it came from" />
+              </Field>
+            </div>
+
+            {error ? (
+              <p role="alert" className="text-sm text-negative">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={pending}
+              >
+                {pending ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : null}
+                Save
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setAdding(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        <TableScroll>
+          <table className="table-data min-w-140 text-sm">
+            <thead>
+              <tr className="text-left">
+                <SerialHead />
+                <Th>Date</Th>
+                <Th align="right">USD rate</Th>
+                <Th>Note</Th>
+                <RowActionsHead />
+              </tr>
+            </thead>
+            <tbody>
+              {loadError ? (
+                <TableMessageRow colSpan={5} tone="error">
+                  {loadError}
+                </TableMessageRow>
+              ) : rates === null ? (
+                <TableMessageRow colSpan={5}>Loading…</TableMessageRow>
+              ) : rates.length === 0 ? (
+                <TableMessageRow colSpan={5}>
+                  No rates recorded. Until one is, USD reports show taka and say
+                  so rather than guessing.
+                </TableMessageRow>
+              ) : (
+                rates.map((rate, index) => (
+                  <tr key={rate.id} className="row-finance">
+                    <SerialCell n={index + 1} />
+                    <td className="num">{rate.rateDate}</td>
+                    <td className="num text-right font-medium">
+                      {Number(rate.rate).toFixed(2)}
+                    </td>
+                    <td className="cell-prose text-muted-foreground">
+                      {rate.notes ?? "—"}
+                    </td>
+                    {/*
+                      There is no per-row editor to open — a day's number is
+                      corrected by recording it again through the form above. So
+                      Edit renders disabled rather than absent, and a reader who
+                      cannot write sees the same pair greyed out: an empty cell
+                      here would read as a rendering fault, not as a refusal.
+                    */}
+                    <RowActions
+                      second="delete"
+                      onSecond={canWrite ? () => setDeleting(rate) : undefined}
+                    />
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </TableScroll>
+      </Card>
+
+      {/*
+        A rate is not one row's worth of data — it governs every dollar figure
+        printed for its period. Deleting it on a misclick would quietly change
+        numbers on reports nobody happens to be looking at, so it is asked for
+        first, with the day and the number in the question.
+      */}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete this rate?"
+        destructive
+        confirmLabel={deletePending ? "Deleting…" : "Delete it"}
+        pending={deletePending}
+        body={
+          <>
+            Every USD figure for{" "}
+            <span className="font-medium text-foreground">
+              {deleting?.rateDate}
+            </span>{" "}
+            is translated at{" "}
+            <span className="num font-medium text-foreground">
+              {deleting ? Number(deleting.rate).toFixed(2) : ""}
+            </span>
+            . Without it, that period falls back to the nearest earlier rate, or
+            shows taka if there is none.
+            {deleteError ? (
+              <span role="alert" className="mt-2 block text-negative">
+                {deleteError}
+              </span>
+            ) : null}
+          </>
         }
+        onConfirm={() => void onDelete()}
+        onCancel={() => {
+          setDeleting(null);
+          setDeleteError(null);
+        }}
       />
-
-      {adding ? (
-        <form
-          onSubmit={onSubmit}
-          className="flex flex-col gap-4 border-b border-border bg-surface-muted/30 px-4 py-4"
-        >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Date" required>
-              <DateInput
-                name="rateDate"
-                defaultValue={todayInDhaka()}
-                max={todayInDhaka()}
-              />
-            </Field>
-            <Field label="BDT for one USD" required>
-              <Input
-                name="rate"
-                className="num"
-                placeholder="118.40"
-                autoFocus
-              />
-            </Field>
-            <Field label="Note">
-              <Input name="notes" placeholder="Where it came from" />
-            </Field>
-          </div>
-
-          {error ? (
-            <p role="alert" className="text-sm text-negative">
-              {error}
-            </p>
-          ) : null}
-
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              disabled={pending}
-            >
-              {pending ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : null}
-              Save
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setAdding(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : null}
-
-      <TableScroll>
-        <table className="table-data min-w-[480px] text-sm">
-          <thead>
-            <tr className="text-left">
-              <SerialHead />
-              <Th>Date</Th>
-              <Th align="right">USD rate</Th>
-              <Th>Note</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadError ? (
-              <TableMessageRow colSpan={4} tone="error">
-                {loadError}
-              </TableMessageRow>
-            ) : rates === null ? (
-              <TableMessageRow colSpan={4}>Loading…</TableMessageRow>
-            ) : rates.length === 0 ? (
-              <TableMessageRow colSpan={4}>
-                No rates recorded. Until one is, USD reports show taka and say
-                so rather than guessing.
-              </TableMessageRow>
-            ) : (
-              rates.map((rate, index) => (
-                <tr key={rate.id} className="row-finance">
-                  <SerialCell n={index + 1} />
-                  <td className="num">{rate.rateDate}</td>
-                  <td className="num text-right font-medium">
-                    {Number(rate.rate).toFixed(2)}
-                  </td>
-                  <td className="cell-prose text-muted-foreground">
-                    {rate.notes ?? "—"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </TableScroll>
-    </Card>
+    </>
   );
 }

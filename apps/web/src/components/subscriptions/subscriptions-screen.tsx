@@ -9,7 +9,7 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { Image as ImageIcon, Pencil, Plus } from "lucide-react";
+import { Image as ImageIcon, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -20,6 +20,7 @@ import { ScreenshotDialog } from "@/components/subscriptions/screenshot-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SearchField } from "@/components/ui/search-field";
 import { EmptyState } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
@@ -71,6 +72,8 @@ export function SubscriptionsScreen({
   const [screenshotOf, setScreenshotOf] = useState<SubscriptionDto | null>(
     null,
   );
+  /** The plan whose status is in flight, so its button cannot be hit twice. */
+  const [cycling, setCycling] = useState<string | null>(null);
 
   // A request per keystroke also lets a slower earlier response land after a
   // faster later one, so the table settles on the wrong search. Clearing the
@@ -101,6 +104,31 @@ export function SubscriptionsScreen({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  /**
+   * The status button's one move.
+   *
+   * The plan leaves the list as often as not — a paused plan is not on the
+   * Active tab — so this reloads rather than patching the row in place, and
+   * the reload is what proves the write landed.
+   */
+  const cycleStatus = useCallback(
+    async (row: SubscriptionDto) => {
+      const next = nextStatus(row.status);
+      setCycling(row.id);
+      try {
+        await subscriptionsApi.update(row.id, { status: next });
+        await load();
+      } catch {
+        setError(
+          `Could not move ${row.toolName} to ${SUBSCRIPTION_STATUS_LABELS[next].toLowerCase()}.`,
+        );
+      } finally {
+        setCycling(null);
+      }
+    },
+    [load],
+  );
 
   const money = (value: string, currency: string) =>
     formatMoney(value, { currency, format: settings.numberFormat });
@@ -218,7 +246,8 @@ export function SubscriptionsScreen({
         <Card className="overflow-hidden p-0">
           <TableScroll>
             {/* SL, then fourteen columns in the order the owner reads them,
-              then one unnamed cell for the pencil. */}
+              then the unnamed cell the row's two buttons live in. Sixteen,
+              which is what the message row below spans. */}
             <table className="table-data w-full min-w-[1808px]">
               <thead>
                 <tr>
@@ -237,7 +266,7 @@ export function SubscriptionsScreen({
                   <Th>Billing Cycle</Th>
                   <Th>Next Renewal Date</Th>
                   <Th>Status</Th>
-                  <Th align="right"> </Th>
+                  <RowActionsHead />
                 </tr>
               </thead>
               <tbody>
@@ -358,18 +387,19 @@ export function SubscriptionsScreen({
                         <td>
                           <StatusPill status={row.status} />
                         </td>
-                        <td className="text-right">
-                          {canWrite ? (
-                            <button
-                              type="button"
-                              onClick={() => setEditing(row)}
-                              aria-label={`Edit ${row.toolName} ${row.planName}`}
-                              className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
-                            >
-                              <Pencil className="size-3.5" />
-                            </button>
-                          ) : null}
-                        </td>
+                        {/* Both buttons render for everybody. A reader
+                          without write access gets them disabled: a blank
+                          cell where every other row has controls reads as a
+                          rendering fault, not as a permission. */}
+                        <RowActions
+                          onEdit={canWrite ? () => setEditing(row) : undefined}
+                          second="status"
+                          onSecond={
+                            canWrite && cycling !== row.id
+                              ? () => void cycleStatus(row)
+                              : undefined
+                          }
+                        />
                       </tr>
                     );
                   })
@@ -428,6 +458,19 @@ export function SubscriptionsScreen({
       ) : null}
     </>
   );
+}
+
+/**
+ * Where the status button takes a plan.
+ *
+ * A plan that is running gets paused; everything else — paused, cancelled,
+ * expired — comes back on. Nothing here reaches cancelled or expired on
+ * purpose: cancelling is a decision with a date behind it and belongs in the
+ * form, and expiring is something that happens rather than something a button
+ * does.
+ */
+function nextStatus(status: SubscriptionStatus): SubscriptionStatus {
+  return status === "active" ? "paused" : "active";
 }
 
 /**

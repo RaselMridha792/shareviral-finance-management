@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { DataPanel } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SearchField } from "@/components/ui/search-field";
 import { SerialCell, SerialHead, Th } from "@/components/ui/table";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
@@ -31,11 +32,29 @@ export function TeamScreen({
   const [page, setPage] = useState(initialPage);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  /**
+   * The person the edit drawer is open against; null is closed. It is the
+   * same drawer the Add button opens, handed a member so it saves an update
+   * instead of creating somebody new.
+   */
+  const [editing, setEditing] = useState<TeamMemberDto | null>(null);
 
   async function refresh(q = query) {
     setPage(await teamApi.list({ q: q || undefined }));
     router.refresh();
   }
+
+  /**
+   * Status deliberately has no drawer of its own here.
+   *
+   * The control lives on the profile, where it sits beside the last-day field
+   * and the history it changes, and where the wording explains that nothing is
+   * deleted. Taking somebody off the salary sheet is the one change on this
+   * screen with consequences, so the button goes to the page that says so
+   * rather than growing a second, thinner copy of that form on the list.
+   */
+  const goToProfile = (member: TeamMemberDto) =>
+    router.push(`/team/${member.id}`);
 
   /**
    * Two tabs, and the names matter.
@@ -189,6 +208,8 @@ export function TeamScreen({
                 past={tab === "past"}
                 showPay={canSeePay}
                 salaries={salaries}
+                onEdit={canWrite ? setEditing : undefined}
+                onStatus={canWrite ? goToProfile : undefined}
               />
               <Section
                 title="Contractors"
@@ -201,6 +222,8 @@ export function TeamScreen({
                 past={tab === "past"}
                 showPay={canSeePay}
                 salaries={salaries}
+                onEdit={canWrite ? setEditing : undefined}
+                onStatus={canWrite ? goToProfile : undefined}
               />
             </>
           )}
@@ -212,6 +235,19 @@ export function TeamScreen({
         onClose={() => setCreating(false)}
         onSaved={() => refresh()}
       />
+
+      {/* Keyed on the id because every field in there is uncontrolled: without
+          it, opening a second person after a first would keep the first
+          person's defaults. */}
+      {editing ? (
+        <TeamMemberForm
+          key={editing.id}
+          open
+          member={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => refresh()}
+        />
+      ) : null}
     </>
   );
 }
@@ -223,6 +259,8 @@ function Section({
   past = false,
   showPay,
   salaries,
+  onEdit,
+  onStatus,
 }: {
   /** Adds the last day, which is the fact the past tab is read for. */
   past?: boolean;
@@ -232,6 +270,13 @@ function Section({
   title: string;
   subtitle: string;
   members: TeamMemberDto[];
+  /**
+   * Left undefined for a role that cannot write, which renders the pair
+   * disabled rather than dropping it. A blank cell where every other row has
+   * two buttons reads as a broken table, not as "this is not yours to do".
+   */
+  onEdit?: (member: TeamMemberDto) => void;
+  onStatus?: (member: TeamMemberDto) => void;
 }) {
   if (members.length === 0) return null;
 
@@ -241,7 +286,7 @@ function Section({
       icon={title === "Contractors" ? "badge" : "groups"}
       description={subtitle}
     >
-      <table className="table-data min-w-[860px] text-sm">
+      <table className="table-data min-w-[960px] text-sm">
         <thead>
           <tr className="text-left">
             {/*
@@ -262,6 +307,14 @@ function Section({
             <Th width="w-40">Designation</Th>
             <Th width="w-32">Department</Th>
             <Th width="w-28">Status</Th>
+            {/*
+              Last, after every data column, because the pair sits in the same
+              place on every table in the app. This screen had no controls at
+              all: the View column went when the name itself became the link
+              to the profile, and nothing took its place — so editing somebody
+              meant opening their page first.
+            */}
+            <RowActionsHead />
           </tr>
         </thead>
         <tbody>
@@ -347,6 +400,11 @@ function Section({
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
                 </Badge>
               </td>
+              <RowActions
+                onEdit={onEdit ? () => onEdit(member) : undefined}
+                second="status"
+                onSecond={onStatus ? () => onStatus(member) : undefined}
+              />
             </tr>
           ))}
         </tbody>

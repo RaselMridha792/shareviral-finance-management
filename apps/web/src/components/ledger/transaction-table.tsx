@@ -1,7 +1,7 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
-import { Ban, Link2, Paperclip, SquarePen, TriangleAlert } from "lucide-react";
+import { Link2, Paperclip, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -9,6 +9,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import type { TransactionDto } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
@@ -156,7 +157,7 @@ export function TransactionTable({
                   Balance
                 </Th>
               ) : null}
-              <Th width="w-24" />
+              <RowActionsHead />
             </tr>
           </thead>
           <tbody>
@@ -406,9 +407,34 @@ export function TransactionTable({
                       ) : null}
                     </td>
                   ) : null}
-                  <td>
-                    <div className="flex items-center justify-end gap-1">
-                      {row.receiptUrl ? (
+                  {/*
+                    The pair every table in this app ends with, in the place
+                    every table puts it. The verb is "void" because this is the
+                    ledger: the row stays, struck through, out of every total
+                    and in the audit log.
+
+                    Both buttons render whatever the row is. A voided entry, or
+                    a reader without the right to touch one, gets them greyed
+                    rather than removed — this cell used to empty itself, and an
+                    empty cell in a column of controls reads as a rendering
+                    fault rather than as "you cannot do this". Nothing is
+                    granted by showing them: with no handler passed the button
+                    is disabled, so the screen still decides.
+                  */}
+                  <RowActions
+                    onEdit={
+                      canWrite && onEdit && !voided
+                        ? () => onEdit(row)
+                        : undefined
+                    }
+                    second="void"
+                    onSecond={
+                      canVoid && onVoid && !voided
+                        ? () => onVoid(row)
+                        : undefined
+                    }
+                    extra={
+                      row.receiptUrl ? (
                         <a
                           href={row.receiptUrl}
                           target="_blank"
@@ -418,29 +444,9 @@ export function TransactionTable({
                         >
                           <Link2 className="size-3.5" />
                         </a>
-                      ) : null}
-                      {canWrite && onEdit && !voided ? (
-                        <button
-                          type="button"
-                          onClick={() => onEdit(row)}
-                          title="Edit"
-                          className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-                        >
-                          <SquarePen className="size-3.5" />
-                        </button>
-                      ) : null}
-                      {canVoid && onVoid && !voided ? (
-                        <button
-                          type="button"
-                          onClick={() => onVoid(row)}
-                          title="Void"
-                          className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-surface-muted hover:text-negative"
-                        >
-                          <Ban className="size-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
+                      ) : null
+                    }
+                  />
                 </tr>
               );
             })}

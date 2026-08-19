@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
@@ -25,6 +26,8 @@ import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { reportsApi } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { TransactionForm } from "@/components/ledger/transaction-form";
+import { VoidDialog } from "@/components/ledger/void-dialog";
 import { CashInForm } from "./cash-in-form";
 
 /**
@@ -51,6 +54,12 @@ export function CashInScreen({
 }) {
   const canWrite = useCan("transactions.write");
   /**
+   * Undoing an entry is its own permission rather than a shade of writing one:
+   * a role can be trusted to fix a typo on a receipt and not to take that
+   * receipt out of the month's totals.
+   */
+  const canVoid = useCan("transactions.void");
+  /**
    * The overview needs `dashboard.money`; this screen needs `accounts.read`.
    * A role can hold the second without the first, and the rate is a detail on
    * a page whose subject is the receipts — so it is asked for only when it can
@@ -64,6 +73,16 @@ export function CashInScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  /**
+   * The receipt a correction or an undo is open on.
+   *
+   * Both are the ledger's own flows — the drawer every other screen edits an
+   * entry in, and the dialog that insists on a reason before voiding — so a
+   * wrong figure is dealt with in the month somebody noticed it, rather than
+   * by going to find the row again on the Transactions page.
+   */
+  const [editing, setEditing] = useState<TransactionDto | null>(null);
+  const [voiding, setVoiding] = useState<TransactionDto | null>(null);
   /**
    * Which entry, and which of its documents.
    *
@@ -157,6 +176,18 @@ export function CashInScreen({
       setRateStatus("hidden");
     }
   }, [canSeeRate, fiscalYear, periodIndex]);
+
+  /**
+   * The table and the strip above it, together.
+   *
+   * Any receipt that changes can be the one the month's rate is read off — a
+   * corrected rate, or a voided transfer that happened to be the first funded
+   * row — so reloading the rows without re-asking for the rate would leave the
+   * caption stating a figure the table underneath no longer supports.
+   */
+  const refresh = useCallback(async () => {
+    await Promise.all([load(), loadRate()]);
+  }, [load, loadRate]);
 
   useEffect(() => {
     // Fetching from the API when the month changes — the rule's own "subscribe
@@ -318,7 +349,10 @@ export function CashInScreen({
       ) : (
         <Card className="overflow-hidden">
           <TableScroll>
-            <table className="table-data min-w-[1320px] text-sm">
+            {/* 1320 was the eleven columns of data. The actions column adds
+                its own w-24, so the floor moves with it instead of letting the
+                browser crush Description to keep an old number true. */}
+            <table className="table-data min-w-[1416px] text-sm">
               <thead>
                 <tr className="text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
@@ -340,6 +374,7 @@ export function CashInScreen({
                   <Th>Invoice No.</Th>
                   <Th>Transaction ID</Th>
                   <Th>Note</Th>
+                  <RowActionsHead />
                 </tr>
               </thead>
               <tbody>
@@ -348,6 +383,11 @@ export function CashInScreen({
                   // divided out when it did not: a derived figure is the app's
                   // arithmetic, and the stored one is the remittance advice.
                   const sentUsd = dollarsOf(row, rate);
+                  // Voided entries are never asked for here, so this is the
+                  // rule rather than a case on screen: a voided row cannot be
+                  // edited and cannot be voided twice, and the pair goes grey
+                  // rather than missing if one ever reaches this table.
+                  const voided = Boolean(row.voidedAt);
                   return (
                     <tr key={row.id} className="row-finance">
                       <SerialCell n={index + 1} />
@@ -439,6 +479,30 @@ export function CashInScreen({
                           "—"
                         )}
                       </td>
+                      {/*
+                        Last, after every column of data, which is where every
+                        table in this app now ends. The verb is "void" because
+                        these are ledger rows: the entry stays on screen, out of
+                        every total and in the audit log.
+
+                        Both buttons are drawn whatever the row is and whoever
+                        is reading. Someone without the right gets them greyed
+                        rather than removed — an empty cell in a column of
+                        controls reads as a rendering fault, not as "you cannot
+                        do this" — and drawing them grants nothing, since a
+                        button handed no handler is disabled.
+                      */}
+                      <RowActions
+                        onEdit={
+                          canWrite && !voided
+                            ? () => setEditing(row)
+                            : undefined
+                        }
+                        second="void"
+                        onSecond={
+                          canVoid && !voided ? () => setVoiding(row) : undefined
+                        }
+                      />
                     </tr>
                   );
                 })}
@@ -469,9 +533,28 @@ export function CashInScreen({
         onClose={() => setRecording(false)}
         // Both: a transfer recorded into an empty month is the entry that sets
         // the rate, so the strip is stale the moment the table is not.
-        onSaved={async () => {
-          await Promise.all([load(), loadRate()]);
-        }}
+        onSaved={refresh}
+      />
+
+      {/*
+        The ledger's own drawer, opened on a row instead of empty. Recording a
+        receipt has its own form on this screen because a remittance asks its
+        own questions; correcting one does not — it is an ordinary money-in
+        entry, and this is the drawer the rest of the app corrects one in.
+      */}
+      <TransactionForm
+        key={editing?.id}
+        open={Boolean(editing)}
+        transaction={editing ?? undefined}
+        accounts={accounts}
+        categories={categories}
+        onClose={() => setEditing(null)}
+        onSaved={refresh}
+      />
+      <VoidDialog
+        transaction={voiding}
+        onClose={() => setVoiding(null)}
+        onVoided={refresh}
       />
     </>
   );

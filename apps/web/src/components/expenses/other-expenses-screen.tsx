@@ -5,14 +5,7 @@ import {
   PAYMENT_METHOD_LABELS,
   toMinorUnits,
 } from "@finance/shared";
-import {
-  Ban,
-  LoaderCircle,
-  Plus,
-  ShoppingBag,
-  SquarePen,
-  TriangleAlert,
-} from "lucide-react";
+import { LoaderCircle, Plus, ShoppingBag, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -26,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SummaryBar } from "@/components/ui/patterns";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
@@ -248,10 +242,12 @@ export function OtherExpensesScreen({
               Ten columns, not nine. Account is the one addition, next to
               Payment Method because how it was paid and what it was paid from
               are one thought, and because the owner asked for the account name
-              to open the account.
+              to open the account. Eleven with the actions column, which is not
+              a column of the sheet: it is where every table in the app keeps
+              its edit and void.
             */
             <TableScroll>
-              <table className="table-data min-w-[1180px] text-sm">
+              <table className="table-data min-w-[1280px] text-sm">
                 <thead>
                   <tr className="text-left">
                     {/* Row order, like the sheet's own SL — not a stored
@@ -280,6 +276,11 @@ export function OtherExpensesScreen({
                         sheet has one reference column: this is the one it
                         means. */}
                     <Th width="w-32">Reference No.</Th>
+                    {/* Eleventh column. It is not on the owner's sheet, but
+                        the pair sits in the same place on every table in the
+                        app, and riding inside Description made the widest
+                        prose cell the narrowest one. */}
+                    <RowActionsHead />
                   </tr>
                 </thead>
                 <tbody>
@@ -302,78 +303,43 @@ export function OtherExpensesScreen({
                         <SerialCell n={index + 1} />
                         <td className="num whitespace-nowrap">{row.txnDate}</td>
                         <td className="cell-prose">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  voided && "line-through",
-                                )}
-                              >
-                                {row.description}
-                              </span>
-                              <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {/* Who it was with. The account, the payment
-                                    method and the dollars have columns of
-                                    their own now, so this is all that is left
-                                    under a description — any of those three
-                                    here would print the same fact on the row
-                                    twice. */}
-                                {row.vendorName ?? row.counterparty ?? null}
-                                {/* Own money moved between own accounts. It
-                                    lands as a money-out row and is counted in
-                                    the total above, so a row that is not
-                                    really an expense has to say so. */}
-                                {row.transferGroupId ? (
-                                  <Badge>transfer</Badge>
-                                ) : null}
-                                {Number(row.withheldTaxAmount) > 0 ? (
-                                  <Badge tone="warning">
-                                    tax withheld{" "}
-                                    <span className="num">
-                                      {row.withheldTaxAmount}
-                                    </span>
-                                  </Badge>
-                                ) : null}
-                                {voided ? (
-                                  <Badge tone="negative">
-                                    voided
-                                    {row.voidReason
-                                      ? `: ${row.voidReason}`
-                                      : ""}
-                                  </Badge>
-                                ) : null}
-                              </span>
-                            </div>
-                            {/* Edit and void have a column of their own on the
-                                shared table. An eleventh column is not on the
-                                owner's sheet, so the two controls ride in the
-                                one cell with room for them — and stay visible
-                                rather than appearing on hover, because a
-                                tablet has no hover to appear on. */}
-                            <div className="flex shrink-0 items-center gap-1">
-                              {canWrite && !voided ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditing(row)}
-                                  title="Edit"
-                                  className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-                                >
-                                  <SquarePen className="size-3.5" />
-                                </button>
-                              ) : null}
-                              {canVoid && !voided ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setVoiding(row)}
-                                  title="Void"
-                                  className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-surface-muted hover:text-negative"
-                                >
-                                  <Ban className="size-3.5" />
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
+                          <span
+                            className={cn(
+                              "font-medium",
+                              voided && "line-through",
+                            )}
+                          >
+                            {row.description}
+                          </span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            {/* Who it was with. The account, the payment
+                                method and the dollars have columns of their
+                                own now, so this is all that is left under a
+                                description — any of those three here would
+                                print the same fact on the row twice. */}
+                            {row.vendorName ?? row.counterparty ?? null}
+                            {/* Own money moved between own accounts. It lands
+                                as a money-out row and is counted in the total
+                                above, so a row that is not really an expense
+                                has to say so. */}
+                            {row.transferGroupId ? (
+                              <Badge>transfer</Badge>
+                            ) : null}
+                            {Number(row.withheldTaxAmount) > 0 ? (
+                              <Badge tone="warning">
+                                tax withheld{" "}
+                                <span className="num">
+                                  {row.withheldTaxAmount}
+                                </span>
+                              </Badge>
+                            ) : null}
+                            {voided ? (
+                              <Badge tone="negative">
+                                voided
+                                {row.voidReason ? `: ${row.voidReason}` : ""}
+                              </Badge>
+                            ) : null}
+                          </span>
                         </td>
                         <td>
                           {row.categoryName ? (
@@ -476,6 +442,24 @@ export function OtherExpensesScreen({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
+                        {/* Both buttons always render. A voided row, or a
+                            reader without the permission, gets the pair
+                            disabled rather than an empty cell — a blank where
+                            every other row has controls reads as a rendering
+                            fault, not as "you cannot do this". */}
+                        <RowActions
+                          second="void"
+                          onEdit={
+                            canWrite && !voided
+                              ? () => setEditing(row)
+                              : undefined
+                          }
+                          onSecond={
+                            canVoid && !voided
+                              ? () => setVoiding(row)
+                              : undefined
+                          }
+                        />
                       </tr>
                     );
                   })}

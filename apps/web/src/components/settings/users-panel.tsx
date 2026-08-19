@@ -14,7 +14,6 @@ import {
   Copy,
   KeyRound,
   LoaderCircle,
-  Pencil,
   Plus,
   ShieldAlert,
 } from "lucide-react";
@@ -26,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
+import { ConfirmDialog } from "@/components/ui/overlay";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -33,6 +34,7 @@ import {
   TableScroll,
   Th,
 } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { usersApi } from "@/lib/users";
 
@@ -47,14 +49,45 @@ const ROLE_SUMMARY: Record<Role, string> = {
 
 export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
   const me = useSession();
+  const toast = useToast();
   const [users, setUsers] = useState(initialUsers);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [resetting, setResetting] = useState<UserDto | null>(null);
+  const [deactivating, setDeactivating] = useState<UserDto | null>(null);
+  const [deactivatePending, setDeactivatePending] = useState(false);
 
   async function refresh() {
     const page = await usersApi.list();
     setUsers(page.items);
+  }
+
+  /**
+   * The same change the edit drawer's Status field makes, one click sooner.
+   *
+   * It goes through `usersApi.update` with the status the Select submits, so
+   * there is one code path that takes somebody's access away and one audit
+   * trail behind it — the row button is a shortcut, not a second mechanism.
+   */
+  async function deactivate() {
+    if (!deactivating) return;
+    const { id, fullName } = deactivating;
+    setDeactivatePending(true);
+    try {
+      await usersApi.update(id, { status: "disabled" });
+      setDeactivating(null);
+      await refresh();
+      toast.show(`${fullName} can no longer sign in.`);
+    } catch (caught) {
+      toast.show(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not disable that account.",
+        "error",
+      );
+    } finally {
+      setDeactivatePending(false);
+    }
   }
 
   return (
@@ -82,7 +115,7 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                 <Th>Status</Th>
                 <Th>Last signed in</Th>
                 <Th>Email</Th>
-                <Th />
+                <RowActionsHead />
               </tr>
             </thead>
             <tbody>
@@ -136,26 +169,31 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                         : "never"}
                     </td>
                     <td className="text-muted-foreground">{user.email}</td>
-                    <td>
-                      <div className="flex items-center justify-end gap-1.5">
+                    <RowActions
+                      onEdit={() => setEditing(user)}
+                      second="deactivate"
+                      // No handler where the action is not available — their
+                      // own account, or one that is already disabled — so the
+                      // button renders disabled rather than leaving a hole
+                      // where every other row has controls.
+                      onSecond={
+                        user.id === me.id || user.status === "disabled"
+                          ? undefined
+                          : () => setDeactivating(user)
+                      }
+                      extra={
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setEditing(user)}
-                          aria-label={`Edit ${user.fullName}`}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
+                          className="h-7 px-1.5"
                           onClick={() => setResetting(user)}
+                          aria-label={`Set a new password for ${user.fullName}`}
+                          title="Set a new password"
                         >
                           <KeyRound className="size-3.5" />
-                          Password
                         </Button>
-                      </div>
-                    </td>
+                      }
+                    />
                   </tr>
                 ))
               )}
@@ -188,6 +226,20 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
           setResetting(null);
           await refresh();
         }}
+      />
+      <ConfirmDialog
+        open={deactivating !== null}
+        title="Disable this account?"
+        destructive
+        confirmLabel="Deactivate"
+        pending={deactivatePending}
+        body={
+          deactivating
+            ? `${deactivating.fullName} is signed out everywhere at once and cannot sign in again until somebody sets their status back to Active.`
+            : ""
+        }
+        onConfirm={deactivate}
+        onCancel={() => setDeactivating(null)}
       />
     </div>
   );
