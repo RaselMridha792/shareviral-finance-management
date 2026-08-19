@@ -22,8 +22,15 @@ export type SubscriptionSeatDto = {
 
 export type SubscriptionDto = {
   id: string;
-  vendorId: string;
-  vendorName: string;
+  /**
+   * The tool this plan is for, as text.
+   *
+   * It used to arrive as a join onto `vendors` — a row the form minted from
+   * this very name. The join is gone and so is the id beside it: nothing on
+   * any screen read that id, and keeping it would leave a field here that no
+   * longer points at anything.
+   */
+  toolName: string;
   planName: string;
   category: SubscriptionCategory;
   status: SubscriptionStatus;
@@ -54,7 +61,7 @@ export type SubscriptionDto = {
 export type MemberSubscriptionDto = {
   subscriptionId: string;
   planName: string;
-  vendorName: string;
+  toolName: string;
   category: SubscriptionCategory;
   costUsd: string;
   billingCycle: BillingCycle;

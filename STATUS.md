@@ -1198,3 +1198,54 @@ chose rather than wherever the arithmetic landed.
 
 The stored components must add up to the gross. If they do not, the page says
 so rather than silently showing a total that disagrees with the figure above it.
+
+## Next: a signature on the payslip (asked 2026-08-19)
+
+**Not built — deliberately paused.** The work was scoped and a workflow written
+for it; the owner stopped it to finish what was in flight first. The plan below
+is the thinking, so it does not have to be done twice.
+
+The owner: *"Put a signature section at the lower part of the payslip, and make
+it dynamic — I want to upload it from Settings. Definitely mention the ratio and
+the image size and make it required, so nothing bigger can be uploaded."* They
+pointed at AUTHORISED SIGNATORY, which today prints a name and a rule.
+
+### Where the file lives
+
+`files` enforces that a file belongs to exactly one thing, by a check constraint
+counting owner columns — there are four, and `subscription` was the last one
+added, so it is the pattern to copy. A signature belongs to the COMPANY, so it
+needs a fifth owner pointing at `app_settings`. That row is keyed by a smallint
+with `check (id = 1)`, so the column is a smallint, not a uuid. The invariant
+must not be weakened to allow an unowned file: an unowned row is unreachable
+through every screen and still on disk.
+
+Uploading a second signature must retire the first in the same transaction.
+`SINGULAR_KINDS` in files.service.ts already does exactly that for the profile
+photo.
+
+**SQL required**: the new owner column, the replaced check constraint, and the
+new file kind.
+
+### The constraint the owner actually asked for
+
+Numbers go in `packages/shared` as exported constants, and one pure function
+takes width, height, bytes and mime and returns ok or a reason. The browser and
+the server both call it — two implementations of one rule is how they drift.
+
+Enforcing it server-side means reading the image's real dimensions from its
+bytes. No new dependency: PNG carries them in the IHDR and JPEG in its frame
+header, and this repo already sniffs mime from bytes in `sniffMime`. That reader
+needs tests for truncated, zero-byte and mislabelled files, not just the happy
+path.
+
+"Mentioned" is half the request: Settings must state the size, shape and types
+before a file is chosen, not only after one is refused.
+
+### The trap on the payslip
+
+That page is measured against the company's own PDF and currently fits one A4
+sheet with about 13pt to spare. The signature needs a fixed height in `pt` with
+the width following, or a tall scan pushes the slip onto two pages — which is
+worse than no signature. And it must show against a dark surface in Settings: a
+black PNG on a dark card is invisible.

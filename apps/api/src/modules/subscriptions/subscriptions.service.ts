@@ -59,17 +59,22 @@ export class SubscriptionsService {
     if (query.status) filters.push(eq(subscriptions.status, query.status));
     if (query.category)
       filters.push(eq(subscriptions.category, query.category));
+    // Only ever matches the rows written before `tool_name` existed, because
+    // nothing puts a company on a subscription now. Left working rather than
+    // deleted: for those rows it is the one way to ask what was bought from a
+    // particular company, and a filter that answers nothing is a different
+    // thing from a filter that is gone.
     if (query.vendorId)
       filters.push(eq(subscriptions.vendorId, query.vendorId));
 
     if (query.q) {
       const like = `%${query.q}%`;
-      // The vendor's name too: somebody searching "Claude" is not thinking
-      // about whether that is the plan or the company.
+      // The tool's name too: somebody searching "Claude" is not thinking about
+      // whether that is the plan or the tool.
       filters.push(
         or(
+          sql`${this.toolNameSql()} ilike ${like}`,
           ilike(subscriptions.planName, like),
-          ilike(vendors.name, like),
           ilike(subscriptions.boughtFor, like),
           ilike(subscriptions.loginEmail, like),
         )!,
@@ -90,16 +95,21 @@ export class SubscriptionsService {
 
     const where = and(...filters);
 
+    // Left, and that is not a tidy-up. `vendor_id` is nullable now and nothing
+    // writes one, so an inner join would return only the rows from before the
+    // name column and silently drop every subscription added since — a list
+    // that looks perfectly healthy and is missing its newest half. The join is
+    // here at all because the fallback name and the search read through it.
     const [{ total }] = await this.db.client
       .select({ total: count() })
       .from(subscriptions)
-      .innerJoin(vendors, eq(subscriptions.vendorId, vendors.id))
+      .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .where(where);
 
     const rows = await this.db.client
       .select(this.columns())
       .from(subscriptions)
-      .innerJoin(vendors, eq(subscriptions.vendorId, vendors.id))
+      .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(where)
       // Renewal first, because the question this screen answers most often is
@@ -107,7 +117,7 @@ export class SubscriptionsService {
       // can act on, and it should not sit at the top of the list.
       .orderBy(
         sql`${subscriptions.nextRenewalOn} asc nulls last`,
-        asc(vendors.name),
+        sql`${this.toolNameSql()} asc`,
         asc(subscriptions.planName),
       )
       .limit(query.pageSize)
@@ -128,7 +138,9 @@ export class SubscriptionsService {
     const [row] = await this.db.client
       .select(this.columns())
       .from(subscriptions)
-      .innerJoin(vendors, eq(subscriptions.vendorId, vendors.id))
+      // Left, for the same reason as the list: an inner join here is a 404 on
+      // every subscription written since the name column arrived.
+      .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(and(eq(subscriptions.id, id), isNull(subscriptions.deletedAt)))
       .limit(1);
@@ -144,7 +156,7 @@ export class SubscriptionsService {
       .select({
         subscriptionId: subscriptions.id,
         planName: subscriptions.planName,
-        vendorName: vendors.name,
+        toolName: this.toolNameSql(),
         category: subscriptions.category,
         costUsd: subscriptions.costUsd,
         billingCycle: subscriptions.billingCycle,
@@ -159,14 +171,14 @@ export class SubscriptionsService {
         subscriptions,
         eq(subscriptionUsers.subscriptionId, subscriptions.id),
       )
-      .innerJoin(vendors, eq(subscriptions.vendorId, vendors.id))
+      .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .where(
         and(
           eq(subscriptionUsers.teamMemberId, teamMemberId),
           isNull(subscriptions.deletedAt),
         ),
       )
-      .orderBy(asc(vendors.name), asc(subscriptions.planName));
+      .orderBy(sql`${this.toolNameSql()} asc`, asc(subscriptions.planName));
   }
 
   async create(input: CreateSubscriptionInput, actor: AuthenticatedUser) {
@@ -183,7 +195,7 @@ export class SubscriptionsService {
         const [row] = await tx
           .insert(subscriptions)
           .values({
-            vendorId: input.vendorId,
+            toolName: input.toolName,
             planName: input.planName,
             category: input.category,
             status: input.status,
@@ -306,11 +318,31 @@ export class SubscriptionsService {
 
   /* ------------------------------------------------------------------ */
 
+  /**
+   * What the tool is called.
+   *
+   * `tool_name` on everything written since it arrived, and the name of the
+   * company the plan used to hang off for everything older — those rows were
+   * only ever labelled by the `vendors` row the form minted for them, so the
+   * fallback is this register's whole history until today.
+   *
+   * Built in SQL rather than chosen in TypeScript because the list orders on
+   * it and the search matches it, and both of those happen in Postgres.
+   */
+  private toolNameSql() {
+    return sql<string>`coalesce(${subscriptions.toolName}, ${vendors.name})`;
+  }
+
   private columns() {
     return {
       id: subscriptions.id,
+      toolName: this.toolNameSql(),
+      /**
+       * Null on everything written since the name column arrived, and that is
+       * all it is: which company an old plan was bought from. Nothing sets it,
+       * and no screen has to show it.
+       */
       vendorId: subscriptions.vendorId,
-      vendorName: vendors.name,
       planName: subscriptions.planName,
       category: subscriptions.category,
       status: subscriptions.status,
@@ -470,8 +502,8 @@ export class SubscriptionsService {
 
 type SubscriptionRow = {
   id: string;
-  vendorId: string;
-  vendorName: string;
+  toolName: string;
+  vendorId: string | null;
   planName: string;
   category: string;
   status: string;

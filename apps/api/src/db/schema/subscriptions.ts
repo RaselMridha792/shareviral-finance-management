@@ -23,8 +23,8 @@ import { vendors } from "./vendors";
 /**
  * A paid seat: one plan, one price, one lifecycle.
  *
- * Not the same thing as a vendor. Claude is one vendor and nine of these —
- * Pro for seven people, Max 5x, Max 20x — each with its own price, cycle and
+ * Not the same thing as the tool. Claude is one tool and nine of these — Pro
+ * for seven people, Max 5x, Max 20x — each with its own price, cycle and
  * status. The tools sheet has one row per person per billing period, which
  * mixes the subscription with each month of it; this holds the subscription,
  * and the months are ledger rows, where every other figure in this app lives.
@@ -42,8 +42,29 @@ export const subscriptions = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     entityId: uuid("entity_id"),
 
-    /** The company behind it. Claude, Figma, Github. */
-    vendorId: uuid("vendor_id").notNull(),
+    /**
+     * What the tool is called. Claude, Figma, Github.
+     *
+     * Text, and not a `vendors` row any longer. Typing a name into the form
+     * used to mint a company on the books — the same free-text-becomes-a-record
+     * path `transactions` refuses on purpose — and nothing was bought with it:
+     * paying for a tool is an ordinary expense in a category that already
+     * exists, and this register only ever needed to say which tool a plan is
+     * for.
+     */
+    toolName: varchar("tool_name", { length: 160 }).notNull(),
+
+    /**
+     * The company a plan was bought from, on the rows written before there was
+     * a name column.
+     *
+     * Nullable, never written now, and kept on purpose: for those rows it is
+     * the only record of which company the plan came from, and the joined name
+     * is what the register falls back to when `toolName` is empty. Dropping it
+     * would take a fact with it that nothing else in the database holds. The
+     * relation below stays for the same reason — the fallback is a join.
+     */
+    vendorId: uuid("vendor_id"),
 
     /** "Max Plan 5x", "Professional Full seats". */
     planName: varchar("plan_name", { length: 160 }).notNull(),

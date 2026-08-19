@@ -1,820 +1,470 @@
 "use client";
 
 import {
-  FILING_STATUS_LABELS,
-  TDS_DEPOSIT_TYPE_LABELS,
-  isSelectableMonth,
-  nearestSelectableMonth,
-  recordYears,
+  GRANULARITIES,
+  RECORDS_START,
+  currentFiscalYear,
+  fiscalYearLabel,
+  fiscalYearOf,
+  isWithin,
+  isoDate,
+  periodsInFiscalYear,
   todayInDhaka,
-  type TdsDepositType,
+  type FiscalYearMode,
+  type Granularity,
+  type PeriodRange,
+  type SalaryTdsRegister,
 } from "@finance/shared";
-import {
-  AlertTriangle,
-  Check,
-  Download,
-  LoaderCircle,
-  Plus,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { LoaderCircle, Printer } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { TabStrip } from "@/components/reports/granularity-tabs";
+import { useSettings } from "@/components/settings-provider";
+import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Drawer } from "@/components/ui/drawer";
-import {
-  DateInput,
-  Field,
-  Input,
-  MoneyInput,
-  Select,
-  Textarea,
-} from "@/components/ui/field";
+import { Select } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import { exportUrl } from "@/lib/ledger";
-import type { AccountDto } from "@/lib/masters";
 import { ApiError } from "@/lib/api-client";
-import {
-  tdsApi,
-  type TdsDepositDto,
-  type TdsLiabilityDto,
-  type WithholdingReturnDto,
-} from "@/lib/tax";
+import { tdsApi } from "@/lib/tax";
+import { cn } from "@/lib/utils";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+/**
+ * Who was taxed this period, and how much — and nothing else.
+ *
+ * The screen used to carry three summary cards, a month-by-month liability
+ * table, the challans, the quarterly returns and a form for each. The owner cut
+ * it to one card, one table and a calculator: every deduction here comes off a
+ * salary, so the useful question is whose salary and how much, and the answer
+ * to that is a list of people rather than a grid of totals.
+ *
+ * What left the screen did not leave the app. `/tds/deposits`, `/tds/liability`
+ * and `/tds/returns` still answer, `tdsApi` still calls them, and the challans
+ * and returns are still recorded — they are the compliance trail, and they are
+ * one `git show` away from a page of their own. Same treatment income tax and
+ * the retired reports got.
+ */
+const TABS = [
+  { id: "register", label: "Salary deductions" },
+  { id: "calculator", label: "Tax calculator" },
+] as const;
+
+type Tab = (typeof TABS)[number]["id"];
+
+/**
+ * The four periods, named the way the owner asked for them.
+ *
+ * The reports and statement screens name the same four after the document
+ * ("Quarterly Finance Report"). Here the period is a filter over one table, so
+ * it is named as a period and nothing more.
+ */
+const PERIOD_NAMES: Record<Granularity, string> = {
+  month: "Monthly",
+  quarter: "Quarterly",
+  half: "Half year",
+  year: "Yearly",
+};
 
 const th =
   "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
 const thRight = `${th} text-right`;
 
-export function WithholdingScreen({
-  year,
-  fiscalYear,
-  liability,
-  deposits,
-  returns,
-  accounts,
-}: {
-  year: number;
-  fiscalYear: number;
-  liability: TdsLiabilityDto;
-  deposits: { items: TdsDepositDto[]; total: string };
-  returns: WithholdingReturnDto[];
-  accounts: AccountDto[];
-}) {
-  const router = useRouter();
-  const canWrite = useCan("tds.write");
-  // Each read unconditionally: downloading needs both the right to export and
-  // the right to see the tax figures.
-  const canRunExports = useCan("exports.run");
-  const canReadTds = useCan("tds.read");
-  const canExport = canRunExports && canReadTds;
-  const [recording, setRecording] = useState<{ year: number; month: number } | null>(
-    null,
-  );
-  const [filing, setFiling] = useState<WithholdingReturnDto | null>(null);
+export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
+  const { fiscalYearMode: mode } = useSettings();
+  // The payslip behind the link is guarded by `payroll.read`, so a reader
+  // holding `tds.read` alone is given the figures without a link that would
+  // answer 403.
+  const canSeePayslips = useCan("payroll.read");
 
-  const today = todayInDhaka();
-  const outstanding = Number(liability.totals.outstanding);
-  /**
-   * More deposited than was ever withheld.
-   *
-   * Worth its own figure because "still held" is clamped at zero: without this
-   * an over-deposit reads as a settled month, and the card underneath said
-   * "everything deducted has been deposited" — true, and the wrong thing to be
-   * told when a challan carries a digit too many or names the wrong month.
-   */
-  const overDeposited = Number(liability.totals.overDeposited ?? 0);
-  const overDepositedMonths = liability.months.filter(
-    (m) => Number(m.overDeposited ?? 0) > 0,
+  const [tab, setTab] = useState<Tab>("register");
+  const [granularity, setGranularity] = useState(initial.period.granularity);
+  const [fiscalYear, setFiscalYear] = useState(initial.period.fiscalYear);
+  const [index, setIndex] = useState(initial.period.index);
+
+  const [register, setRegister] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const years = useMemo(() => selectableFiscalYears(mode), [mode]);
+  const periods = useMemo(
+    () => periodsInFiscalYear(fiscalYear, mode, granularity),
+    [fiscalYear, mode, granularity],
   );
+
+  /**
+   * The period already on the screen.
+   *
+   * A ref rather than a comparison against `register.period`, so the effect
+   * below can tell "the filter moved" from "the page has just loaded". The
+   * server rendered the first period; asking for it again on mount would be a
+   * wasted request and a loader flashing over figures that are already right.
+   */
+  const shown = useRef(periodKey(initial.period));
+
+  useEffect(() => {
+    const wanted = periodKey({ granularity, fiscalYear, index });
+    if (wanted === shown.current) return;
+    shown.current = wanted;
+
+    let live = true;
+    // Cleared before the request rather than after it: a failure on one period
+    // must not leave its red banner sitting over a period that read perfectly
+    // well.
+    setLoading(true);
+    setError(null);
+    tdsApi
+      .salaryRegister({ granularity, fiscalYear, index })
+      .then((next) => {
+        if (live) setRegister(next);
+      })
+      .catch((caught) => {
+        if (!live) return;
+        setError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not read that period.",
+        );
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [granularity, fiscalYear, index]);
+
+  /**
+   * Keep the reader where they were in the year.
+   *
+   * Switching August to Quarterly lands on the quarter August sits in, not on
+   * the first quarter of a year nobody was looking at. Carrying the index
+   * across untouched would be worse than surprising: the API cross-checks it
+   * against the granularity, so month 9 asked for as a quarter is a 400 rather
+   * than a shrug.
+   */
+  function chooseGranularity(next: Granularity) {
+    const anchor = periods[index - 1]?.start ?? todayInDhaka();
+    const list = periodsInFiscalYear(fiscalYear, mode, next);
+    const found = list.findIndex((range) => isWithin(anchor, range));
+
+    setGranularity(next);
+    setIndex(nearestSelectable(list, found >= 0 ? found + 1 : 1));
+  }
+
+  /**
+   * The same period of another year may not be there to look at: June of this
+   * financial year has not happened, and June of the one before it ended before
+   * the books opened. `nearestSelectableMonth` does this for the month pickers;
+   * a period picker needs it for the same reason.
+   */
+  function chooseYear(next: number) {
+    setFiscalYear(next);
+    setIndex(
+      nearestSelectable(periodsInFiscalYear(next, mode, granularity), index),
+    );
+  }
+
+  const period = register.period;
+  const rows = register.rows;
+  /**
+   * The month column earns its place only when the table crosses one. A column
+   * repeating "August 2026" on every row of an August table says nothing.
+   */
+  const showMonth =
+    new Set(rows.map((row) => `${row.periodYear}-${row.periodMonth}`)).size > 1;
+  const columns = showMonth ? 5 : 4;
 
   return (
     <>
       <PageHeader
         title="Withholding tax"
-        description="Tax deducted from salaries and vendor bills, the challans that deposited it, and the quarterly returns."
-        actions={
-          canWrite ? (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setRecording({ year, month: currentMonth(today) })}
-            >
-              <Plus className="size-4" />
-              Record a challan
-            </Button>
-          ) : null
-        }
+        description="Tax deducted from salaries — whose, and how much."
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <YearPicker
-          value={year}
-          onChange={(next) => router.push(`/tax/withholding?year=${next}`)}
-        />
-      </div>
+      <TabStrip
+        tabs={TABS}
+        active={tab}
+        onSelect={setTab}
+        label="Withholding tax"
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Deducted" value={liability.totals.deducted} />
-        <SummaryCard label="Deposited" value={liability.totals.deposited} />
-        <SummaryCard
-          label="Still held"
-          value={liability.totals.outstanding}
-          tone={
-            outstanding > 0
-              ? "warning"
-              : overDeposited > 0
-                ? "neutral"
-                : "positive"
-          }
-          note={
-            outstanding > 0
-              ? "Money withheld from someone else that has not reached the treasury"
-              : overDeposited > 0
-                ? "Nothing is owed — but more has been deposited than was withheld"
-                : "Everything deducted has been deposited"
-          }
-        />
-      </div>
+      {tab === "calculator" ? (
+        <TaxCalculator years={years} mode={mode} />
+      ) : (
+        <>
+          {/*
+            One card, and deliberately above the filter rather than beside the
+            table: it always shows the calendar month we are in, whatever period
+            is being read below. Sitting inside the filtered block it would read
+            as a figure the filter had produced.
+          */}
+          <Card className="flex max-w-xs flex-col gap-1 px-4 py-3.5">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Deducted in {register.currentMonth.label}
+            </span>
+            <Amount
+              value={register.currentMonth.total}
+              tone="neutral"
+              className="text-xl font-medium"
+            />
+            <span className="text-xs text-muted-foreground">
+              The month we are in, whichever period the table shows.
+            </span>
+          </Card>
 
-      {/*
-        Shown only when it happens, because a figure that is nearly always zero
-        earns no permanent place on the screen. When it is not zero it is money
-        already with the treasury that nobody is looking for — a challan typed
-        with an extra digit, or filed against the wrong month.
-      */}
-      {overDeposited > 0 ? (
-        <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/8 px-4 py-3">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-          <div className="text-sm">
-            <p className="font-medium">
-              <Amount value={liability.totals.overDeposited} tone="neutral" />{" "}
-              deposited beyond what was withheld
-            </p>
-            <p className="mt-0.5 text-muted-foreground">
-              {overDepositedMonths.length === 1
-                ? `${overDepositedMonths[0].label} has a challan larger than that month's deductions.`
-                : `${overDepositedMonths.map((m) => m.label).join(", ")} each have a challan larger than that month's deductions.`}{" "}
-              Check the amount on the challan and the month it names — this is
-              money already with the treasury.
-            </p>
-          </div>
-        </div>
-      ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-border p-0.5">
+              {GRANULARITIES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={granularity === option}
+                  onClick={() => chooseGranularity(option)}
+                  className={cn(
+                    "cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition",
+                    granularity === option
+                      ? "bg-primary text-white"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {PERIOD_NAMES[option]}
+                </button>
+              ))}
+            </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader
-          title="Month by month"
-          description="Salary tax comes from the payroll sheet; vendor tax from the withheld column on payments."
-          action={
-            canExport ? (
-              <ExcelButton target="tds/liability" query={{ year }} />
-            ) : null
-          }
-        />
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <th className={th}>Month</th>
-                <th className={thRight}>Salary tax</th>
-                <th className={thRight}>Vendor tax</th>
-                <th className={thRight}>Deducted</th>
-                <th className={thRight}>Deposited</th>
-                <th className={thRight}>Still held</th>
-                <th className={th}>Deposit by</th>
-                <th className={th} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {liability.months.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-10 text-center text-sm text-muted-foreground"
+            {/* A financial year holds one yearly period, so there is nothing
+                to pick between. */}
+            {periods.length > 1 ? (
+              <Select
+                aria-label="Period"
+                className="h-9 w-40"
+                value={index}
+                onChange={(event) => setIndex(Number(event.target.value))}
+              >
+                {/* A period that has not begun, or one that ended before the
+                    books did, is greyed rather than dropped: not offered is a
+                    different thing from not there. */}
+                {periods.map((range, position) => (
+                  <option
+                    key={range.label}
+                    value={position + 1}
+                    disabled={!isSelectable(range)}
                   >
-                    No tax was deducted in {year}.
-                  </td>
-                </tr>
-              ) : (
-                liability.months.map((row) => {
-                  const held = Number(row.outstanding);
-                  const over = Number(row.overDeposited ?? 0);
-                  const late = held > 0 && row.dueOn < today;
-                  return (
-                    <tr
-                      key={row.month}
-                      className="row-finance hover:bg-surface-muted/50"
-                    >
-                      <td className="px-4 py-2.5 font-medium">{row.label}</td>
-                      <td className="px-4 py-2.5">
-                        <Amount value={row.salaryTds} tone="neutral" className="block" />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Amount value={row.vendorTds} tone="neutral" className="block" />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Amount
-                          value={row.totalDeducted}
-                          tone="neutral"
-                          className="block font-medium"
-                        />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Amount
-                          value={row.deposited}
-                          tone="neutral"
-                          className={
-                            over > 0 ? "block font-medium text-warning" : "block"
-                          }
-                        />
-                        {/* Marked on the deposit, not on "still held", because
-                            the deposit is the figure that is wrong. */}
-                        {over > 0 ? (
-                          <span className="mt-0.5 block text-xs text-warning">
-                            <Amount
-                              value={row.overDeposited}
-                              tone="neutral"
-                              className="inline"
-                            />{" "}
-                            more than was withheld
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Amount
-                          value={row.outstanding}
-                          tone="neutral"
-                          className={
-                            held > 0 ? "block font-medium text-warning" : "block"
-                          }
-                        />
-                      </td>
-                      <td className="num px-4 py-2.5 text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          {row.dueOn}
-                          {late ? (
-                            <AlertTriangle
-                              className="size-3.5 text-negative"
-                              aria-label="Past the deadline"
-                            />
-                          ) : null}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {canWrite && held > 0 ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              setRecording({ year: row.year, month: row.month })
-                            }
-                          >
-                            Deposit
-                          </Button>
-                        ) : null}
+                    {range.label}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+
+            {/* Named rather than a bare "2026": under the July–June setting a
+                financial year spans two of the years a person would name. */}
+            <Select
+              aria-label="Financial year"
+              title={
+                mode === "bd_july_june" ? "July to June" : "January to December"
+              }
+              className="h-9 w-auto"
+              value={fiscalYear}
+              onChange={(event) => chooseYear(Number(event.target.value))}
+            >
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {fiscalYearLabel(year, mode)}
+                </option>
+              ))}
+            </Select>
+
+            {loading ? (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                Reading {periods[index - 1]?.label ?? "that period"}…
+              </span>
+            ) : null}
+          </div>
+
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          <Card className="overflow-hidden">
+            <CardHeader
+              title={period.label}
+              description="Everyone on a finalised payroll run in this period. Somebody who owed no tax is listed at 0.00 rather than left out — this is who was paid, not only who was taxed."
+            />
+            <div className="overflow-x-auto">
+              <table className="table-data min-w-160 text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface-muted/50 text-left">
+                    <th className={th}>Employee</th>
+                    {showMonth ? <th className={th}>Month</th> : null}
+                    <th className={thRight}>Salary</th>
+                    <th className={thRight}>Tax deducted</th>
+                    <th className={th} />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {rows.length === 0 ? (
+                    <tr>
+                      {/*
+                        Why it is empty, rather than emptiness. A blank table
+                        under a period nobody ran payroll for reads as "no tax
+                        was deducted", which is a different statement about the
+                        company.
+                      */}
+                      <td
+                        colSpan={columns}
+                        className="cell-prose px-4 py-10 text-center text-sm text-muted-foreground"
+                      >
+                        <p>No finalised payroll run in {period.label}.</p>
+                        <p className="mt-1">
+                          A run reaches this page once it is finalised — while
+                          it is a draft its figures can still change, so nothing
+                          has been deducted from anybody yet.
+                        </p>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          title="Challans"
-          description="Each A-Challan and the month of deductions it covers."
-          action={
-            canExport ? (
-              <ExcelButton target="tds/deposits" query={{ year }} />
-            ) : null
-          }
-        />
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <th className={th}>Challan</th>
-                <th className={th}>Deposited</th>
-                <th className={th}>Covers</th>
-                <th className={th}>Type</th>
-                <th className={th}>Bank</th>
-                <th className={thRight}>Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {deposits.items.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-10 text-center text-sm text-muted-foreground"
-                  >
-                    No challans recorded for {year} yet.
-                  </td>
-                </tr>
-              ) : (
-                deposits.items.map((row) => (
-                  <tr key={row.id} className="row-finance hover:bg-surface-muted/50">
-                    <td className="num px-4 py-2.5 font-medium">
-                      {row.challanNumber}
-                    </td>
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {row.depositDate}
-                    </td>
-                    <td className="px-4 py-2.5">{row.periodLabel}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {TDS_DEPOSIT_TYPE_LABELS[row.depositType]}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.bankName ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Amount value={row.amount} tone="neutral" className="block" />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          title={`Quarterly returns · FY ${fiscalYear}-${String(fiscalYear + 1).slice(-2)}`}
-          description="Due on the 25th of the month after each quarter — 25 Oct, 25 Jan, 25 Apr, 25 Jul."
-          action={
-            canExport ? (
-              <ExcelButton target="tds/returns" query={{ fiscalYear }} />
-            ) : null
-          }
-        />
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <th className={th}>Quarter</th>
-                <th className={th}>Covers</th>
-                <th className={th}>Due</th>
-                <th className={th}>Status</th>
-                <th className={th}>Filed on</th>
-                <th className={th}>Acknowledgement</th>
-                <th className={th} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {returns.map((row) => (
-                <tr key={row.id} className="row-finance hover:bg-surface-muted/50">
-                  <td className="px-4 py-2.5 font-medium">Q{row.quarter}</td>
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {row.periodStart} → {row.periodEnd}
-                  </td>
-                  <td className="num px-4 py-2.5">{row.dueDate}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={
-                        row.status === "filed"
-                          ? "positive"
-                          : row.status === "late"
-                            ? "warning"
-                            : row.isOverdue
-                              ? "negative"
-                              : "neutral"
-                      }
-                    >
-                      {row.isOverdue && row.status === "pending"
-                        ? "Overdue"
-                        : FILING_STATUS_LABELS[row.status]}
-                    </Badge>
-                  </td>
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {row.filedOn ?? "—"}
-                  </td>
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {row.acknowledgementNo ?? "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {canWrite && row.status === "pending" ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setFiling(row)}
+                  ) : (
+                    rows.map((row) => (
+                      <tr
+                        key={row.payrollLineId}
+                        className="row-finance hover:bg-surface-muted/50"
                       >
-                        Mark filed
-                      </Button>
-                    ) : row.status !== "pending" ? (
-                      <Check className="ml-auto size-4 text-positive" />
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <ChallanForm
-        // Keyed on the month, so opening "record a challan" for July after
-        // looking at June starts on July rather than on whatever the form was
-        // last left showing.
-        key={recording ? `${recording.year}-${recording.month}` : "none"}
-        target={recording}
-        accounts={accounts}
-        onClose={() => setRecording(null)}
-        onSaved={() => {
-          setRecording(null);
-          router.refresh();
-        }}
-      />
-      <FileReturnForm
-        record={filing}
-        onClose={() => setFiling(null)}
-        onSaved={() => {
-          setFiling(null);
-          router.refresh();
-        }}
-      />
+                        <td className="px-4 py-2.5 font-medium">
+                          {row.fullName}
+                          {/*
+                            The run is finalised, so the deduction is settled —
+                            but the salary has not gone out, so nothing has
+                            actually been withheld from this person yet. Shown
+                            only when it is true, which is rarely.
+                          */}
+                          {!row.isPaid ? (
+                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                              Salary not paid yet
+                            </span>
+                          ) : null}
+                        </td>
+                        {showMonth ? (
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {row.periodLabel}
+                          </td>
+                        ) : null}
+                        <td className="px-4 py-2.5">
+                          <Amount
+                            value={row.grossAmount}
+                            tone="neutral"
+                            className="block"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Amount
+                            value={row.tdsAmount}
+                            tone="neutral"
+                            className="block font-medium"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {canSeePayslips ? (
+                            <Link
+                              href={`/payroll/${row.payrollLineId}/payslip`}
+                              prefetch={false}
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <Printer className="size-3" />
+                              Payslip
+                            </Link>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {rows.length > 0 ? (
+                  <tfoot>
+                    <tr className="border-t border-border bg-surface-muted/40">
+                      <td
+                        className="px-4 py-2.5 font-medium"
+                        colSpan={showMonth ? 3 : 2}
+                      >
+                        Deducted in {period.label}
+                      </td>
+                      {/*
+                        The server's figure, summed in SQL across the period.
+                        Adding the rows up here would be the same question put
+                        to floating point, and it would answer differently.
+                      */}
+                      <td className="px-4 py-2.5">
+                        <Amount
+                          value={register.periodTotal}
+                          tone="neutral"
+                          className="block font-semibold"
+                        />
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
     </>
   );
 }
 
+/** The three fields that decide which period is being read. */
+function periodKey(period: {
+  granularity: Granularity;
+  fiscalYear: number;
+  index: number;
+}): string {
+  return `${period.granularity}:${period.fiscalYear}:${period.index}`;
+}
+
 /**
- * One button per table, not one for the screen.
+ * A period the app can show figures for: one that has begun, and one that had
+ * not already ended when the books opened.
  *
- * This page shows three different things — the monthly position, the challans,
- * and the quarterly returns — and each is its own sheet with its own filter.
+ * The same test `/reports/periods` applies server-side. It is repeated here
+ * rather than fetched because that endpoint is guarded by `reports.view` and
+ * this screen by `tds.read` — a reader holding the tax permission and not the
+ * reports one must still get a working picker.
  */
-function ExcelButton({
-  target,
-  query,
-}: {
-  target: string;
-  query: Record<string, string | number | undefined>;
-}) {
-  return (
-    <Button
-      variant="secondary"
-      size="md"
-      onClick={() => {
-        window.location.href = exportUrl(target, query);
-      }}
-    >
-      <Download className="size-4" />
-      Excel
-    </Button>
-  );
+function isSelectable(range: PeriodRange): boolean {
+  const booksOpen = isoDate(RECORDS_START.year, RECORDS_START.month, 1);
+  return range.start <= todayInDhaka() && range.end >= booksOpen;
 }
 
-function SummaryCard({
-  label,
-  value,
-  tone = "neutral",
-  note,
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "warning" | "positive";
-  note?: string;
-}) {
-  return (
-    <Card className="flex flex-col gap-1 px-4 py-3.5">
-      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </span>
-      <Amount
-        value={value}
-        tone="neutral"
-        className={`text-xl font-medium ${
-          tone === "warning"
-            ? "text-warning"
-            : tone === "positive"
-              ? "text-positive"
-              : ""
-        }`}
-      />
-      {note ? (
-        <span className="text-xs text-muted-foreground">{note}</span>
-      ) : null}
-    </Card>
-  );
-}
-
-function YearPicker({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (year: number) => void;
-}) {
-  // 2026 onwards, growing on its own. It used to offer next year and two years
-  // back — three years the company has no withholding records for, and one of
-  // them not yet begun.
-  const years = recordYears();
-
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">Year</span>
-      <Select
-        className="h-9 w-28"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      >
-        {years.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </Select>
-    </label>
-  );
-}
-
-function ChallanForm({
-  target,
-  accounts,
-  onClose,
-  onSaved,
-}: {
-  target: { year: number; month: number } | null;
-  accounts: AccountDto[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const today = todayInDhaka();
-
-  // Which month's deductions the challan covers. Held here rather than read off
-  // the form on submit, because the month list has to grey out what the chosen
-  // year cannot have, and two uncontrolled boxes cannot see each other.
-  const [coversYear, setCoversYear] = useState(
-    target?.year ?? Number(today.slice(0, 4)),
-  );
-  const [coversMonth, setCoversMonth] = useState(
-    target?.month ?? Number(today.slice(5, 7)),
-  );
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
-
-    const data = new FormData(event.currentTarget);
-    const accountId = String(data.get("accountId") ?? "");
-
-    try {
-      await tdsApi.createDeposit({
-        challanNumber: String(data.get("challanNumber") ?? "").trim(),
-        challanDate: String(data.get("challanDate") ?? ""),
-        depositDate: String(data.get("depositDate") ?? ""),
-        amount: String(data.get("amount") ?? "").replace(/,/g, ""),
-        bankName: String(data.get("bankName") ?? "") || undefined,
-        branch: String(data.get("branch") ?? "") || undefined,
-        periodYear: coversYear,
-        periodMonth: coversMonth,
-        depositType: String(data.get("depositType")) as TdsDepositType,
-        accountId: accountId || undefined,
-        notes: String(data.get("notes") ?? "") || undefined,
-      });
-      onSaved();
-    } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not record that challan.",
-      );
-    } finally {
-      setPending(false);
-    }
+/** The wanted period if it can be shown, else the latest one that can. */
+function nearestSelectable(periods: PeriodRange[], wanted: number): number {
+  if (periods[wanted - 1] && isSelectable(periods[wanted - 1])) return wanted;
+  for (let position = periods.length; position >= 1; position--) {
+    if (isSelectable(periods[position - 1])) return position;
   }
-
-  return (
-    <Drawer
-      open={target !== null}
-      onClose={onClose}
-      title="Record a TDS challan"
-    >
-      {target ? (
-        <form id="challan-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Challan number" required>
-              <Input name="challanNumber" autoFocus className="num" />
-            </Field>
-            <Field label="Challan date" required>
-              <DateInput name="challanDate" defaultValue={today} />
-            </Field>
-            <Field
-              label="Deposited on"
-              required
-              hint="The date the bank took the money"
-            >
-              <DateInput name="depositDate" defaultValue={today} />
-            </Field>
-            <Field label="Amount" required>
-              <MoneyInput name="amount" placeholder="0.00" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/*
-              Which month's deductions this challan covers. Controlled, so the
-              month list can grey out what the chosen year cannot have — a
-              challan filed against a month that has not happened would allocate
-              against deductions nobody has made.
-            */}
-            <Field label="Deductions from" required>
-              <Select
-                value={coversMonth}
-                onChange={(event) => setCoversMonth(Number(event.target.value))}
-              >
-                {MONTHS.map((name, index) => (
-                  <option
-                    key={name}
-                    value={index + 1}
-                    disabled={!isSelectableMonth(coversYear, index + 1)}
-                  >
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Year" required>
-              <Select
-                value={coversYear}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setCoversYear(next);
-                  setCoversMonth((current) =>
-                    nearestSelectableMonth(next, current),
-                  );
-                }}
-              >
-                {recordYears().map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-
-          <Field label="Covers">
-            <Select name="depositType" defaultValue="salary">
-              {Object.entries(TDS_DEPOSIT_TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field
-            label="Paid from"
-            hint="Leave blank if this payment is already in the ledger. Choosing an account writes the money-out row for you."
-          >
-            <Select name="accountId" defaultValue="">
-              <option value="">Do not write a ledger entry</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Bank">
-              <Input name="bankName" />
-            </Field>
-            <Field label="Branch">
-              <Input name="branch" />
-            </Field>
-          </div>
-
-          <Field label="Notes">
-            <Textarea name="notes" />
-          </Field>
-
-          {error ? (
-            <p
-              role="alert"
-              className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
-            >
-              {error}
-            </p>
-          ) : null}
-        </form>
-      ) : null}
-
-      <div className="mt-6 flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          form="challan-form"
-          variant="primary"
-          disabled={pending}
-        >
-          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Record
-        </Button>
-      </div>
-    </Drawer>
-  );
+  return 1;
 }
 
-function FileReturnForm({
-  record,
-  onClose,
-  onSaved,
-}: {
-  record: WithholdingReturnDto | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    if (!record) return;
-    event.preventDefault();
-    setPending(true);
-    setError(null);
-
-    const data = new FormData(event.currentTarget);
-    try {
-      await tdsApi.fileReturn(record.id, {
-        filedOn: String(data.get("filedOn") ?? ""),
-        acknowledgementNo: String(data.get("acknowledgementNo") ?? "") || undefined,
-        notes: String(data.get("notes") ?? "") || undefined,
-      });
-      onSaved();
-    } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : "Could not save that.",
-      );
-    } finally {
-      setPending(false);
-    }
+/**
+ * Every financial year the picker may offer: the one the books opened in, up to
+ * the one we are in, newest first. In July–June mode, books opening in May 2026
+ * makes the first of them FY 2025-26.
+ */
+function selectableFiscalYears(mode: FiscalYearMode): number[] {
+  const first = fiscalYearOf(
+    isoDate(RECORDS_START.year, RECORDS_START.month, 1),
+    mode,
+  );
+  const years: number[] = [];
+  for (let year = currentFiscalYear(mode); year >= first; year--) {
+    years.push(year);
   }
-
-  return (
-    <Drawer
-      open={record !== null}
-      onClose={onClose}
-      title={record ? `Q${record.quarter} withholding return` : ""}
-    >
-      {record ? (
-        <form id="file-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            Covers {record.periodStart} to {record.periodEnd}, due{" "}
-            <span className="num">{record.dueDate}</span>.
-          </p>
-          <Field label="Filed on" required>
-            <DateInput name="filedOn" defaultValue={todayInDhaka()} />
-          </Field>
-          <Field label="Acknowledgement number">
-            <Input name="acknowledgementNo" className="num" />
-          </Field>
-          <Field label="Notes">
-            <Textarea name="notes" />
-          </Field>
-
-          {error ? (
-            <p
-              role="alert"
-              className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative"
-            >
-              {error}
-            </p>
-          ) : null}
-        </form>
-      ) : null}
-
-      <div className="mt-6 flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" form="file-form" variant="primary" disabled={pending}>
-          {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Save
-        </Button>
-      </div>
-    </Drawer>
-  );
-}
-
-function currentMonth(today: string): number {
-  return Number(today.slice(5, 7));
+  return years;
 }

@@ -4,8 +4,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  currentFiscalYear,
   deadlineStatus,
   formatMoney,
+  MONTH_NAMES,
+  parseIsoDate,
+  periodsInFiscalYear,
   tdsDepositDeadlineForMonth,
   todayInDhaka,
   withholdingReturnDeadlines,
@@ -14,6 +18,8 @@ import {
   type FileReturnInput,
   type PendingItem,
   type PendingQuery,
+  type SalaryTdsRegister,
+  type SalaryTdsRegisterQuery,
   type TdsLiabilityQuery,
 } from "@finance/shared";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -257,6 +263,137 @@ export class TdsService {
         // stranded against August, and one subtraction across the year would
         // net them off and show neither.
         overDeposited: sumOf(active.map((r) => r.overDeposited)),
+      },
+    };
+  }
+
+  /**
+   * Whose salary was taxed over a period — one row per person per month.
+   *
+   * `liability` above answers what a month owes the treasury. This answers
+   * where that figure came from, by name, and it is the whole of the
+   * withholding screen's table: gross, tax, and the payroll line each row's
+   * payslip link is built from.
+   *
+   * Only runs past draft, the same rule and for the same reason as everywhere
+   * else in this file: `generate-lines` deletes and rebuilds a draft's lines,
+   * so listing one would put people's names against figures that pressing
+   * Regenerate can change.
+   */
+  async salaryRegister(
+    query: SalaryTdsRegisterQuery,
+  ): Promise<SalaryTdsRegister> {
+    const settings = await this.settings.get();
+    const mode = settings.fiscalYearMode;
+    const fiscalYear = query.fiscalYear ?? currentFiscalYear(mode);
+    const today = todayInDhaka();
+
+    const all = periodsInFiscalYear(fiscalYear, mode, query.granularity);
+
+    // Asked for no period in particular, the answer is the one we are in.
+    // Defaulting to the first would open August's register on July's page —
+    // and in BD mode, on a July that is already a year behind by June.
+    const index = query.index
+      ? Math.min(query.index, all.length) - 1
+      : Math.max(
+          all.findIndex((p) => p.start <= today && today <= p.end),
+          0,
+        );
+    const range = all[index];
+
+    /**
+     * A payroll run is keyed by (year, month) and not by a date, so the
+     * period's two ends become month numbers on one scale: July 2026 is
+     * 2026 × 12 + 7.
+     *
+     * One comparison rather than a list of months to match against, and it
+     * survives a period that crosses a calendar year — which every BD fiscal
+     * quarter but the first one does.
+     */
+    const from = parseIsoDate(range.start);
+    const to = parseIsoDate(range.end);
+    const inPeriod = sql`(${payrollRuns.periodYear} * 12 + ${payrollRuns.periodMonth}) between ${from.year * 12 + from.month} and ${to.year * 12 + to.month}`;
+
+    /**
+     * Summed by Postgres and handed over as text, never added up in here.
+     *
+     * These are `numeric(14,2)` strings, and totalling a column of them as
+     * JavaScript numbers is how a payroll figure arrives at 17250.000000000002.
+     * The cast on the way out is what makes an empty period answer "0.00"
+     * rather than the bare "0" that a coalesced integer gives.
+     */
+    const taxTotal = sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::numeric(14,2)::text`;
+    const current = parseIsoDate(today);
+
+    const [rows, [periodTotal], [monthTotal]] = await Promise.all([
+      this.db.client
+        .select({
+          payrollLineId: payrollLines.id,
+          teamMemberId: teamMembers.id,
+          fullName: teamMembers.fullName,
+          periodYear: payrollRuns.periodYear,
+          periodMonth: payrollRuns.periodMonth,
+          grossAmount: payrollLines.grossAmount,
+          tdsAmount: payrollLines.tdsAmount,
+          isPaid: payrollLines.isPaid,
+        })
+        .from(payrollLines)
+        .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+        .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
+        .where(and(inPeriod, FINALISED_OR_LATER))
+        // Month, then name. The table is read a month at a time, and somebody
+        // who moves position between months cannot be followed down it.
+        .orderBy(
+          asc(payrollRuns.periodYear),
+          asc(payrollRuns.periodMonth),
+          asc(teamMembers.fullName),
+        ),
+
+      this.db.client
+        .select({ total: taxTotal })
+        .from(payrollLines)
+        .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+        .where(and(inPeriod, FINALISED_OR_LATER)),
+
+      // The card's figure, and deliberately not a slice of the rows above: the
+      // card says what this month deducted while the table shows whichever
+      // period is selected, and the two agree in only one case out of four.
+      this.db.client
+        .select({ total: taxTotal })
+        .from(payrollLines)
+        .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+        .where(
+          and(
+            eq(payrollRuns.periodYear, current.year),
+            eq(payrollRuns.periodMonth, current.month),
+            FINALISED_OR_LATER,
+          ),
+        ),
+    ]);
+
+    return {
+      period: {
+        label: range.label,
+        start: range.start,
+        end: range.end,
+        granularity: range.granularity,
+        fiscalYear: range.fiscalYear,
+        index: index + 1,
+      },
+      // Every finalised line, including the people whose tax came to nothing.
+      // Most of a Bangladeshi payroll is under the threshold, and a register
+      // that drops them cannot answer "was anything taken from Rahim in
+      // August?" — which a zero row answers and a missing row does not.
+      rows: rows.map((row) => ({
+        ...row,
+        periodLabel: monthLabel(row.periodYear, row.periodMonth),
+      })),
+      periodTotal: periodTotal.total,
+      currentMonth: {
+        year: current.year,
+        month: current.month,
+        label: monthLabel(current.year, current.month),
+        total: monthTotal.total,
       },
     };
   }
@@ -912,6 +1049,11 @@ export class TdsService {
 /** Money strings in, one money string out. */
 function sumOf(values: Array<string | null>): string {
   return values.reduce((sum, v) => sum + Number(v ?? 0), 0).toFixed(2);
+}
+
+/** "August 2026" — a payroll period, the way a person writes it. */
+function monthLabel(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
 function firstDayOf(year: number, month: number): string {

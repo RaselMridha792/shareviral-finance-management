@@ -1112,8 +1112,12 @@ export class ExportsController {
           value: (r) => r.salaryTds,
         },
         {
-          header: "Vendor tax",
-          key: "vendor",
+          // The same two words the screen uses. This is the tax withheld from
+          // the bills the company pays, which is a different thing from the
+          // salary tax in the column before it, and the download is meant to
+          // be what the screen shows.
+          header: "Bill tax",
+          key: "bill",
           kind: "money",
           value: (r) => r.vendorTds,
         },
@@ -1162,7 +1166,7 @@ export class ExportsController {
       rows: liability.months,
       totalColumns: [
         "salary",
-        "vendor",
+        "bill",
         "deducted",
         "deposited",
         "outstanding",

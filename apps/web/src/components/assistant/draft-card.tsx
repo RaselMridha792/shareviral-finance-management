@@ -49,9 +49,12 @@ export const FIELD_LABELS: Record<string, string> = {
   psrStatus: "PSR",
   psrAssessmentYear: "PSR year",
 
-  // Money and vendors.
+  // The money itself, and who it was with.
   paymentMethod: "Paid by",
-  vendorName: "Vendor",
+  // Named for what the field holds — the other side of the payment — not
+  // for the row it is stored against. Same words the import column mapper
+  // uses for the same thing, so a person meets one phrase, not two.
+  vendorName: "Paid to / received from",
   receiptUrl: "Receipt link",
   originalAmount: "Amount sent",
   originalCurrency: "Currency sent",
@@ -145,7 +148,11 @@ export function DraftCard({
         <p className="text-xs text-muted-foreground">
           {ready
             ? "Check every line, then save."
-            : `Still needed: ${reply.missingFields.join(", ")}`}
+            : // The model names what it still needs by the schema key, so this
+              // read "Still needed: vendorName" — the database talking, in the
+              // one line asking a person for help. Same words as the labels on
+              // the boxes below, which is where they will go to answer it.
+              `Still needed: ${reply.missingFields.map(labelFor).join(", ")}`}
         </p>
       </div>
 

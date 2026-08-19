@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
 import { Select } from "@/components/ui/field";
-import type { AccountDto, VendorDto } from "@/lib/masters";
+import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
 import { cn } from "@/lib/utils";
@@ -47,11 +47,9 @@ const TABS: { id: SubscriptionStatus | "all"; label: string }[] = [
 ];
 
 export function SubscriptionsScreen({
-  vendors,
   accounts,
   members,
 }: {
-  vendors: VendorDto[];
   accounts: AccountDto[];
   members: TeamMemberDto[];
 }) {
@@ -113,6 +111,27 @@ export function SubscriptionsScreen({
     [rows],
   );
 
+  /**
+   * The tool names the form offers under its name field.
+   *
+   * They come from the rows on screen because the register is now the only
+   * place a tool's name is written down — there is no company list behind it
+   * to ask any more, and fetching one purely to fill a datalist would put back
+   * exactly what the owner had taken out.
+   *
+   * Folded case-insensitively: a tool entered twice, spelled two ways, is
+   * offered once, and the suggestion is whichever spelling was seen first.
+   */
+  const toolNames = useMemo(() => {
+    const byName = new Map<string, string>();
+    for (const row of rows) {
+      const name = row.toolName.trim();
+      if (name && !byName.has(name.toLowerCase()))
+        byName.set(name.toLowerCase(), name);
+    }
+    return [...byName.values()].sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   return (
     <>
       <PageHeader
@@ -157,7 +176,7 @@ export function SubscriptionsScreen({
           <SearchField
             value={search}
             onChange={setSearch}
-            placeholder="Plan, company, team, login…"
+            placeholder="Tool, plan, team, login…"
           />
           <Select
             aria-label="Category"
@@ -246,13 +265,13 @@ export function SubscriptionsScreen({
                           onClick={() => setScreenshotOf(row)}
                           className="flex cursor-pointer items-center gap-1.5 text-left font-medium transition hover:text-primary"
                         >
-                          {row.vendorName}
+                          {row.toolName}
                           {row.screenshotFileId ? (
                             <ImageIcon className="size-3 shrink-0 text-muted-foreground" />
                           ) : null}
                         </button>
                         {/* The plan rides under the name instead of taking a
-                            column. Two plans of one vendor are otherwise the
+                            column. Two plans of one tool are otherwise the
                             same row twice. */}
                         <span className="block text-xs text-muted-foreground">
                           {row.planName}
@@ -331,7 +350,7 @@ export function SubscriptionsScreen({
                           <button
                             type="button"
                             onClick={() => setEditing(row)}
-                            aria-label={`Edit ${row.vendorName} ${row.planName}`}
+                            aria-label={`Edit ${row.toolName} ${row.planName}`}
                             className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
                           >
                             <Pencil className="size-3.5" />
@@ -359,7 +378,7 @@ export function SubscriptionsScreen({
       {adding ? (
         <SubscriptionForm
           open
-          vendors={vendors}
+          toolNames={toolNames}
           accounts={accounts}
           members={members}
           onClose={() => setAdding(false)}
@@ -374,7 +393,7 @@ export function SubscriptionsScreen({
         <SubscriptionForm
           open
           subscription={editing}
-          vendors={vendors}
+          toolNames={toolNames}
           accounts={accounts}
           members={members}
           onClose={() => setEditing(null)}

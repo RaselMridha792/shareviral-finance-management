@@ -202,7 +202,7 @@ export function MemberTools({
               {shown.map((row) => (
                 <tr key={row.subscriptionId} className="row-finance">
                   <td className="px-3 py-2">
-                    <span className="font-medium">{row.vendorName}</span>
+                    <span className="font-medium">{row.toolName}</span>
                     <span className="block text-xs text-muted-foreground">
                       {row.planName} ·{" "}
                       {BILLING_CYCLE_LABELS[row.billingCycle].toLowerCase()}

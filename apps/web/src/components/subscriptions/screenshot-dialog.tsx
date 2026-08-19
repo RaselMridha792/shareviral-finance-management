@@ -21,7 +21,7 @@ import {
  * The plan as it looked when it was bought, opened from the tool's name.
  *
  * The reason it is a screenshot and not a note: what a plan includes lives on
- * the vendor's own page, and that page changes without telling anybody. A year
+ * whoever sells it, on a page that changes without telling anybody. A year
  * later "Max 5x" no longer means what it meant, and the only record of what
  * was actually bought is a picture of it.
  *
@@ -117,7 +117,7 @@ export function ScreenshotDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Plan screenshot for ${subscription.vendorName} ${subscription.planName}`}
+      aria-label={`Plan screenshot for ${subscription.toolName} ${subscription.planName}`}
       className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -127,7 +127,7 @@ export function ScreenshotDialog({
         <div className="flex items-center gap-3 border-b border-border px-5 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
-              {subscription.vendorName} — {subscription.planName}
+              {subscription.toolName} — {subscription.planName}
             </p>
             <p className="truncate text-xs text-muted-foreground">
               {subscription.boughtFor ?? "The plan, as it was bought"}

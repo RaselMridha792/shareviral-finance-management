@@ -21,12 +21,17 @@ import { DocumentsDialog } from "./documents-dialog";
  * do not agree on them: All Transactions wants a Type column and no payment
  * method; Other Expenses wants the payment method and no Type, every row there
  * being money out. One table with two flags beats two tables that drift.
+ *
+ * What is left when nothing is switched on is the sheet All Transactions is
+ * read from, less its Type column: SL, Date, Category, Description,
+ * Reference No., Amount (BDT), Amount (USD), Rate. The account is not among
+ * the sheet's nine, so it is opt-in rather than opt-out — see `showAccount`.
  */
 export function TransactionTable({
   rows,
   onEdit,
   onVoid,
-  showAccount = true,
+  showAccount = false,
   showBalance = false,
   showType = false,
   showPaymentMethod = false,
@@ -35,6 +40,13 @@ export function TransactionTable({
   rows: (TransactionDto & { runningBalance?: string })[];
   onEdit?: (row: TransactionDto) => void;
   onVoid?: (row: TransactionDto) => void;
+  /**
+   * The account as its own column. Off, because the sheet this table is read
+   * from lists nine columns and the account is not one of them. With it off a
+   * row still names its account under the description — but only where the
+   * rows disagree about it, so a single-account register is not told its own
+   * name on every line.
+   */
   showAccount?: boolean;
   showBalance?: boolean;
   /** Cash In / Cash Out as its own column, for the all-transactions view. */
@@ -59,6 +71,15 @@ export function TransactionTable({
     );
   }
 
+  /*
+    Whether naming the account on a row tells anybody anything. A register is
+    one account and says which in its heading; All Transactions is every
+    account, until somebody filters it down to one. Judged on the rows in
+    hand, so a page that turns out to be one account does not repeat its name
+    down the whole page.
+  */
+  const accountsDiffer = new Set(rows.map((row) => row.accountId)).size > 1;
+
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -70,13 +91,15 @@ export function TransactionTable({
               {showType ? <Th className="w-24">Type</Th> : null}
               <Th className="w-40">Category</Th>
               <Th>Description</Th>
-              <Th className="w-32">Reference</Th>
+              <Th className="w-32">Reference No.</Th>
               {showPaymentMethod ? <Th className="w-32">Paid by</Th> : null}
               {showAccount ? <Th className="w-32">Account</Th> : null}
               <Th className="w-28 text-right">Amount (BDT)</Th>
               <Th className="w-28 text-right">Amount (USD)</Th>
               <Th className="w-20 text-right">Rate</Th>
-              {showBalance ? <Th className="w-32 text-right">Balance</Th> : null}
+              {showBalance ? (
+                <Th className="w-32 text-right">Balance</Th>
+              ) : null}
               <Th className="w-24" />
             </tr>
           </thead>
@@ -126,7 +149,9 @@ export function TransactionTable({
                   </td>
                   {showType ? (
                     <td className="px-4 py-2.5">
-                      <Badge tone={row.direction === "in" ? "positive" : "negative"}>
+                      <Badge
+                        tone={row.direction === "in" ? "positive" : "negative"}
+                      >
                         {row.direction === "in" ? "Cash In" : "Cash Out"}
                       </Badge>
                     </td>
@@ -145,7 +170,9 @@ export function TransactionTable({
                     )}
                   </td>
                   <td className="cell-prose px-4 py-2.5">
-                    <span className={cn("font-medium", voided && "line-through")}>
+                    <span
+                      className={cn("font-medium", voided && "line-through")}
+                    >
                       {row.description}
                     </span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -158,6 +185,15 @@ export function TransactionTable({
                       {row.vendorName ?? row.counterparty ?? null}
                       {!showPaymentMethod ? (
                         <span>{PAYMENT_METHOD_LABELS[row.paymentMethod]}</span>
+                      ) : null}
+                      {/*
+                        The account came down here the same way party did, when
+                        the sheet turned out to list nine columns and not this
+                        one. Printed only where the rows disagree about it — a
+                        register is one account and names it in its heading.
+                      */}
+                      {!showAccount && accountsDiffer && row.accountName ? (
+                        <span>{row.accountName}</span>
                       ) : null}
                       {row.transferGroupId ? <Badge>transfer</Badge> : null}
                       {Number(row.withheldTaxAmount) > 0 ? (
@@ -275,7 +311,10 @@ export function TransactionTable({
                       currency={row.currency}
                       showCounterpart={false}
                       tone={row.direction === "in" ? "in" : "out"}
-                      className={cn("block font-semibold", voided && "line-through")}
+                      className={cn(
+                        "block font-semibold",
+                        voided && "line-through",
+                      )}
                     />
                   </td>
                   <td className="px-4 py-2.5">

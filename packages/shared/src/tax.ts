@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { amountSchema, isoDateSchema } from "./masters.ts";
+import {
+  checkPeriodIndex,
+  granularitySchema,
+  type Granularity,
+} from "./periods.ts";
 
 const optionalText = (max: number) =>
   z
@@ -46,6 +51,93 @@ export const tdsLiabilityQuerySchema = z.strictObject({
   month: z.coerce.number().int().min(1).max(12).optional(),
 });
 export type TdsLiabilityQuery = z.infer<typeof tdsLiabilityQuerySchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  The salary withholding register                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whose salary was taxed, and by how much, over a period.
+ *
+ * The period arrives the way every other report's does — a fiscal year, a
+ * granularity and an index into it — rather than as a pair of dates. The
+ * screen's filter offers monthly, quarterly, half-yearly and yearly, which is
+ * exactly `GRANULARITIES`, and only `periodsInFiscalYear` knows whether this
+ * company's quarters run Jul–Sep or Jan–Mar. A second way of naming a period
+ * here would be a second answer to that question.
+ *
+ * Both `fiscalYear` and `index` are optional: with neither, the answer is the
+ * period we are actually in, which is what somebody opening the page wants.
+ */
+export const salaryTdsRegisterQuerySchema = z
+  .strictObject({
+    granularity: granularitySchema.default("month"),
+    /** The fiscal year's starting calendar year. */
+    fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
+    /** Which period within it: 1-12 for months, 1-4 quarters, 1-2 halves. */
+    index: z.coerce.number().int().min(1).max(12).optional(),
+  })
+  .superRefine(checkPeriodIndex);
+export type SalaryTdsRegisterQuery = z.infer<
+  typeof salaryTdsRegisterQuerySchema
+>;
+
+/**
+ * One person's deduction in one month.
+ *
+ * `payrollLineId` is here so the row can link straight to that month's payslip.
+ * The register answers who and how much; the payslip is where the working
+ * behind the figure lives, and an employee asking why never wants the first
+ * without the second.
+ */
+export type SalaryTdsRow = {
+  payrollLineId: string;
+  teamMemberId: string;
+  fullName: string;
+  periodYear: number;
+  periodMonth: number;
+  /** "August 2026" — the month the pay was for, ready to render. */
+  periodLabel: string;
+  /** What they were paid before deductions, which the tax was worked out from. */
+  grossAmount: string;
+  tdsAmount: string;
+  /**
+   * Whether this person's salary actually went out.
+   *
+   * The line's own flag rather than the run's status: a run can be part paid,
+   * and a row that reads "paid" because the run it belongs to is half settled
+   * is the kind of half-truth a payroll screen should not print.
+   */
+  isPaid: boolean;
+};
+
+export type SalaryTdsRegister = {
+  period: {
+    label: string;
+    start: string;
+    end: string;
+    granularity: Granularity;
+    fiscalYear: number;
+    /** Which period was read — set even when the request named none. */
+    index: number;
+  };
+  rows: SalaryTdsRow[];
+  /** Tax deducted across the whole period. */
+  periodTotal: string;
+  /**
+   * The calendar month we are in, whatever period is on screen.
+   *
+   * The page shows one card and this is what it shows. Switching the filter to
+   * the year does not change what this month's deduction was, so it cannot be
+   * read off `periodTotal`.
+   */
+  currentMonth: {
+    year: number;
+    month: number;
+    label: string;
+    total: string;
+  };
+};
 
 export const allocateDepositSchema = z.strictObject({
   payrollLineIds: z.array(z.string().uuid()).default([]),

@@ -3,7 +3,9 @@ import type {
   CreateTdsDepositInput,
   FileReturnInput,
   FilingStatus,
+  Granularity,
   PendingItem,
+  SalaryTdsRegister,
   TdsDepositType,
 } from "@finance/shared";
 
@@ -17,6 +19,14 @@ import { apiFetch } from "./api-client";
  * client for it went with the screen. The API still serves `/income-tax/*` and
  * the records are still in the database: bringing the screen back is a routing
  * change plus a client like the one below, not a rebuild.
+ *
+ * Since the withholding screen was cut down to the salary register, the same is
+ * true of most of what is below: `liability`, `deposits`, `deposit`,
+ * `createDeposit`, `allocate`, `unallocated`, `returns` and `fileReturn` have
+ * no caller in the app today. They stay because the challans and the quarterly
+ * returns are this company's compliance trail — the records are still written
+ * and the endpoints still answer, and the page that reads them again will want
+ * this client rather than a second one.
  */
 
 export type TdsMonthDto = {
@@ -119,6 +129,32 @@ const json = (body: unknown) => ({ body: JSON.stringify(body) });
 const fresh = { cache: "no-store" as const };
 
 export const tdsApi = {
+  /**
+   * Whose salary was taxed over a period, and by how much.
+   *
+   * The period is named the way every report names one — a granularity, a
+   * financial year and an index into it — rather than as two dates. Every part
+   * of it is optional, and asking for none of it answers with the period we are
+   * in, which is what the screen wants on its first paint.
+   */
+  salaryRegister: (
+    params: {
+      granularity?: Granularity;
+      fiscalYear?: number;
+      index?: number;
+    } = {},
+  ) => {
+    const search = new URLSearchParams();
+    if (params.granularity) search.set("granularity", params.granularity);
+    if (params.fiscalYear) search.set("fiscalYear", String(params.fiscalYear));
+    if (params.index) search.set("index", String(params.index));
+    const query = search.toString();
+
+    return apiFetch<SalaryTdsRegister>(
+      `/tds/salary-deductions${query ? `?${query}` : ""}`,
+      fresh,
+    );
+  },
   liability: (year: number, month?: number) =>
     apiFetch<TdsLiabilityDto>(
       `/tds/liability?year=${year}${month ? `&month=${month}` : ""}`,
@@ -132,7 +168,10 @@ export const tdsApi = {
   deposit: (id: string) =>
     apiFetch<DepositDetailDto>(`/tds/deposits/${id}`, fresh),
   createDeposit: (input: CreateTdsDepositInput) =>
-    apiFetch<TdsDepositDto>("/tds/deposits", { method: "POST", ...json(input) }),
+    apiFetch<TdsDepositDto>("/tds/deposits", {
+      method: "POST",
+      ...json(input),
+    }),
   allocate: (id: string, input: AllocateDepositInput) =>
     apiFetch<DepositDetailDto>(`/tds/deposits/${id}/allocations`, {
       method: "POST",

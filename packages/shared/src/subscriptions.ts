@@ -210,7 +210,19 @@ const optionalMoney = z
  * materialises it on an absent key.
  */
 const subscriptionFieldsSchema = z.strictObject({
-  vendorId: z.uuid("Pick the company it is bought from"),
+  /**
+   * What the tool is called, as text.
+   *
+   * This was a `vendors` row, and the form created one from whatever was typed
+   * into it — the same free-text-becomes-a-record path that `transactions`
+   * refuses on purpose, only worse, because a plan for a $20 tool minted a
+   * company on the books that nobody asked for and no screen ever showed.
+   *
+   * Nothing was gained by it. The payment for a tool is an ordinary expense in
+   * a category that already exists, and the register only ever needed to say
+   * which tool the plan is for. A name does that.
+   */
+  toolName: z.string().trim().min(1, "Name the tool").max(160),
   planName: z.string().trim().min(1, "Name the plan").max(160),
   category: subscriptionCategorySchema,
   status: subscriptionStatusSchema.default("active"),

@@ -66,8 +66,14 @@ describe("which month the figures cover", () => {
     // Half a period is the dangerous case. A year alone would have to mean
     // some month, and whichever one the server picked would be a guess made on
     // the caller's behalf about money — so it is refused rather than guessed.
-    assert.equal(subscriptionsQuerySchema.safeParse({ year: 2026 }).success, false);
-    assert.equal(subscriptionsQuerySchema.safeParse({ month: 6 }).success, false);
+    assert.equal(
+      subscriptionsQuerySchema.safeParse({ year: 2026 }).success,
+      false,
+    );
+    assert.equal(
+      subscriptionsQuerySchema.safeParse({ month: 6 }).success,
+      false,
+    );
   });
 
   it("refuses a month outside 1–12", () => {
@@ -155,7 +161,10 @@ describe("deriveCost", () => {
   });
 
   it("does not divide by zero to find a rate", () => {
-    assert.equal(deriveCost({ costUsd: "0", costBdt: "2450.00" }).usdRate, undefined);
+    assert.equal(
+      deriveCost({ costUsd: "0", costBdt: "2450.00" }).usdRate,
+      undefined,
+    );
   });
 
   it("does not divide by a zero rate to find a price", () => {
@@ -173,7 +182,10 @@ describe("deriveCost", () => {
     // Nothing is invented from one figure — what came in comes back untouched,
     // empty box and all…
     assert.equal(deriveCost({ costUsd: "20.00", costBdt: "" }).costBdt, "");
-    assert.equal(deriveCost({ costUsd: "20.00", costBdt: "" }).usdRate, undefined);
+    assert.equal(
+      deriveCost({ costUsd: "20.00", costBdt: "" }).usdRate,
+      undefined,
+    );
 
     // …and once there are two real figures, the empty one is the hole to fill.
     assert.equal(
@@ -193,7 +205,11 @@ describe("costsAgree", () => {
 
   it("refuses a triple where one of the three is wrong", () => {
     assert.equal(
-      costsAgree({ costUsd: "3000.00", costBdt: "340000.00", usdRate: "122.50" }),
+      costsAgree({
+        costUsd: "3000.00",
+        costBdt: "340000.00",
+        usdRate: "122.50",
+      }),
       false,
     );
   });
@@ -243,7 +259,7 @@ describe("costsAgree", () => {
 /* -------------------------------------------------------------------------- */
 
 const plan = {
-  vendorId: "11111111-1111-4111-8111-111111111111",
+  toolName: "Claude",
   planName: "Max Plan 5x",
   category: "ai_tool" as const,
   costUsd: "100.00",
@@ -317,6 +333,38 @@ describe("creating a subscription", () => {
     // A plan can be perfectly active while one person's access to it ended.
     assert.equal(parsed.data?.users[0].status, "active");
     assert.equal(parsed.data?.users[1].status, "canceled");
+  });
+
+  /**
+   * The tool was a `vendors` row picked by id, and typing a name into the form
+   * created the row. A name is all the register ever wanted; what it must not
+   * take is a blank one, which is how the old free-text path put a company
+   * called "" on the books.
+   */
+  it("wants the tool named, and tidies the name", () => {
+    assert.equal(
+      createSubscriptionSchema.safeParse({ ...plan, toolName: "  " }).success,
+      false,
+    );
+    const parsed = createSubscriptionSchema.safeParse({
+      ...plan,
+      toolName: "  Claude Code  ",
+    });
+    assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
+    assert.equal(parsed.data?.toolName, "Claude Code");
+  });
+
+  // Not covered by the strict-object test below: this one names the field the
+  // API and the form used to send, so an old caller fails loudly here rather
+  // than writing a plan against a tool nobody can read.
+  it("refuses the vendor it no longer hangs off", () => {
+    assert.equal(
+      createSubscriptionSchema.safeParse({
+        ...plan,
+        vendorId: "11111111-1111-4111-8111-111111111111",
+      }).success,
+      false,
+    );
   });
 
   it("refuses a field nobody defined", () => {

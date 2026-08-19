@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
-import { vendorsApi, type AccountDto, type VendorDto } from "@/lib/masters";
+import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import {
   subscriptionsApi,
@@ -79,7 +79,7 @@ function methodOfAccount(
  */
 export function SubscriptionForm({
   subscription,
-  vendors,
+  toolNames,
   accounts,
   members,
   open,
@@ -87,7 +87,8 @@ export function SubscriptionForm({
   onSaved,
 }: {
   subscription?: SubscriptionDto;
-  vendors: VendorDto[];
+  /** Every tool name already on the list behind this drawer — see below. */
+  toolNames: string[];
   accounts: AccountDto[];
   members: TeamMemberDto[];
   open: boolean;
@@ -101,12 +102,14 @@ export function SubscriptionForm({
    *
    * The owner asked for a name field rather than a dropdown, and they are
    * right about the use: a tool is bought and then entered, so the name is
-   * already known and hunting for it in a list is work the form invented. The
-   * vendor row behind it is still real — it is looked up by name on save, and
-   * created when it is new, so a name typed once becomes a name the rest of
-   * the app can group spending by.
+   * already known and hunting for it in a list is work the form invented.
+   *
+   * There is nothing behind it any more either. The name was looked up in
+   * `vendors` and a row created there when it was new — a company minted from
+   * a text box, which is what the owner threw out. What the plan is for is a
+   * name, and the name is now all the register keeps of it.
    */
-  const [toolName, setToolName] = useState(subscription?.vendorName ?? "");
+  const [toolName, setToolName] = useState(subscription?.toolName ?? "");
 
   /**
    * The plan screenshot, chosen while typing and posted once there is a row to
@@ -211,46 +214,21 @@ export function SubscriptionForm({
       })),
   ];
 
-  /**
-   * The vendor row behind the typed name.
-   *
-   * Matched case-insensitively against what is already on the books, so
-   * "claude" and "Claude" stay one company rather than two that never add up.
-   * Created when it is genuinely new — which is the point of typing the name
-   * instead of picking it.
-   */
-  async function resolveVendor(): Promise<string> {
-    const wanted = toolName.trim();
-    const existing = vendors.find(
-      (vendor) => vendor.name.trim().toLowerCase() === wanted.toLowerCase(),
-    );
-    if (existing) return existing.id;
-    const created = await vendorsApi.create({
-      name: wanted,
-      // The vendor is a stub the subscription hangs on: what it costs, how
-      // often and in what currency all live on the subscription itself, so
-      // repeating them here would be two places to change one price.
-      type: "ai_tool",
-      billingCycle: "none",
-      billingCurrency: "USD",
-      psrStatus: "unknown",
-    });
-    return created.id;
-  }
-
   async function save() {
     setPending(true);
     setError(null);
     setFieldErrors({});
     try {
-      if (toolName.trim().length < 2) {
-        setFieldErrors({ vendorId: ["Give the tool a name"] });
+      // Said here as well as by the API, which refuses a blank name in the
+      // same words. A round trip that comes back asking for the one field
+      // somebody is already looking at is a round trip for nothing.
+      if (!toolName.trim()) {
+        setFieldErrors({ toolName: ["Name the tool"] });
         return;
       }
-      const vendorId = await resolveVendor();
 
       const body = {
-        vendorId,
+        toolName,
         planName,
         category,
         status,
@@ -358,11 +336,11 @@ export function SubscriptionForm({
     >
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Tool name" required error={fieldErrors.vendorId}>
+          <Field label="Tool name" required error={fieldErrors.toolName}>
             <div className="flex items-center gap-2">
               <Input
                 value={toolName}
-                maxLength={120}
+                maxLength={160}
                 placeholder="Claude, Figma, Github…"
                 onChange={(e) => setToolName(e.target.value)}
                 list="subscription-tool-names"
@@ -391,12 +369,15 @@ export function SubscriptionForm({
               </button>
             </div>
 
-            {/* Names already on the books, offered rather than imposed — the
-                field is still free text, so a new tool is typed and not
-                hunted for. */}
+            {/* Names already in the register, offered rather than imposed —
+                the field is still free text, so a new tool is typed and not
+                hunted for. They are the names on the list behind this drawer,
+                which is the only place a tool's name is written down now: a
+                second plan for something already on it should be spelled the
+                way the first one was, or a search for either finds half. */}
             <datalist id="subscription-tool-names">
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.name} />
+              {toolNames.map((name) => (
+                <option key={name} value={name} />
               ))}
             </datalist>
 

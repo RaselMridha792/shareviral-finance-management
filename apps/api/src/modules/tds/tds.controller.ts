@@ -8,6 +8,7 @@ import {
   saveTdsPolicySchema,
   listDepositsQuerySchema,
   pendingQuerySchema,
+  salaryTdsRegisterQuerySchema,
   tdsLiabilityQuerySchema,
   type AllocateDepositInput,
   type CalculateTdsInput,
@@ -16,6 +17,7 @@ import {
   type FiscalYearQuery,
   type ListDepositsQuery,
   type PendingQuery,
+  type SalaryTdsRegisterQuery,
   type SaveTdsPolicyInput,
   type TdsLiabilityQuery,
 } from "@finance/shared";
@@ -109,6 +111,20 @@ export class TdsController {
   @RequirePermission("tds.read")
   liability(@ZodQuery(tdsLiabilityQuerySchema) query: TdsLiabilityQuery) {
     return this.tds.liability(query);
+  }
+
+  /**
+   * The withholding screen's table: who was taxed this period, and how much.
+   *
+   * Above the `:id` routes below for the reason in the note at the top of this
+   * file — a literal segment declared after one is swallowed by it.
+   */
+  @Get("salary-deductions")
+  @RequirePermission("tds.read")
+  salaryDeductions(
+    @ZodQuery(salaryTdsRegisterQuerySchema) query: SalaryTdsRegisterQuery,
+  ) {
+    return this.tds.salaryRegister(query);
   }
 
   @Get("pending")
