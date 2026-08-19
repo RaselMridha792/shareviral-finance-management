@@ -226,7 +226,9 @@ export function SearchableSelect({
           !selected && "text-muted-foreground",
         )}
       >
-        <span className="truncate">{selected ? selected.label : placeholder}</span>
+        <span className="truncate">
+          {selected ? selected.label : placeholder}
+        </span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </button>
 

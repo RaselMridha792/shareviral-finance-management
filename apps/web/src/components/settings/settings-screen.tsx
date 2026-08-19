@@ -72,6 +72,7 @@ export function SettingsScreen({
     <>
       <PageHeader
         title="Settings"
+        icon="settings"
         description="Company details, how figures are shown, categories, and the USD rate."
       />
 

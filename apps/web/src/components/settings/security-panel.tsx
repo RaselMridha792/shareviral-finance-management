@@ -391,8 +391,8 @@ function RecoveryCodes({
           <p className="mt-1 text-muted-foreground">
             Each one signs you in once if your phone is lost, broken or wiped.
             Only their fingerprints are kept on the server, so nobody can read
-            them back to you — not an administrator, not this application.
-            Print them, or put them somewhere that is not the phone.
+            them back to you — not an administrator, not this application. Print
+            them, or put them somewhere that is not the phone.
           </p>
         </div>
       </div>

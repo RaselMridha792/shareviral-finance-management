@@ -109,6 +109,14 @@ export function OverviewScreen({
             />
             Overview, {firstName}
           </h1>
+          {/* What the page is, in one line — and which currency it is in, which
+              is the first thing anybody asks of a figure on a screen like
+              this. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Consolidated cash position across{" "}
+            {report.groups.reduce((total, g) => total + g.accounts.length, 0)}{" "}
+            accounts · reported in {report.currency}
+          </p>
           {/*
             The rate line is gone when there is a rate, and stays when there is
             not.
@@ -175,7 +183,15 @@ export function OverviewScreen({
 
       {/* --- the figures, grouped by what the money is ------------------ */}
       {report.groups.map((group) => (
-        <AccountBlock key={group.key} group={group} ended={periodHasEnded} />
+        <AccountBlock
+          key={group.key}
+          group={group}
+          ended={periodHasEnded}
+          monthName={MONTH_NAMES[month - 1]}
+          // December's opening is carried from November, and January's from
+          // December — hence the wrap rather than `month - 2`.
+          previousMonthName={MONTH_NAMES[(month + 10) % 12]}
+        />
       ))}
 
       {/*
@@ -206,10 +222,15 @@ export function OverviewScreen({
 function AccountBlock({
   group,
   ended,
+  monthName,
+  previousMonthName,
 }: {
   group: AccountGroup;
   /** True when the month on screen is over, so the figure is a close. */
   ended: boolean;
+  monthName: string;
+  /** Where the opening figure came from — "Carried forward from July". */
+  previousMonthName: string;
 }) {
   const inflow = Number(group.moneyIn);
   const outflow = Number(group.moneyOut);
@@ -229,15 +250,19 @@ function AccountBlock({
         group with no accounts is never built — but a heading that rendered as
         an empty string would be a worse way to find that out.
       */}
+      {/* The label names the kind of money, the qualifier names the accounts
+          it is in. One without the other leaves a reader either not knowing
+          which block this is, or not knowing what is in it. */}
       <SectionHeading
-        title={group.accounts.join(" · ") || group.label}
+        title={group.label}
         icon={group.key === "card" ? "credit_card" : "account_balance"}
         iconTone="text-primary-text"
+        qualifier={group.accounts.join(" · ")}
         aside={
           moved > 0 ? (
             <StatusPill tone={net >= 0 ? "positive" : "negative"}>
-              {net >= 0 ? "Up" : "Down"}{" "}
-              {money(Math.abs(net).toFixed(2), group)} this month
+              Net for {monthName} {net >= 0 ? "+" : "−"}
+              {money(Math.abs(net).toFixed(2))}
             </StatusPill>
           ) : null
         }
@@ -250,35 +275,47 @@ function AccountBlock({
         <StatCell
           label="Opening balance"
           icon="history"
-          value={money(group.opening, group)}
+          value={money(group.opening)}
           secondary={usd(group.usd.opening)}
-          footnote="carried forward"
+          footnote={`Carried forward from ${previousMonthName}`}
         />
 
         <StatCell
           label="Cash inflow"
+          tone="positive"
           icon="south_west"
           iconTone="text-positive"
-          value={money(group.moneyIn, group)}
+          value={money(group.moneyIn)}
           secondary={usd(group.usd.moneyIn)}
         >
           {/* How the month split between arriving and leaving. Drawn only when
               something moved: a full-width bar over two zeroes reads as a
               hundred per cent of nothing. */}
           {moved > 0 ? (
-            <ShareBar share={inflow / moved} tone="bg-positive" />
+            <>
+              <ShareBar share={inflow / moved} tone="bg-positive" />
+              <p className="text-[13px] text-muted-foreground">
+                {Math.round((inflow / moved) * 100)}% of total movement
+              </p>
+            </>
           ) : null}
         </StatCell>
 
         <StatCell
           label="Cash outflow"
+          tone="negative"
           icon="north_east"
           iconTone="text-negative"
-          value={money(group.moneyOut, group)}
+          value={money(group.moneyOut)}
           secondary={usd(group.usd.moneyOut)}
         >
           {moved > 0 ? (
-            <ShareBar share={outflow / moved} tone="bg-negative" />
+            <>
+              <ShareBar share={outflow / moved} tone="bg-negative" />
+              <p className="text-[13px] text-muted-foreground">
+                {Math.round((outflow / moved) * 100)}% of total movement
+              </p>
+            </>
           ) : null}
         </StatCell>
 
@@ -298,7 +335,7 @@ function AccountBlock({
           label={ended ? "Closing balance" : "Current balance"}
           icon="account_balance_wallet"
           iconTone="text-primary-text"
-          value={money(group.closing, group)}
+          value={money(group.closing)}
           secondary={usd(group.usd.closing)}
           footnote={
             ended
@@ -322,7 +359,16 @@ function usd(value: string | null): string | null {
   return value === null ? null : `≈ ${formatMoney(value, { currency: "USD" })}`;
 }
 
-/** The group's own currency, not the report's — a card may be held in dollars. */
-function money(value: string, group: AccountGroup): string {
-  return formatMoney(value, { currency: group.currency });
+/**
+ * Taka, always — including the block headed "Card overview".
+ *
+ * `group.currency` says what the card is *denominated* in; it does not say
+ * what these four figures are in. Every amount in this system is recorded in
+ * BDT, the card's included, with the foreign figure kept beside it on the
+ * transaction. Formatting the block in dollars because the account is a dollar
+ * one printed "$69,537.00" over "≈ $587.80" — the same money, two currencies,
+ * off by a factor of a hundred and eighteen.
+ */
+function money(value: string): string {
+  return formatMoney(value, { currency: "BDT" });
 }

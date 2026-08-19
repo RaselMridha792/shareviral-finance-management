@@ -85,7 +85,7 @@ export function TransactionTable({
       <div className="overflow-x-auto">
         <table className="table-data min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border bg-surface-muted/50 text-left">
+            <tr className="text-left">
               <Th className="w-12 text-right">SL</Th>
               <Th className="w-24">Date</Th>
               {showType ? <Th className="w-24">Type</Th> : null}
@@ -103,7 +103,7 @@ export function TransactionTable({
               <Th className="w-24" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody>
             {rows.map((row, index) => {
               const voided = Boolean(row.voidedAt);
 
@@ -130,10 +130,7 @@ export function TransactionTable({
               return (
                 <tr
                   key={row.id}
-                  className={cn(
-                    "row-finance hover:bg-surface-muted/50",
-                    voided && "opacity-55",
-                  )}
+                  className={cn("row-finance", voided && "opacity-55")}
                 >
                   {/*
                     A position in the list, not a stored number. The sheets

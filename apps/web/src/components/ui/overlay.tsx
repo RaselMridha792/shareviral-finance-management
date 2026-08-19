@@ -155,11 +155,7 @@ export function DocumentViewer({
           </button>
         </div>
 
-        <iframe
-          src={src}
-          title={name}
-          className="min-h-0 flex-1 bg-white"
-        />
+        <iframe src={src} title={name} className="min-h-0 flex-1 bg-white" />
       </div>
     </div>
   );

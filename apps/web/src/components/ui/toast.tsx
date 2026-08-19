@@ -81,7 +81,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 "border-positive/30 bg-surface text-foreground",
               toast.tone === "error" &&
                 "border-negative/40 bg-surface text-foreground",
-              toast.tone === "info" && "border-border bg-surface text-foreground",
+              toast.tone === "info" &&
+                "border-border bg-surface text-foreground",
             )}
           >
             {toast.tone === "success" ? (

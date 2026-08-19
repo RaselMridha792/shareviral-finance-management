@@ -202,11 +202,11 @@ export function OtherExpensesScreen({
             </p>
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-                <ShoppingBag className="size-5" />
+              <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+                <ShoppingBag className="size-6" />
               </span>
               <div>
-                <p className="text-sm font-semibold">
+                <p className="text-lg font-semibold">
                   Nothing but subscriptions in {range.label}
                 </p>
                 <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -235,7 +235,7 @@ export function OtherExpensesScreen({
             <div className="overflow-x-auto">
               <table className="table-data min-w-[1180px] text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-left">
+                  <tr className="text-left">
                     {/* Row order, like the sheet's own SL — not a stored
                         number. Every entry already carries `refNo`, and a
                         second identity that renumbers itself when the month
@@ -258,7 +258,7 @@ export function OtherExpensesScreen({
                     <Th className="w-24 text-right">USD Rate</Th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {rows.map((row, index) => {
                     const voided = Boolean(row.voidedAt);
                     const rate = rateOf(row);
@@ -273,10 +273,7 @@ export function OtherExpensesScreen({
                     return (
                       <tr
                         key={row.id}
-                        className={cn(
-                          "row-finance hover:bg-surface-muted/50",
-                          voided && "opacity-55",
-                        )}
+                        className={cn("row-finance", voided && "opacity-55")}
                       >
                         <td className="num px-4 py-2.5 text-right text-xs text-muted-foreground">
                           {index + 1}

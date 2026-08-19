@@ -19,7 +19,11 @@ import { settingsApi } from "@/lib/masters";
  * editing June after the CEO has read June. The audit trail records it, but
  * recording is not preventing. This is the preventing part, and it is one date.
  */
-export function PeriodLock({ lockedThrough }: { lockedThrough: string | null }) {
+export function PeriodLock({
+  lockedThrough,
+}: {
+  lockedThrough: string | null;
+}) {
   const router = useRouter();
   const canWrite = useCan("settings.write");
   const [pending, setPending] = useState(false);
@@ -76,7 +80,10 @@ export function PeriodLock({ lockedThrough }: { lockedThrough: string | null }) 
         {canWrite ? (
           <>
             <div className="flex flex-wrap items-end gap-3">
-              <Field label="Close everything up to and including" className="w-56">
+              <Field
+                label="Close everything up to and including"
+                className="w-56"
+              >
                 <DateInput
                   value={value}
                   max={todayInDhaka()}

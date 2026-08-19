@@ -32,8 +32,8 @@ export default async function NoAccessPage({
 
   return (
     <Card className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-14 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-        <Lock className="size-5" />
+      <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+        <Lock className="size-6" />
       </span>
 
       <div>

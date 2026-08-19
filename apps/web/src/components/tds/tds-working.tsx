@@ -24,7 +24,11 @@ export function TdsWorking({ result }: { result: TdsResult }) {
         label={`Less exempted — ${result.exemption.byFraction} by fraction, cap ${result.exemption.cap}`}
         value={`-${result.exemption.applied}`}
       />
-      <WorkingLine label="Net taxable income" value={result.taxableIncome} strong />
+      <WorkingLine
+        label="Net taxable income"
+        value={result.taxableIncome}
+        strong
+      />
 
       {result.bands.map((band, index) => (
         <WorkingLine
@@ -34,7 +38,11 @@ export function TdsWorking({ result }: { result: TdsResult }) {
           muted
         />
       ))}
-      <WorkingLine label="Tax before rebate" value={result.taxBeforeRebate} strong />
+      <WorkingLine
+        label="Tax before rebate"
+        value={result.taxBeforeRebate}
+        strong
+      />
 
       <WorkingLine
         label={`Rebate — on investment ${result.rebate.onInvestment}, on income ${result.rebate.onTaxableIncome}, ceiling ${result.rebate.fixedCap}`}

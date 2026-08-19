@@ -55,3 +55,8 @@ apps/web/test/browser/roles.env
 apps/web/test/browser/shots/
 apps/api/test/integration/*.xlsx
 .view.mjs
+.sweep.mjs
+.shots/
+.cell.mjs
+.cols.mjs
+.dollars.mjs

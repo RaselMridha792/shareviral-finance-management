@@ -14,7 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
-import { payrollApi, type PayrollLineDto, type PayslipLineDto } from "@/lib/payroll";
+import {
+  payrollApi,
+  type PayrollLineDto,
+  type PayslipLineDto,
+} from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 
 /**
@@ -142,7 +146,9 @@ export function BreakdownDrawer({
               className="num"
               inputMode="numeric"
               value={workingDays}
-              onChange={(e) => setWorkingDays(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) =>
+                setWorkingDays(e.target.value.replace(/\D/g, ""))
+              }
               placeholder="26"
             />
           </Field>

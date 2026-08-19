@@ -15,6 +15,8 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DataPanel } from "@/components/ui/patterns";
+import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
 import { exportUrl } from "@/lib/ledger";
@@ -80,7 +82,9 @@ export function TeamScreen({
       .currentSalaries()
       .then((rows) => {
         if (alive) {
-          setSalaries(new Map(rows.map((r) => [r.teamMemberId, r.grossAmount])));
+          setSalaries(
+            new Map(rows.map((r) => [r.teamMemberId, r.grossAmount])),
+          );
         }
       })
       .catch(() => undefined);
@@ -103,6 +107,7 @@ export function TeamScreen({
     <>
       <PageHeader
         title="Team"
+        icon="groups"
         description="Everyone on the payroll, and everyone who bills."
         actions={
           <>
@@ -160,11 +165,11 @@ export function TeamScreen({
 
       {page.items.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Users className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Users className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">
+            <p className="text-lg font-semibold">
               {query ? "Nobody matched that" : "No one added yet"}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -175,31 +180,26 @@ export function TeamScreen({
         </Card>
       ) : (
         <>
-          <div
-            role="tablist"
-            aria-label="Team"
-            className="flex gap-1 border-b border-border"
-          >
-            <Tab
-              selected={tab === "current"}
-              count={current.length}
-              onSelect={() => setTab("current")}
-            >
-              Current team
-            </Tab>
-            <Tab
-              selected={tab === "past"}
-              count={past.length}
-              onSelect={() => setTab("past")}
-            >
-              Past team
-            </Tab>
-          </div>
+          {/* Two views of one list, so a segmented group — the underline row
+              is for pages that are different documents. */}
+          <Segmented
+            options={[
+              {
+                id: "current" as const,
+                label: "Current team",
+                count: current.length,
+              },
+              { id: "past" as const, label: "Past team", count: past.length },
+            ]}
+            value={tab}
+            onChange={setTab}
+            label="Team"
+          />
 
           {shown.length === 0 ? (
             <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-                <Users className="size-5" />
+              <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+                <Users className="size-6" />
               </span>
               <p className="max-w-sm text-sm text-muted-foreground">
                 {tab === "past"
@@ -267,39 +267,31 @@ function Section({
   if (members.length === 0) return null;
 
   return (
-    <div>
-      <div className="mb-3">
-        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          {title} · <span className="num">{members.length}</span>
-        </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table-data min-w-[860px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
-                <Th>Name</Th>
-                <Th className="w-40">Designation</Th>
-                <Th className="w-32">Department</Th>
-                <Th className="w-28">Date of Joining</Th>
-                {past ? <Th className="w-28">Last day</Th> : null}
-                {showPay ? (
-                  <Th className="w-36 text-right">Current salary</Th>
-                ) : null}
-                <Th className="w-28">Status</Th>
-                <Th className="w-24 text-right" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {members.map((member) => (
-                <tr
-                  key={member.id}
-                  className="row-finance hover:bg-surface-muted/50"
-                >
-                  <td className="px-4 py-2.5">
-                    {/*
+    <DataPanel
+      title={`${title} · ${members.length}`}
+      icon={title === "Contractors" ? "badge" : "groups"}
+      description={subtitle}
+    >
+      <table className="table-data min-w-[860px] text-sm">
+        <thead>
+          <tr className="text-left">
+            <Th>Name</Th>
+            <Th className="w-40">Designation</Th>
+            <Th className="w-32">Department</Th>
+            <Th className="w-28">Date of Joining</Th>
+            {past ? <Th className="w-28">Last day</Th> : null}
+            {showPay ? (
+              <Th className="w-36 text-right">Current salary</Th>
+            ) : null}
+            <Th className="w-28">Status</Th>
+            <Th className="w-24 text-right" />
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((member) => (
+            <tr key={member.id} className="row-finance">
+              <td className="px-4 py-2.5">
+                {/*
                       prefetch={false} on every link that repeats per row.
 
                       Next prefetches each link as it enters the viewport, so
@@ -313,27 +305,27 @@ function Section({
                       it is work not worth doing. The sidebar keeps its
                       prefetch, because there the guess is usually right.
                     */}
-                    <Link
-                      href={`/team/${member.id}`}
-                      prefetch={false}
-                      className="font-medium hover:text-primary hover:underline"
-                    >
-                      {member.fullName}
-                    </Link>
-                    <span className="block text-xs text-muted-foreground">
-                      {ENGAGEMENT_LABELS[member.engagementType]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {member.designation ?? "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {member.department ?? "—"}
-                  </td>
-                  <td className="num px-4 py-2.5 text-muted-foreground">
-                    {member.joinedOn}
-                  </td>
-                  {/*
+                <Link
+                  href={`/team/${member.id}`}
+                  prefetch={false}
+                  className="font-medium hover:text-primary hover:underline"
+                >
+                  {member.fullName}
+                </Link>
+                <span className="block text-xs text-muted-foreground">
+                  {ENGAGEMENT_LABELS[member.engagementType]}
+                </span>
+              </td>
+              <td className="px-4 py-2.5 text-muted-foreground">
+                {member.designation ?? "—"}
+              </td>
+              <td className="px-4 py-2.5 text-muted-foreground">
+                {member.department ?? "—"}
+              </td>
+              <td className="num px-4 py-2.5 text-muted-foreground">
+                {member.joinedOn}
+              </td>
+              {/*
                     Must appear under exactly the same condition as its header.
                     It did not, for one deploy: the header was added and this
                     was not, so every row in the past tab was one cell short
@@ -342,12 +334,12 @@ function Section({
                     Status. A row that is silently offset reads as wrong data
                     rather than as a broken table.
                   */}
-                  {past ? (
-                    <td className="num px-4 py-2.5 text-muted-foreground">
-                      {member.endedOn ?? "—"}
-                    </td>
-                  ) : null}
-                  {/*
+              {past ? (
+                <td className="num px-4 py-2.5 text-muted-foreground">
+                  {member.endedOn ?? "—"}
+                </td>
+              ) : null}
+              {/*
                     What they earn now, not what they were hired at.
 
                     The joining figure was here first and is the wrong one to
@@ -360,74 +352,42 @@ function Section({
                     salary sheet will silently skip, and this is where that
                     shows up before payroll day rather than on it.
                   */}
-                  {showPay ? (
-                    <td className="col-amount px-4 py-2.5">
-                      {salaries.get(member.id) ? (
-                        <Amount value={salaries.get(member.id)!} hideDecimals />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          Not set
-                        </span>
-                      )}
-                    </td>
-                  ) : null}
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={member.status === "active" ? "positive" : "neutral"}
-                    >
-                      {EMPLOYMENT_STATUS_LABELS[member.status]}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {/* A link, not a Button with a router push: <button> inside
+              {showPay ? (
+                <td className="col-amount px-4 py-2.5">
+                  {salaries.get(member.id) ? (
+                    <Amount value={salaries.get(member.id)!} hideDecimals />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Not set
+                    </span>
+                  )}
+                </td>
+              ) : null}
+              <td className="px-4 py-2.5">
+                <Badge
+                  tone={member.status === "active" ? "positive" : "neutral"}
+                >
+                  {EMPLOYMENT_STATUS_LABELS[member.status]}
+                </Badge>
+              </td>
+              <td className="px-4 py-2.5 text-right">
+                {/* A link, not a Button with a router push: <button> inside
                         <a> is invalid, so this borrows the secondary/sm look
                         and stays a real link — middle-click still opens it. */}
-                    <Link
-                      href={`/team/${member.id}`}
-                      prefetch={false}
-                      className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground transition hover:bg-surface-muted"
-                    >
-                      <Eye className="size-3.5" />
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function Tab({
-  selected,
-  count,
-  onSelect,
-  children,
-}: {
-  selected: boolean;
-  count: number;
-  onSelect: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={selected}
-      onClick={onSelect}
-      className={cn(
-        "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition",
-        selected
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}{" "}
-      <span className="num text-xs text-muted-foreground">{count}</span>
-    </button>
+                <Link
+                  href={`/team/${member.id}`}
+                  prefetch={false}
+                  className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground transition hover:bg-surface-muted"
+                >
+                  <Eye className="size-3.5" />
+                  View
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </DataPanel>
   );
 }
 

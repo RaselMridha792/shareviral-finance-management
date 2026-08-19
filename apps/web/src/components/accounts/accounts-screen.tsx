@@ -66,11 +66,17 @@ export function AccountsScreen({
   /** Only ever an archived one — the card offers no Delete otherwise. */
   const [deleting, setDeleting] = useState<AccountWithBalance | null>(null);
 
-  // Only the base currency. Adding a USD balance to a BDT one gives a figure
-  // that is not money in either — and it would look completely ordinary.
+  /*
+   * Every active account, and no currency filter.
+   *
+   * There used to be one: accounts whose `currency` was not the base were left
+   * out of the total, on the reasoning that adding dollars to taka gives a
+   * figure that is money in neither. True, but not the situation — the field
+   * marks which account is the foreign-spend one; every balance behind it is
+   * already in taka. The filter was quietly under-reporting the total by
+   * whatever the card held.
+   */
   const base = settings.baseCurrency;
-  const inBase = active.filter((a) => a.currency === base);
-  const otherCurrencies = active.filter((a) => a.currency !== base).length;
   /**
    * What the accounts hold now — not what they opened at.
    *
@@ -80,7 +86,7 @@ export function AccountsScreen({
    * card. The figure comes from the API now, where it is computed once and
    * shared with the dashboard.
    */
-  const total = inBase
+  const total = active
     .reduce((sum, a) => sum + Number(a.balance), 0)
     .toFixed(2);
 
@@ -124,6 +130,7 @@ export function AccountsScreen({
     <>
       <PageHeader
         title="Accounts"
+        icon="account_balance"
         description="Bank accounts and cards."
         actions={
           <>
@@ -152,7 +159,7 @@ export function AccountsScreen({
 
       {active.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
             <Icon
               name="account_balance"
               size={22}
@@ -160,7 +167,7 @@ export function AccountsScreen({
             />
           </span>
           <div>
-            <p className="text-sm font-semibold">No accounts yet</p>
+            <p className="text-lg font-semibold">No accounts yet</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
               Add your bank accounts and petty cash, each with the balance it
               held on the day your records start here.
@@ -184,27 +191,22 @@ export function AccountsScreen({
             icon="savings"
             iconTone="text-primary-text"
             description={
-              otherCurrencies > 0 ? (
-                <>
-                  {inBase.length} account{inBase.length === 1 ? "" : "s"} in{" "}
-                  {base}. {otherCurrencies} in another currency, counted
-                  separately — mixing them would give a figure that is money in
-                  neither.
-                </>
-              ) : (
-                <>
-                  {active.length} active account
-                  {active.length === 1 ? "" : "s"} · opening balance plus every
-                  entry since, voided rows excluded
-                </>
-              )
+              <>
+                {active.length} active account{active.length === 1 ? "" : "s"} ·
+                opening balance plus every entry since, voided rows excluded
+              </>
             }
             // `Amount` draws its own dollar line underneath, so the bar's
             // secondary slot would be a second one saying the same thing.
             value={<Amount value={total} currency={base} />}
           />
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+            }}
+          >
             {active.map((account) => (
               <AccountCard
                 key={account.id}
@@ -225,7 +227,12 @@ export function AccountsScreen({
           <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Archived
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+            }}
+          >
             {archived.map((account) => (
               <AccountCard
                 key={account.id}
@@ -368,12 +375,8 @@ function AccountCard({
   /** Archived cards only. An account in use is archived first. */
   onDelete?: () => void;
 }) {
-  const equivalent = otherCurrency(
-    account.balance,
-    account.currency,
-    base,
-    usdRate,
-  );
+  // Taka in, dollars out — the figure is BDT whatever the account is called.
+  const equivalent = otherCurrency(account.balance, base, base, usdRate);
 
   const symbol = ICONS[account.type];
 
@@ -395,12 +398,15 @@ function AccountCard({
       </div>
 
       {/*
-        The balance, in the currency the account is actually held in.
+        The balance, in taka — including on the card that is *called* a dollar
+        one.
 
-        Which one is large follows `account.currency`, not the account type: a
-        card is usually the dollar one and a bank account the taka one, but
-        that is a habit rather than a rule, and the day somebody adds a taka
-        card the type would have been the wrong thing to read.
+        `account.currency` says which account is the foreign-spend one. It does
+        not say what this figure is denominated in: every amount this system
+        stores is BDT, the card's included, with the foreign figure kept beside
+        the transaction that recorded it. Reading the account's label as the
+        figure's currency printed "$29,562.00" over "~৳35,10,487.50" — one
+        balance, stated twice, a hundred and eighteen times apart.
 
         The second line is a translation and is marked as one — `~`, greyed,
         with the rate in its tooltip. This app is careful never to let a
@@ -411,7 +417,7 @@ function AccountCard({
           edge instead of leaving the eye to find each one. */}
       <Amount
         value={account.balance}
-        currency={account.currency}
+        currency={base}
         showCounterpart={false}
         className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
       />
@@ -437,7 +443,7 @@ function AccountCard({
         Opened at{" "}
         <Amount
           value={account.openingBalance}
-          currency={account.currency}
+          currency={base}
           showCounterpart={false}
         />{" "}
         on {account.openingBalanceOn}

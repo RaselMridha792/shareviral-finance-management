@@ -37,7 +37,7 @@ export function StatStrip({
   return (
     <div
       className={cn(
-        "grid gap-px overflow-hidden rounded-xl border border-border bg-border",
+        "grid gap-px overflow-hidden rounded-xl border border-border bg-border shadow-e1",
         className,
       )}
       style={{
@@ -49,11 +49,14 @@ export function StatStrip({
   );
 }
 
+export type StatTone = "default" | "positive" | "negative";
+
 export function StatCell({
   label,
   icon,
   iconTone,
   value,
+  tone = "default",
   secondary,
   footnote,
   emphasis = false,
@@ -64,6 +67,12 @@ export function StatCell({
   icon?: string;
   iconTone?: string;
   value: ReactNode;
+  /**
+   * The figure's own colour. Money arriving is green and money leaving is red
+   * — the same rule the ledger rows follow, so a cell and a row never say
+   * different things about the same direction.
+   */
+  tone?: StatTone;
   /** The "≈ $…" line under the figure. */
   secondary?: ReactNode;
   footnote?: ReactNode;
@@ -71,26 +80,55 @@ export function StatCell({
   emphasis?: boolean;
   children?: ReactNode;
 }) {
+  const tones: Record<StatTone, string> = {
+    default: "text-foreground",
+    positive: "text-positive",
+    negative: "text-negative",
+  };
+
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 px-6 py-[23px]",
+        "flex flex-col gap-3 px-[22px] pt-[22px] pb-5",
         emphasis ? "bg-surface-muted" : "bg-surface",
       )}
     >
-      <p className="flex items-center gap-1.5 text-2xs font-semibold tracking-[0.11em] text-muted-foreground uppercase">
+      <p className="flex items-center gap-[9px] text-2xs font-semibold tracking-[0.11em] text-muted-foreground uppercase">
         {icon ? (
           <Icon name={icon} size={17} className={iconTone ?? "text-faint"} />
         ) : null}
         {label}
       </p>
-      <p className="num text-[clamp(22px,1.8vw,28px)] leading-tight font-medium text-foreground">
-        {value}
-      </p>
-      {secondary ? <p className="num text-xs text-faint">{secondary}</p> : null}
-      {children}
-      {footnote ? (
-        <p className="text-xs text-muted-foreground">{footnote}</p>
+
+      <div className="flex flex-col gap-[3px]">
+        <p
+          className={cn(
+            "num text-[clamp(22px,1.8vw,28px)] leading-tight font-medium tracking-[-0.02em]",
+            tones[tone],
+          )}
+        >
+          {value}
+        </p>
+        {secondary ? (
+          <p className="num text-[13.5px] text-faint">{secondary}</p>
+        ) : null}
+      </div>
+
+      {/*
+        Pushed to the foot of the cell rather than left under the figure.
+
+        Four cells in a strip are four different heights of content, and a
+        caption that follows its own figure lands at four different heights.
+        Anchored to the bottom they line up, and the strip reads as one row
+        instead of four boxes.
+      */}
+      {children || footnote ? (
+        <div className="mt-auto flex flex-col gap-1.5 pt-2">
+          {children}
+          {footnote ? (
+            <p className="text-[13px] text-muted-foreground">{footnote}</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -352,13 +390,13 @@ export function SectionHeading({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+      <h2 className="flex flex-wrap items-center gap-x-[9px] gap-y-1 text-[17px] font-semibold text-foreground">
         {icon ? (
           <Icon name={icon} size={21} className={iconTone ?? "text-faint"} />
         ) : null}
         {title}
         {qualifier ? (
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className="ml-0.5 text-[13.5px] font-normal text-muted-foreground">
             {qualifier}
           </span>
         ) : null}

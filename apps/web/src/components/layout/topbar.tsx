@@ -3,6 +3,10 @@
 import { usePathname } from "next/navigation";
 
 import { MobileSidebar } from "@/components/layout/sidebar";
+import {
+  toggleSidebar,
+  useSidebarCollapsed,
+} from "@/components/layout/sidebar-state";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import {
   NAV_GROUPS,
@@ -12,6 +16,8 @@ import {
 import { useUsdRateContext } from "@/components/money/rate-provider";
 import { Icon } from "@/components/ui/icon";
 import { useState } from "react";
+
+import { cn } from "@/lib/utils";
 
 /**
  * The bar across the top: where you are, what a dollar is worth, and the two
@@ -29,10 +35,15 @@ import { useState } from "react";
  * translated at — so it belongs where it is visible from every screen instead
  * of only on the one that sets it.
  */
+/** The bordered 36px square both chrome buttons are drawn as. */
+const TOGGLE =
+  "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border text-muted-foreground transition hover:bg-surface-muted hover:text-foreground";
+
 export function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const screen = screenNameFor(pathname);
+  const collapsed = useSidebarCollapsed();
 
   /**
    * The rate the dollar figures on screen were actually worked out at — the
@@ -47,14 +58,30 @@ export function Topbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex min-h-[66px] flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6 lg:px-8">
+      <header
+        className="sticky top-0 z-40 flex min-h-[66px] flex-wrap items-center gap-3 border-b border-border bg-surface"
+        style={{ padding: "12px clamp(16px, 3vw, 32px)" }}
+      >
+        {/* One button, two jobs, matching the design: on a wide screen it
+            narrows and widens the rail; on a narrow one there is no rail to
+            narrow, so it opens the drawer. */}
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
           aria-label="Open navigation"
-          className="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground lg:hidden"
+          className={cn(TOGGLE, "lg:hidden")}
         >
-          <Icon name="menu" size={20} />
+          <Icon name="menu" size={21} />
+        </button>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={collapsed ? "Widen the sidebar" : "Narrow the sidebar"}
+          aria-pressed={collapsed}
+          title="Show or hide the sidebar"
+          className={cn(TOGGLE, "hidden lg:inline-flex")}
+        >
+          <Icon name={collapsed ? "menu" : "menu_open"} size={21} />
         </button>
 
         {/* Finance / <screen>. The first half never changes and is not a link:

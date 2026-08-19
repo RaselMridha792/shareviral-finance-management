@@ -21,8 +21,7 @@ export type TwoFactorSetup = {
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
 export const twoFactorApi = {
-  status: () =>
-    apiFetch<TwoFactorStatus>("/auth/2fa", { cache: "no-store" }),
+  status: () => apiFetch<TwoFactorStatus>("/auth/2fa", { cache: "no-store" }),
 
   /** Returns the secret once. Closing the page means starting again. */
   beginSetup: (password: string) =>

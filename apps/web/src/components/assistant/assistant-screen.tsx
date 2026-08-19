@@ -22,10 +22,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AttachmentCard } from "@/components/assistant/attachment-card";
-import {
-  BatchCard,
-  type RowResult,
-} from "@/components/assistant/batch-card";
+import { BatchCard, type RowResult } from "@/components/assistant/batch-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
 import { DraftCard, labelFor } from "@/components/assistant/draft-card";
@@ -52,9 +49,7 @@ function explain(caught: unknown, fallback: string): string {
     // "_" is the whole object, not a field — an unexpected key, or a rule
     // about two fields together.
     .map(([field, messages]) =>
-      field === "_"
-        ? messages[0]
-        : `${labelFor(field)} — ${messages[0]}`,
+      field === "_" ? messages[0] : `${labelFor(field)} — ${messages[0]}`,
     )
     .join("; ");
 
@@ -134,11 +129,11 @@ export function AssistantScreen({
     return (
       <div className="flex h-[calc(100dvh-4rem)] items-center justify-center px-4">
         <Card className="flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Sparkles className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Sparkles className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">Not switched on</p>
+            <p className="text-lg font-semibold">Not switched on</p>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {availability.reason}
             </p>
@@ -296,7 +291,11 @@ export function AssistantScreen({
     setError(null);
 
     try {
-      const outcomes = await aiApi.saveMany(batch.target, keeping, setSavedCount);
+      const outcomes = await aiApi.saveMany(
+        batch.target,
+        keeping,
+        setSavedCount,
+      );
 
       // Back onto the full-length row list, so a dropped row keeps its place
       // in the table rather than shifting every result up by one.

@@ -54,6 +54,8 @@ export function BankStatementScreen({
     <>
       <PageHeader
         title="Bank statement"
+        icon="description"
+        description="One account's movements, in date order, with the balance after each."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -92,7 +94,7 @@ export function BankStatementScreen({
         <div className="overflow-x-auto">
           <table className="table-data min-w-[900px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
+              <tr className="text-left">
                 <Th className="text-right">SL</Th>
                 <Th>Date</Th>
                 <Th>Description</Th>
@@ -102,7 +104,7 @@ export function BankStatementScreen({
                 <Th className="text-right">Balance</Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {/* The opening figure is a row, not a caption. A statement that
                   starts mid-air gives a reader no way to check the first
                   balance against anything. */}
@@ -117,7 +119,6 @@ export function BankStatementScreen({
                 <td className="px-4 py-2.5 text-right">
                   <Amount
                     value={register.openingBalance}
-                    currency={register.account.currency}
                     tone="neutral"
                     className="block font-medium"
                   />
@@ -137,10 +138,7 @@ export function BankStatementScreen({
                 register.rows.map((row, index) => (
                   <tr
                     key={row.id}
-                    className={cn(
-                      "row-finance hover:bg-surface-muted/50",
-                      row.voidedAt && "opacity-60",
-                    )}
+                    className={cn("row-finance", row.voidedAt && "opacity-60")}
                   >
                     <td className="num px-4 py-2.5 text-right text-muted-foreground">
                       {index + 1}
@@ -168,7 +166,6 @@ export function BankStatementScreen({
                       {row.direction === "out" ? (
                         <Amount
                           value={row.amount}
-                          currency={register.account.currency}
                           tone="out"
                           showCounterpart={false}
                           className="block"
@@ -179,7 +176,6 @@ export function BankStatementScreen({
                       {row.direction === "in" ? (
                         <Amount
                           value={row.amount}
-                          currency={register.account.currency}
                           tone="in"
                           showCounterpart={false}
                           className="block"
@@ -189,7 +185,6 @@ export function BankStatementScreen({
                     <td className="px-4 py-2.5 text-right">
                       <Amount
                         value={row.runningBalance}
-                        currency={register.account.currency}
                         tone="neutral"
                         className="block"
                       />
@@ -208,7 +203,6 @@ export function BankStatementScreen({
                 <td className="px-4 py-3 text-right">
                   <Amount
                     value={register.totalOut}
-                    currency={register.account.currency}
                     tone="out"
                     showCounterpart={false}
                     className="block"
@@ -217,7 +211,6 @@ export function BankStatementScreen({
                 <td className="px-4 py-3 text-right">
                   <Amount
                     value={register.totalIn}
-                    currency={register.account.currency}
                     tone="in"
                     showCounterpart={false}
                     className="block"
@@ -226,7 +219,6 @@ export function BankStatementScreen({
                 <td className="px-4 py-3 text-right">
                   <Amount
                     value={register.closingBalance}
-                    currency={register.account.currency}
                     tone="neutral"
                     className="block font-semibold"
                   />

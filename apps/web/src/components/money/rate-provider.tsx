@@ -55,7 +55,10 @@ export function useUsdRate(): number | null {
 }
 
 /** The same rate with the date it is from, for the caption. */
-export function useUsdRateContext(): { rate: number; asOf: string | null } | null {
+export function useUsdRateContext(): {
+  rate: number;
+  asOf: string | null;
+} | null {
   const { rate: raw, asOf } = useContext(RateContext);
   if (!raw) return null;
   const rate = Number(raw);

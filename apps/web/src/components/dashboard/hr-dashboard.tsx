@@ -25,12 +25,13 @@ export function HrDashboard({
     <>
       <PageHeader
         title={`Welcome, ${firstName}`}
+        icon="space_dashboard"
         description="Your work lives under Team."
       />
 
       <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-        <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-          <Users className="size-5" />
+        <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+          <Users className="size-6" />
         </span>
         <div>
           {/*
@@ -39,7 +40,7 @@ export function HrDashboard({
             sheet. A dashboard that describes the wrong account is worse than
             an empty one: the person believes it and stops looking.
           */}
-          <p className="text-sm font-semibold">
+          <p className="text-lg font-semibold">
             The company&apos;s own figures are not on this account
           </p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">

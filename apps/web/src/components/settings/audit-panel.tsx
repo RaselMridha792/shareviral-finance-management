@@ -41,12 +41,8 @@ export function AuditPanel() {
   // slower earlier response land after a faster later one. This clears the
   // pending timer, so only the pause at the end of typing queries.
   useEffect(() => {
-    const id = setTimeout(
-      () => change({ q: search.trim() || undefined }),
-      300,
-    );
+    const id = setTimeout(() => change({ q: search.trim() || undefined }), 300);
     return () => clearTimeout(id);
-     
   }, [search]);
 
   const load = useCallback(async () => {
@@ -74,8 +70,10 @@ export function AuditPanel() {
   }, [load]);
 
   useEffect(() => {
-     
-    void auditApi.filters().then(setOptions).catch(() => undefined);
+    void auditApi
+      .filters()
+      .then(setOptions)
+      .catch(() => undefined);
   }, []);
 
   function change(next: Partial<AuditFilters>) {
@@ -225,7 +223,7 @@ export function AuditPanel() {
           ) : null}
         </div>
 
-        <ul className="divide-y divide-border">
+        <ul>
           {rows.length === 0 && !loading ? (
             <li className="px-4 py-10 text-center text-sm text-muted-foreground">
               Nothing matches those filters.
@@ -236,7 +234,7 @@ export function AuditPanel() {
                 <button
                   type="button"
                   onClick={() => setOpen(open === row.id ? null : row.id)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-surface-muted/50"
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition"
                 >
                   <Badge
                     tone={
@@ -256,9 +254,7 @@ export function AuditPanel() {
                       {row.actorName ?? "the system"}
                       {row.actorRole ? ` · ${ROLE_LABELS[row.actorRole]}` : ""}
                       {" · "}
-                      <span className="num">
-                        {formatWhen(row.occurredAt)}
-                      </span>
+                      <span className="num">{formatWhen(row.occurredAt)}</span>
                       {row.actorIp ? ` · ${row.actorIp}` : ""}
                     </span>
                   </span>
@@ -303,12 +299,11 @@ function Detail({ row }: { row: AuditEntryDto }) {
 
   const before = row.before as Record<string, unknown> | null;
   const after = row.after as Record<string, unknown> | null;
-  const fields =
-    row.changedFields?.length
-      ? row.changedFields
-      : Array.from(
-          new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]),
-        );
+  const fields = row.changedFields?.length
+    ? row.changedFields
+    : Array.from(
+        new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]),
+      );
 
   if (!fields.length) {
     return (
@@ -328,7 +323,7 @@ function Detail({ row }: { row: AuditEntryDto }) {
             <th className="py-1.5 font-medium">Became</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border/60">
+        <tbody>
           {fields.map((field) => (
             <tr key={field}>
               <td className="py-1.5 pr-4 font-medium">{field}</td>

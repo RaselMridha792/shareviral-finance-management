@@ -121,6 +121,7 @@ export function TransactionsScreen({
     <>
       <PageHeader
         title="Transactions"
+        icon="swap_vert"
         description="Every movement of money, in and out."
         actions={
           canExport ? (

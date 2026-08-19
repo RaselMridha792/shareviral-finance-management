@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchField } from "@/components/ui/search-field";
+import { EmptyState } from "@/components/ui/patterns";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
@@ -136,6 +138,7 @@ export function SubscriptionsScreen({
     <>
       <PageHeader
         title="AI tools and subscriptions"
+        icon="auto_awesome"
         description="Every paid plan, what it costs, who is on it, and which card renews it."
         actions={
           canWrite ? (
@@ -148,29 +151,15 @@ export function SubscriptionsScreen({
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div
-          role="tablist"
-          aria-label="Subscription status"
-          className="tabs-scroll flex gap-1 border-b border-border"
-        >
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              role="tab"
-              type="button"
-              aria-selected={tab === entry.id}
-              onClick={() => setTab(entry.id)}
-              className={cn(
-                "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition",
-                tab === entry.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+        {/* A filter over one list, so the design's segmented group rather than
+            the underline row it had — underlines are for switching between
+            documents, which these five are not. */}
+        <Segmented
+          options={TABS}
+          value={tab}
+          onChange={setTab}
+          label="Subscription status"
+        />
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <SearchField
@@ -202,169 +191,183 @@ export function SubscriptionsScreen({
         </p>
       ) : null}
 
-      <Card className="overflow-hidden p-0">
-        <div className="table-scroll overflow-x-auto">
-          {/* Fourteen columns in the order the owner reads them, then one
+      {!loading && rows.length === 0 ? (
+        /*
+          Outside the table, not a cell inside it.
+          
+          A colSpan row centres itself in the table's 1760px min-width, which
+          put "Nothing is active." three hundred pixels off the right edge of
+          the screen — a message nobody could read, under fourteen empty
+          columns.
+        */
+        <Card>
+          <EmptyState
+            icon="auto_awesome"
+            title={
+              tab === "all"
+                ? "No subscriptions yet"
+                : `Nothing is ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}`
+            }
+          >
+            {tab === "all"
+              ? "Every paid plan the company runs goes here — what it costs, who is on it, and which card renews it."
+              : "Try another status, or All."}
+          </EmptyState>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="table-scroll overflow-x-auto">
+            {/* Fourteen columns in the order the owner reads them, then one
               unnamed cell for the pencil. */}
-          <table className="table-data w-full min-w-[1760px]">
-            <thead>
-              <tr>
-                <Th>Tool Name</Th>
-                <Th>Category</Th>
-                <Th align="right">Cost (USD)</Th>
-                <Th align="right">Equivalent (BDT)</Th>
-                <Th align="right">USD Rate</Th>
-                <Th>Billing Cycle</Th>
-                <Th>Start Date</Th>
-                <Th>Next Renewal Date</Th>
-                <Th>Status</Th>
-                <Th>Payment Method</Th>
-                <Th>User Department</Th>
-                <Th>User Name</Th>
-                <Th>Notes</Th>
-                <Th>Login accounts</Th>
-                <Th align="right"> </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+            <table className="table-data w-full min-w-[1760px]">
+              <thead>
                 <tr>
-                  <td
-                    colSpan={15}
-                    className="px-4 py-8 text-center text-sm text-muted-foreground"
-                  >
-                    Loading…
-                  </td>
+                  <Th>Tool Name</Th>
+                  <Th>Category</Th>
+                  <Th align="right">Cost (USD)</Th>
+                  <Th align="right">Equivalent (BDT)</Th>
+                  <Th align="right">USD Rate</Th>
+                  <Th>Billing Cycle</Th>
+                  <Th>Start Date</Th>
+                  <Th>Next Renewal Date</Th>
+                  <Th>Status</Th>
+                  <Th>Payment Method</Th>
+                  <Th>User Department</Th>
+                  <Th>User Name</Th>
+                  <Th>Notes</Th>
+                  <Th>Login accounts</Th>
+                  <Th align="right"> </Th>
                 </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={15}
-                    className="px-4 py-8 text-center text-sm text-muted-foreground"
-                  >
-                    {tab === "all"
-                      ? "Nothing here yet."
-                      : `Nothing is ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}.`}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  // Names rather than a headcount: the column is asked "who is
-                  // on this", and a number does not answer it.
-                  const seatNames = row.users
-                    .map((seat) => seat.fullName)
-                    .join(", ");
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={15}
+                      className="px-4 py-8 text-center text-sm text-muted-foreground"
+                    >
+                      Loading…
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row) => {
+                    // Names rather than a headcount: the column is asked "who is
+                    // on this", and a number does not answer it.
+                    const seatNames = row.users
+                      .map((seat) => seat.fullName)
+                      .join(", ");
 
-                  return (
-                    <tr key={row.id} className="row-finance">
-                      <td className="px-4 py-2">
-                        {/* The name opens the screenshot — the request was that
+                    return (
+                      <tr key={row.id} className="row-finance">
+                        <td className="px-4 py-2">
+                          {/* The name opens the screenshot — the request was that
                             clicking the tool shows the plan as it was bought. */}
-                        <button
-                          type="button"
-                          onClick={() => setScreenshotOf(row)}
-                          className="flex cursor-pointer items-center gap-1.5 text-left font-medium transition hover:text-primary"
-                        >
-                          {row.toolName}
-                          {row.screenshotFileId ? (
-                            <ImageIcon className="size-3 shrink-0 text-muted-foreground" />
-                          ) : null}
-                        </button>
-                        {/* The plan rides under the name instead of taking a
-                            column. Two plans of one tool are otherwise the
-                            same row twice. */}
-                        <span className="block text-xs text-muted-foreground">
-                          {row.planName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
-                      </td>
-                      <td className="col-amount px-4 py-2">
-                        {money(row.costUsd, "USD")}
-                      </td>
-                      <td className="col-amount px-4 py-2">
-                        {row.costBdt ? money(row.costBdt, "BDT") : "—"}
-                      </td>
-                      <td className="col-amount px-4 py-2 text-sm text-muted-foreground">
-                        {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {BILLING_CYCLE_LABELS[row.billingCycle]}
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        <span className="num">{row.startDate}</span>
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        {row.nextRenewalOn ? (
-                          <span className="num">{row.nextRenewalOn}</span>
-                        ) : (
-                          /* The note cannot be typed any more, but rows written
-                             while it could still carry one, and it is the only
-                             thing this column has to say about them. */
-                          <span className="text-muted-foreground">
-                            {row.renewalNote ?? "—"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <StatusPill status={row.status} />
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {row.accountName ?? "—"}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {row.boughtFor ?? "—"}
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        {seatNames ? (
-                          // Clamped, with the whole list on hover, so a plan
-                          // with six seats does not stretch every row past it.
-                          <span
-                            title={seatNames}
-                            className="block max-w-[14rem] truncate"
-                          >
-                            {seatNames}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {row.notes ? (
-                          <span
-                            title={row.notes}
-                            className="block max-w-[16rem] truncate"
-                          >
-                            {row.notes}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-muted-foreground">
-                        {row.loginEmail ?? "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {canWrite ? (
                           <button
                             type="button"
-                            onClick={() => setEditing(row)}
-                            aria-label={`Edit ${row.toolName} ${row.planName}`}
-                            className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                            onClick={() => setScreenshotOf(row)}
+                            className="flex cursor-pointer items-center gap-1.5 text-left font-medium transition hover:text-primary"
                           >
-                            <Pencil className="size-3.5" />
+                            {row.toolName}
+                            {row.screenshotFileId ? (
+                              <ImageIcon className="size-3 shrink-0 text-muted-foreground" />
+                            ) : null}
                           </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                          {/* The plan rides under the name instead of taking a
+                            column. Two plans of one tool are otherwise the
+                            same row twice. */}
+                          <span className="block text-xs text-muted-foreground">
+                            {row.planName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
+                        </td>
+                        <td className="col-amount px-4 py-2">
+                          {money(row.costUsd, "USD")}
+                        </td>
+                        <td className="col-amount px-4 py-2">
+                          {row.costBdt ? money(row.costBdt, "BDT") : "—"}
+                        </td>
+                        <td className="col-amount px-4 py-2 text-sm text-muted-foreground">
+                          {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {BILLING_CYCLE_LABELS[row.billingCycle]}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className="num">{row.startDate}</span>
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {row.nextRenewalOn ? (
+                            <span className="num">{row.nextRenewalOn}</span>
+                          ) : (
+                            /* The note cannot be typed any more, but rows written
+                             while it could still carry one, and it is the only
+                             thing this column has to say about them. */
+                            <span className="text-muted-foreground">
+                              {row.renewalNote ?? "—"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          <StatusPill status={row.status} />
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {row.accountName ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {row.boughtFor ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {seatNames ? (
+                            // Clamped, with the whole list on hover, so a plan
+                            // with six seats does not stretch every row past it.
+                            <span
+                              title={seatNames}
+                              className="block max-w-[14rem] truncate"
+                            >
+                              {seatNames}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {row.notes ? (
+                            <span
+                              title={row.notes}
+                              className="block max-w-[16rem] truncate"
+                            >
+                              {row.notes}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {row.loginEmail ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          {canWrite ? (
+                            <button
+                              type="button"
+                              onClick={() => setEditing(row)}
+                              aria-label={`Edit ${row.toolName} ${row.planName}`}
+                              className="cursor-pointer rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {rows.length > 0 ? (
         <p className="text-xs text-muted-foreground">

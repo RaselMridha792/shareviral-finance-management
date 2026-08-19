@@ -89,14 +89,27 @@ export function TransferForm({
       title="Move money between accounts"
       description="Records two entries so each account matches its own statement."
     >
-      <form id="transfer-form" onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        id="transfer-form"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+      >
         <Field label="Date" required error={fieldErrors.txnDate}>
           <DateInput name="txnDate" required defaultValue={todayInDhaka()} />
         </Field>
 
         <div className="flex items-end gap-2">
-          <Field label="From" required error={fieldErrors.fromAccountId} className="flex-1">
-            <Select name="fromAccountId" required defaultValue={accounts[0]?.id}>
+          <Field
+            label="From"
+            required
+            error={fieldErrors.fromAccountId}
+            className="flex-1"
+          >
+            <Select
+              name="fromAccountId"
+              required
+              defaultValue={accounts[0]?.id}
+            >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
@@ -105,7 +118,12 @@ export function TransferForm({
             </Select>
           </Field>
           <ArrowRight className="mb-3 size-4 shrink-0 text-muted-foreground" />
-          <Field label="To" required error={fieldErrors.toAccountId} className="flex-1">
+          <Field
+            label="To"
+            required
+            error={fieldErrors.toAccountId}
+            className="flex-1"
+          >
             <Select name="toAccountId" required defaultValue={accounts[1]?.id}>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>

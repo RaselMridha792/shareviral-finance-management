@@ -14,7 +14,12 @@ import {
 import { formatMoney } from "@finance/shared";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { SectionHeading, StatCell, StatStrip } from "@/components/ui/patterns";
+import {
+  SectionHeading,
+  ShareBar,
+  StatCell,
+  StatStrip,
+} from "@/components/ui/patterns";
 import { Card } from "@/components/ui/card";
 import { useDismissable } from "@/components/ui/overlay";
 import { cn } from "@/lib/utils";
@@ -227,7 +232,7 @@ export function ExpenseRow({
       />
 
       {editing ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           Pick the figures worth watching. {chosen.length} of {MAX_CARDS} shown
           — remove one with the cross, add one with the tile at the end. Kept in
           this browser.
@@ -238,44 +243,62 @@ export function ExpenseRow({
           cards, which read as a different kind of thing on a page where the
           two above it are strips — and they are all four-figures-in-a-row. */}
       <StatStrip>
-        {cards.map((card) => (
-          <div key={card.key} className="relative bg-surface">
-            <StatCell
-              label={card.label}
-              icon={card.symbol}
-              iconTone={card.iconTone}
-              // Formatted here, where the cell only renders what it is given.
-              // Passing the raw string printed "68875.00" under a heading whose
-              // neighbours read ৳11,83,000.00 — the same figures, one of them
-              // looking like a database column.
-              value={money(card.value)}
-              secondary={
-                card.usd
-                  ? `≈ ${formatMoney(card.usd, { currency: "USD" })}`
-                  : null
-              }
-              footnote={card.hint}
-            />
-            {editing ? (
-              <button
-                type="button"
-                onClick={() => drop(card.key)}
-                aria-label={`Remove ${card.label}`}
-                // Disabled rather than hidden on the last one, so it is clear
-                // the cross exists and why it will not go.
-                disabled={cards.length === 1}
-                title={
-                  cards.length === 1
-                    ? "The row cannot be empty"
-                    : `Remove ${card.label}`
+        {cards.map((card) => {
+          const share = card.shareOfOutflow
+            ? shareOf(card.value, report.totals.moneyOut)
+            : null;
+          return (
+            <div key={card.key} className="relative bg-surface">
+              <StatCell
+                label={card.label}
+                icon={card.symbol}
+                iconTone={card.iconTone}
+                // Formatted here, where the cell only renders what it is given.
+                // Passing the raw string printed "68875.00" under a heading whose
+                // neighbours read ৳11,83,000.00 — the same figures, one of them
+                // looking like a database column.
+                value={money(card.value)}
+                secondary={
+                  card.usd
+                    ? `≈ ${formatMoney(card.usd, { currency: "USD" })}`
+                    : null
                 }
-                className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-e1 transition hover:border-negative hover:bg-negative/10 hover:text-negative disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-muted-foreground"
+                footnote={
+                  // The share, then whatever the card had to say. A figure with
+                  // no denominator is a figure nobody can size: ৳68,875 means one
+                  // thing against a two-lakh month and another against a
+                  // twenty-four-lakh one.
+                  [share, card.hint].filter(Boolean).join(" · ")
+                }
               >
-                <X className="size-3.5" />
-              </button>
-            ) : null}
-          </div>
-        ))}
+                {share ? (
+                  <ShareBar
+                    share={Number(card.value) / Number(report.totals.moneyOut)}
+                    tone="bg-primary"
+                  />
+                ) : null}
+              </StatCell>
+              {editing ? (
+                <button
+                  type="button"
+                  onClick={() => drop(card.key)}
+                  aria-label={`Remove ${card.label}`}
+                  // Disabled rather than hidden on the last one, so it is clear
+                  // the cross exists and why it will not go.
+                  disabled={cards.length === 1}
+                  title={
+                    cards.length === 1
+                      ? "The row cannot be empty"
+                      : `Remove ${card.label}`
+                  }
+                  className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-e1 transition hover:border-negative hover:bg-negative/10 hover:text-negative disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-muted-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
 
         {editing && !full ? (
           <button
@@ -321,6 +344,19 @@ export function ExpenseRow({
  * ৳45,000" are different amounts of help when somebody is deciding whether it
  * is worth a card.
  */
+/**
+ * What share of the month's spending this figure is.
+ *
+ * Null rather than "0%" when there is nothing to divide by — a percentage of a
+ * month with no outflow is not zero, it is undefined, and printing 0% asserts
+ * something the data does not say.
+ */
+function shareOf(value: string, total: string): string | null {
+  const whole = Number(total);
+  if (!Number.isFinite(whole) || whole <= 0) return null;
+  return `${Math.round((Number(value) / whole) * 100)}% of outflow`;
+}
+
 function CardChooser({
   open,
   options,

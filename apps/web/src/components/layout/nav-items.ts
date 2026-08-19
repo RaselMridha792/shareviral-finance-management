@@ -78,21 +78,21 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
-        // No href: the parent opens the three screens under it. /expenses is
-        // reachable as "Overview", the first child.
+        /**
+         * A page in its own right, and the heading for the two screens
+         * indented under it.
+         *
+         * It used to navigate nowhere and carry an "Overview" child pointing
+         * at /expenses — one more row in the rail for a destination the row
+         * above it could have been. The design has the parent be the page.
+         */
         key: "expenses",
+        href: "/expenses",
         label: "Expenses",
         icon: "receipt_long",
         hue: 27,
+        permission: "transactions.read",
         children: [
-          {
-            key: "expenses-overview",
-            href: "/expenses",
-            label: "Overview",
-            icon: "grid_view",
-            hue: 27,
-            permission: "transactions.read",
-          },
           {
             // The register of plans: what is bought, who is on it, which card
             // renews it. The supplier-and-spend screen that used to sit beside
@@ -232,4 +232,3 @@ export const SECONDARY_NAV: NavItem[] = [
     permission: "settings.read",
   },
 ];
-

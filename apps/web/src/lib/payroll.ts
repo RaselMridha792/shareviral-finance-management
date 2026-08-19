@@ -220,7 +220,14 @@ export type MemberPayslipDto = {
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
 export const teamApi = {
-  list: (params: { page?: number; q?: string; status?: string; engagementType?: string } = {}) => {
+  list: (
+    params: {
+      page?: number;
+      q?: string;
+      status?: string;
+      engagementType?: string;
+    } = {},
+  ) => {
     const search = new URLSearchParams({
       page: String(params.page ?? 1),
       pageSize: "100",
@@ -236,7 +243,10 @@ export const teamApi = {
   get: (id: string) =>
     apiFetch<TeamMemberDto>(`/team-members/${id}`, { cache: "no-store" }),
   create: (input: CreateTeamMemberInput) =>
-    apiFetch<TeamMemberDto>("/team-members", { method: "POST", ...json(input) }),
+    apiFetch<TeamMemberDto>("/team-members", {
+      method: "POST",
+      ...json(input),
+    }),
   update: (id: string, input: UpdateTeamMemberInput) =>
     apiFetch<TeamMemberDto>(`/team-members/${id}`, {
       method: "PATCH",
@@ -293,7 +303,10 @@ export const payrollApi = {
       { cache: "no-store" },
     ),
   createRun: (input: CreatePayrollRunInput) =>
-    apiFetch<PayrollRunDto>("/payroll/runs", { method: "POST", ...json(input) }),
+    apiFetch<PayrollRunDto>("/payroll/runs", {
+      method: "POST",
+      ...json(input),
+    }),
   generateLines: (id: string) =>
     apiFetch<{ created: number; skipped: string[]; message?: string }>(
       `/payroll/runs/${id}/generate-lines`,
@@ -336,8 +349,7 @@ export const payrollApi = {
    * empty list, so the profile page must not call this without checking.
    */
   memberPayslips: (teamMemberId: string) =>
-    apiFetch<MemberPayslipDto[]>(
-      `/payroll/members/${teamMemberId}/payslips`,
-      { cache: "no-store" },
-    ),
+    apiFetch<MemberPayslipDto[]>(`/payroll/members/${teamMemberId}/payslips`, {
+      cache: "no-store",
+    }),
 };

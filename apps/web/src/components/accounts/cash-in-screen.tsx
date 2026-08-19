@@ -203,6 +203,7 @@ export function CashInScreen({
     <>
       <PageHeader
         title="Cash in"
+        icon="savings"
         actions={
           <>
             <input
@@ -300,11 +301,11 @@ export function CashInScreen({
         </Card>
       ) : received.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Landmark className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Landmark className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">
+            <p className="text-lg font-semibold">
               Nothing received in {range.label}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -318,7 +319,7 @@ export function CashInScreen({
           <div className="overflow-x-auto">
             <table className="table-data min-w-[1220px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-left">
+                <tr className="text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
                       Every entry already carries `ref_no`, and a second
                       identity that renumbers itself when a row is voided would
@@ -339,17 +340,14 @@ export function CashInScreen({
                   <Th>Note</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {received.map((row, index) => {
                   // What was actually sent, when the entry recorded it. Only
                   // divided out when it did not: a derived figure is the app's
                   // arithmetic, and the stored one is the remittance advice.
                   const sentUsd = dollarsOf(row, rate);
                   return (
-                    <tr
-                      key={row.id}
-                      className="row-finance hover:bg-surface-muted/50"
-                    >
+                    <tr key={row.id} className="row-finance">
                       <td className="num px-4 py-2.5 text-right text-muted-foreground">
                         {index + 1}
                       </td>

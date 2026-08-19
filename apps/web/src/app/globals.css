@@ -376,16 +376,45 @@ tr.row-finance > th {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--muted-foreground);
-  padding: 0.75rem 1.4375rem;
+  padding: 0.75rem 0.4375rem;
   text-align: left;
 }
 
 .table-data tbody td {
-  padding: 0.9375rem 1.4375rem;
+  padding: 0.9375rem 0.4375rem;
+  /*
+   * One body size for every table in the app.
+   *
+   * Set here rather than left to each table's own `text-sm`, because it was
+   * not every table's: one screen's rows were 12.5px and its neighbour's 14.5,
+   * which reads as two different apps rather than as one design. A `text-xs`
+   * on the <table> loses to this — a class plus two elements outranks a class
+   * — which is the point.
+   */
+  font-size: 0.90625rem;
 }
 
 .table-data tbody tr {
   border-bottom: 1px solid var(--border-soft);
+}
+
+/*
+ * 23px at the card's edge, 14px between columns — which is what the design
+ * says, and is not the same thing as 23px on every cell.
+ *
+ * It was 23px on every cell, and the difference is not cosmetic: eleven
+ * columns each paid 32px of padding they were not owed, which pushed the
+ * Transactions table to 1645px inside a 1102px card and left the Amount
+ * column — the one somebody opened the page for — off the right-hand edge.
+ * The hairline between columns now sits in the middle of a real 14px gap
+ * instead of the middle of a 46px one.
+ */
+.table-data tr > *:first-child {
+  padding-left: 1.4375rem;
+}
+
+.table-data tr > *:last-child {
+  padding-right: 1.4375rem;
 }
 
 /* The last row's rule would sit against the card's own edge, doubling it. */
@@ -403,7 +432,7 @@ tr.row-finance > th {
 }
 
 .table-data tfoot td {
-  padding: 0.9375rem 1.4375rem;
+  padding: 0.9375rem 0.4375rem;
 }
 
 /**

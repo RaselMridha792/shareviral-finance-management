@@ -115,9 +115,12 @@ export const settingsApi = {
 
 export const accountsApi = {
   list: (includeInactive = false) =>
-    apiFetch<AccountWithBalance[]>(`/accounts?includeInactive=${includeInactive}`, {
-      cache: "no-store",
-    }),
+    apiFetch<AccountWithBalance[]>(
+      `/accounts?includeInactive=${includeInactive}`,
+      {
+        cache: "no-store",
+      },
+    ),
   /**
    * One account, with every column - not the narrow projection the register
    * returns. The register only ever needed a name and a currency; the details

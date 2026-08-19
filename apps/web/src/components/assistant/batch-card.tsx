@@ -6,7 +6,8 @@ import { CircleAlert, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { labelFor } from "@/components/assistant/draft-card";
 import { Button } from "@/components/ui/button";
 
-export type RowResult = { ok: true; refNo?: string } | { ok: false; error: string };
+export type RowResult =
+  { ok: true; refNo?: string } | { ok: false; error: string };
 
 /**
  * Many proposed records, as a table you read before any of them is written.
@@ -185,8 +186,14 @@ export function BatchCard({
           </p>
         ) : (
           <>
-            <Button type="button" onClick={onConfirm} disabled={saving || !keeping}>
-              {saving ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+            <Button
+              type="button"
+              onClick={onConfirm}
+              disabled={saving || !keeping}
+            >
+              {saving ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : null}
               {saving
                 ? `Saving ${savedCount} of ${keeping}…`
                 : `Save ${keeping}`}

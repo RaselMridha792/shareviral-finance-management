@@ -47,13 +47,15 @@ export function SidebarFooter({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div
       className={cn(
-        "mt-3 flex items-center gap-2.5 border-t border-border pt-3",
+        "mx-3 flex items-center gap-[11px] border-t border-border px-2.5 pt-3.5 pb-1",
         collapsed && "flex-col gap-2",
       )}
     >
       <span
-        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-sidebar-item-active"
-        title={collapsed ? `${user.fullName} — ${ROLE_LABELS[user.role]}` : undefined}
+        className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-sidebar-item-active"
+        title={
+          collapsed ? `${user.fullName} — ${ROLE_LABELS[user.role]}` : undefined
+        }
       >
         {initials}
       </span>

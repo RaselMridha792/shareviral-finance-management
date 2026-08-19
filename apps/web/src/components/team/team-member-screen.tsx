@@ -400,11 +400,11 @@ export function TeamMemberScreen({
           independently — it is just no longer a click away from the rest. */}
       {!canSeePay ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Lock className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Lock className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">Pay is not visible to you</p>
+            <p className="text-lg font-semibold">Pay is not visible to you</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
               Your role manages people but not what they earn. The server
               refuses this independently — it is not simply hidden here.
@@ -486,7 +486,7 @@ export function TeamMemberScreen({
                 <div className="overflow-x-auto">
                   <table className="table-data min-w-[620px] text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-surface-muted/50 text-left">
+                      <tr className="text-left">
                         <Th>Month</Th>
                         <Th>Salary sheet</Th>
                         <Th className="text-right">Gross</Th>
@@ -495,7 +495,7 @@ export function TeamMemberScreen({
                         <Th className="w-24" />
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody>
                       {payslips.map((slip) => (
                         <tr key={slip.id} className="row-finance">
                           <td className="px-5 py-2.5">

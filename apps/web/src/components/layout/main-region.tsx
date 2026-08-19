@@ -26,8 +26,24 @@ export function MainRegion({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    /**
+     * No max width, and the gutter grows with the viewport.
+     *
+     * It was `max-w-7xl mx-auto`, which put two columns of empty space either
+     * side of every screen on any monitor wider than 1280px — while a table of
+     * fourteen columns scrolled sideways inside a card that had room to spare.
+     * The handoff has no such column: the gutter is clamp(16px, 3vw, 32px) and
+     * the content takes what is left.
+     */
+    <main
+      className="flex-1"
+      style={{
+        padding: "clamp(22px, 3vw, 34px) clamp(16px, 3vw, 32px) 32px",
+      }}
+    >
+      {/* 20px, not 24. The handoff stacks its blocks at 16–20, and at 24 the
+          three sections of the dashboard read as three pages. */}
+      <div className="flex flex-col gap-5">
         {children}
         {/*
           Under every screen, because every screen now shows dollar figures

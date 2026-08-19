@@ -108,8 +108,7 @@ export function SalarySheetScreen({
     try {
       const result = await fn();
       const withMessage = result as
-        | { message?: string; skipped?: string[] }
-        | undefined;
+        { message?: string; skipped?: string[] } | undefined;
       setNotice(withMessage?.message ?? message ?? null);
       setSkipped(withMessage?.skipped ?? []);
       refresh();
@@ -173,6 +172,7 @@ export function SalarySheetScreen({
 
       <PageHeader
         title={`Salary sheet — ${run.label}`}
+        icon="table_view"
         description={`${lines.length} people · ${PAYROLL_STATUS_LABELS[run.status]}`}
         actions={
           <>
@@ -287,7 +287,11 @@ export function SalarySheetScreen({
               </Button>
             ) : null}
             {canPay && run.status === "finalized" ? (
-              <Button variant="primary" size="md" onClick={() => setPaying(true)}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setPaying(true)}
+              >
                 <CircleCheck className="size-4" />
                 Mark paid
               </Button>
@@ -373,7 +377,7 @@ export function SalarySheetScreen({
           <div className="overflow-x-auto">
             <table className="table-data min-w-[980px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-left">
+                <tr className="text-left">
                   <Th>Name</Th>
                   <Th className="w-28 text-right">Gross</Th>
                   <Th className="w-28 text-right">Bonus</Th>
@@ -384,7 +388,7 @@ export function SalarySheetScreen({
                   <Th className="w-24" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {lines.map((line) => (
                   <LineRow
                     key={line.id}
@@ -395,20 +399,32 @@ export function SalarySheetScreen({
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-border-strong bg-surface-muted/50">
+                <tr className="border-t border-border-strong bg-surface-muted">
                   <td className="px-4 py-3 font-semibold" colSpan={2}>
                     Total
                   </td>
                   <td className="px-4 py-3">
-                    <Amount value={run.totalGross} tone="neutral" className="block font-semibold" />
+                    <Amount
+                      value={run.totalGross}
+                      tone="neutral"
+                      className="block font-semibold"
+                    />
                   </td>
                   <td colSpan={2} />
                   <td className="px-4 py-3">
-                    <Amount value={run.totalTds} tone="neutral" className="block font-semibold" />
+                    <Amount
+                      value={run.totalTds}
+                      tone="neutral"
+                      className="block font-semibold"
+                    />
                   </td>
                   <td />
                   <td className="px-4 py-3">
-                    <Amount value={run.totalNet} tone="neutral" className="block font-semibold" />
+                    <Amount
+                      value={run.totalNet}
+                      tone="neutral"
+                      className="block font-semibold"
+                    />
                   </td>
                   <td />
                 </tr>
@@ -507,13 +523,37 @@ function LineRow({
           <span className="mt-0.5 block text-xs text-negative">{error}</span>
         ) : null}
       </td>
-      <Cell value={line.grossAmount} field="grossAmount" editable={editable} onSave={save} />
-      <Cell value={line.bonusAmount} field="bonusAmount" editable={editable} onSave={save} />
-      <Cell value={line.otherAdditions} field="otherAdditions" editable={editable} onSave={save} />
+      <Cell
+        value={line.grossAmount}
+        field="grossAmount"
+        editable={editable}
+        onSave={save}
+      />
+      <Cell
+        value={line.bonusAmount}
+        field="bonusAmount"
+        editable={editable}
+        onSave={save}
+      />
+      <Cell
+        value={line.otherAdditions}
+        field="otherAdditions"
+        editable={editable}
+        onSave={save}
+      />
       <TdsCell line={line} onOpen={() => setWorking(true)} />
-      <Cell value={line.otherDeductions} field="otherDeductions" editable={editable} onSave={save} />
+      <Cell
+        value={line.otherDeductions}
+        field="otherDeductions"
+        editable={editable}
+        onSave={save}
+      />
       <td className="px-4 py-2">
-        <Amount value={line.netAmount} tone="neutral" className="block font-semibold" />
+        <Amount
+          value={line.netAmount}
+          tone="neutral"
+          className="block font-semibold"
+        />
       </td>
       <td className="px-4 py-2">
         <div className="flex items-center justify-end gap-3">
@@ -647,8 +687,8 @@ function TdsWorkingDrawer({
         <div className="flex flex-col gap-4">
           {!basis.exactYear ? (
             <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm">
-              That income year had no rule of its own, so an earlier
-              year&apos;s was used.
+              That income year had no rule of its own, so an earlier year&apos;s
+              was used.
             </p>
           ) : null}
 
@@ -816,14 +856,21 @@ function PayForm({
         />
         <p className="mt-2 text-xs text-muted-foreground">
           The <Amount value={run.totalTds} tone="neutral" /> of tax withheld is
-          not part of this —
-          it stays with you until you deposit the challan.
+          not part of this — it stays with you until you deposit the challan.
         </p>
       </div>
 
-      <form id="pay-run-form" onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        id="pay-run-form"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+      >
         <Field label="Payment date" required>
-          <DateInput name="paymentDate" required defaultValue={todayInDhaka()} />
+          <DateInput
+            name="paymentDate"
+            required
+            defaultValue={todayInDhaka()}
+          />
         </Field>
         <Field label="From which account" required>
           <Select name="accountId" required defaultValue={accounts[0]?.id}>
@@ -861,7 +908,12 @@ function PayForm({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="pay-run-form" variant="primary" disabled={pending}>
+        <Button
+          type="submit"
+          form="pay-run-form"
+          variant="primary"
+          disabled={pending}
+        >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
           Record the payment
         </Button>

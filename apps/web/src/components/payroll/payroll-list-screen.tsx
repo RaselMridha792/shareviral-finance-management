@@ -25,8 +25,18 @@ import { ApiError } from "@/lib/api-client";
 import { payrollApi, type PayrollRunDto } from "@/lib/payroll";
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 export function PayrollListScreen({
@@ -42,10 +52,15 @@ export function PayrollListScreen({
     <>
       <PageHeader
         title="Payroll"
+        icon="payments"
         description="One run a month. Nothing leaves the bank until you say so."
         actions={
           canWrite ? (
-            <Button variant="primary" size="md" onClick={() => setCreating(true)}>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setCreating(true)}
+            >
               <Plus className="size-4" />
               New month
             </Button>
@@ -55,11 +70,11 @@ export function PayrollListScreen({
 
       {initialPage.items.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Wallet className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Wallet className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">No payroll runs yet</p>
+            <p className="text-lg font-semibold">No payroll runs yet</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
               Start a month, build the salary sheet, type in each person&apos;s
               tax, then mark it paid — that last step is what moves money.
@@ -71,7 +86,7 @@ export function PayrollListScreen({
           <div className="overflow-x-auto">
             <table className="table-data min-w-[760px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-left">
+                <tr className="text-left">
                   <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                     Month
                   </th>
@@ -92,9 +107,9 @@ export function PayrollListScreen({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {initialPage.items.map((run) => (
-                  <tr key={run.id} className="row-finance hover:bg-surface-muted/50">
+                  <tr key={run.id} className="row-finance">
                     <td className="px-4 py-2.5">
                       {/* One link per row — see the note in team-screen.tsx. */}
                       <Link
@@ -119,10 +134,18 @@ export function PayrollListScreen({
                       </Badge>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Amount value={run.totalGross} tone="neutral" className="block" />
+                      <Amount
+                        value={run.totalGross}
+                        tone="neutral"
+                        className="block"
+                      />
                     </td>
                     <td className="px-4 py-2.5">
-                      <Amount value={run.totalTds} tone="neutral" className="block" />
+                      <Amount
+                        value={run.totalTds}
+                        tone="neutral"
+                        className="block"
+                      />
                     </td>
                     <td className="px-4 py-2.5">
                       <Amount
@@ -196,7 +219,9 @@ function NewRunForm({
       onCreated(run.id);
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Could not start that run.",
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not start that run.",
       );
       setPending(false);
     }
@@ -264,7 +289,12 @@ function NewRunForm({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="run-form" variant="primary" disabled={pending}>
+        <Button
+          type="submit"
+          form="run-form"
+          variant="primary"
+          disabled={pending}
+        >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
           Start
         </Button>

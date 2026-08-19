@@ -263,7 +263,12 @@ function SecondStep({
           : "The six digits from your authenticator app."}
       </p>
 
-      <form method="post" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+      <form
+        method="post"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+        noValidate
+      >
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">
             {useRecovery ? "Recovery code" : "Code"}

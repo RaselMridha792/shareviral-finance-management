@@ -89,6 +89,7 @@ export function AccountDetailScreen({
 
       <PageHeader
         title={account.name}
+        icon="account_balance"
         description={[type, account.bankName, account.branch]
           .filter(Boolean)
           .join(" · ")}
@@ -126,7 +127,6 @@ export function AccountDetailScreen({
         </p>
         <Amount
           value={account.balance}
-          currency={account.currency}
           className="mt-2 block text-3xl font-semibold"
         />
         <p className="mt-2 text-xs text-muted-foreground">
@@ -165,7 +165,6 @@ export function AccountDetailScreen({
               <DetailRow
                 key={row.label}
                 row={row}
-                currency={account.currency}
                 copied={false}
                 onCopy={copy}
               />

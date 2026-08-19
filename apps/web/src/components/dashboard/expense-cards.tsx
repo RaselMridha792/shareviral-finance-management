@@ -31,6 +31,15 @@ export type CardSpec = {
   value: string;
   usd?: string | null;
   hint?: string;
+  /**
+   * Whether this figure is a slice of what went out, and so gets a bar and a
+   * percentage under it.
+   *
+   * Not every card is. "Money in" is not part of the outflow, "Cash in hand"
+   * is a balance rather than a flow, and "Total spent" IS the outflow — a bar
+   * reading 100% of itself is a bar that says nothing.
+   */
+  shareOfOutflow?: boolean;
   /** Only where a comparable figure for the period before actually exists. */
   change?: number | null;
   risingIsGood?: boolean;
@@ -100,6 +109,7 @@ export function buildCatalogue(
   const fixed: CardSpec[] = [
     {
       key: "salaryPaid",
+      shareOfOutflow: true,
       label: "Salary paid",
       group: "Spending",
       symbol: "groups",
@@ -112,6 +122,7 @@ export function buildCatalogue(
     },
     {
       key: "tools",
+      shareOfOutflow: true,
       label: "AI & other tools",
       group: "Spending",
       symbol: "auto_awesome",
@@ -185,6 +196,7 @@ export function buildCatalogue(
     },
     {
       key: "tdsWithheld",
+      shareOfOutflow: true,
       label: "TDS withheld",
       group: "Tax",
       symbol: "receipt_long",
@@ -195,6 +207,7 @@ export function buildCatalogue(
     },
     {
       key: "tdsDeposited",
+      shareOfOutflow: true,
       label: "TDS deposited",
       group: "Tax",
       symbol: "payments",
@@ -242,7 +255,9 @@ export function buildCatalogue(
       tone: "out" as const,
       value: line.total,
       usd: inUsd(line.total, usdRate),
-      hint: `${line.share.toFixed(0)}% of what went out`,
+      // The share is drawn as a bar with its own caption, so saying it here
+      // too would print the same percentage twice on one card.
+      shareOfOutflow: true,
     }));
 
   return [...fixed, ...categories];

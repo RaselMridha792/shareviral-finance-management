@@ -1,8 +1,4 @@
-import type {
-  SaveTdsPolicyInput,
-  TdsPolicy,
-  TdsResult,
-} from "@finance/shared";
+import type { SaveTdsPolicyInput, TdsPolicy, TdsResult } from "@finance/shared";
 
 import { apiFetch } from "./api-client";
 

@@ -71,7 +71,7 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
         <div className="overflow-x-auto">
           <table className="table-data min-w-[760px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
+              <tr className="text-left">
                 <th className={th}>Name</th>
                 <th className={th}>Email</th>
                 <th className={th}>Role</th>
@@ -80,12 +80,9 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                 <th className={th} />
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {users.map((user) => (
-                <tr
-                  key={user.id}
-                  className="row-finance hover:bg-surface-muted/50"
-                >
+                <tr key={user.id} className="row-finance">
                   <td className="px-4 py-2.5">
                     <span className="font-medium">{user.fullName}</span>
                     {user.id === me?.id ? (
@@ -243,7 +240,13 @@ function PasswordField({
   );
 }
 
-function RoleSelect({ name, defaultValue }: { name: string; defaultValue?: Role }) {
+function RoleSelect({
+  name,
+  defaultValue,
+}: {
+  name: string;
+  defaultValue?: Role;
+}) {
   const [role, setRole] = useState<Role>(defaultValue ?? "finance");
 
   return (
@@ -320,7 +323,11 @@ function CreateUserForm({
 
   return (
     <Drawer open={open} onClose={onClose} title="Add someone">
-      <form id="user-create" onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        id="user-create"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+      >
         <Field label="Full name" required error={fieldErrors.fullName}>
           <Input name="fullName" autoFocus />
         </Field>
@@ -394,7 +401,11 @@ function EditUserForm({
       title={user ? user.fullName : ""}
     >
       {user ? (
-        <form id="user-edit" onSubmit={onSubmit} className="flex flex-col gap-4">
+        <form
+          id="user-edit"
+          onSubmit={onSubmit}
+          className="flex flex-col gap-4"
+        >
           <Field label="Full name" required>
             <Input name="fullName" defaultValue={user.fullName} />
           </Field>
@@ -516,7 +527,12 @@ function ResetPasswordForm({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="user-pw" variant="primary" disabled={pending}>
+        <Button
+          type="submit"
+          form="user-pw"
+          variant="primary"
+          disabled={pending}
+        >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
           Set password
         </Button>

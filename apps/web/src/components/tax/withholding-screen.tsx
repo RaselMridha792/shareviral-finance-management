@@ -26,6 +26,7 @@ import { useSettings } from "@/components/settings-provider";
 import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
+import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import { tdsApi } from "@/lib/tax";
@@ -181,6 +182,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
     <>
       <PageHeader
         title="Withholding tax"
+        icon="percent"
         description="Tax deducted from salaries — whose, and how much."
       />
 
@@ -201,19 +203,19 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             is being read below. Sitting inside the filtered block it would read
             as a figure the filter had produced.
           */}
-          <Card className="flex max-w-xs flex-col gap-1 px-4 py-3.5">
-            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Deducted in {register.currentMonth.label}
-            </span>
-            <Amount
-              value={register.currentMonth.total}
-              tone="neutral"
-              className="text-xl font-medium"
-            />
-            <span className="text-xs text-muted-foreground">
-              The month we are in, whichever period the table shows.
-            </span>
-          </Card>
+          <SummaryBar
+            label={`Deducted in ${register.currentMonth.label}`}
+            icon="percent"
+            iconTone="text-negative"
+            description="The month we are in, whichever period the table shows."
+            value={
+              <Amount
+                value={register.currentMonth.total}
+                tone="neutral"
+                className="text-[clamp(25px,2vw,32px)] font-semibold"
+              />
+            }
+          />
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-border p-0.5">
@@ -302,7 +304,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             <div className="overflow-x-auto">
               <table className="table-data min-w-160 text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-left">
+                  <tr className="text-left">
                     <th className={th}>Employee</th>
                     {showMonth ? <th className={th}>Month</th> : null}
                     <th className={thRight}>Salary</th>
@@ -310,7 +312,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                     <th className={th} />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {rows.length === 0 ? (
                     <tr>
                       {/*
@@ -333,10 +335,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                     </tr>
                   ) : (
                     rows.map((row) => (
-                      <tr
-                        key={row.payrollLineId}
-                        className="row-finance hover:bg-surface-muted/50"
-                      >
+                      <tr key={row.payrollLineId} className="row-finance">
                         <td className="px-4 py-2.5 font-medium">
                           {row.fullName}
                           {/*

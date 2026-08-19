@@ -97,7 +97,12 @@ export function RateHistory() {
               />
             </Field>
             <Field label="BDT for one USD" required>
-              <Input name="rate" className="num" placeholder="118.40" autoFocus />
+              <Input
+                name="rate"
+                className="num"
+                placeholder="118.40"
+                autoFocus
+              />
             </Field>
             <Field label="Note">
               <Input name="notes" placeholder="Where it came from" />
@@ -111,8 +116,15 @@ export function RateHistory() {
           ) : null}
 
           <div className="flex gap-2">
-            <Button type="submit" variant="primary" size="sm" disabled={pending}>
-              {pending ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={pending}
+            >
+              {pending ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : null}
               Save
             </Button>
             <Button
@@ -130,7 +142,7 @@ export function RateHistory() {
       <div className="overflow-x-auto">
         <table className="table-data min-w-[420px] text-sm">
           <thead>
-            <tr className="border-b border-border bg-surface-muted/50 text-left">
+            <tr className="text-left">
               <th className="px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 Date
               </th>
@@ -142,23 +154,29 @@ export function RateHistory() {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody>
             {rates === null ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td
+                  colSpan={3}
+                  className="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
                   Loading…
                 </td>
               </tr>
             ) : rates.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td
+                  colSpan={3}
+                  className="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
                   No rates recorded. Until one is, USD reports show taka and say
                   so rather than guessing.
                 </td>
               </tr>
             ) : (
               rates.map((rate) => (
-                <tr key={rate.id} className="row-finance hover:bg-surface-muted/50">
+                <tr key={rate.id} className="row-finance">
                   <td className="num px-4 py-2.5">{rate.rateDate}</td>
                   <td className="num px-4 py-2.5 text-right font-medium">
                     {Number(rate.rate).toFixed(2)}

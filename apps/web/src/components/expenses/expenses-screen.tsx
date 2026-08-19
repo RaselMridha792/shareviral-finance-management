@@ -104,6 +104,7 @@ export function ExpensesScreen({
 
       <PageHeader
         title="Expenses"
+        icon="receipt_long"
         description="What the company spent, grouped by heading."
         actions={
           <>
@@ -149,11 +150,11 @@ export function ExpensesScreen({
 
       {summary.groups.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
-            <Receipt className="size-5" />
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+            <Receipt className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">
+            <p className="text-lg font-semibold">
               Nothing spent in {range.label}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -162,7 +163,12 @@ export function ExpensesScreen({
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+          }}
+        >
           {summary.groups.map((group) => {
             const share = (Number(group.total) / Number(summary.total)) * 100;
             return (

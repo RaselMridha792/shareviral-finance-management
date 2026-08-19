@@ -219,6 +219,7 @@ export function ImportScreen({
     <>
       <PageHeader
         title="Import from Excel"
+        icon="upload_file"
         description="Bring in past transactions from a spreadsheet or bank export."
       />
 
@@ -251,12 +252,12 @@ export function ImportScreen({
       ) : null}
 
       {step === 0 ? (
-        <Card className="flex flex-col items-center gap-4 px-6 py-14 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
+        <Card className="flex flex-col items-center gap-4 border-dashed px-6 py-14 text-center">
+          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
             <FileSpreadsheet className="size-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold">Choose a spreadsheet</p>
+            <p className="text-lg font-semibold">Choose a spreadsheet</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
               An .xlsx file or a CSV from your bank. The first row must be the
               column headings. Nothing is saved until you have checked it.
@@ -305,7 +306,7 @@ export function ImportScreen({
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {upload.headers.map((header) => (
                       <tr key={header}>
                         <td className="px-3 py-2 font-medium">{header}</td>
@@ -449,7 +450,7 @@ export function ImportScreen({
             <div className="overflow-x-auto">
               <table className="table-data min-w-[720px] text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-left">
+                  <tr className="text-left">
                     <th className="w-10 px-3 py-2" />
                     <th className="w-12 px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                       #
@@ -468,7 +469,7 @@ export function ImportScreen({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {rows.map((row) => {
                     const bad = row.status === "error";
                     const mapped = row.mapped as {
@@ -601,7 +602,7 @@ export function ImportScreen({
           ) : (
             <div className="overflow-x-auto">
               <table className="table-data min-w-[620px] text-sm">
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {initialBatches.map((entry) => (
                     <tr key={entry.id} className="row-finance">
                       <td className="px-5 py-2.5 font-medium">

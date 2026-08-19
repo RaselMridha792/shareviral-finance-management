@@ -18,8 +18,7 @@ const VARIANTS: Record<Variant, string> = {
    * Solid rather than an outline, because it sits beside Cancel and the eye
    * should land on the one that cannot be undone before the hand does.
    */
-  danger:
-    "bg-negative text-white hover:opacity-90 border border-transparent",
+  danger: "bg-negative text-white hover:opacity-90 border border-transparent",
 };
 
 const SIZES: Record<Size, string> = {

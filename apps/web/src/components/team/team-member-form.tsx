@@ -95,9 +95,7 @@ export function TeamMemberForm({
       educationMajor: text("educationMajor"),
       cvUrl: text("cvUrl"),
       appointmentLetterUrl: text("appointmentLetterUrl"),
-      ...(editing
-        ? { status: text("status"), endedOn: text("endedOn") }
-        : {}),
+      ...(editing ? { status: text("status"), endedOn: text("endedOn") } : {}),
     } as Parameters<typeof teamApi.create>[0];
 
     for (const key of OMIT_WHEN_BLANK) {
@@ -129,7 +127,11 @@ export function TeamMemberForm({
       title={editing ? "Edit person" : "Add a person"}
       description="A name, a code and a joining date are enough — the rest is filled in as it becomes known. Pay is recorded separately, on the Pay tab."
     >
-      <form id="member-form" onSubmit={onSubmit} className="flex flex-col gap-4">
+      <form
+        id="member-form"
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4"
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Type" required>
             <Select
@@ -196,7 +198,11 @@ export function TeamMemberForm({
             </Select>
           </Field>
           <Field label="NID" error={fieldErrors.nid}>
-            <Input name="nid" className="num" defaultValue={member?.nid ?? ""} />
+            <Input
+              name="nid"
+              className="num"
+              defaultValue={member?.nid ?? ""}
+            />
           </Field>
         </div>
 
@@ -204,7 +210,11 @@ export function TeamMemberForm({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone" error={fieldErrors.phone}>
-            <Input name="phone" className="num" defaultValue={member?.phone ?? ""} />
+            <Input
+              name="phone"
+              className="num"
+              defaultValue={member?.phone ?? ""}
+            />
           </Field>
           <Field
             label="Email"
@@ -224,7 +234,11 @@ export function TeamMemberForm({
           error={fieldErrors.workEmail}
           hint="A company address, if they have one"
         >
-          <Input name="workEmail" type="email" defaultValue={member?.workEmail ?? ""} />
+          <Input
+            name="workEmail"
+            type="email"
+            defaultValue={member?.workEmail ?? ""}
+          />
         </Field>
 
         <Field label="Present address" error={fieldErrors.address}>
@@ -242,7 +256,10 @@ export function TeamMemberForm({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Designation" error={fieldErrors.designation}>
-            <Input name="designation" defaultValue={member?.designation ?? ""} />
+            <Input
+              name="designation"
+              defaultValue={member?.designation ?? ""}
+            />
           </Field>
           <Field label="Department" error={fieldErrors.department}>
             <Input name="department" defaultValue={member?.department ?? ""} />
@@ -371,7 +388,10 @@ export function TeamMemberForm({
           label="Return filed (PSR)"
           hint="Required above ৳16,000 basic a month"
         >
-          <Select name="psrStatus" defaultValue={member?.psrStatus ?? "unknown"}>
+          <Select
+            name="psrStatus"
+            defaultValue={member?.psrStatus ?? "unknown"}
+          >
             {PSR_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {PSR_STATUS_LABELS[status]}
@@ -435,7 +455,12 @@ export function TeamMemberForm({
         <Button type="button" variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" form="member-form" variant="primary" disabled={pending}>
+        <Button
+          type="submit"
+          form="member-form"
+          variant="primary"
+          disabled={pending}
+        >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
           {editing ? "Save changes" : "Add"}
         </Button>

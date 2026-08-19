@@ -60,6 +60,7 @@ export function CategoryDetailScreen({
 
       <PageHeader
         title={heading.name}
+        icon="sell"
         description={`Spending under this heading in ${range.label}.`}
         actions={
           <>
@@ -116,7 +117,7 @@ export function CategoryDetailScreen({
           <CardBody className="p-0">
             <div className="overflow-x-auto">
               <table className="table-data min-w-[420px] text-sm">
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {breakdown.groups.map((group) => {
                     const share =
                       (Number(group.total) / Number(breakdown.total)) * 100;

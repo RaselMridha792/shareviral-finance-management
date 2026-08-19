@@ -44,7 +44,8 @@ export function StatementScreen({
   return (
     <>
       <PageHeader
-        title="Statement"
+        title="Reports"
+        icon="bar_chart"
         description="The reconciled position for a period, with its notes and who signed it off."
       />
 
@@ -52,7 +53,7 @@ export function StatementScreen({
         tabs={TABS}
         active={granularity}
         onSelect={setGranularity}
-        label="Statement"
+        label="Reports"
       />
 
       <StatementView

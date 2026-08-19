@@ -71,6 +71,7 @@ export function RegisterScreen({
 
       <PageHeader
         title={account.name}
+        icon="description"
         description={[
           ACCOUNT_TYPE_LABELS[account.type as AccountType] ?? account.type,
           account.bankName,
@@ -168,29 +169,17 @@ export function RegisterScreen({
         <Figure
           label="Opening"
           value={register.openingBalance}
-          currency={account.currency}
           hint={
             range.from
               ? `Everything up to ${range.from}`
               : `Since ${account.openingBalanceOn}`
           }
         />
-        <Figure
-          label="Money in"
-          value={register.totalIn}
-          currency={account.currency}
-          tone="in"
-        />
-        <Figure
-          label="Money out"
-          value={register.totalOut}
-          currency={account.currency}
-          tone="out"
-        />
+        <Figure label="Money in" value={register.totalIn} tone="in" />
+        <Figure label="Money out" value={register.totalOut} tone="out" />
         <Figure
           label="Closing"
           value={register.closingBalance}
-          currency={account.currency}
           hint="Should equal the bank statement"
           emphasis
         />
@@ -234,15 +223,12 @@ export function RegisterScreen({
 function Figure({
   label,
   value,
-  currency,
   hint,
   tone = "neutral",
   emphasis = false,
 }: {
   label: string;
   value: string;
-  /** The account's own currency — a USD account must not print ৳. */
-  currency: string;
   hint?: string;
   tone?: "in" | "out" | "neutral";
   emphasis?: boolean;
@@ -252,9 +238,11 @@ function Figure({
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </p>
+      {/* No `currency`: `Amount` falls back to the base, which is what every
+          figure in this register is in — `account.currency` names the account,
+          not the money. */}
       <Amount
         value={value}
-        currency={currency}
         tone={tone === "neutral" ? "auto" : tone}
         className="mt-3 block text-xl font-semibold tracking-tight"
       />

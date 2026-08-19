@@ -271,7 +271,11 @@ export function TaxPanel() {
               Applied in order to the taxable income. The last band has no width
               and takes everything above.
             </p>
-            <div className="flex flex-col gap-2">
+            {/* Capped, because a slab is a five-digit number and the page is
+                now the full width of the window: the fields ran eleven hundred
+                pixels with the digits parked at the far end, a screen's width
+                from the label that names them. */}
+            <div className="flex max-w-2xl flex-col gap-2">
               {policy.slabs.map((band, index) => (
                 <div key={index} className="flex items-center gap-3">
                   <span className="w-24 shrink-0 text-xs text-muted-foreground">

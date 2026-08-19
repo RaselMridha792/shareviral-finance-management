@@ -200,12 +200,7 @@ export function IdleTimeout() {
           . Anything you have typed and not saved will be lost.
         </p>
         <div className="mt-5 flex gap-2">
-          <Button
-            variant="primary"
-            className="flex-1"
-            autoFocus
-            onClick={stay}
-          >
+          <Button variant="primary" className="flex-1" autoFocus onClick={stay}>
             Stay signed in
           </Button>
           <Button variant="secondary" onClick={() => void signOut()}>

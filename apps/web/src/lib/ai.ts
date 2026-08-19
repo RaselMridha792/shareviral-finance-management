@@ -120,8 +120,12 @@ export const aiApi = {
     target: AiTarget,
     rows: Array<Record<string, unknown>>,
     onProgress?: (done: number) => void,
-  ): Promise<Array<{ ok: true; refNo?: string } | { ok: false; error: string }>> => {
-    const results: Array<{ ok: true; refNo?: string } | { ok: false; error: string }> = [];
+  ): Promise<
+    Array<{ ok: true; refNo?: string } | { ok: false; error: string }>
+  > => {
+    const results: Array<
+      { ok: true; refNo?: string } | { ok: false; error: string }
+    > = [];
 
     for (const [index, row] of rows.entries()) {
       try {
@@ -155,7 +159,11 @@ export const aiApi = {
    * this is called, and nothing about it should be able to fail, block, or
    * appear to fail because a lesson could not be filed.
    */
-  learn: (chatId: string, target: AiTarget, confirmed: Record<string, unknown>) =>
+  learn: (
+    chatId: string,
+    target: AiTarget,
+    confirmed: Record<string, unknown>,
+  ) =>
     apiFetch<{ recorded: number }>("/ai/learn", {
       method: "POST",
       ...json({ chatId, target, confirmed }),

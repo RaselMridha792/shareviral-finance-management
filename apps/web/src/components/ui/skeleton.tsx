@@ -21,10 +21,7 @@ import { cn } from "@/lib/utils";
  * way. Anything livelier draws the eye to the loading rather than the page.
  */
 
-export function Skeleton({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+export function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       // Not aria-hidden. A screen reader should learn that something is
@@ -104,7 +101,12 @@ export function SkeletonTable({ rows = 8 }: { rows?: number }) {
 /** A row of figure cards, as the dashboard and the account screens use. */
 export function SkeletonCards({ count = 3 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div
+      className="grid gap-4"
+      style={{
+        gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+      }}
+    >
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="rounded-xl border border-border p-5">
           <div className="flex items-start gap-3">

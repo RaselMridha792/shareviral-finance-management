@@ -550,13 +550,13 @@ export function StatementView({
         <div className="overflow-x-auto">
           <table className="table-data min-w-140 text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
+              <tr className="text-left">
                 <th className={th}>Measure</th>
                 <th className={th}>Basis</th>
                 <th className={thRight}>Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {summary.lines.map((line) => (
                 <tr key={line.label} className="row-finance">
                   <td className="px-4 py-2.5">
@@ -623,13 +623,13 @@ export function StatementView({
         <div className="overflow-x-auto">
           <table className="table-data min-w-140 text-sm">
             <thead>
-              <tr className="border-b border-border bg-surface-muted/50 text-left">
+              <tr className="text-left">
                 <th className={th}>Component</th>
                 <th className={th}>Nature</th>
                 <th className={thRight}>Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               <tr className="row-finance">
                 <td className="px-4 py-2.5">
                   <span className="block font-medium">Free cash</span>
@@ -795,14 +795,14 @@ export function StatementView({
             <div className="overflow-x-auto">
               <table className="table-data min-w-180 text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-left">
+                  <tr className="text-left">
                     <th className={th}>Particulars</th>
                     <th className={th}>Type</th>
                     <th className={thRight}>Amount</th>
                     <th className={thRight}>Balance</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   <tr className="row-finance bg-surface-muted/30">
                     <td className="px-4 py-2.5 font-medium">Opening balance</td>
                     <td className="px-4 py-2.5 text-muted-foreground">—</td>
@@ -817,7 +817,7 @@ export function StatementView({
                   {rows.map((row, r) => (
                     <tr
                       key={row.id ?? `${r}-${row.label}`}
-                      className="row-finance hover:bg-surface-muted/50"
+                      className="row-finance"
                     >
                       <td className="px-4 py-2.5">
                         <span className="block font-medium">{row.label}</span>
@@ -1146,10 +1146,17 @@ function HeadlineCard({
         {label}
       </p>
       <div className="mt-3 flex flex-col items-start">
+        {/*
+          The dollar line comes from `UsdLine` below, at the rate this period
+          was actually reported at. Without this flag `Amount` drew its own as
+          well, at today's rate — and the card carried two different dollar
+          figures for one taka figure, twelve pixels apart.
+        */}
         <Amount
           value={value.bdt}
           currency="BDT"
           tone="auto"
+          showCounterpart={false}
           className="block text-3xl font-semibold tracking-tight"
         />
         <UsdLine value={value} className="mt-1 text-sm" />

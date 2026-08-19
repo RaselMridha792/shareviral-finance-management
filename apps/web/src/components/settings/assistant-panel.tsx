@@ -107,7 +107,9 @@ export function AssistantPanel() {
       router.refresh();
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Could not save that key.",
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not save that key.",
       );
     } finally {
       setPending(false);
@@ -268,7 +270,10 @@ export function AssistantPanel() {
           description="Anything the assistant is given is sent to Anthropic to be turned into a sentence. This decides how much that is."
         />
         <CardBody className="flex flex-col gap-4">
-          <Field label="How much it may read" hint={AI_DATA_ACCESS_DETAIL[access]}>
+          <Field
+            label="How much it may read"
+            hint={AI_DATA_ACCESS_DETAIL[access]}
+          >
             <Select
               value={access}
               disabled={saving}
