@@ -43,9 +43,7 @@ export function CategoryDetailScreen({
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
   function changeRange(next: Range) {
-    router.push(
-      `/expenses/${heading.slug}?from=${next.from}&to=${next.to}`,
-    );
+    router.push(`/expenses/${heading.slug}?from=${next.from}&to=${next.to}`);
   }
 
   const refresh = () => router.refresh();

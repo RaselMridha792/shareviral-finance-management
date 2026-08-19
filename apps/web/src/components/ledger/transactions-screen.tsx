@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { SearchField } from "@/components/ui/search-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
@@ -139,15 +140,32 @@ export function TransactionsScreen({
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryTile label="Money in" value={summary?.moneyIn} tone="in" />
-        <SummaryTile label="Money out" value={summary?.moneyOut} tone="out" />
+      <StatStrip>
         <SummaryTile
+          label="Money in"
+          icon="south_west"
+          iconTone="text-positive"
+          value={summary?.moneyIn}
+          tone="in"
+        />
+        <SummaryTile
+          label="Money out"
+          icon="north_east"
+          iconTone="text-negative"
+          value={summary?.moneyOut}
+          tone="out"
+        />
+        {/* The one that answers the question, so it sits on the raised surface
+            the way a closing figure does everywhere else. */}
+        <SummaryTile
+          emphasis
           label="Net"
+          icon="account_balance_wallet"
+          iconTone="text-primary-text"
           value={summary?.net}
           hint={summary ? `${summary.entries} entries in this view` : undefined}
         />
-      </div>
+      </StatStrip>
 
       <FilterRow
         filters={filters}
@@ -472,29 +490,38 @@ function SummaryTile({
   value,
   tone = "neutral",
   hint,
+  icon,
+  iconTone,
+  emphasis,
 }: {
   label: string;
   value?: string;
   tone?: "in" | "out" | "neutral";
   hint?: string;
+  icon?: string;
+  iconTone?: string;
+  emphasis?: boolean;
 }) {
   return (
-    <Card className="p-5">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      {value === undefined ? (
-        <div className="mt-3 h-7 w-32 animate-pulse rounded bg-surface-muted" />
-      ) : (
-        <Amount
-          value={value}
-          tone={tone === "neutral" ? "auto" : tone}
-          className="mt-3 block text-2xl font-semibold tracking-tight"
-        />
-      )}
-      {hint ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>
-      ) : null}
-    </Card>
+    <StatCell
+      label={label}
+      icon={icon}
+      iconTone={iconTone}
+      emphasis={emphasis}
+      value={
+        value === undefined ? (
+          // Still being fetched, at the height it will land at, so the row does
+          // not jump underneath somebody reading it.
+          <span className="block h-7 w-32 animate-pulse rounded bg-surface-muted" />
+        ) : (
+          <Amount
+            value={value}
+            tone={tone === "neutral" ? "auto" : tone}
+            showCounterpart={false}
+          />
+        )
+      }
+      footnote={hint}
+    />
   );
 }

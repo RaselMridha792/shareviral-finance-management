@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { SummaryBar } from "@/components/ui/patterns";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
@@ -166,29 +167,23 @@ export function OtherExpensesScreen({
         }
       />
 
-      <Card className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Spent in {range.label}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {recurringRows > 0 ? (
-              <>
-                <span className="num">{recurringRows}</span> recurring payment
-                {recurringRows === 1 ? "" : "s"} left out — they are counted on
-                AI tools and subscriptions
-              </>
-            ) : (
-              "Subscriptions and AI tools are counted on their own screen"
-            )}
-          </p>
-        </div>
-        <Amount
-          value={spent}
-          tone="neutral"
-          className="text-2xl font-semibold"
-        />
-      </Card>
+      <SummaryBar
+        label={`Spent in ${range.label}`}
+        icon="shopping_basket"
+        iconTone="text-warning"
+        description={
+          recurringRows > 0 ? (
+            <>
+              <span className="num">{recurringRows}</span> recurring payment
+              {recurringRows === 1 ? "" : "s"} left out — they are counted on AI
+              tools and subscriptions
+            </>
+          ) : (
+            "Subscriptions and AI tools are counted on their own screen"
+          )
+        }
+        value={<Amount value={spent} tone="neutral" />}
+      />
 
       <Card>
         <CardHeader
