@@ -72,23 +72,35 @@ const DOCUMENT_NAMES: Record<DocKind, string> = {
  */
 export function CashInForm({
   open,
+  transaction,
   accounts,
   categories,
   onClose,
   onSaved,
 }: {
   open: boolean;
+  /**
+   * The row being corrected, or nothing when one is being recorded.
+   *
+   * Correcting a cash-in used to open the general ledger drawer, which asks a
+   * different set of questions: no sender, no invoice number, no rate read
+   * back as you type. So the same row was recorded through one form and fixed
+   * through another, and the fields this screen exists for were unreachable
+   * the moment they were wrong.
+   */
+  transaction?: TransactionDto;
   accounts: AccountDto[];
   categories: CategoryNode[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
+  const editing = Boolean(transaction);
   /**
    * The rate governs the whole month, so an empty box is the expensive
    * outcome. Prefilled with the last one recorded — almost always today's —
    * and editable, because the day's rate is the entire point of asking.
    */
-  const [usdRate, setUsdRate] = useState("");
+  const [usdRate, setUsdRate] = useState(transaction?.usdRate ?? "");
   const [latestRate, setLatestRate] = useState<string | null>(null);
 
   /**
@@ -209,12 +221,16 @@ export function CashInForm({
    * `FormData`, so the value has to reach a hidden input, and a hidden input
    * does not remember anything on its own.
    */
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  // Correcting: the row's own account, and the field is locked — see the
+  // comment on the submit. Recording: the first account, as before.
+  const [accountId, setAccountId] = useState(
+    transaction?.accountId ?? accounts[0]?.id ?? "",
+  );
 
   /** Refetched when a heading is added from inside this form. */
   const [tree, setTree] = useState(categories);
-  const [categoryId, setCategoryId] = useState(() =>
-    fundingCategoryId(categories),
+  const [categoryId, setCategoryId] = useState(
+    () => transaction?.categoryId ?? fundingCategoryId(categories),
   );
 
   async function onCategoryCreated() {
@@ -321,7 +337,7 @@ export function CashInForm({
     };
 
     try {
-      const created = await ledgerApi.recordCashIn({
+      const payload = {
         txnDate: String(data.get("txnDate")),
         // The bank's number for the transfer, as against `invoiceNo`, which is
         // ours. The sheet calls this one the Transaction ID.
@@ -347,12 +363,34 @@ export function CashInForm({
         senderAccountName: text("senderAccountName"),
         // Money from abroad arrives one way. Offering a choice here would only
         // create a row that says a wire was paid in cash.
-        paymentMethod: "bank_transfer",
+        paymentMethod: "bank_transfer" as const,
         notes: text("notes"),
-      });
+      };
+
+      /*
+       * Correcting sends only what changed shape allows, and never re-runs the
+       * conversion columns: `usdSent` and the realised rate belong to the day
+       * the money landed, and an edit weeks later must not restate them.
+       */
+      const row = transaction
+        ? await ledgerApi.update(transaction.id, {
+            txnDate: payload.txnDate,
+            reference: payload.reference,
+            invoiceNo: payload.invoiceNo,
+            description: payload.description,
+            amount: payload.amount,
+            categoryId: payload.categoryId,
+            senderAccountName: payload.senderAccountName,
+            notes: payload.notes,
+            // No `accountId`: the ledger will not let an edit move money
+            // between two balances, and it is right not to. Landing it in the
+            // wrong account is fixed by voiding the row and recording it
+            // again, which leaves a trail.
+          })
+        : await ledgerApi.recordCashIn(payload);
 
       const picked = chosen().length;
-      const failures = await attach(created.id);
+      const failures = await attach(row.id);
 
       // Before either ending: the row is in the table now, and how many
       // documents hang on it is part of what that table draws.
@@ -369,11 +407,11 @@ export function CashInForm({
       }
 
       toast.show(
-        `Recorded as ${created.refNo}, but a document did not upload.`,
+        `Saved as ${row.refNo}, but a document did not upload.`,
         "error",
       );
       setFailed(failures);
-      setSaved(created);
+      setSaved(row);
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -435,7 +473,7 @@ export function CashInForm({
               <DateInput
                 name="txnDate"
                 required
-                defaultValue={todayInDhaka()}
+                defaultValue={transaction?.txnDate ?? todayInDhaka()}
               />
             </Field>
 
@@ -465,6 +503,7 @@ export function CashInForm({
               <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
                 <Input
                   name="invoiceNo"
+                  defaultValue={transaction?.invoiceNo ?? undefined}
                   required
                   className="num min-w-0 flex-1"
                   placeholder="INV-002"
@@ -484,6 +523,7 @@ export function CashInForm({
               >
                 <Input
                   name="reference"
+                  defaultValue={transaction?.reference ?? undefined}
                   required
                   className="num min-w-0 flex-1"
                   placeholder="FT26081200412"
@@ -495,6 +535,7 @@ export function CashInForm({
           <Field label="Description" required error={fieldErrors.description}>
             <Input
               name="description"
+              defaultValue={transaction?.description}
               required
               placeholder="August funding from ShareViral Corp"
             />
@@ -556,6 +597,7 @@ export function CashInForm({
           >
             <MoneyInput
               name="amount"
+              defaultValue={transaction?.amount}
               required
               placeholder="0.00"
               value={amount}
@@ -600,12 +642,17 @@ export function CashInForm({
             label="Received Bank Name"
             required
             error={fieldErrors.accountId}
-            hint="The account of ours the money landed in"
+            hint={
+              editing
+                ? "Fixed once recorded. Landing it in the wrong account is corrected by voiding this entry and recording it again, which leaves a trail — an edit that moved money between two balances would not."
+                : "The account of ours the money landed in"
+            }
           >
             <SearchableSelect
               name="accountId"
               value={accountId}
               onChange={setAccountId}
+              disabled={editing}
               invalid={Boolean(fieldErrors.accountId?.length)}
               options={accounts.map((account) => ({
                 value: account.id,
@@ -622,11 +669,18 @@ export function CashInForm({
             wrote down is still a receipt, and refusing it would lose the
             amount along with the name. */}
           <Field label="Sender" error={fieldErrors.senderAccountName}>
-            <Input name="senderAccountName" placeholder="ShareViral Corp" />
+            <Input
+              name="senderAccountName"
+              defaultValue={transaction?.senderAccountName ?? undefined}
+              placeholder="ShareViral Corp"
+            />
           </Field>
 
           <Field label="Note" error={fieldErrors.notes}>
-            <Textarea name="notes" />
+            <Textarea
+              name="notes"
+              defaultValue={transaction?.notes ?? undefined}
+            />
           </Field>
 
           {error ? (

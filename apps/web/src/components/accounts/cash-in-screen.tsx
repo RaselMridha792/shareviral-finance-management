@@ -17,16 +17,17 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { reportsApi } from "@/lib/reports";
 import { cn } from "@/lib/utils";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
-import { TransactionForm } from "@/components/ledger/transaction-form";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { CashInForm } from "./cash-in-form";
 
@@ -69,6 +70,8 @@ export function CashInScreen({
   const { fiscalYearMode } = useSettings();
 
   const [month, setMonth] = useState(() => todayInDhaka().slice(0, 7));
+  /** Which page of the month is on screen. 1-based, the way the pager counts. */
+  const [page, setPage] = useState(1);
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +129,12 @@ export function CashInScreen({
     setLoading(true);
     setError(null);
     try {
-      const page = await ledgerApi.list({
+      // The month, whole — deliberately not a page of it. Three figures on
+      // this screen are read across every receipt in the month (see the slice
+      // under the totals), and the API has no aggregate that answers any of
+      // them, so the rows have to be here to be counted. 200 is the list
+      // endpoint's own ceiling on pageSize.
+      const result = await ledgerApi.list({
         from,
         to,
         direction: "in",
@@ -136,7 +144,7 @@ export function CashInScreen({
       });
       // A slower earlier request must not overwrite a faster later one.
       if (request !== requestRef.current) return;
-      setRows(page.items);
+      setRows(result.items);
     } catch (caught) {
       if (request !== requestRef.current) return;
       setError(
@@ -231,6 +239,40 @@ export function CashInScreen({
         .toFixed(2)
     : null;
 
+  /**
+   * The page on screen, cut from the month rather than asked for as one.
+   *
+   * Every other table here fetches its page. This one cannot, and the reason is
+   * the strip above it: both figures in "Received in {month}" are sums over the
+   * month's receipts *minus internal transfers*, and no endpoint answers that.
+   * `/transactions/summary` sums by direction only — a transfer between our own
+   * accounts is a money-in row to it, which is the one thing this screen's total
+   * refuses to count — and no dollar total exists server-side at all, since the
+   * USD column is per-row (`dollarsOf`), not a division of the taka figure.
+   * Ask the API for twenty rows and "Received in July" silently becomes
+   * "received on this page", which is a wrong number, not a small one.
+   *
+   * The rate caption has the same shape: `firstFunded` wants the *earliest*
+   * funded entry of the month, and the table is sorted newest first, so on a
+   * fetched page it would name whichever late-month transfer happened to land
+   * there.
+   *
+   * So the month comes down whole and is paged here. What the pager counts is
+   * `received` — already free of transfers — so the sentence under the table
+   * counts exactly the rows the table shows.
+   */
+  const totalPages = pageCount(received.length);
+  /**
+   * Voiding the last entry on the last page shortens the set underneath the
+   * reader. Clamping here beats an effect that fixes the state up afterwards,
+   * and it means nothing has to be reset when a refresh comes back smaller.
+   */
+  const currentPage = Math.min(page, totalPages);
+  const visible = received.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
   return (
     <>
       <PageHeader
@@ -241,9 +283,12 @@ export function CashInScreen({
             <input
               type="month"
               value={month}
-              onChange={(event) =>
-                setMonth(event.target.value || todayInDhaka().slice(0, 7))
-              }
+              onChange={(event) => {
+                setMonth(event.target.value || todayInDhaka().slice(0, 7));
+                // A different month is a different, differently sized set.
+                // Staying on page three of it opens on an empty table.
+                setPage(1);
+              }}
               // Named for a screen reader rather than by a caption above it:
               // this row is one line of h-9 controls, and a stacked label
               // would be the only thing in it standing two rows tall.
@@ -378,7 +423,7 @@ export function CashInScreen({
                 </tr>
               </thead>
               <tbody>
-                {received.map((row, index) => {
+                {visible.map((row, index) => {
                   // What was actually sent, when the entry recorded it. Only
                   // divided out when it did not: a derived figure is the app's
                   // arithmetic, and the stored one is the remittance advice.
@@ -390,7 +435,7 @@ export function CashInScreen({
                   const voided = Boolean(row.voidedAt);
                   return (
                     <tr key={row.id} className="row-finance">
-                      <SerialCell n={index + 1} />
+                      <SerialCell n={serial(currentPage, index)} />
                       <td className="num">{row.txnDate}</td>
                       <td className="cell-prose">
                         <span className="font-medium">{row.description}</span>
@@ -512,6 +557,18 @@ export function CashInScreen({
         </Card>
       )}
 
+      {/* Outside the block above, never inside it: the loading and empty
+          states replace the entire table, and a pager written in there would
+          disappear on precisely the page somebody needs it on to get back.
+          It draws nothing at all while the month fits on one page. */}
+      <Pagination
+        page={currentPage}
+        totalPages={totalPages}
+        total={received.length}
+        noun="entry"
+        onPage={setPage}
+      />
+
       {documentsFor ? (
         <DocumentsDialog
           transactionId={documentsFor.row.id}
@@ -526,29 +583,33 @@ export function CashInScreen({
         />
       ) : null}
 
-      <CashInForm
-        open={recording}
-        accounts={accounts}
-        categories={categories}
-        onClose={() => setRecording(false)}
-        // Both: a transfer recorded into an empty month is the entry that sets
-        // the rate, so the strip is stale the moment the table is not.
-        onSaved={refresh}
-      />
-
       {/*
-        The ledger's own drawer, opened on a row instead of empty. Recording a
-        receipt has its own form on this screen because a remittance asks its
-        own questions; correcting one does not — it is an ordinary money-in
-        entry, and this is the drawer the rest of the app corrects one in.
+        One form, recording and correcting.
+
+        It briefly used the ledger's general drawer for corrections, on the
+        reasoning that a correction is an ordinary money-in edit. It is not:
+        this screen exists because a remittance asks its own questions — who
+        sent it, against which invoice, at what rate — and the general drawer
+        asks none of them. So the fields somebody most needs to fix were the
+        exact fields they could not reach.
+
+        The account is the one thing an edit cannot change. Moving money
+        between two balances by editing a row is what a ledger must refuse;
+        landing it in the wrong account is fixed by voiding and recording
+        again, which leaves a trail.
       */}
-      <TransactionForm
-        key={editing?.id}
-        open={Boolean(editing)}
+      <CashInForm
+        key={editing?.id ?? "new"}
+        open={recording || Boolean(editing)}
         transaction={editing ?? undefined}
         accounts={accounts}
         categories={categories}
-        onClose={() => setEditing(null)}
+        onClose={() => {
+          setRecording(false);
+          setEditing(null);
+        }}
+        // Both: a transfer recorded into an empty month is the entry that sets
+        // the rate, so the strip is stale the moment the table is not.
         onSaved={refresh}
       />
       <VoidDialog

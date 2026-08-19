@@ -11,7 +11,7 @@ import {
 import { LoaderCircle, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -21,9 +21,18 @@ import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
+import { Pagination } from "@/components/ui/pagination";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
+import { serial } from "@/lib/pagination";
 import { payrollApi, type PayrollRunDto } from "@/lib/payroll";
+import { cn } from "@/lib/utils";
 
 const MONTHS = [
   "January",
@@ -40,6 +49,9 @@ const MONTHS = [
   "December",
 ];
 
+/** SL, Paid on, Month, Gross, Tax withheld, Net paid, Status. */
+const COLUMNS = 7;
+
 export function PayrollListScreen({
   initialPage,
 }: {
@@ -48,6 +60,45 @@ export function PayrollListScreen({
   const router = useRouter();
   const canWrite = useCan("payroll.write");
   const [creating, setCreating] = useState(false);
+
+  /**
+   * The page on screen, envelope and all.
+   *
+   * The server hands the first page in; every page after it is fetched here.
+   * The page *number* is read off `data.page` rather than kept as a second
+   * piece of state, because it arrives with the rows it belongs to — so the
+   * pager and the SL column cannot say "page 3" while page 2 is still drawn.
+   */
+  const [data, setData] = useState(initialPage);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Only the newest request may write. Two quick clicks on Next fire two
+   * fetches, and without this the slower answer lands last — leaving the rows
+   * of one page under the number of another.
+   */
+  const request = useRef(0);
+
+  async function goToPage(next: number) {
+    const token = ++request.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await payrollApi.listRuns(next);
+      if (token === request.current) setData(result);
+    } catch (caught) {
+      if (token === request.current) {
+        setError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not load that page.",
+        );
+      }
+    } finally {
+      if (token === request.current) setLoading(false);
+    }
+  }
 
   return (
     <>
@@ -69,7 +120,12 @@ export function PayrollListScreen({
         }
       />
 
-      {initialPage.items.length === 0 ? (
+      {/*
+        `total`, not `items.length`: with twenty rows to a page an empty *page*
+        is not an empty company. Past page one this branch would otherwise
+        announce "No payroll runs yet" over a set of runs that exist.
+      */}
+      {data.total === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
             <Wallet className="size-6" />
@@ -84,8 +140,30 @@ export function PayrollListScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden">
+          {/*
+            Above the table rather than inside it: a page that failed to load
+            leaves the previous page's rows on screen, and those rows are still
+            true. Replacing them with the error would throw away good data to
+            report a bad fetch.
+          */}
+          {error ? (
+            <p
+              role="alert"
+              className="border-b border-negative/20 bg-negative/10 px-4 py-2.5 text-sm text-negative"
+            >
+              {error}
+            </p>
+          ) : null}
           <TableScroll>
-            <table className="table-data min-w-[820px] text-sm">
+            <table
+              aria-busy={loading}
+              className={cn(
+                "table-data min-w-[820px] text-sm",
+                // Dimmed while the next page is in flight — "being replaced",
+                // without the table dropping to a spinner and springing back.
+                loading && "opacity-60",
+              )}
+            >
               <thead>
                 <tr className="text-left">
                   <SerialHead />
@@ -104,63 +182,87 @@ export function PayrollListScreen({
                 </tr>
               </thead>
               <tbody>
-                {initialPage.items.map((run, index) => (
-                  <tr key={run.id} className="row-finance">
-                    <SerialCell n={index + 1} />
-                    <td className="num text-muted-foreground">
-                      {run.paymentDate ?? "—"}
-                    </td>
-                    <td>
-                      {/* One link per row — see the note in team-screen.tsx. */}
-                      <Link
-                        href={`/payroll/${run.id}`}
-                        prefetch={false}
-                        className="font-medium hover:text-primary hover:underline"
-                      >
-                        {run.label}
-                      </Link>
-                    </td>
-                    <td className="text-right">
-                      <Amount
-                        value={run.totalGross}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="text-right">
-                      <Amount
-                        value={run.totalTds}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
-                    <td className="text-right">
-                      <Amount
-                        value={run.totalNet}
-                        tone="neutral"
-                        className="block font-medium"
-                      />
-                    </td>
-                    <td>
-                      <Badge
-                        tone={
-                          run.status === "paid"
-                            ? "positive"
-                            : run.status === "finalized"
-                              ? "primary"
-                              : "neutral"
-                        }
-                      >
-                        {PAYROLL_STATUS_LABELS[run.status]}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {data.items.length === 0 ? (
+                  <TableMessageRow colSpan={COLUMNS}>
+                    No runs on this page.
+                  </TableMessageRow>
+                ) : (
+                  data.items.map((run, index) => (
+                    <tr key={run.id} className="row-finance">
+                      {/*
+                        Counted across pages. `index + 1` restarted at 1 on page
+                        two, so the twenty-first run and the first one both
+                        answered to "1".
+                      */}
+                      <SerialCell n={serial(data.page, index)} />
+                      <td className="num text-muted-foreground">
+                        {run.paymentDate ?? "—"}
+                      </td>
+                      <td>
+                        {/* One link per row — see the note in team-screen.tsx. */}
+                        <Link
+                          href={`/payroll/${run.id}`}
+                          prefetch={false}
+                          className="font-medium hover:text-primary hover:underline"
+                        >
+                          {run.label}
+                        </Link>
+                      </td>
+                      <td className="text-right">
+                        <Amount
+                          value={run.totalGross}
+                          tone="neutral"
+                          className="block"
+                        />
+                      </td>
+                      <td className="text-right">
+                        <Amount
+                          value={run.totalTds}
+                          tone="neutral"
+                          className="block"
+                        />
+                      </td>
+                      <td className="text-right">
+                        <Amount
+                          value={run.totalNet}
+                          tone="neutral"
+                          className="block font-medium"
+                        />
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            run.status === "paid"
+                              ? "positive"
+                              : run.status === "finalized"
+                                ? "primary"
+                                : "neutral"
+                          }
+                        >
+                          {PAYROLL_STATUS_LABELS[run.status]}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </TableScroll>
         </Card>
       )}
+
+      {/*
+        A sibling of the card, never inside the branch above. A pager written
+        into the empty case disappears on an empty page, which is precisely the
+        page somebody needs it on to get back. It draws nothing at one page.
+      */}
+      <Pagination
+        page={data.page}
+        totalPages={data.totalPages}
+        total={data.total}
+        noun="run"
+        onPage={goToPage}
+      />
 
       <NewRunForm
         open={creating}

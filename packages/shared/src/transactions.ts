@@ -326,6 +326,16 @@ export const updateTransactionSchema = z
     reference: optionalText(120),
     invoiceNo: optionalText(60),
     description: z.string().trim().min(2).max(300).optional(),
+    /**
+     * Who sent it — descriptive, and so correctable.
+     *
+     * Deliberately here while `accountId` is not: changing the sender's name
+     * fixes a label, while changing the account would move money between two
+     * balances by editing a row, which is the one thing a ledger must refuse.
+     * Correcting the account means voiding the entry and recording it again,
+     * which is what leaves a trail.
+     */
+    senderAccountName: optionalText(160),
     notes: optionalText(1000),
     receiptUrl: receiptUrlSchema,
     billAmount: amountSchema.optional(),

@@ -16,6 +16,7 @@ import type {
   UpdatePayrollLineInput,
   UpdateTeamMemberInput,
 } from "@finance/shared";
+import { PAGE_SIZE } from "@/lib/pagination";
 
 import { apiFetch } from "./api-client";
 
@@ -230,7 +231,9 @@ export const teamApi = {
   ) => {
     const search = new URLSearchParams({
       page: String(params.page ?? 1),
-      pageSize: "100",
+      // Was 100, which is not a page size — it is where the list stopped, and
+      // person 101 could not be reached from anywhere in the app.
+      pageSize: String(PAGE_SIZE),
     });
     if (params.q) search.set("q", params.q);
     if (params.status) search.set("status", params.status);
@@ -294,7 +297,7 @@ export const teamApi = {
 export const payrollApi = {
   listRuns: (page = 1) =>
     apiFetch<Paginated<PayrollRunDto>>(
-      `/payroll/runs?page=${page}&pageSize=24`,
+      `/payroll/runs?page=${page}&pageSize=${PAGE_SIZE}`,
       { cache: "no-store" },
     ),
   getRun: (id: string) =>

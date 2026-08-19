@@ -17,7 +17,13 @@ import {
   Plus,
   ShieldAlert,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { useSession } from "@/components/auth/session-provider";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +32,7 @@ import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
+import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
@@ -36,6 +43,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
+import { pageCount, serial } from "@/lib/pagination";
 import { usersApi } from "@/lib/users";
 
 /** What each role can actually do, in one line, at the moment you assign it. */
@@ -51,15 +59,78 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
   const me = useSession();
   const toast = useToast();
   const [users, setUsers] = useState(initialUsers);
+  const [page, setPage] = useState(1);
+  /*
+   * The whole set, not the rows on screen.
+   *
+   * The server component hands this panel `initialUsers` as a plain array, so
+   * the envelope's `total` does not survive the prop — twenty rows arriving
+   * could be twenty people or the first twenty of sixty, and the array cannot
+   * say which. These start as what the seed can prove and are replaced by the
+   * count the API reports on the first load below.
+   */
+  const [total, setTotal] = useState(initialUsers.length);
+  const [totalPages, setTotalPages] = useState(() =>
+    pageCount(initialUsers.length),
+  );
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [resetting, setResetting] = useState<UserDto | null>(null);
   const [deactivating, setDeactivating] = useState<UserDto | null>(null);
   const [deactivatePending, setDeactivatePending] = useState(false);
 
+  // Click Next twice quickly and two requests are in flight; the slower one
+  // can answer last. Only the newest request is allowed to set the rows, so
+  // page 1 cannot land on top of the page 2 you are looking at.
+  const latest = useRef(0);
+
+  const load = useCallback(async (target: number) => {
+    const ticket = ++latest.current;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const result = await usersApi.list({ page: target });
+      if (ticket !== latest.current) return;
+      setUsers(result.items);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+    } catch (caught) {
+      if (ticket !== latest.current) return;
+      setLoadError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not load the accounts.",
+      );
+    } finally {
+      if (ticket === latest.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(page);
+  }, [load, page]);
+
+  /** Reload the page being looked at — an edit or a reset does not move a row. */
   async function refresh() {
-    const page = await usersApi.list();
-    setUsers(page.items);
+    await load(page);
+  }
+
+  /**
+   * After adding someone, show page one.
+   *
+   * The list is newest first, so a new account is the top row of page one —
+   * which is not where you were standing if you were three pages deep, and an
+   * admin who cannot see the person they just added tends to add them twice.
+   */
+  async function refreshFromFirstPage() {
+    if (page === 1) {
+      await load(1);
+      return;
+    }
+    setPage(1); // the effect above fetches it
   }
 
   /**
@@ -119,14 +190,26 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
               </tr>
             </thead>
             <tbody>
-              {users.length === 0 ? (
+              {loadError ? (
+                // A request that failed and a company with nobody in it are
+                // different facts, and only one of them is reassuring.
+                <TableMessageRow colSpan={7} tone="error">
+                  {loadError}
+                </TableMessageRow>
+              ) : users.length === 0 ? (
                 <TableMessageRow colSpan={7}>
-                  Nobody can sign in yet.
+                  {loading
+                    ? "Loading…"
+                    : total === 0
+                      ? "Nobody can sign in yet."
+                      : "Nothing on this page."}
                 </TableMessageRow>
               ) : (
                 users.map((user, index) => (
                   <tr key={user.id} className="row-finance">
-                    <SerialCell n={index + 1} />
+                    {/* Counted across pages: the first row of page two is 21,
+                        not a second row wearing the number 1. */}
+                    <SerialCell n={serial(page, index)} />
                     <td>
                       <span className="font-medium">{user.fullName}</span>
                       {user.id === me?.id ? (
@@ -202,12 +285,23 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
         </TableScroll>
       </Card>
 
+      {/* A sibling of the card, never inside the empty branch above: the page
+          with no rows on it is the page you most need the Previous button. */}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        noun="person"
+        nounPlural="people"
+        onPage={setPage}
+      />
+
       <CreateUserForm
         open={creating}
         onClose={() => setCreating(false)}
         onSaved={async () => {
           setCreating(false);
-          await refresh();
+          await refreshFromFirstPage();
         }}
       />
       <EditUserForm

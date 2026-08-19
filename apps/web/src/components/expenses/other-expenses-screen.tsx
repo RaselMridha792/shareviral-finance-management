@@ -18,20 +18,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { SummaryBar } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import { MonthPicker, type Range } from "./month-picker";
 
 /**
- * The API caps a page at 200. The subscription rows are dropped after the
- * fetch, so this asks for the maximum and says out loud when a month has more.
+ * The whole month in one request, up to the API's cap of 200.
+ *
+ * Not a page size, and deliberately not paged: `spent` below — the headline
+ * "Spent in August" — is added up from these rows, because no server figure
+ * answers "money out with tooling excluded" (the reason is written out there).
+ * Fetch twenty and that headline silently becomes the spend of twenty rows.
+ * So the fetch stays whole and the table pages through what came back, at the
+ * app's `PAGE_SIZE`.
  */
-const PAGE_SIZE = 200;
+const FETCH_CAP = 200;
 
 /**
  * Everything the company spent in a month except what renews.
@@ -61,6 +69,16 @@ export function OtherExpensesScreen({
   const [fetched, setFetched] = useState(0);
   /** How many rows this screen has, tooling already excluded. */
   const [screenTotal, setScreenTotal] = useState(0);
+  /**
+   * Which twenty of the fetched rows the table is showing.
+   *
+   * The slicing happens here rather than in the request, and that is the whole
+   * argument of `FETCH_CAP`: the month's total is summed from `rows`, so
+   * `rows` has to be the month. Paging the display costs one `slice` and keeps
+   * the owner's rule — twenty to a page, newest first — on the one screen
+   * whose headline figure a paged fetch would quietly falsify.
+   */
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -68,6 +86,17 @@ export function OtherExpensesScreen({
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
   /** Which entry's attachments are open. Set by clicking a reference number. */
   const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+
+  /**
+   * A new month is a new and usually shorter list, and page 4 of it may not
+   * exist. Landing there shows an empty table on a month that has expenses in
+   * it, which reads as a broken screen rather than as a page number left over
+   * from the month before.
+   */
+  const changeRange = useCallback((next: Range) => {
+    setRange(next);
+    setPage(1);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,7 +119,7 @@ export function OtherExpensesScreen({
           direction: "out",
           excludeToolSpend: true,
           page: 1,
-          pageSize: PAGE_SIZE,
+          pageSize: FETCH_CAP,
         }),
       ]);
 
@@ -118,11 +147,23 @@ export function OtherExpensesScreen({
     void load();
   }, [load]);
 
-  // Summed from the rows on screen rather than from /expenses/summary: that
-  // total counts the subscriptions this screen exists to leave out. Minor
-  // units in bigint, never floats — 0.1 + 0.2 has no place in a ledger.
-  // `BigInt(0)` rather than `0n`: the build targets ES2017, which has no
-  // literal for it.
+  /*
+   * The month's spend, summed from every fetched row — never from the page.
+   *
+   * `rows` is the whole month here and not a page of it, which is the only
+   * reason this reduce is allowed to stand. Neither server total can answer
+   * this screen's question: `/expenses/summary` counts the subscriptions it
+   * exists to leave out, and `/transactions/summary` does accept
+   * `excludeToolSpend` but sums `from(transactions)` with no join to
+   * `accounts` or `vendors` — the two tables `isToolSpend()` reads — so the
+   * flag makes that query fail rather than answer. Until it joins them the way
+   * the list's own count already does, the honest month total is this one,
+   * over an unpaged fetch.
+   *
+   * Minor units in bigint, never floats — 0.1 + 0.2 has no place in a ledger.
+   * `BigInt(0)` rather than `0n`: the build targets ES2017, which has no
+   * literal for it.
+   */
   const spent = fromMinorUnits(
     rows
       // A voided row stays on screen struck through, and out of the total.
@@ -145,6 +186,21 @@ export function OtherExpensesScreen({
    */
   const truncated = fetched < screenTotal;
 
+  /*
+   * Pages of what arrived, not of what exists.
+   *
+   * `rows.length` rather than `screenTotal`: past the cap those are different
+   * numbers, and a pager offering page 17 of a fetch that stopped at 200 rows
+   * would send somebody to a blank table. The card's heading already says how
+   * many of the month's entries are here.
+   */
+  const totalPages = pageCount(rows.length);
+  /* Clamped rather than reset: voiding the last row of the last page shortens
+     the list under the reader, and a page number past the end would leave them
+     on an empty table until they touched the control. */
+  const current = Math.min(page, totalPages);
+  const visible = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
   return (
     <>
       {error ? (
@@ -161,7 +217,7 @@ export function OtherExpensesScreen({
         description="Everything the company spent that is not an AI tool or a subscription."
         actions={
           <>
-            <MonthPicker range={range} onChange={setRange} />
+            <MonthPicker range={range} onChange={changeRange} />
             {/* No Excel button: the export takes the same filter the list
                 does, which cannot say "except these vendor types", so the
                 sheet would not be what is on screen. */}
@@ -203,7 +259,9 @@ export function OtherExpensesScreen({
           description={
             truncated
               ? `Showing the most recent ${fetched} of ${screenTotal} entries — narrow the month or use All transactions to see the rest`
-              : `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`
+              : // The envelope's count of the whole month, not the length of
+                // the page below it.
+                `${screenTotal} entr${screenTotal === 1 ? "y" : "ies"}`
           }
         />
         <CardBody className="p-0">
@@ -284,7 +342,7 @@ export function OtherExpensesScreen({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, index) => {
+                  {visible.map((row, index) => {
                     const voided = Boolean(row.voidedAt);
                     const rate = rateOf(row);
                     const usd = dollarsOf(row);
@@ -300,7 +358,11 @@ export function OtherExpensesScreen({
                         key={row.id}
                         className={cn("row-finance", voided && "opacity-55")}
                       >
-                        <SerialCell n={index + 1} />
+                        {/* Counted across the pages rather than within
+                            one: `index + 1` restarts at 1 on page two, and two
+                            rows of one table answering to the same number is
+                            the number somebody reads out to somebody else. */}
+                        <SerialCell n={serial(current, index)} />
                         <td className="num whitespace-nowrap">{row.txnDate}</td>
                         <td className="cell-prose">
                           <span
@@ -469,6 +531,19 @@ export function OtherExpensesScreen({
           )}
         </CardBody>
       </Card>
+
+      {/* A sibling of the card, never inside the loading-or-empty branch above
+        — the page somebody most needs this control on is the empty one, and a
+        pager written in the table's branch is the one that is not there. It
+        renders nothing at all while a month fits on one page. */}
+      <Pagination
+        page={current}
+        totalPages={totalPages}
+        total={rows.length}
+        noun="entry"
+        nounPlural="entries"
+        onPage={setPage}
+      />
 
       {documentsFor ? (
         <DocumentsDialog

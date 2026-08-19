@@ -7,6 +7,7 @@ import type {
   SubscriptionStatus,
   UpdateSubscriptionInput,
 } from "@finance/shared";
+import { PAGE_SIZE } from "@/lib/pagination";
 
 import { apiFetch, apiUpload, type StoredFile } from "./api-client";
 
@@ -84,7 +85,7 @@ function query(input: Partial<ListSubscriptionsQuery>): string {
 export const subscriptionsApi = {
   list: (input: Partial<ListSubscriptionsQuery> = {}) =>
     apiFetch<Paginated<SubscriptionDto>>(
-      `/subscriptions?${query({ pageSize: 50, ...input })}`,
+      `/subscriptions?${query({ pageSize: PAGE_SIZE, ...input })}`,
       { cache: "no-store" },
     ),
   get: (id: string) =>

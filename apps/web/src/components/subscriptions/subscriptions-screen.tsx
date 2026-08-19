@@ -20,6 +20,7 @@ import { ScreenshotDialog } from "@/components/subscriptions/screenshot-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SearchField } from "@/components/ui/search-field";
 import { EmptyState } from "@/components/ui/patterns";
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
+import { serial } from "@/lib/pagination";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
 import { cn } from "@/lib/utils";
@@ -64,6 +66,16 @@ export function SubscriptionsScreen({
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<SubscriptionDto[]>([]);
+  /**
+   * Where in the register we are, and how long it is.
+   *
+   * `total` and `totalPages` are the envelope's figures, over the whole
+   * filtered set — deliberately not `rows.length`, which is twenty on every
+   * register that has more than twenty plans in it.
+   */
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,26 +91,53 @@ export function SubscriptionsScreen({
   // faster later one, so the table settles on the wrong search. Clearing the
   // pending timer means only the pause at the end of typing queries.
   useEffect(() => {
-    const id = setTimeout(() => setQuery(search.trim()), 300);
+    const id = setTimeout(() => {
+      setQuery(search.trim());
+      // A new search is a new and usually shorter list, and page 4 of it may
+      // not exist. Staying put would answer a search that has plenty of
+      // matches with an empty table.
+      setPage(1);
+    }, 300);
     return () => clearTimeout(id);
   }, [search]);
+
+  /**
+   * Both filters go back to the first page.
+   *
+   * Page 3 of the active plans is not page 3 of the paused ones, and page 3 of
+   * "every category" is usually past the end of "AI tools". Keeping the number
+   * across a filter change lands on an empty table, which reads as "there are
+   * none of these" when there is a full page 1 of them.
+   */
+  const changeTab = useCallback((next: SubscriptionStatus | "all") => {
+    setTab(next);
+    setPage(1);
+  }, []);
+
+  const changeCategory = useCallback((next: SubscriptionCategory | "") => {
+    setCategory(next);
+    setPage(1);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const page = await subscriptionsApi.list({
+      const result = await subscriptionsApi.list({
         status: tab === "all" ? undefined : tab,
         category: category || undefined,
         q: query || undefined,
+        page,
       });
-      setRows(page.items);
+      setRows(result.items);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
     } catch {
       setError("Could not load the subscriptions.");
     } finally {
       setLoading(false);
     }
-  }, [tab, category, query]);
+  }, [tab, category, query, page]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -133,9 +172,15 @@ export function SubscriptionsScreen({
   const money = (value: string, currency: string) =>
     formatMoney(value, { currency, format: settings.numberFormat });
 
-  // Counted from what is on screen, and labelled as such. A count that claimed
-  // to be the whole register while showing one page of it would be worse than
-  // no count at all.
+  /**
+   * The seats on the plans currently on screen — which is now one page of them.
+   *
+   * There is no company-wide seat figure to ask the API for: seats arrive
+   * attached to the plans of the page that was fetched, and nothing aggregates
+   * them across the filtered set. So this stays a page figure and the sentence
+   * under the table says which rows it counted, rather than adding up twenty
+   * plans and presenting the answer as the company's.
+   */
   const seats = useMemo(
     () => rows.reduce((total, row) => total + row.users.length, 0),
     [rows],
@@ -151,6 +196,10 @@ export function SubscriptionsScreen({
    *
    * Folded case-insensitively: a tool entered twice, spelled two ways, is
    * offered once, and the suggestion is whichever spelling was seen first.
+   *
+   * Paged, these are the names on the current page rather than in the whole
+   * register. The datalist is a shortcut and not a vocabulary — a name it does
+   * not offer can still be typed — so that is a narrower list, not a wrong one.
    */
   const toolNames = useMemo(() => {
     const byName = new Map<string, string>();
@@ -185,7 +234,7 @@ export function SubscriptionsScreen({
         <Segmented
           options={SUBSCRIPTION_STATUS_TABS}
           value={tab}
-          onChange={setTab}
+          onChange={changeTab}
           label="Subscription status"
         />
 
@@ -199,7 +248,7 @@ export function SubscriptionsScreen({
             aria-label="Category"
             value={category}
             onChange={(e) =>
-              setCategory(e.target.value as SubscriptionCategory | "")
+              changeCategory(e.target.value as SubscriptionCategory | "")
             }
             className="w-48"
           >
@@ -282,7 +331,7 @@ export function SubscriptionsScreen({
 
                     return (
                       <tr key={row.id} className="row-finance">
-                        <SerialCell n={index + 1} />
+                        <SerialCell n={serial(page, index)} />
                         <td className="text-sm">
                           <span className="num">{row.startDate}</span>
                         </td>
@@ -410,12 +459,31 @@ export function SubscriptionsScreen({
         </Card>
       )}
 
+      {/* A sibling of the table and of the empty card, never inside either.
+        The page somebody most needs this control on is the empty one they
+        landed on when a filter narrowed the list under them, and a pager
+        written inside the table branch is the one that is not there. */}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        noun="plan"
+        onPage={setPage}
+      />
+
       {rows.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          {rows.length} {rows.length === 1 ? "plan" : "plans"} shown, {seats}{" "}
-          {seats === 1 ? "seat" : "seats"} between them. What was actually paid
-          for these is on the Expenses screens — these are the plans, not the
-          payments.
+          {/* The plan count is the envelope's, so it counts the filtered
+            register rather than the twenty rows above it. The seat count
+            cannot be: seats come attached to the plans of this page and
+            nothing sums them server-side, so it names the rows it counted
+            instead of implying the company. */}
+          {total} {total === 1 ? "plan" : "plans"},{" "}
+          {rows.length < total
+            ? `${seats} ${seats === 1 ? "seat" : "seats"} on the ${rows.length} shown here.`
+            : `${seats} ${seats === 1 ? "seat" : "seats"} between them.`}{" "}
+          What was actually paid for these is on the Expenses screens — these
+          are the plans, not the payments.
         </p>
       ) : null}
 

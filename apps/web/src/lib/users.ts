@@ -8,12 +8,27 @@ import type {
 
 import { apiFetch } from "./api-client";
 
+import { PAGE_SIZE } from "@/lib/pagination";
+
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
 /** Super Admin only — every one of these answers 403 for anybody else. */
 export const usersApi = {
-  list: (params: { q?: string; role?: string; status?: string } = {}) => {
-    const search = new URLSearchParams({ page: "1", pageSize: "100" });
+  list: (
+    params: {
+      page?: number;
+      q?: string;
+      role?: string;
+      status?: string;
+    } = {},
+  ) => {
+    // The page size is the owner's twenty. It was a hardcoded page 1 of 100 —
+    // a fetch cap with no control underneath, so the hundred-and-first person
+    // who could sign in was unreachable by any means the app offered.
+    const search = new URLSearchParams({
+      page: String(params.page ?? 1),
+      pageSize: String(PAGE_SIZE),
+    });
     if (params.q) search.set("q", params.q);
     if (params.role) search.set("role", params.role);
     if (params.status) search.set("status", params.status);

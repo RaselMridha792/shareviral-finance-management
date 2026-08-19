@@ -36,7 +36,17 @@ export function Pagination({
   onPage: (next: number) => void;
   className?: string;
 }) {
-  // One page is not worth a control, but the count is still worth saying.
+  /*
+   * One page, no control.
+   *
+   * The owner's rule: pagination appears when a table has more than a page of
+   * rows, and not before. A "Page 1 of 1" under five users is a control that
+   * cannot do anything, and the row count is already in the card's own heading
+   * on nearly every screen — so this would be saying it twice to announce that
+   * there is nothing to page through.
+   */
+  if (totalPages <= 1) return null;
+
   const plural = nounPlural ?? `${noun}s`;
 
   return (
@@ -47,35 +57,29 @@ export function Pagination({
       )}
     >
       <span className="text-muted-foreground">
-        {totalPages > 1 ? (
-          <>
-            Page <span className="num">{page}</span> of{" "}
-            <span className="num">{totalPages}</span> ·{" "}
-          </>
-        ) : null}
+        Page <span className="num">{page}</span> of{" "}
+        <span className="num">{totalPages}</span> ·{" "}
         <span className="num">{total}</span> {total === 1 ? noun : plural}
       </span>
 
-      {totalPages > 1 ? (
-        <span className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-          >
-            Previous
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-          >
-            Next
-          </Button>
-        </span>
-      ) : null}
+      <span className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          Previous
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+        >
+          Next
+        </Button>
+      </span>
     </div>
   );
 }

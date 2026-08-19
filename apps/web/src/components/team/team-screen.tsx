@@ -4,7 +4,7 @@ import { EMPLOYMENT_STATUS_LABELS, type Paginated } from "@finance/shared";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
@@ -14,9 +14,11 @@ import { Card } from "@/components/ui/card";
 import { DataPanel } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SearchField } from "@/components/ui/search-field";
 import { SerialCell, SerialHead, Th } from "@/components/ui/table";
+import { serial } from "@/lib/pagination";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { TeamMemberForm } from "./team-member-form";
 
@@ -29,8 +31,25 @@ export function TeamScreen({
   const canWrite = useCan("team.write");
   const canSeePay = useCan("team.compensation.read");
 
-  const [page, setPage] = useState(initialPage);
+  /**
+   * The fetched page, and which page it is.
+   *
+   * `page` used to hold the envelope itself, back when the client asked for
+   * one page of a hundred and there was never a second one to name. The
+   * number now has to exist separately, because it is what goes to the API
+   * and what the SL column counts from.
+   */
+  const [data, setData] = useState(initialPage);
+  const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
+  /**
+   * The term the fetched rows were actually fetched for.
+   *
+   * `query` is what is in the box, which changes on every keystroke; this is
+   * what was pressed Search on. Keeping them apart is what lets the fetch
+   * effect depend on the search without firing a request per letter typed.
+   */
+  const [submitted, setSubmitted] = useState("");
   const [creating, setCreating] = useState(false);
   /**
    * The person the edit drawer is open against; null is closed. It is the
@@ -39,10 +58,41 @@ export function TeamScreen({
    */
   const [editing, setEditing] = useState<TeamMemberDto | null>(null);
 
-  async function refresh(q = query) {
-    setPage(await teamApi.list({ q: q || undefined }));
+  /**
+   * Re-read the page being looked at, after somebody was added or edited.
+   *
+   * Stays on the current page and keeps the current search: a save is not a
+   * reason to be sent back to the top of the list.
+   */
+  async function reload() {
+    setData(await teamApi.list({ page, q: submitted || undefined }));
     router.refresh();
   }
+
+  /**
+   * Fetch whenever the page or the search changes.
+   *
+   * The first render is skipped — the server component already handed us page
+   * 1 of the unfiltered list as `initialPage`, and refetching it on mount
+   * would be the same twenty rows over again.
+   */
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    let alive = true;
+    void teamApi
+      .list({ page, q: submitted || undefined })
+      .then((next) => {
+        if (alive) setData(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [page, submitted]);
 
   /**
    * Status deliberately has no drawer of its own here.
@@ -71,6 +121,18 @@ export function TeamScreen({
   const [tab, setTab] = useState<"current" | "past">("current");
 
   /**
+   * Switching tab goes back to page 1.
+   *
+   * The two tabs are two different lengths, so page 4 of Current is very
+   * often past the end of Past — and an empty table on arrival reads as
+   * "nobody has ever left" rather than as "you are too far down".
+   */
+  const changeTab = (next: "current" | "past") => {
+    setTab(next);
+    setPage(1);
+  };
+
+  /**
    * What each person earns now, fetched only when the role may see it.
    *
    * Empty for a role without the permission, and the column is then not
@@ -95,13 +157,18 @@ export function TeamScreen({
     return () => {
       alive = false;
     };
-  }, [canSeePay, page]);
+  }, [canSeePay, data]);
 
   const isCurrent = (m: TeamMemberDto) =>
     m.status === "active" || m.status === "on_leave";
 
-  const current = page.items.filter(isCurrent);
-  const past = page.items.filter((m) => !isCurrent(m));
+  /**
+   * Current / Past and Employees / Contractors are both split here, out of the
+   * twenty rows this page happens to hold — which is why neither split carries
+   * a count any more. See the note on the Segmented group below.
+   */
+  const current = data.items.filter(isCurrent);
+  const past = data.items.filter((m) => !isCurrent(m));
 
   const shown = tab === "current" ? current : past;
   const employees = shown.filter((m) => m.engagementType === "employee");
@@ -145,20 +212,28 @@ export function TeamScreen({
       <SearchField
         value={query}
         onChange={setQuery}
-        onSubmit={(next) => void refresh(next)}
+        onSubmit={(next) => {
+          // Back to page 1: a narrower result set is a shorter one, and
+          // staying on page 4 of it lands on rows that no longer exist.
+          setSubmitted(next);
+          setPage(1);
+        }}
         placeholder="Search by name, designation or phone"
         label="Search the team"
         className="max-w-sm"
       />
 
-      {page.items.length === 0 ? (
+      {data.items.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
             <Users className="size-6" />
           </span>
           <div>
             <p className="text-lg font-semibold">
-              {query ? "Nobody matched that" : "No one added yet"}
+              {/* `submitted`, not `query`: the box can hold half a typed name
+                  that was never searched for, and "Nobody matched that" under
+                  the full list would be blaming a search nobody ran. */}
+              {submitted ? "Nobody matched that" : "No one added yet"}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
               Add your employees and contractors here. Pay is recorded
@@ -168,19 +243,34 @@ export function TeamScreen({
         </Card>
       ) : (
         <>
-          {/* Two views of one list, so a segmented group — the underline row
-              is for pages that are different documents. */}
+          {/*
+              Two views of one list, so a segmented group — the underline row
+              is for pages that are different documents.
+
+              The counts that used to sit on these two chips are gone, and
+              deliberately. They were `current.length` and `past.length`,
+              counted over the rows this page happens to hold: with the whole
+              team fetched at once they were the real totals, and the moment a
+              page holds twenty they became "how many of these twenty", under
+              a label that reads as "how many people". A chip saying
+              "Past team 3" beside a company that has lost forty is a wrong
+              number on a screen somebody answers questions from.
+
+              They cannot be worked out here. Current is active *or* on leave
+              and Past is resigned *or* terminated, while the API's `status`
+              filter takes exactly one status — so neither tab is a query this
+              client can ask, and no whole-set count for either arrives in the
+              envelope. `data.total` counts everybody, which is what the pager
+              below says and all this screen honestly knows. Restoring the
+              numbers needs the API, not this file: see the report.
+          */}
           <Segmented
             options={[
-              {
-                id: "current" as const,
-                label: "Current team",
-                count: current.length,
-              },
-              { id: "past" as const, label: "Past team", count: past.length },
+              { id: "current" as const, label: "Current team" },
+              { id: "past" as const, label: "Past team" },
             ]}
             value={tab}
-            onChange={setTab}
+            onChange={changeTab}
             label="Team"
           />
 
@@ -205,6 +295,7 @@ export function TeamScreen({
                     : "Drawn on the monthly salary sheet"
                 }
                 members={employees}
+                page={page}
                 past={tab === "past"}
                 showPay={canSeePay}
                 salaries={salaries}
@@ -219,6 +310,7 @@ export function TeamScreen({
                     : "Paid against bills — not on the salary sheet"
                 }
                 members={contractors}
+                page={page}
                 past={tab === "past"}
                 showPay={canSeePay}
                 salaries={salaries}
@@ -230,10 +322,31 @@ export function TeamScreen({
         </>
       )}
 
+      {/*
+          One pager for the screen, outside the empty branch above.
+
+          Outside, because the empty card replaces both tables — and a pager
+          written inside it vanishes on exactly the page somebody needs it on:
+          the one that came up blank, with Previous the only way back.
+
+          One, because there is one request behind all of this. Employees and
+          Contractors are two tables cut from a single fetched page, and the
+          tab cuts it again; none of those four views is a page of its own, so
+          none of them gets its own control. What this pages is the team.
+      */}
+      <Pagination
+        page={page}
+        totalPages={data.totalPages}
+        total={data.total}
+        noun="person"
+        nounPlural="people"
+        onPage={setPage}
+      />
+
       <TeamMemberForm
         open={creating}
         onClose={() => setCreating(false)}
-        onSaved={() => refresh()}
+        onSaved={() => reload()}
       />
 
       {/* Keyed on the id because every field in there is uncontrolled: without
@@ -245,7 +358,7 @@ export function TeamScreen({
           open
           member={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => refresh()}
+          onSaved={() => reload()}
         />
       ) : null}
     </>
@@ -256,12 +369,15 @@ function Section({
   title,
   subtitle,
   members,
+  page,
   past = false,
   showPay,
   salaries,
   onEdit,
   onStatus,
 }: {
+  /** Which page these rows came from — the SL column counts from it. */
+  page: number;
   /** Adds the last day, which is the fact the past tab is read for. */
   past?: boolean;
   /** The salary column appears only for a role that may read pay. */
@@ -281,8 +397,18 @@ function Section({
   if (members.length === 0) return null;
 
   return (
+    /*
+     * The heading was `${title} · ${members.length}` — "Employees · 18".
+     *
+     * That number counted the employees among the rows this page holds, not
+     * the employees. Once a page is twenty people it says 12 on page one and
+     * 8 on page two about a company whose payroll has not changed, and the
+     * engagement split is made here rather than asked for, so the whole set
+     * never sends a figure that could replace it. A heading that names a
+     * quantity has to be right about it; this one now names the group.
+     */
     <DataPanel
-      title={`${title} · ${members.length}`}
+      title={title}
       icon={title === "Contractors" ? "badge" : "groups"}
       description={subtitle}
     >
@@ -290,10 +416,21 @@ function Section({
         <thead>
           <tr className="text-left">
             {/*
-              SL counts this section, not the page. Employees and Contractors
-              are two tables that happen to sit under one heading, so both
-              start at 1 — one run of numbers across them would say they are
-              one list, and the salary sheet treats them as anything but.
+              SL is anchored to the page, not restarted inside the section.
+
+              It was `index + 1`, from when one fetch held everybody: both
+              tables started at 1, which said what it meant — Employees and
+              Contractors are two lists that sit under one heading, not one
+              list, and the salary sheet treats them as anything but. With
+              twenty rows to a page that same `index + 1` starts over on page
+              two, so the twenty-first employee is also "1" and two rows in
+              one table answer to the same number. `serial` counts from the
+              page instead, which is the one thing here that cannot collide.
+
+              It does leave gaps — employees 1–12 on page one, then 21–25 on
+              page two — because the section is cut out of the page rather
+              than fetched as itself. A gap is honest about that; a repeat
+              would not be.
             */}
             <SerialHead />
             <Th width="w-28">Date of Joining</Th>
@@ -320,7 +457,7 @@ function Section({
         <tbody>
           {members.map((member, index) => (
             <tr key={member.id} className="row-finance">
-              <SerialCell n={index + 1} />
+              <SerialCell n={serial(page, index)} />
               <td className="num text-muted-foreground">{member.joinedOn}</td>
               <td>
                 {/*

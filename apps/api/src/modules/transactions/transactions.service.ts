@@ -728,6 +728,13 @@ export class TransactionsService {
               ? { invoiceNo: input.invoiceNo }
               : {}),
             ...(input.description ? { description: input.description } : {}),
+            // Cash in is recorded and corrected through the same form now, and
+            // the sender is one of the fields that form exists to ask for —
+            // so it has to be one an edit can reach. Listed explicitly, like
+            // every other field here.
+            ...(input.senderAccountName !== undefined
+              ? { senderAccountName: input.senderAccountName }
+              : {}),
             ...(input.notes !== undefined ? { notes: input.notes } : {}),
             ...(input.receiptUrl !== undefined
               ? { receiptUrl: input.receiptUrl }
