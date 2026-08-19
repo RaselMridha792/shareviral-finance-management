@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  EMPLOYMENT_STATUS_LABELS,
-  ENGAGEMENT_LABELS,
-  type Paginated,
-} from "@finance/shared";
+import { EMPLOYMENT_STATUS_LABELS, type Paginated } from "@finance/shared";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -295,9 +291,10 @@ function Section({
                 >
                   {member.fullName}
                 </Link>
-                <span className="block text-xs text-muted-foreground">
-                  {ENGAGEMENT_LABELS[member.engagementType]}
-                </span>
+                {/* No "Employee" under the name: the panel heading above says
+                    "Employees · 18", and the Contractors panel says
+                    Contractors. The label only ever carried information on a
+                    table that mixed the two, which this screen does not. */}
               </td>
               {/*
                     Must appear under exactly the same condition as its header.

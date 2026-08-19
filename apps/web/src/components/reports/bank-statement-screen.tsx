@@ -8,6 +8,13 @@ import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import type { RegisterResult, TransactionDto } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { cn } from "@/lib/utils";
@@ -91,17 +98,26 @@ export function BankStatementScreen({
       />
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
+        <TableScroll>
           <table className="table-data min-w-[900px] text-sm">
             <thead>
+              {/* Seven columns: SL, Date, Description, then this table's own
+                  subject — the two figures and the total they move — and the
+                  reference last. Debit, Credit and Balance sit together
+                  because that is the arithmetic a reader checks in one glance;
+                  the Transaction ID used to be wedged between the description
+                  and the debit, which broke that line of figures in half. */}
               <tr className="text-left">
-                <Th className="text-right">SL</Th>
-                <Th>Date</Th>
+                <SerialHead />
+                <Th width="w-28">Date</Th>
                 <Th>Description</Th>
+                <Th align="right">Debit</Th>
+                <Th align="right">Credit</Th>
+                <Th align="right">Balance</Th>
+                {/* The bank's own number for the line — what you quote back to
+                    them, not what you read the statement by, so it sits after
+                    the figures. It still opens the row's documents. */}
                 <Th>Transaction ID</Th>
-                <Th className="text-right">Debit</Th>
-                <Th className="text-right">Credit</Th>
-                <Th className="text-right">Balance</Th>
               </tr>
             </thead>
             <tbody>
@@ -109,49 +125,76 @@ export function BankStatementScreen({
                   starts mid-air gives a reader no way to check the first
                   balance against anything. */}
               <tr className="row-finance bg-surface-muted/30">
-                <td className="px-4 py-2.5" />
-                <td className="num px-4 py-2.5 whitespace-nowrap">
+                <td />
+                <td className="num whitespace-nowrap">
                   {register.account.openingBalanceOn}
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground" colSpan={4}>
+                {/* 3: Description, Debit, Credit — the label runs up to the
+                    balance it is the label for. */}
+                <td className="text-muted-foreground" colSpan={3}>
                   Balance brought forward
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="text-right">
                   <Amount
                     value={register.openingBalance}
                     tone="neutral"
                     className="block font-medium"
                   />
                 </td>
+                {/* Transaction ID: an opening balance is not a movement, so it
+                    has no reference of its own. */}
+                <td />
               </tr>
 
               {register.rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Nothing on this account in that period.
-                  </td>
-                </tr>
+                // 7: SL, Date, Description, Debit, Credit, Balance, Txn ID.
+                <TableMessageRow colSpan={7}>
+                  Nothing on this account in that period.
+                </TableMessageRow>
               ) : (
                 register.rows.map((row, index) => (
                   <tr
                     key={row.id}
                     className={cn("row-finance", row.voidedAt && "opacity-60")}
                   >
-                    <td className="num px-4 py-2.5 text-right text-muted-foreground">
-                      {index + 1}
-                    </td>
-                    <td className="num px-4 py-2.5 whitespace-nowrap">
-                      {row.txnDate}
-                    </td>
-                    <td className="cell-prose px-4 py-2.5">
+                    {/* Oldest first, and the serial counts with them: the
+                        running balance is a window function over this order,
+                        so neither the rows nor their numbering turn around. */}
+                    <SerialCell n={index + 1} />
+                    <td className="num whitespace-nowrap">{row.txnDate}</td>
+                    <td className="cell-prose">
                       <span className={cn(row.voidedAt && "line-through")}>
                         {row.description}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="text-right">
+                      {row.direction === "out" ? (
+                        <Amount
+                          value={row.amount}
+                          tone="out"
+                          showCounterpart={false}
+                          className="block"
+                        />
+                      ) : null}
+                    </td>
+                    <td className="text-right">
+                      {row.direction === "in" ? (
+                        <Amount
+                          value={row.amount}
+                          tone="in"
+                          showCounterpart={false}
+                          className="block"
+                        />
+                      ) : null}
+                    </td>
+                    <td className="text-right">
+                      <Amount
+                        value={row.runningBalance}
+                        tone="neutral"
+                        className="block"
+                      />
+                    </td>
+                    <td>
                       {/* Every movement is meant to carry its paper, so the
                           number that identifies it is what opens it. */}
                       <button
@@ -162,45 +205,20 @@ export function BankStatementScreen({
                         {row.reference ?? row.refNo}
                       </button>
                     </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {row.direction === "out" ? (
-                        <Amount
-                          value={row.amount}
-                          tone="out"
-                          showCounterpart={false}
-                          className="block"
-                        />
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {row.direction === "in" ? (
-                        <Amount
-                          value={row.amount}
-                          tone="in"
-                          showCounterpart={false}
-                          className="block"
-                        />
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Amount
-                        value={row.runningBalance}
-                        tone="neutral"
-                        className="block"
-                      />
-                    </td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-ink">
-                <td className="px-4 py-3" colSpan={4}>
+                {/* 3: SL, Date, Description — the label reaches the first
+                    figure it is the total of. */}
+                <td colSpan={3}>
                   <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                     Closing balance
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="text-right">
                   <Amount
                     value={register.totalOut}
                     tone="out"
@@ -208,7 +226,7 @@ export function BankStatementScreen({
                     className="block"
                   />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="text-right">
                   <Amount
                     value={register.totalIn}
                     tone="in"
@@ -216,17 +234,19 @@ export function BankStatementScreen({
                     className="block"
                   />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="text-right">
                   <Amount
                     value={register.closingBalance}
                     tone="neutral"
                     className="block font-semibold"
                   />
                 </td>
+                {/* Transaction ID: a total has no reference of its own. */}
+                <td />
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       </Card>
 
       <p className="text-xs text-muted-foreground">
@@ -242,25 +262,5 @@ export function BankStatementScreen({
         />
       ) : null}
     </>
-  );
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      scope="col"
-      className={cn(
-        "px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
   );
 }

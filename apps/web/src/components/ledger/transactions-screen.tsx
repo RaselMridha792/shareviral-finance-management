@@ -121,6 +121,21 @@ export function TransactionsScreen({
         description="Every movement of money, in and out."
       />
 
+      {/*
+        The filter above the figures, not below them.
+
+        The three cells answer to it — the Net cell literally says "31 entries
+        in this view" — so this is cause above effect. The other way round, a
+        reader meets three numbers and only afterwards finds out what decided
+        them.
+      */}
+      <FilterRow
+        filters={filters}
+        accounts={accounts}
+        categories={categories}
+        onChange={changeFilters}
+      />
+
       <StatStrip>
         <SummaryTile
           label="Money in"
@@ -147,13 +162,6 @@ export function TransactionsScreen({
           hint={summary ? `${summary.entries} entries in this view` : undefined}
         />
       </StatStrip>
-
-      <FilterRow
-        filters={filters}
-        accounts={accounts}
-        categories={categories}
-        onChange={changeFilters}
-      />
 
       {error ? (
         <p

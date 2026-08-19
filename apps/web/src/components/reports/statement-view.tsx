@@ -27,6 +27,13 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/components/settings-provider";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/field";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { useCan } from "@/components/auth/session-provider";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
@@ -58,10 +65,6 @@ const CHART_COLOURS = [
   "var(--chart-5)",
   "var(--chart-6)",
 ];
-
-const th =
-  "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
-const thRight = `${th} text-right`;
 
 /**
  * Rates are stored with six decimals. Two is what a person reads; the rest
@@ -547,19 +550,24 @@ export function StatementView({
           title="Executive summary"
           description="The period in four measures, and where it left the company."
         />
-        <div className="overflow-x-auto">
+        <TableScroll>
           <table className="table-data min-w-140 text-sm">
             <thead>
               <tr className="text-left">
-                <th className={th}>Measure</th>
-                <th className={th}>Basis</th>
-                <th className={thRight}>Amount</th>
+                {/* Four fixed measures, not a record list: no date of their
+                    own, no id, nothing to open. SL is the whole of what the
+                    column order has to add here. */}
+                <SerialHead />
+                <Th>Measure</Th>
+                <Th>Basis</Th>
+                <Th align="right">Amount</Th>
               </tr>
             </thead>
             <tbody>
-              {summary.lines.map((line) => (
+              {summary.lines.map((line, i) => (
                 <tr key={line.label} className="row-finance">
-                  <td className="px-4 py-2.5">
+                  <SerialCell n={i + 1} />
+                  <td>
                     <span className="block font-medium">{line.label}</span>
                     {line.detail ? (
                       <span className="cell-prose block text-xs text-muted-foreground">
@@ -567,7 +575,7 @@ export function StatementView({
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td>
                     <Badge
                       tone={
                         line.basis === "Inflow"
@@ -580,7 +588,7 @@ export function StatementView({
                       {line.basis}
                     </Badge>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td>
                     <MoneyPair value={line.amount} tone="auto" />
                   </td>
                 </tr>
@@ -588,7 +596,11 @@ export function StatementView({
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-muted/30">
-                <td className="px-4 py-3">
+                {/* Where the four measures left the company, not a fifth
+                    measure — so the serial column stays blank here rather
+                    than continuing the count. */}
+                <td />
+                <td>
                   <span className="block font-semibold">Closing position</span>
                   <span className="block text-xs text-muted-foreground">
                     Bank
@@ -596,10 +608,10 @@ export function StatementView({
                     {period.end}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
+                <td className="text-xs text-muted-foreground">
                   {summary.closing.card ? "Bank / Card" : "Bank"}
                 </td>
-                <td className="px-4 py-3">
+                <td>
                   <div className="flex flex-col items-end gap-2">
                     <MoneyPair value={summary.closing.bank} size="lg" />
                     {summary.closing.card ? (
@@ -610,7 +622,7 @@ export function StatementView({
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       </Card>
 
       {/* --- 02 cash composition ---------------------------------------- */}
@@ -620,18 +632,23 @@ export function StatementView({
           title="Cash composition"
           description="What the closing bank balance is actually made of. Money held against a tax liability is in the account but is not the company's to spend."
         />
-        <div className="overflow-x-auto">
+        <TableScroll>
           <table className="table-data min-w-140 text-sm">
             <thead>
               <tr className="text-left">
-                <th className={th}>Component</th>
-                <th className={th}>Nature</th>
-                <th className={thRight}>Amount</th>
+                {/* Two fixed parts of one balance, not a record list. SL
+                    numbers them so a reader can point at one; neither row has
+                    a date, an id, or anything to link to. */}
+                <SerialHead />
+                <Th>Component</Th>
+                <Th>Nature</Th>
+                <Th align="right">Amount</Th>
               </tr>
             </thead>
             <tbody>
               <tr className="row-finance">
-                <td className="px-4 py-2.5">
+                <SerialCell n={1} />
+                <td>
                   <span className="block font-medium">Free cash</span>
                   <span className="cell-prose block text-xs text-muted-foreground">
                     Available to spend on{" "}
@@ -659,16 +676,17 @@ export function StatementView({
                     </span>
                   ) : null}
                 </td>
-                <td className="px-4 py-2.5">
+                <td>
                   <Badge tone="positive">Free</Badge>
                 </td>
-                <td className="px-4 py-2.5">
+                <td>
                   <MoneyPair value={composition.free} />
                 </td>
               </tr>
 
               <tr className="row-finance bg-warning/5">
-                <td className="px-4 py-2.5">
+                <SerialCell n={2} />
+                <td>
                   <span className="block font-medium text-warning">
                     Withheld tax
                   </span>
@@ -676,29 +694,29 @@ export function StatementView({
                     In the account, owed to the treasury
                   </span>
                 </td>
-                <td className="px-4 py-2.5">
+                <td>
                   <Badge tone="warning">Restricted</Badge>
                 </td>
-                <td className="px-4 py-2.5">
+                <td>
                   <MoneyPair value={composition.restricted} />
                 </td>
               </tr>
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-muted/30">
-                <td className="px-4 py-3 font-semibold">
-                  Closing bank balance
-                </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
+                {/* The two rows above added together, not a third component. */}
+                <td />
+                <td className="font-semibold">Closing bank balance</td>
+                <td className="text-xs text-muted-foreground">
                   Free + restricted
                 </td>
-                <td className="px-4 py-3">
+                <td>
                   <MoneyPair value={composition.total} size="lg" />
                 </td>
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       </Card>
 
       {/* --- 03 fund movement -------------------------------------------- */}
@@ -792,24 +810,40 @@ export function StatementView({
                   .join(" · ") || undefined
               }
             />
-            <div className="overflow-x-auto">
+            <TableScroll>
               <table className="table-data min-w-180 text-sm">
                 <thead>
                   <tr className="text-left">
-                    <th className={th}>Particulars</th>
-                    <th className={th}>Type</th>
-                    <th className={thRight}>Amount</th>
-                    <th className={thRight}>Balance</th>
+                    {/*
+                      SL, the description, then the subject this table is
+                      about — which way the money went — and only then the
+                      money.
+
+                      No Date and no Transaction-number column: a ledger row
+                      carries neither as a field. The day and the reference
+                      arrive inside `detail`, as prose ("03 Jul · ref
+                      TT-2026-0703"), and a column split out of a sentence is
+                      a column that is blank on half the rows. To have them,
+                      they have to be sent as fields — the row type lives in
+                      packages/shared/src/statement.ts.
+                    */}
+                    <SerialHead />
+                    <Th>Particulars</Th>
+                    <Th>Type</Th>
+                    <Th align="right">Amount</Th>
+                    <Th align="right">Balance</Th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="row-finance bg-surface-muted/30">
-                    <td className="px-4 py-2.5 font-medium">Opening balance</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">—</td>
-                    <td className="px-4 py-2.5 text-right text-muted-foreground">
-                      —
-                    </td>
-                    <td className="px-4 py-2.5">
+                    {/* Opening is a position, not an entry, so it wears no
+                        serial: starting the count here would leave every
+                        entry one ahead of the line item it answers to. */}
+                    <td />
+                    <td className="font-medium">Opening balance</td>
+                    <td className="text-muted-foreground">—</td>
+                    <td className="text-right text-muted-foreground">—</td>
+                    <td>
                       <MoneyPair value={ledger.opening} strong />
                     </td>
                   </tr>
@@ -819,7 +853,8 @@ export function StatementView({
                       key={row.id ?? `${r}-${row.label}`}
                       className="row-finance"
                     >
-                      <td className="px-4 py-2.5">
+                      <SerialCell n={r + 1} />
+                      <td>
                         <span className="block font-medium">{row.label}</span>
                         {row.detail ? (
                           <span className="cell-prose block text-xs text-muted-foreground">
@@ -827,7 +862,7 @@ export function StatementView({
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td>
                         <Badge
                           tone={
                             row.direction === "in" ? "positive" : "negative"
@@ -836,43 +871,43 @@ export function StatementView({
                           {row.direction === "in" ? "IN" : "OUT"}
                         </Badge>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td>
                         <MoneyPair
                           value={row.amount}
                           tone={row.direction === "in" ? "in" : "out"}
                         />
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td>
                         <MoneyPair value={row.balance} />
                       </td>
                     </tr>
                   ))}
 
                   {rows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-4 py-10 text-center text-sm text-muted-foreground"
-                      >
-                        No entries on this account in {period.label}.
-                      </td>
-                    </tr>
+                    // Five columns since SL leads: SL, Particulars, Type,
+                    // Amount, Balance.
+                    <TableMessageRow colSpan={5}>
+                      No entries on this account in {period.label}.
+                    </TableMessageRow>
                   ) : null}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-border bg-surface-muted/30">
-                    <td className="px-4 py-3 font-semibold">Closing balance</td>
-                    <td className="px-4 py-3 num text-xs text-muted-foreground">
+                    <td />
+                    <td className="font-semibold">Closing balance</td>
+                    <td className="num text-xs text-muted-foreground">
                       {ledger.currency}
                     </td>
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3">
+                    {/* No total under Amount: a running balance already ends
+                        at the closing figure in the column to its right. */}
+                    <td />
+                    <td>
                       <MoneyPair value={ledger.closing} size="lg" />
                     </td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </TableScroll>
           </Card>
         );
       })}

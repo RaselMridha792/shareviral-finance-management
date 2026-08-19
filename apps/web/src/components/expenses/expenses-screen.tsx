@@ -1,15 +1,13 @@
 "use client";
 
-import { LoaderCircle, Plus, Receipt } from "lucide-react";
+import { LoaderCircle, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useCan } from "@/components/auth/session-provider";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SummaryBar } from "@/components/ui/patterns";
@@ -36,15 +34,12 @@ export function ExpensesScreen({
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
-  const canWrite = useCan("transactions.write");
-
   const [range, setRange] = useState(initialRange);
   const [summary, setSummary] = useState(initialSummary);
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
@@ -102,21 +97,11 @@ export function ExpensesScreen({
         title="Expenses"
         icon="receipt_long"
         description="What the company spent, grouped by heading."
-        actions={
-          <>
-            <MonthPicker range={range} onChange={setRange} />
-            {canWrite ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => setCreating(true)}
-              >
-                <Plus className="size-4" />
-                Add expense
-              </Button>
-            ) : null}
-          </>
-        }
+        // No "Add expense" here. Adding moved to the heading pages, where the
+        // button names the heading it adds to — "add Office & premises" — so
+        // nobody has to pick a category from a drawer to record a bill they
+        // already know the kind of. This page reads; those pages write.
+        actions={<MonthPicker range={range} onChange={setRange} />}
       />
 
       <SummaryBar
@@ -222,15 +207,6 @@ export function ExpensesScreen({
         </CardBody>
       </Card>
 
-      <TransactionForm
-        open={creating}
-        defaultDirection="out"
-        accounts={accounts}
-        categories={categories}
-        lockDirection
-        onClose={() => setCreating(false)}
-        onSaved={load}
-      />
       <TransactionForm
         key={editing?.id}
         open={Boolean(editing)}

@@ -38,6 +38,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
@@ -418,18 +419,24 @@ export function SalarySheetScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table-data min-w-[980px] text-sm">
+          <TableScroll>
+            {/* One column wider than it was — the SL somebody reads a row out
+                by — so the money columns keep the width they had. */}
+            <table className="table-data min-w-[1040px] text-sm">
               <thead>
-                <tr className="text-left">
+                <tr>
+                  <SerialHead />
                   <Th>Name</Th>
-                  <Th className="w-28 text-right">Gross</Th>
-                  {/* The gross, opened up. Each heading carries the share it
-                      is of the month's gross, which is the thing the owner
-                      wants to read off the sheet — the amounts alone do not
-                      say whether this month followed the rule. */}
+                  <Th width="w-28" align="right">
+                    Gross
+                  </Th>
+                  {/* The gross opened up, so it stays beside the gross rather
+                      than after the columns that are added to it. Each heading
+                      carries the share it is of the month's gross, which is the
+                      thing the owner wants to read off the sheet — the amounts
+                      alone do not say whether this month followed the rule. */}
                   {splitLabels.map((label) => (
-                    <Th key={label} className="w-24 text-right">
+                    <Th key={label} width="w-24" align="right">
                       {label}
                       {/* Under the name, not beside it. Beside it, "House Rent
                           30%" set the column's width from a heading rather
@@ -440,18 +447,31 @@ export function SalarySheetScreen({
                       </span>
                     </Th>
                   ))}
-                  <Th className="w-28 text-right">Bonus</Th>
-                  <Th className="w-28 text-right">Other +</Th>
-                  <Th className="w-28 text-right">Tax</Th>
-                  <Th className="w-28 text-right">Other −</Th>
-                  <Th className="w-32 text-right">Net</Th>
-                  <Th className="w-24" />
+                  {/* Left to right in the order they add up: the gross, what is
+                      added to it, what is taken off, what is left. */}
+                  <Th width="w-28" align="right">
+                    Bonus
+                  </Th>
+                  <Th width="w-28" align="right">
+                    Other +
+                  </Th>
+                  <Th width="w-28" align="right">
+                    Tax
+                  </Th>
+                  <Th width="w-28" align="right">
+                    Other −
+                  </Th>
+                  <Th width="w-32" align="right">
+                    Net
+                  </Th>
+                  <Th width="w-24" />
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
+                {lines.map((line, index) => (
                   <LineRow
                     key={line.id}
+                    n={index + 1}
                     line={line}
                     splitLabels={splitLabels}
                     editable={canWrite && draft}
@@ -465,13 +485,21 @@ export function SalarySheetScreen({
                 It was written as a run of colSpans that added up to nine cells
                 for an eight-column table, which put every total one column to
                 the right of the figures it totalled — the gross under Bonus,
-                the tax under Other −. Nobody had seen it because a sheet needs
+                the tax under Other −. Nobody had seen it because a tfoot needs
                 a finalised run to exist. Spelled out now, so adding a column
                 cannot silently shift it again.
+
+                Counted by hand against the head: 2 (Total, over SL and Name)
+                + 1 gross + splitLabels.length + 5 (bonus, other +, tax,
+                other −, net) + 1 blank = 9 + splitLabels.length. The head emits
+                SL, Name, Gross, the splits, those same five and the actions
+                column — 9 + splitLabels.length.
               */}
               <tfoot>
-                <tr className="border-t border-border-strong bg-surface-muted">
-                  <td className="font-semibold">Total</td>
+                <tr>
+                  <td colSpan={2} className="font-semibold">
+                    Total
+                  </td>
                   <FootAmount value={run.totalGross} />
                   {splitLabels.map((label) => (
                     <FootAmount key={label} value={splitTotals[label] ?? "0"} />
@@ -485,7 +513,7 @@ export function SalarySheetScreen({
                 </tr>
               </tfoot>
             </table>
-          </div>
+          </TableScroll>
         </Card>
       )}
 
@@ -533,11 +561,14 @@ export function SalarySheetScreen({
 }
 
 function LineRow({
+  n,
   line,
   splitLabels,
   editable,
   onSaved,
 }: {
+  /** The row's place on the sheet — the number a figure gets read out by. */
+  n: number;
   line: PayrollLineDto;
   /** The sheet's columns, so every row puts its parts under the same ones. */
   splitLabels: string[];
@@ -569,7 +600,8 @@ function LineRow({
 
   return (
     <tr className={cn("row-finance", line.isPaid && "bg-positive/5")}>
-      <td className="px-4 py-2">
+      <SerialCell n={n} />
+      <td>
         <span className="font-medium">{line.fullName}</span>
         <span className="block text-xs text-muted-foreground">
           {line.snapshotDesignation ?? "—"}
@@ -597,7 +629,7 @@ function LineRow({
       {splitLabels.map((label) => {
         const part = line.earningsBreakdown?.find((p) => p.label === label);
         return (
-          <td key={label} className="py-2">
+          <td key={label}>
             {part ? (
               <Amount
                 value={part.amount}
@@ -631,14 +663,14 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
-      <td className="px-4 py-2">
+      <td>
         <Amount
           value={line.netAmount}
           tone="neutral"
           className="block font-semibold"
         />
       </td>
-      <td className="px-4 py-2">
+      <td>
         <div className="flex items-center justify-end gap-3">
           {saving ? (
             <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
@@ -705,7 +737,7 @@ function TdsCell({
   onOpen: () => void;
 }) {
   return (
-    <td className="px-4 py-2">
+    <td>
       <button
         type="button"
         onClick={onOpen}
@@ -812,14 +844,14 @@ function Cell({
 }) {
   if (!editable) {
     return (
-      <td className="px-4 py-2">
+      <td>
         <Amount value={value} tone="neutral" className="block" />
       </td>
     );
   }
 
   return (
-    <td className="px-2 py-1.5">
+    <td>
       <input
         defaultValue={value}
         inputMode="decimal"
@@ -857,28 +889,9 @@ function shareOfGross(part: string | undefined, gross: string): string {
 /** One money cell in the totals row. */
 function FootAmount({ value }: { value: string }) {
   return (
-    <td className="py-3">
+    <td>
       <Amount value={value} tone="neutral" className="block font-semibold" />
     </td>
-  );
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
   );
 }
 

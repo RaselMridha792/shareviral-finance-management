@@ -2,12 +2,14 @@
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
 import { Ban, Link2, Paperclip, SquarePen, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import type { TransactionDto } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 import { DocumentsDialog } from "./documents-dialog";
@@ -27,6 +29,11 @@ import { DocumentsDialog } from "./documents-dialog";
  * to be part of reading the row, not a detail belonging only to the register —
  * so it is opt-out, and only the register turns it off, because a register is
  * one account and names it in its heading.
+ *
+ * The order is the owner's, and it is the order every table in this app now
+ * follows: SL, date, what happened, what it was filed under, the money, the
+ * banking detail, then the numbers a document is found by. Reading two of
+ * these screens side by side should not mean learning two layouts.
  */
 export function TransactionTable({
   rows,
@@ -80,27 +87,76 @@ export function TransactionTable({
     down the whole page.
   */
 
+  /*
+    The floor the columns actually need, rather than a number typed once.
+
+    min-w-[880px] was written when this table had nine columns and it never
+    moved again — it does not track the flags at all, and 880 is now less than
+    the widths the headings themselves declare, so the browser was free to
+    crush Description and the amounts to honour a figure that had stopped being
+    true. This is summed from the same `w-*` each heading carries, with
+    cell-prose's 14rem floor standing in for Description, and it follows the
+    flags: the register no longer scrolls sideways to reserve room for four
+    columns it never renders.
+  */
+  const minWidth =
+    1184 +
+    (showAccount ? 128 : 0) +
+    (showType ? 96 : 0) +
+    (showPaymentMethod ? 128 : 0) +
+    (showBalance ? 128 : 0);
+
   return (
     <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="table-data min-w-[880px] text-sm">
+      <TableScroll>
+        <table className="table-data text-sm" style={{ minWidth }}>
           <thead>
-            <tr className="text-left">
-              <Th className="w-12 text-right">SL</Th>
-              <Th className="w-24">Date</Th>
-              {showType ? <Th className="w-24">Type</Th> : null}
-              <Th className="w-40">Category</Th>
+            <tr>
+              <SerialHead />
+              <Th width="w-24">Date</Th>
+              {/*
+                What happened comes before what it was filed under. A category
+                is somebody's later decision about the row; the description is
+                the row. Reading down a column of categories tells you less
+                than reading down the descriptions, so the descriptions take
+                the position the eye lands on after the date.
+              */}
               <Th>Description</Th>
-              <Th className="w-32">Reference No.</Th>
-              {showPaymentMethod ? <Th className="w-32">Paid by</Th> : null}
-              {showAccount ? <Th className="w-32">Account</Th> : null}
-              <Th className="w-28 text-right">Amount (BDT)</Th>
-              <Th className="w-28 text-right">Amount (USD)</Th>
-              <Th className="w-20 text-right">Rate</Th>
+              <Th width="w-40">Category</Th>
+              <Th align="right" width="w-28">
+                Amount (BDT)
+              </Th>
+              <Th align="right" width="w-28">
+                Amount (USD)
+              </Th>
+              {/* "Rate" on its own did not say a rate between what and what. */}
+              <Th align="right" width="w-20">
+                USD rate
+              </Th>
+              {showAccount ? <Th width="w-32">Account</Th> : null}
+              {/*
+                Type sat third, between the date and the category, where it
+                pushed the description away from the date for a fact the sign
+                and the colour of the amount already carry. It belongs with the
+                banking detail, after the money it describes.
+              */}
+              {showType ? <Th width="w-24">Type</Th> : null}
+              {showPaymentMethod ? <Th width="w-32">Paid by</Th> : null}
+              {/*
+                Two columns, not one stack. These are the two numbers a row is
+                searched for, they come from different places — ours and the
+                bank's — and stacking them under a single "Reference No."
+                meant neither could be scanned down or read against a heading
+                that named it.
+              */}
+              <Th width="w-32">Invoice number</Th>
+              <Th width="w-32">Transaction number</Th>
               {showBalance ? (
-                <Th className="w-32 text-right">Balance</Th>
+                <Th align="right" width="w-32">
+                  Balance
+                </Th>
               ) : null}
-              <Th className="w-24" />
+              <Th width="w-24" />
             </tr>
           </thead>
           <tbody>
@@ -138,35 +194,9 @@ export function TransactionTable({
                     is — it renumbers when the filter changes, which is correct,
                     because it was never an identifier. `refNo` is.
                   */}
-                  <td className="num px-4 py-2.5 text-right text-xs text-muted-foreground">
-                    {index + 1}
-                  </td>
-                  <td className="num px-4 py-2.5 whitespace-nowrap">
-                    {row.txnDate}
-                  </td>
-                  {showType ? (
-                    <td className="px-4 py-2.5">
-                      <Badge
-                        tone={row.direction === "in" ? "positive" : "negative"}
-                      >
-                        {row.direction === "in" ? "Cash In" : "Cash Out"}
-                      </Badge>
-                    </td>
-                  ) : null}
-                  <td className="px-4 py-2.5">
-                    {row.categoryName ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ background: row.categoryColor ?? undefined }}
-                        />
-                        {row.categoryName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="cell-prose px-4 py-2.5">
+                  <SerialCell n={index + 1} />
+                  <td className="num">{row.txnDate}</td>
+                  <td className="cell-prose">
                     <span
                       className={cn("font-medium", voided && "line-through")}
                     >
@@ -205,15 +235,122 @@ export function TransactionTable({
                       ) : null}
                     </span>
                   </td>
+                  <td>
+                    {row.categoryName ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ background: row.categoryColor ?? undefined }}
+                        />
+                        {row.categoryName}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                   {/*
-                    The reference opens what is attached to the entry.
+                    Three cells where there was one, and the third is what
+                    makes the second readable.
 
-                    It shows the app's own ref, which every row has, with any
-                    reference the person typed underneath. A cell that is
-                    sometimes empty cannot be the thing you click, and the
-                    sheets this replaces left that column blank on every row.
+                    `showCounterpart` is off because the dollars now have a
+                    column of their own — leaving it on would print them twice,
+                    once under the taka and once beside it.
                   */}
-                  <td className="px-4 py-2.5">
+                  <td className="col-amount">
+                    <Amount
+                      value={row.signedAmount}
+                      showSign
+                      currency={row.currency}
+                      showCounterpart={false}
+                      tone={row.direction === "in" ? "in" : "out"}
+                      className={cn(
+                        "block font-semibold",
+                        voided && "line-through",
+                      )}
+                    />
+                  </td>
+                  <td className="col-amount">
+                    {usd ? (
+                      <Amount
+                        value={usd}
+                        showSign
+                        currency="USD"
+                        approximate={!recordedInUsd}
+                        showCounterpart={false}
+                        tone={row.direction === "in" ? "in" : "out"}
+                        className={cn("block", voided && "line-through")}
+                      />
+                    ) : (
+                      <span
+                        className="num text-xs text-muted-foreground"
+                        title="No rate is recorded for this entry, so there is nothing to convert at. A figure here would be invented rather than approximate."
+                      >
+                        —
+                      </span>
+                    )}
+                  </td>
+                  <td className="num text-right text-xs text-muted-foreground">
+                    {rate ?? "—"}
+                  </td>
+                  {showAccount ? (
+                    <td className="text-muted-foreground">
+                      {/*
+                        Opens the account itself — its bank, its number, what
+                        is in it now. The same link the Cash In and Other
+                        Expenses sheets put on their bank column, to the same
+                        page; the id is on the row, so this is not a guess.
+                      */}
+                      {row.accountName ? (
+                        <Link
+                          href={`/accounts/${row.accountId}`}
+                          className="transition hover:text-primary hover:underline"
+                        >
+                          {row.accountName}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  ) : null}
+                  {showType ? (
+                    <td>
+                      <Badge
+                        tone={row.direction === "in" ? "positive" : "negative"}
+                      >
+                        {row.direction === "in" ? "Cash In" : "Cash Out"}
+                      </Badge>
+                    </td>
+                  ) : null}
+                  {showPaymentMethod ? (
+                    <td className="text-xs text-muted-foreground">
+                      {PAYMENT_METHOD_LABELS[row.paymentMethod]}
+                    </td>
+                  ) : null}
+                  {/*
+                    The company's own number, and the one a person searches
+                    for. Plain text: it opens nothing, because what is attached
+                    hangs off the entry rather than off the invoice, and two
+                    buttons a cell apart doing the same job is how people learn
+                    to press the wrong one.
+                  */}
+                  <td className="num text-xs">
+                    {row.invoiceNo ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/*
+                    The transaction number, and the click that opens what is
+                    attached to the entry.
+
+                    It leads with the app's own ref, which every row has, and
+                    carries the bank's reference — the string a query to the
+                    bank quotes — underneath. The app's ref is what takes the
+                    click, for the same reason as before the split: a cell that
+                    is sometimes empty cannot be the thing you press, and the
+                    sheets this replaces left the bank's column blank on most
+                    rows.
+                  */}
+                  <td>
                     <button
                       type="button"
                       onClick={() => setDocumentsFor(row)}
@@ -255,18 +392,6 @@ export function TransactionTable({
                           </span>
                         ) : null}
                       </span>
-                      {/*
-                        Both, when both exist. The invoice is the company's
-                        own number and the one a person searches for; the
-                        bank's reference is what a query to the bank quotes.
-                        Showing only one means the other is invisible on
-                        exactly the rows where somebody needs it.
-                      */}
-                      {row.invoiceNo ? (
-                        <span className="num block text-xs text-foreground">
-                          {row.invoiceNo}
-                        </span>
-                      ) : null}
                       {row.reference ? (
                         <span className="num block text-xs text-muted-foreground">
                           {row.reference}
@@ -274,68 +399,14 @@ export function TransactionTable({
                       ) : null}
                     </button>
                   </td>
-                  {showPaymentMethod ? (
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {PAYMENT_METHOD_LABELS[row.paymentMethod]}
-                    </td>
-                  ) : null}
-                  {showAccount ? (
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.accountName ?? "—"}
-                    </td>
-                  ) : null}
-                  {/*
-                    Three cells where there was one, and the third is what
-                    makes the second readable.
-
-                    `showCounterpart` is off because the dollars now have a
-                    column of their own — leaving it on would print them twice,
-                    once under the taka and once beside it.
-                  */}
-                  <td className="px-4 py-2.5">
-                    <Amount
-                      value={row.signedAmount}
-                      showSign
-                      currency={row.currency}
-                      showCounterpart={false}
-                      tone={row.direction === "in" ? "in" : "out"}
-                      className={cn(
-                        "block font-semibold",
-                        voided && "line-through",
-                      )}
-                    />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    {usd ? (
-                      <Amount
-                        value={usd}
-                        showSign
-                        currency="USD"
-                        approximate={!recordedInUsd}
-                        showCounterpart={false}
-                        tone={row.direction === "in" ? "in" : "out"}
-                        className={cn("block", voided && "line-through")}
-                      />
-                    ) : (
-                      <span
-                        className="num block text-right text-xs text-muted-foreground"
-                        title="No rate is recorded for this entry, so there is nothing to convert at. A figure here would be invented rather than approximate."
-                      >
-                        —
-                      </span>
-                    )}
-                  </td>
-                  <td className="num px-4 py-2.5 text-right text-xs text-muted-foreground">
-                    {rate ?? "—"}
-                  </td>
                   {showBalance ? (
-                    <td className="col-amount px-4 py-2.5">
+                    <td className="col-amount">
                       {row.runningBalance ? (
                         <Amount value={row.runningBalance} tone="neutral" />
                       ) : null}
                     </td>
                   ) : null}
-                  <td className="px-4 py-2.5">
+                  <td>
                     <div className="flex items-center justify-end gap-1">
                       {row.receiptUrl ? (
                         <a
@@ -375,7 +446,7 @@ export function TransactionTable({
             })}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
 
       {documentsFor ? (
         <DocumentsDialog
@@ -417,23 +488,4 @@ function signed(amount: string | null, direction: "in" | "out"): string | null {
   if (!amount) return null;
   const bare = amount.trim().replace(/^[+-]/, "");
   return direction === "out" ? `-${bare}` : bare;
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={cn(
-        "px-4 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
 }

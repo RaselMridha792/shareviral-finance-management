@@ -12,6 +12,7 @@ import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { type ExpenseSummary, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { MonthPicker, type Range } from "./month-picker";
@@ -45,6 +46,22 @@ export function CategoryDetailScreen({
 
   const refresh = () => router.refresh();
 
+  /*
+   * The count on the total card has to be counted over the same rows the
+   * total was.
+   *
+   * It used to be `rows.length` — the transactions this screen happened to
+   * fetch, one capped page of them — printed beside a figure the server
+   * summed over every matching row. Two populations in one card, agreeing
+   * only while the heading stayed under the page size. The summary carries
+   * `entries` per sub-category, counted by the same query that produced
+   * `breakdown.total`, so the sum of those is the honest figure.
+   */
+  const entries = breakdown.groups.reduce(
+    (sum, group) => sum + group.entries,
+    0,
+  );
+
   return (
     <>
       <Link
@@ -77,7 +94,7 @@ export function CategoryDetailScreen({
               Total
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {rows.length} entr{rows.length === 1 ? "y" : "ies"}
+              {entries} entr{entries === 1 ? "y" : "ies"}
             </p>
           </div>
         </div>
@@ -95,19 +112,64 @@ export function CategoryDetailScreen({
             description="Where inside this heading the money went"
           />
           <CardBody className="p-0">
-            <div className="overflow-x-auto">
-              <table className="table-data min-w-[420px] text-sm">
+            <TableScroll>
+              <table className="table-data min-w-[560px] text-sm">
+                <thead>
+                  <tr className="text-left">
+                    {/* Position in a list sorted by spend, nothing more. These
+                        rows are sub-categories, and a sub-category's identity
+                        is its name — a number here would invite people to
+                        quote "number 3" at each other, which changes meaning
+                        the moment the month does. */}
+                    <SerialHead />
+                    <Th>Sub-category</Th>
+                    <Th width="w-36" align="right">
+                      Amount (BDT)
+                    </Th>
+                    {/* The bar is the share drawn, and the column beside it is
+                        the same share as a figure. One heading between them,
+                        on the number — heading both "Share" would state one
+                        fact twice and read as two. The bar itself is hidden
+                        from screen readers for the same reason. */}
+                    <Th width="w-40" />
+                    <Th width="w-16" align="right">
+                      Share
+                    </Th>
+                    <Th width="w-20" align="right">
+                      Entries
+                    </Th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {breakdown.groups.map((group) => {
+                  {breakdown.groups.map((group, index) => {
                     const share =
                       (Number(group.total) / Number(breakdown.total)) * 100;
                     return (
                       <tr key={group.id} className="row-finance">
-                        <td className="px-5 py-2.5 font-medium">
-                          {group.name}
+                        <SerialCell n={index + 1} />
+                        <td className="font-medium">
+                          {/* Opens the sub-category's own page — this same
+                              screen, one level down. The slug is already on
+                              the row the server sent; nothing is guessed. */}
+                          <Link
+                            href={`/expenses/${group.slug}`}
+                            className="transition hover:text-primary hover:underline"
+                          >
+                            {group.name}
+                          </Link>
                         </td>
-                        <td className="px-5 py-2.5">
-                          <div className="h-1.5 w-full min-w-24 overflow-hidden rounded-full bg-surface-muted">
+                        <td className="text-right">
+                          <Amount
+                            value={group.total}
+                            tone="neutral"
+                            className="block font-medium"
+                          />
+                        </td>
+                        <td>
+                          <div
+                            aria-hidden
+                            className="h-1.5 w-full min-w-24 overflow-hidden rounded-full bg-surface-muted"
+                          >
                             <div
                               className="h-full rounded-full"
                               style={{
@@ -117,25 +179,18 @@ export function CategoryDetailScreen({
                             />
                           </div>
                         </td>
-                        <td className="num w-16 px-5 py-2.5 text-right text-xs text-muted-foreground">
+                        <td className="num text-right text-xs text-muted-foreground">
                           {share.toFixed(0)}%
                         </td>
-                        <td className="num w-16 px-5 py-2.5 text-right text-xs text-muted-foreground">
+                        <td className="num text-right text-xs text-muted-foreground">
                           {group.entries}
-                        </td>
-                        <td className="px-5 py-2.5">
-                          <Amount
-                            value={group.total}
-                            tone="neutral"
-                            className="block font-medium"
-                          />
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroll>
           </CardBody>
         </Card>
       ) : null}

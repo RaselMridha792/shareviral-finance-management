@@ -8,15 +8,23 @@ import {
   type AuditEntryDto,
 } from "@finance/shared";
 import { ChevronDown, EyeOff, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DateInput, Select } from "@/components/ui/field";
 import { SearchField } from "@/components/ui/search-field";
+import {
+  SerialCell,
+  SerialHead,
+  TableMessageRow,
+  TableScroll,
+  Th,
+} from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { auditApi, type AuditFilters } from "@/lib/audit";
+import { serial } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 
 /** Actions that moved money, coloured so they stand out in a long list. */
@@ -223,65 +231,166 @@ export function AuditPanel() {
           ) : null}
         </div>
 
-        <ul>
-          {rows.length === 0 && !loading ? (
-            <li className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Nothing matches those filters.
-            </li>
-          ) : (
-            rows.map((row) => (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpen(open === row.id ? null : row.id)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition"
-                >
-                  <Badge
-                    tone={
-                      STRONG.includes(row.action)
-                        ? "negative"
-                        : row.action === "create"
-                          ? "positive"
-                          : "neutral"
-                    }
-                  >
-                    {AUDIT_ACTION_LABELS[row.action]}
-                  </Badge>
+        <TableScroll>
+          <table className="table-data min-w-[900px] text-sm">
+            <thead>
+              <tr className="text-left">
+                <SerialHead />
+                <Th width="w-44">When</Th>
+                <Th width="w-52">Who</Th>
+                <Th>What changed</Th>
+                <Th width="w-40">Where</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && !loading ? (
+                <TableMessageRow colSpan={5}>
+                  Nothing matches those filters.
+                </TableMessageRow>
+              ) : (
+                rows.map((row, index) => {
+                  const expanded = open === row.id;
+                  const toggle = () => setOpen(expanded ? null : row.id);
+                  const detailId = `audit-detail-${row.id}`;
 
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm">{row.summary}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {row.actorName ?? "the system"}
-                      {row.actorRole ? ` · ${ROLE_LABELS[row.actorRole]}` : ""}
-                      {" · "}
-                      <span className="num">{formatWhen(row.occurredAt)}</span>
-                      {row.actorIp ? ` · ${row.actorIp}` : ""}
-                    </span>
-                  </span>
+                  return (
+                    <Fragment key={row.id}>
+                      <tr
+                        className="row-finance cursor-pointer"
+                        onClick={toggle}
+                      >
+                        {/*
+                          Counted across pages, not within one — page two of
+                          the trail starts where page one stopped.
 
-                  {row.redacted ? (
-                    <span
-                      className="flex items-center gap-1 text-xs text-muted-foreground"
-                      title="This change involved pay. Your role can see that it happened, not what changed."
-                    >
-                      <EyeOff className="size-3.5" />
-                      hidden
-                    </span>
-                  ) : null}
+                          It is off today, and not by this table's doing:
+                          `auditApi.list` asks the API for `pageSize: "50"`
+                          while `serial` counts in PAGE_SIZE (20), so page two
+                          restates 21-50. The number here is right the moment
+                          that request stops naming its own page size.
+                        */}
+                        <SerialCell n={serial(page, index)} />
+                        <td className="num">{formatWhen(row.occurredAt)}</td>
 
-                  <ChevronDown
-                    className={cn(
-                      "size-4 shrink-0 text-muted-foreground transition",
-                      open === row.id && "rotate-180",
-                    )}
-                  />
-                </button>
+                        <td>
+                          {/*
+                            The IP sits with the person, not under Where: it
+                            says where the actor was, and Where answers where
+                            in the books the change landed. Two different
+                            questions that read as one if they share a column.
+                          */}
+                          <span className="block">
+                            {row.actorName ?? "the system"}
+                          </span>
+                          {row.actorRole || row.actorIp ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {row.actorRole ? ROLE_LABELS[row.actorRole] : ""}
+                              {row.actorRole && row.actorIp ? " · " : ""}
+                              {row.actorIp ? (
+                                <span className="num">{row.actorIp}</span>
+                              ) : null}
+                            </span>
+                          ) : null}
+                        </td>
 
-                {open === row.id ? <Detail row={row} /> : null}
-              </li>
-            ))
-          )}
-        </ul>
+                        <td className="cell-prose">
+                          {/*
+                            The chevron rides with the summary rather than in a
+                            column of its own. An audit record takes no actions
+                            — a sixth column at the end of the row is the shape
+                            of one, whatever we put in it.
+                          */}
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-controls={detailId}
+                            onClick={(event) => {
+                              // The row toggles as well, so a press here would
+                              // otherwise reach both handlers and the panel
+                              // would open and shut inside one click.
+                              event.stopPropagation();
+                              toggle();
+                            }}
+                            className="flex w-full items-start gap-2 text-left"
+                          >
+                            <Badge
+                              tone={
+                                STRONG.includes(row.action)
+                                  ? "negative"
+                                  : row.action === "create"
+                                    ? "positive"
+                                    : "neutral"
+                              }
+                            >
+                              {AUDIT_ACTION_LABELS[row.action]}
+                            </Badge>
+
+                            <span className="min-w-0 flex-1">
+                              {row.summary}
+                            </span>
+
+                            {row.redacted ? (
+                              <span
+                                className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
+                                title="This change involved pay. Your role can see that it happened, not what changed."
+                              >
+                                <EyeOff className="size-3.5" />
+                                hidden
+                              </span>
+                            ) : null}
+
+                            <ChevronDown
+                              className={cn(
+                                "size-4 shrink-0 text-muted-foreground transition",
+                                expanded && "rotate-180",
+                              )}
+                            />
+                          </button>
+                        </td>
+
+                        <td>
+                          {/*
+                            The Area filter above narrows on `module`, and until
+                            now the list never showed it — you could filter by
+                            something the table did not display. The table
+                            underneath is the concrete one that changed.
+
+                            `entityId` is not linked: it names a row in whatever
+                            table this was, not an account or a person, so there
+                            is no route to send it to.
+                          */}
+                          <span className="block">
+                            {row.module ?? row.entityTable}
+                          </span>
+                          {row.module ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {row.entityTable}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+
+                      {expanded ? (
+                        <tr id={detailId}>
+                          {/*
+                            Five columns, matching the head above. The padding
+                            has to be inline: `.table-data tbody td` is a class
+                            plus two elements, so a `p-0` utility loses to it
+                            and the panel would sit inset inside a cell that
+                            already pads it.
+                          */}
+                          <td colSpan={5} style={{ padding: 0 }}>
+                            <Detail row={row} />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </TableScroll>
       </Card>
     </div>
   );
