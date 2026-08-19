@@ -17,62 +17,23 @@ import {
   NAV_GROUPS,
   SECONDARY_ACCENT,
   SECONDARY_NAV,
-  type NavAccent,
   type NavItem,
 } from "@/components/layout/nav-items";
+import { SidebarFooter } from "@/components/layout/sidebar-footer";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 /**
- * Section colour, written out in full.
+ * The rail is coloured by destination, not by section.
  *
- * Tailwind scans source text for class names, so `text-chart-${accent}` would
- * produce nothing. Every class here is a literal, and every colour is a token
- * from globals.css — the dark theme swaps the token, not this file.
+ * One hue per item, carried on the row as a custom property and turned into a
+ * colour by CSS — see `.nav-icon` in globals.css. It has to work that way
+ * rather than as a class per item: fifteen hues written out as fifteen
+ * Tailwind classes is fifteen chances for one of them to drift, and the hue is
+ * data the design supplies rather than a decision made here.
  *
- * Colour sits on the icon, never as a wash behind the whole row: if every row
- * is tinted, the one you are on stops standing out.
+ * The active row drops the hue and takes the brand lime, filled.
  */
-const ACCENT: Record<
-  NavAccent,
-  { icon: string; activeIcon: string; activeRow: string; bar: string }
-> = {
-  "chart-1": {
-    icon: "text-chart-1/70 group-hover:text-chart-1",
-    activeIcon: "text-chart-1",
-    activeRow: "bg-chart-1/10 inset-ring-1 inset-ring-chart-1/25",
-    bar: "bg-chart-1",
-  },
-  "chart-2": {
-    icon: "text-chart-2/70 group-hover:text-chart-2",
-    activeIcon: "text-chart-2",
-    activeRow: "bg-chart-2/10 inset-ring-1 inset-ring-chart-2/25",
-    bar: "bg-chart-2",
-  },
-  "chart-3": {
-    icon: "text-chart-3/70 group-hover:text-chart-3",
-    activeIcon: "text-chart-3",
-    activeRow: "bg-chart-3/10 inset-ring-1 inset-ring-chart-3/25",
-    bar: "bg-chart-3",
-  },
-  "chart-4": {
-    icon: "text-chart-4/70 group-hover:text-chart-4",
-    activeIcon: "text-chart-4",
-    activeRow: "bg-chart-4/10 inset-ring-1 inset-ring-chart-4/25",
-    bar: "bg-chart-4",
-  },
-  "chart-5": {
-    icon: "text-chart-5/70 group-hover:text-chart-5",
-    activeIcon: "text-chart-5",
-    activeRow: "bg-chart-5/10 inset-ring-1 inset-ring-chart-5/25",
-    bar: "bg-chart-5",
-  },
-  "chart-6": {
-    icon: "text-chart-6/70 group-hover:text-chart-6",
-    activeIcon: "text-chart-6",
-    activeRow: "bg-chart-6/10 inset-ring-1 inset-ring-chart-6/25",
-    bar: "bg-chart-6",
-  },
-};
 
 /* -------------------------------------------------------------------------- */
 /*  Which row is the current page                                              */
@@ -139,74 +100,61 @@ function visibleFor(role: Role | undefined, item: NavItem): NavItem | null {
 /*  Rows                                                                       */
 /* -------------------------------------------------------------------------- */
 
-function rowClass(
-  accent: NavAccent,
-  {
-    active,
-    depth,
-    collapsed,
-  }: { active: boolean; depth: number; collapsed?: boolean },
-) {
+function rowClass({
+  active,
+  depth,
+  collapsed,
+}: {
+  active: boolean;
+  depth: number;
+  collapsed?: boolean;
+}) {
   return cn(
     "group relative flex w-full items-center rounded-lg transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
     // Narrow: the icon is the whole row, so it is centred and the padding
     // that made room for a label goes away.
-    collapsed ? "justify-center px-0 py-2" : "px-3",
+    collapsed ? "justify-center px-0 py-2.5" : "px-3",
     collapsed
       ? null
       : depth === 0
-        ? "gap-3 py-2 text-sm"
-        : "gap-2.5 py-1.5 text-[13px]",
+        ? "gap-3 py-2 text-[15px]"
+        : "gap-2.5 py-1.5 text-sm",
     active
-      ? // A filled pill, a hairline of the same colour, a left bar and a
-        // heavier weight. Hover below is deliberately a step quieter.
-        cn("font-semibold text-foreground", ACCENT[accent].activeRow)
-      : "font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground",
+      ? "font-semibold text-sidebar-item-active bg-sidebar-item-active-bg"
+      : "font-medium text-sidebar-item hover:bg-sidebar-item-active-bg/40 hover:text-foreground",
   );
 }
 
-function ActiveBar({ accent }: { accent: NavAccent }) {
+/** 3px, inset, lime. The design's marker for where you are. */
+function ActiveBar() {
   return (
     <span
       aria-hidden="true"
-      className={cn(
-        "absolute top-1.5 bottom-1.5 left-0 w-1 rounded-r-full",
-        ACCENT[accent].bar,
-      )}
+      className="absolute inset-y-0 left-0 w-[3px] rounded-r-sm bg-sidebar-item-active"
     />
   );
 }
 
-function NavIcon({
-  item,
-  accent,
-  lit,
-}: {
-  item: NavItem;
-  accent: NavAccent;
-  lit: boolean;
-}) {
-  const Icon = item.icon;
+function NavIcon({ item, lit }: { item: NavItem; lit: boolean }) {
   return (
     <Icon
-      className={cn(
-        "size-4 shrink-0 transition-colors motion-reduce:transition-none",
-        lit ? ACCENT[accent].activeIcon : ACCENT[accent].icon,
-      )}
+      name={item.icon}
+      size={20}
+      fill={lit}
+      className={cn("nav-icon transition-colors motion-reduce:transition-none")}
+      style={{ "--nav-hue": item.hue } as React.CSSProperties}
     />
   );
 }
 
 function NavLink({
   item,
-  accent,
   active,
   depth = 0,
   collapsed,
   onNavigate,
 }: {
   item: NavItem;
-  accent: NavAccent;
   active: boolean;
   depth?: number;
   collapsed?: boolean;
@@ -215,15 +163,15 @@ function NavLink({
   const { href, label, comingSoon } = item;
 
   const className = cn(
-    rowClass(accent, { active, depth, collapsed }),
+    rowClass({ active, depth, collapsed }),
     comingSoon &&
       "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground",
   );
 
   const body = (
     <>
-      {active ? <ActiveBar accent={accent} /> : null}
-      <NavIcon item={item} accent={accent} lit={active} />
+      {active ? <ActiveBar /> : null}
+      <NavIcon item={item} lit={active} />
       {/* Narrow: the name is gone from the screen, so it has to still be
           available to a screen reader and on hover — an unlabelled row of
           icons is a guessing game. */}
@@ -259,6 +207,9 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
+      // Read by the stylesheet, which switches the icon off its hue and onto
+      // the brand. A CSS-only swap, so nothing has to be threaded down.
+      data-nav-active={active ? "true" : undefined}
       title={collapsed ? label : undefined}
       className={className}
     >
@@ -271,14 +222,12 @@ function NavLink({
 function NavChildren({
   id,
   item,
-  accent,
   activeHref,
   hidden,
   onNavigate,
 }: {
   id: string;
   item: NavItem;
-  accent: NavAccent;
   activeHref: string | null;
   hidden?: boolean;
   onNavigate?: () => void;
@@ -295,7 +244,6 @@ function NavChildren({
         <NavLink
           key={child.key}
           item={child}
-          accent={accent}
           active={Boolean(child.href) && child.href === activeHref}
           depth={1}
           onNavigate={onNavigate}
@@ -312,7 +260,6 @@ function NavChildren({
  */
 function NavSection({
   item,
-  accent,
   panelId,
   open,
   onToggle,
@@ -322,7 +269,6 @@ function NavSection({
   onNavigate,
 }: {
   item: NavItem;
-  accent: NavAccent;
   panelId: string;
   open: boolean;
   onToggle: () => void;
@@ -344,13 +290,13 @@ function NavSection({
         aria-controls={panelId}
         title={collapsed ? item.label : undefined}
         className={cn(
-          rowClass(accent, { active: wearsActive, depth: 0, collapsed }),
+          rowClass({ active: wearsActive, depth: 0, collapsed }),
           "cursor-pointer text-left",
           holdsCurrentPage && "font-semibold text-foreground",
         )}
       >
-        {wearsActive ? <ActiveBar accent={accent} /> : null}
-        <NavIcon item={item} accent={accent} lit={holdsCurrentPage} />
+        {wearsActive ? <ActiveBar /> : null}
+        <NavIcon item={item} lit={holdsCurrentPage} />
         {collapsed ? (
           <span className="sr-only">{item.label}</span>
         ) : (
@@ -375,7 +321,6 @@ function NavSection({
         <NavChildren
           id={panelId}
           item={item}
-          accent={accent}
           activeHref={activeHref}
           hidden={!open}
           onNavigate={onNavigate}
@@ -426,7 +371,7 @@ export function SidebarContent({
     visibleFor(user.role, item),
   ).filter((item): item is NavItem => item !== null);
 
-  const renderItem = (item: NavItem, accent: NavAccent) => {
+  const renderItem = (item: NavItem) => {
     const holds = holdsCurrentPage(item);
 
     // A parent with children and no destination of its own is the accordion.
@@ -435,7 +380,6 @@ export function SidebarContent({
         <NavSection
           key={item.key}
           item={item}
-          accent={accent}
           panelId={`${uid}-${item.key}`}
           open={toggled[item.key] ?? holds}
           collapsed={collapsed}
@@ -466,7 +410,6 @@ export function SidebarContent({
         <div key={item.key} className="flex flex-col">
           <NavLink
             item={item}
-            accent={accent}
             active={item.href === activeHref}
             collapsed={collapsed}
             onNavigate={onNavigate}
@@ -475,7 +418,6 @@ export function SidebarContent({
             <NavChildren
               id={`${uid}-${item.key}`}
               item={item}
-              accent={accent}
               activeHref={activeHref}
               onNavigate={onNavigate}
             />
@@ -488,7 +430,6 @@ export function SidebarContent({
       <NavLink
         key={item.key}
         item={item}
-        accent={accent}
         active={item.href === activeHref}
         collapsed={collapsed}
         onNavigate={onNavigate}
@@ -544,17 +485,19 @@ export function SidebarContent({
                 className="mx-2 mt-3 mb-1.5 border-t border-border"
               />
             ) : (
-              <p className="px-3 pt-3 pb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+              <p className="px-3 pt-3 pb-1.5 text-[11px] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
                 {group.title}
               </p>
             )}
-            {group.items.map((item) => renderItem(item, group.accent))}
+            {group.items.map((item) => renderItem(item))}
           </div>
         ))}
 
         <div className="mt-auto flex flex-col gap-1 pt-4">
-          {secondary.map((item) => renderItem(item, SECONDARY_ACCENT))}
+          {secondary.map((item) => renderItem(item))}
         </div>
+
+        <SidebarFooter collapsed={collapsed} />
       </nav>
     </div>
   );
@@ -589,7 +532,7 @@ function CollapseButton({
 }
 
 /** Remembered, so the choice survives a reload rather than being made daily. */
-const COLLAPSED_KEY = "sfm.sidebar.collapsed";
+const COLLAPSED_KEY = "svf-sidebar";
 
 export function Sidebar() {
   /**
@@ -624,8 +567,10 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "hidden shrink-0 border-r border-border bg-surface transition-[width] duration-200 lg:block motion-reduce:transition-none",
-        collapsed ? "w-16" : "w-64",
+        // Pure black in dark, light grey in light — the rail is the one
+        // surface that does not follow the card ladder.
+        "hidden shrink-0 border-r border-border bg-sidebar transition-[width] duration-200 lg:block motion-reduce:transition-none",
+        collapsed ? "w-[84px]" : "w-[272px]",
       )}
     >
       <div className="sticky top-0 h-dvh">

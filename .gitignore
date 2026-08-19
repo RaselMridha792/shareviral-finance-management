@@ -54,3 +54,4 @@ apps/api/test/integration/roles.env
 apps/web/test/browser/roles.env
 apps/web/test/browser/shots/
 apps/api/test/integration/*.xlsx
+.view.mjs

@@ -454,3 +454,30 @@ tr.row-finance > th {
   background: oklch(0.62 0.19 122 / 0.28);
   color: var(--foreground);
 }
+
+/* --------------------------------------------------------------------------
+   The rail's colour-coded icons
+   --------------------------------------------------------------------------
+   One hue per destination, so a glance finds Payroll by its green before the
+   word is read. Lightness and chroma are fixed and only the angle differs,
+   which is what keeps fifteen colours reading as one family rather than as a
+   crayon box. The angle arrives as `--nav-hue` on the element.
+
+   Written here rather than as fifteen Tailwind classes: the hue is data the
+   design supplies, and fifteen hand-written classes is fifteen chances for one
+   to drift.
+   -------------------------------------------------------------------------- */
+
+.nav-icon {
+  color: oklch(0.56 0.16 var(--nav-hue));
+}
+
+:root[data-theme="dark"] .nav-icon {
+  color: oklch(0.78 0.16 var(--nav-hue));
+}
+
+/* Where you are drops the hue and takes the brand, filled. */
+[data-nav-active="true"] .nav-icon,
+[data-nav-active="true"] .nav-icon:where(*) {
+  color: var(--sidebar-mark);
+}

@@ -1,23 +1,4 @@
 import type { Permission } from "@finance/shared";
-import {
-  ArrowLeftRight,
-  BadgePercent,
-  Banknote,
-  Bot,
-  ChartColumn,
-  FileText,
-  FileUp,
-  Gauge,
-  HandCoins,
-  Landmark,
-  LayoutGrid,
-  Receipt,
-  Settings,
-  ShoppingBag,
-  Sparkles,
-  UsersRound,
-} from "lucide-react";
-import type { ComponentType } from "react";
 
 /**
  * The section accent, named after a chart token in globals.css.
@@ -33,7 +14,23 @@ export type NavItem = {
   /** Stable identity — the accordion's open/closed state is keyed by this. */
   key: string;
   label: string;
-  icon: ComponentType<{ className?: string }>;
+  /**
+   * A Material Symbols Rounded ligature — "account_balance", not a component.
+   *
+   * The design names every icon, so writing the name here means a reviewer can
+   * check this file against the handoff by reading it. See `<Icon>`.
+   */
+  icon: string;
+  /**
+   * The hue this item's icon is drawn in, as an oklch hue angle.
+   *
+   * One per item and not one per section: the design colours the rail by
+   * destination rather than by group, so a glance finds Payroll by its green
+   * before the word is read. Lightness and chroma are fixed in CSS and swapped
+   * per theme; only the angle differs, which is what keeps fifteen colours
+   * looking like one family.
+   */
+  hue: number;
   /**
    * Omitted on a parent that only opens its children: that row navigates
    * nowhere, it toggles.
@@ -64,7 +61,8 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Dashboard",
         // A dial, not another panel grid: at 16px the round silhouette is the
         // only one of its kind in the rail, so the first item is unmistakable.
-        icon: Gauge,
+        icon: "space_dashboard",
+        hue: 250,
         permission: "dashboard.view",
       },
     ],
@@ -77,14 +75,16 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "accounts",
         href: "/accounts",
         label: "Accounts",
-        icon: Landmark,
+        icon: "account_balance",
+        hue: 205,
         permission: "accounts.read",
         children: [
           {
             key: "accounts-cash-in",
             href: "/accounts/cash-in",
             label: "Cash-In",
-            icon: HandCoins,
+            icon: "savings",
+            hue: 158,
             permission: "accounts.read",
           },
         ],
@@ -94,13 +94,15 @@ export const NAV_GROUPS: NavGroup[] = [
         // reachable as "Overview", the first child.
         key: "expenses",
         label: "Expenses",
-        icon: Receipt,
+        icon: "receipt_long",
+        hue: 27,
         children: [
           {
             key: "expenses-overview",
             href: "/expenses",
             label: "Overview",
-            icon: LayoutGrid,
+            icon: "grid_view",
+            hue: 27,
             permission: "transactions.read",
           },
           {
@@ -112,14 +114,16 @@ export const NAV_GROUPS: NavGroup[] = [
             key: "expenses-subscriptions",
             href: "/subscriptions",
             label: "AI tools and subscriptions",
-            icon: Sparkles,
+            icon: "auto_awesome",
+            hue: 295,
             permission: "vendors.read",
           },
           {
             key: "expenses-other",
             href: "/expenses/other",
             label: "Other expenses",
-            icon: ShoppingBag,
+            icon: "shopping_basket",
+            hue: 62,
             permission: "transactions.read",
           },
         ],
@@ -128,7 +132,8 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "transactions",
         href: "/transactions",
         label: "All transactions",
-        icon: ArrowLeftRight,
+        icon: "swap_vert",
+        hue: 225,
         permission: "transactions.read",
       },
     ],
@@ -141,14 +146,16 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "team",
         href: "/team",
         label: "Team",
-        icon: UsersRound,
+        icon: "groups",
+        hue: 185,
         permission: "team.read",
       },
       {
         key: "payroll",
         href: "/payroll",
         label: "Payroll",
-        icon: Banknote,
+        icon: "payments",
+        hue: 138,
         permission: "payroll.read",
       },
     ],
@@ -167,7 +174,8 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "TDS",
         // Withholding is a percentage taken off a bill — the percent badge says
         // that; a banknote said "money", which every other tax item is too.
-        icon: BadgePercent,
+        icon: "percent",
+        hue: 340,
         permission: "tds.read",
       },
     ],
@@ -188,7 +196,8 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "reports",
         href: "/reports",
         label: "Reports",
-        icon: ChartColumn,
+        icon: "bar_chart",
+        hue: 265,
         permission: "reports.view",
       },
       {
@@ -203,14 +212,16 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "statement",
         href: "/statement",
         label: "Bank statement",
-        icon: FileText,
+        icon: "description",
+        hue: 45,
         permission: "transactions.read",
       },
       {
         key: "assistant",
         href: "/assistant",
         label: "AI Assistant",
-        icon: Bot,
+        icon: "smart_toy",
+        hue: 310,
         permission: "ai.use",
       },
     ],
@@ -223,14 +234,16 @@ export const SECONDARY_NAV: NavItem[] = [
     key: "import",
     href: "/import",
     label: "Imports",
-    icon: FileUp,
+    icon: "upload_file",
+    hue: 100,
     permission: "imports.run",
   },
   {
     key: "settings",
     href: "/settings",
     label: "Settings",
-    icon: Settings,
+    icon: "settings",
+    hue: 240,
     permission: "settings.read",
   },
 ];

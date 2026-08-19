@@ -1,95 +1,125 @@
 "use client";
 
-import { ROLE_LABELS } from "@finance/shared";
-import { LogOut, Menu } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
 
-import { useSession } from "@/components/auth/session-provider";
 import { MobileSidebar } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { logout } from "@/lib/api-client";
+import {
+  NAV_GROUPS,
+  SECONDARY_NAV,
+  type NavItem,
+} from "@/components/layout/nav-items";
+import { useUsdRateContext } from "@/components/money/rate-provider";
+import { Icon } from "@/components/ui/icon";
+import { useState } from "react";
 
+/**
+ * The bar across the top: where you are, what a dollar is worth, and the two
+ * switches.
+ *
+ * What is NOT here any more: the avatar, the role and the sign-out. They were
+ * the least-used controls in the most prominent place on every screen, and they
+ * have gone to the foot of the rail. There was also a permanently disabled
+ * search box, searching nothing, which went earlier for the same reason — a
+ * control that cannot do the thing it depicts teaches people not to trust the
+ * chrome.
+ *
+ * The rate is stated rather than left to be looked up. Every dollar figure in
+ * this app is a translation of a taka one, and this is the number they are all
+ * translated at — so it belongs where it is visible from every screen instead
+ * of only on the one that sets it.
+ */
 export function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-  const user = useSession();
-  const router = useRouter();
+  const pathname = usePathname();
+  const screen = screenNameFor(pathname);
 
-  async function signOut() {
-    setSigningOut(true);
-    try {
-      await logout();
-    } finally {
-      router.replace("/login");
-      router.refresh();
-    }
-  }
-
-  // Only letters: a name like "HR (test)" must not render as "H(".
-  const initials =
-    user.fullName
-      .split(/\s+/)
-      .map((part) => part.replace(/[^\p{L}]/gu, ""))
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0].toUpperCase())
-      .join("") || user.email[0].toUpperCase();
+  /**
+   * The rate the dollar figures on screen were actually worked out at — the
+   * same one the footnote names, not the fixed setting.
+   *
+   * Those two are allowed to differ: the setting is what somebody typed, and
+   * this is what the period resolved to. Showing one at the top of the page and
+   * the other at the foot is how a reader ends up with two rates and no way to
+   * tell which the numbers used.
+   */
+  const usd = useUsdRateContext();
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-40 flex min-h-[66px] flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6 lg:px-8">
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
           aria-label="Open navigation"
-          className="cursor-pointer rounded-lg p-2 text-muted-foreground hover:bg-surface-muted lg:hidden"
+          className="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground lg:hidden"
         >
-          <Menu className="size-5" />
+          <Icon name="menu" size={20} />
         </button>
 
-        {/*
-          There was a search box here, permanently `disabled`, searching
-          nothing. It came from the scaffold and never got wired up — greyed
-          out, but a search box all the same, in the most prominent place on
-          every screen. A control that cannot do the thing it depicts is worse
-          than no control: people try it, nothing happens, and they learn not
-          to trust the chrome.
+        {/* Finance / <screen>. The first half never changes and is not a link:
+            it says which product you are in, which matters when this sits in a
+            browser beside four other tabs. */}
+        <nav aria-label="Breadcrumb" className="min-w-0">
+          <p className="truncate text-sm">
+            <span className="text-muted-foreground">Finance</span>
+            {screen ? (
+              <>
+                <span className="mx-1.5 text-faint">/</span>
+                <span className="font-medium text-foreground">{screen}</span>
+              </>
+            ) : null}
+          </p>
+        </nav>
 
-          Every screen that has something to search has its own search box on
-          it. If a global one is ever built it belongs here, working.
-        */}
         <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle />
-
-          <div className="flex items-center gap-2.5 pl-1">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-xs font-semibold text-primary">
-              {initials}
+          {usd ? (
+            <span
+              className="hidden items-center gap-1.5 rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs text-muted-foreground sm:inline-flex"
+              title="Every dollar figure in this app is a translation of a taka one, at this rate."
+            >
+              <Icon name="lock" size={15} className="text-faint" />
+              <span>FX locked</span>
+              <span className="num text-foreground">
+                ৳{usd.rate.toFixed(2)} / $1
+              </span>
             </span>
-            <div className="hidden leading-tight sm:block">
-              <p className="max-w-[13ch] truncate text-sm font-medium">
-                {user.fullName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {ROLE_LABELS[user.role]}
-              </p>
-            </div>
-          </div>
+          ) : null}
 
-          <button
-            type="button"
-            onClick={signOut}
-            disabled={signingOut}
-            aria-label="Sign out"
-            title="Sign out"
-            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:bg-surface-muted hover:text-foreground disabled:opacity-50"
-          >
-            <LogOut className="size-4" />
-          </button>
+          <ThemeToggle />
         </div>
       </header>
 
       <MobileSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
     </>
   );
+}
+
+/**
+ * The deepest nav item whose href this path sits under.
+ *
+ * Deepest, not first: /accounts/cash-in must read "Cash-In" and not "Accounts",
+ * and a longest-prefix match is the only rule that gets that right without a
+ * second table of names to keep in step with the rail.
+ */
+function screenNameFor(pathname: string): string | null {
+  let best: { label: string; length: number } | null = null;
+
+  const walk = (items: NavItem[]) => {
+    for (const item of items) {
+      if (
+        item.href &&
+        (pathname === item.href || pathname.startsWith(item.href + "/")) &&
+        (!best || item.href.length > best.length)
+      ) {
+        best = { label: item.label, length: item.href.length };
+      }
+      if (item.children) walk(item.children);
+    }
+  };
+
+  for (const group of NAV_GROUPS) walk(group.items);
+  walk(SECONDARY_NAV);
+
+  return best ? (best as { label: string }).label : null;
 }
