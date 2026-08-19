@@ -21,15 +21,31 @@ import { fxApi, type FxRateDto } from "@/lib/reports";
 export function RateHistory() {
   const canWrite = useCan("settings.write");
   const [rates, setRates] = useState<FxRateDto[] | null>(null);
+  /** A failed load is not an empty one, and must not read as one. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
+      setLoadError(null);
       setRates(await fxApi.rates(30));
-    } catch {
-      setRates([]);
+    } catch (caught) {
+      /*
+       * This set `[]`, which the table renders as "No rates recorded. Until one
+       * is, USD reports show taka and say so rather than guessing." — a
+       * confident, specific, wrong statement about the company's books, printed
+       * because a request failed.
+       *
+       * A request that did not answer says nothing about how many rates exist.
+       */
+      setRates(null);
+      setLoadError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not load the rate history.",
+      );
     }
   }
 
@@ -155,7 +171,16 @@ export function RateHistory() {
             </tr>
           </thead>
           <tbody>
-            {rates === null ? (
+            {loadError ? (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="px-4 py-8 text-center text-sm text-negative"
+                >
+                  {loadError}
+                </td>
+              </tr>
+            ) : rates === null ? (
               <tr>
                 <td
                   colSpan={3}

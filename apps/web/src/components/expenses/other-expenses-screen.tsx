@@ -64,7 +64,8 @@ export function OtherExpensesScreen({
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [recurringRows, setRecurringRows] = useState(0);
   const [fetched, setFetched] = useState(0);
-  const [monthTotal, setMonthTotal] = useState(0);
+  /** How many rows this screen has, tooling already excluded. */
+  const [screenTotal, setScreenTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -101,7 +102,7 @@ export function OtherExpensesScreen({
       setRows(list.items);
       setRecurringRows(all.total - list.total);
       setFetched(list.items.length);
-      setMonthTotal(all.total);
+      setScreenTotal(list.total);
     } catch (caught) {
       // Without this the screen sits on "Loading…" for ever and never says why.
       setError(
@@ -128,10 +129,26 @@ export function OtherExpensesScreen({
   // `BigInt(0)` rather than `0n`: the build targets ES2017, which has no
   // literal for it.
   const spent = fromMinorUnits(
-    rows.reduce((sum, row) => sum + toMinorUnits(row.amount), BigInt(0)),
+    rows
+      // A voided row stays on screen struck through, and out of the total.
+      // It was in this one — so "Spent in August" counted the very entries
+      // this screen draws a line through, and the figure disagreed with its
+      // own rows for anybody who added them up.
+      .filter((row) => !row.voidedAt)
+      .reduce((sum, row) => sum + toMinorUnits(row.amount), BigInt(0)),
   );
 
-  const truncated = fetched < monthTotal;
+  /*
+   * Shown against fetchable, not shown against every money-out row.
+   *
+   * This compared `fetched` against the month's *whole* money-out count, and
+   * those are different populations: `fetched` is this screen's rows — the
+   * month minus tooling — while that count included it. Any month holding a
+   * single subscription therefore made the two differ, and the screen told
+   * somebody to "narrow the month" while it was showing them everything it
+   * had.
+   */
+  const truncated = fetched < screenTotal;
 
   return (
     <>
@@ -190,7 +207,7 @@ export function OtherExpensesScreen({
           title={`Every other expense in ${range.label}`}
           description={
             truncated
-              ? `Showing the most recent ${fetched} of ${monthTotal} money-out entries — narrow the month or use All transactions to see the rest`
+              ? `Showing the most recent ${fetched} of ${screenTotal} entries — narrow the month or use All transactions to see the rest`
               : `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`
           }
         />

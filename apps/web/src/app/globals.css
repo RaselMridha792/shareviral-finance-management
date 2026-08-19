@@ -380,6 +380,20 @@ tr.row-finance > th {
   text-align: left;
 }
 
+/*
+ * A money column's heading sits over its figures.
+ *
+ * `.table-data thead th` above is a class plus two elements, which outranks the
+ * `text-right` utility every one of those headers already carries — so four
+ * screens have been rendering AMOUNT (BDT) hard left above a column of
+ * right-aligned numbers, and the utility that was meant to fix it did nothing.
+ * `.col-amount` is the class the amount cells already use.
+ */
+.table-data thead th.col-amount,
+.table-data thead th.text-right {
+  text-align: right;
+}
+
 .table-data tbody td {
   padding: 0.9375rem 0.4375rem;
   /*
