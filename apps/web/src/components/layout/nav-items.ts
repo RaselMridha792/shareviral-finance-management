@@ -1,15 +1,5 @@
 import type { Permission } from "@finance/shared";
 
-/**
- * The section accent, named after a chart token in globals.css.
- *
- * A name rather than a class string because the class has to be written out in
- * full somewhere Tailwind's scanner can see it — that map lives in
- * `sidebar.tsx`. Never a hex here: both themes swap these tokens.
- */
-export type NavAccent =
-  "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5" | "chart-6";
-
 export type NavItem = {
   /** Stable identity — the accordion's open/closed state is keyed by this. */
   key: string;
@@ -48,12 +38,11 @@ export type NavItem = {
   comingSoon?: boolean;
 };
 
-export type NavGroup = { title: string; accent: NavAccent; items: NavItem[] };
+export type NavGroup = { title: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Overview",
-    accent: "chart-1",
     items: [
       {
         key: "dashboard",
@@ -69,7 +58,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Money",
-    accent: "chart-3",
     items: [
       {
         key: "accounts",
@@ -140,7 +128,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "People",
-    accent: "chart-2",
     items: [
       {
         key: "team",
@@ -162,7 +149,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Tax",
-    accent: "chart-6",
     items: [
       {
         // The only tax screen. Income tax was retired from the UI on the
@@ -182,7 +168,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Insight",
-    accent: "chart-4",
     items: [
       {
         /**
@@ -248,4 +233,3 @@ export const SECONDARY_NAV: NavItem[] = [
   },
 ];
 
-export const SECONDARY_ACCENT: NavAccent = "chart-5";

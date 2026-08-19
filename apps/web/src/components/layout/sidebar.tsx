@@ -15,7 +15,6 @@ import { useSession } from "@/components/auth/session-provider";
 import { BrandMark } from "@/components/layout/brand-mark";
 import {
   NAV_GROUPS,
-  SECONDARY_ACCENT,
   SECONDARY_NAV,
   type NavItem,
 } from "@/components/layout/nav-items";
