@@ -19,10 +19,17 @@ import { cn } from "@/lib/utils";
 /**
  * Several figures across one bordered panel.
  *
- * The dividers are the trick. A 1px gap over a hairline-coloured background
- * gives a true hairline between cells — and, unlike a border on each cell, it
- * survives wrapping: when the grid drops to two columns the rules land in the
- * new places by themselves instead of leaving a stray edge where a row broke.
+ * The dividers are the trick, and the obvious way to draw them is wrong. A 1px
+ * gap over a hairline-coloured background gives true hairlines that survive
+ * wrapping — but when four cells wrap to three-and-one, the two empty columns
+ * beside the last one show that hairline colour as a grey block the width of
+ * half the card. It looked like a broken cell, because it was the panel's
+ * background showing through where nothing was drawn.
+ *
+ * So the cells rule themselves instead: each paints a hairline on its own left
+ * and top edge, and paint order puts that line over the neighbour it abuts.
+ * The panel's own border covers the outermost ones, and empty space at the end
+ * of a wrapped row is just the card.
  */
 export function StatStrip({
   children,
@@ -37,7 +44,7 @@ export function StatStrip({
   return (
     <div
       className={cn(
-        "grid gap-px overflow-hidden rounded-xl border border-border bg-border shadow-e1",
+        "grid overflow-hidden rounded-xl border border-border bg-surface shadow-e1",
         className,
       )}
       style={{
@@ -89,7 +96,9 @@ export function StatCell({
   return (
     <div
       className={cn(
+        // The hairlines. See StatStrip — a cell rules its own left and top.
         "flex flex-col gap-3 px-[22px] pt-[22px] pb-5",
+        "shadow-[-1px_0_0_0_var(--border),0_-1px_0_0_var(--border)]",
         emphasis ? "bg-surface-muted" : "bg-surface",
       )}
     >
