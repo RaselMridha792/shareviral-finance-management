@@ -515,6 +515,16 @@ async function load() {
           paymentMethod: "card",
           accountId: pick(madeAccounts).id,
           boughtFor: pick(DEPARTMENTS),
+          /*
+           * The paperwork behind the plan.
+           *
+           * Not every plan has both, and that is the point of seeding them
+           * unevenly: a column where every row is filled never shows what an
+           * empty one looks like, and the em-dash fallback is the part that
+           * goes wrong unnoticed.
+           */
+          invoiceNo: i % 3 === 0 ? null : `INV-SUB-${between(1000, 9999)}`,
+          reference: i % 5 === 0 ? null : `BNK${between(100000, 999999)}`,
           loginEmail: `${tool.toLowerCase().replace(/\W/g, "")}@sharevirals.test`,
           notes: `Bulk sample ${TAG}`,
           ...stamp,
