@@ -1,0 +1,15 @@
+-- A CFO role.
+--
+-- `ALTER TYPE ... ADD VALUE` cannot run inside the transaction that created the
+-- type, and older Postgres refuses it inside any transaction block at all — so
+-- this file is deliberately one statement with no BEGIN around it. Run it on
+-- its own.
+--
+-- `IF NOT EXISTS` so re-running is free: this has to be applied to the local
+-- development database and to the VPS separately, and a migration that fails
+-- the second time is one somebody skips the second time.
+--
+-- Order matters and cannot be chosen. A value added to a Postgres enum goes on
+-- the end unless the whole type is rewritten, so `cfo` is last here and last in
+-- ROLES in packages/shared/src/roles.ts. The two must agree.
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'cfo';

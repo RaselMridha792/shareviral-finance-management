@@ -53,6 +53,7 @@ const ROLE_SUMMARY: Record<Role, string> = {
   admin: "All the day-to-day work, but not Settings or accounts",
   finance: "Money, payroll and tax",
   hr: "The team directory. Never salary.",
+  cfo: "The same as Admin. Money, payroll, tax and the challans.",
 };
 
 export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {

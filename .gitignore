@@ -66,3 +66,4 @@ apps/api/test/integration/*.xlsx
 .navchk.mjs
 .pager.mjs
 .count.mjs
+.rolecheck.mjs

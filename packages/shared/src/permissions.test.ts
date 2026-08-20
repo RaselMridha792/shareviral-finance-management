@@ -52,13 +52,20 @@ describe("the HR boundary", () => {
 
   it("grants compensation access to the money roles and to HR", () => {
     const allowed = ROLES.filter((role) => canSeeCompensation(role));
-    assert.deepEqual(allowed, ["super_admin", "ceo", "admin", "finance", "hr"]);
+    assert.deepEqual(allowed, [
+      "super_admin",
+      "ceo",
+      "admin",
+      "finance",
+      "hr",
+      "cfo",
+    ]);
   });
 
   it("leaves paying the payroll to the roles that hold the bank", () => {
     // The one that matters most: this is money actually leaving.
     const canPay = ROLES.filter((role) => hasPermission(role, "payroll.pay"));
-    assert.deepEqual(canPay, ["super_admin", "admin", "finance"]);
+    assert.deepEqual(canPay, ["super_admin", "admin", "finance", "cfo"]);
   });
 });
 
@@ -112,6 +119,35 @@ describe("admin runs operations but not the company", () => {
   it("cannot change settings or manage users", () => {
     assert.equal(hasPermission("admin", "settings.write"), false);
     assert.equal(hasPermission("admin", "users.manage"), false);
+  });
+});
+
+describe("the CFO is admin's row, and stays that way", () => {
+  it("holds everything admin holds", () => {
+    // Asserted against admin rather than against a written-out list. The two
+    // are meant to be the same row, and a copied list is exactly what drifts:
+    // somebody grants admin a new permission, nothing fails, and the CFO
+    // quietly cannot do something they should.
+    for (const permission of PERMISSIONS) {
+      assert.equal(
+        hasPermission("cfo", permission),
+        hasPermission("admin", permission),
+        `cfo and admin disagree about ${permission}`,
+      );
+    }
+  });
+
+  it("cannot change settings or manage users", () => {
+    // The two that stay with super_admin alone. Named separately from the
+    // comparison above because this is the boundary, not a consequence of it —
+    // if admin ever gained either, this test must still fail.
+    assert.equal(hasPermission("cfo", "settings.write"), false);
+    assert.equal(hasPermission("cfo", "users.manage"), false);
+  });
+
+  it("can record a challan, which is what it was added for", () => {
+    assert.equal(hasPermission("cfo", "tds.read"), true);
+    assert.equal(hasPermission("cfo", "tds.write"), true);
   });
 });
 

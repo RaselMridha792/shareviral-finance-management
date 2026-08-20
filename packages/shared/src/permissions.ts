@@ -128,6 +128,9 @@ const OPERATIONAL_FULL: Permission[] = [
  * - `super_admin` is the only role with `settings.write` and `users.manage`.
  * - `ceo` is read-only by decision, but sees money and the audit log.
  * - `admin` runs operations but cannot change settings or manage users.
+ * - `cfo` is admin's row exactly — added for the challan work, and given the
+ *   whole operational set because a finance officer who cannot see payroll
+ *   is not one.
  * - `finance` matches admin minus master-data admin and imports.
  * - `hr` has team.read/write but NOT team.compensation.* and NOT payroll.* —
  *   this is the boundary the whole permission system exists to hold.
@@ -136,6 +139,20 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   ceo: READ_ONLY_EVERYTHING,
   admin: OPERATIONAL_FULL,
+  /**
+   * The same row as admin, and deliberately the same object.
+   *
+   * The owner's decision: a CFO does everything admin does — the ledger,
+   * payroll, salary, tax, the challans they were added for — but not
+   * `settings.write` and not `users.manage`, which stay with super_admin
+   * alone.
+   *
+   * Sharing the array rather than copying it is the point. Two lists that are
+   * meant to be identical drift the first time somebody adds a permission to
+   * one of them, and the drift is invisible: nothing fails, a role just
+   * quietly cannot do something it should.
+   */
+  cfo: OPERATIONAL_FULL,
   finance: [
     "dashboard.view",
     "dashboard.money",
