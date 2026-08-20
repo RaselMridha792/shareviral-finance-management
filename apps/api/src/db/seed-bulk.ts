@@ -136,8 +136,22 @@ const TARGET = 120;
 /** The two that stay. Compared lower-cased, like the unique index does. */
 const KEEP_ACCOUNTS = ["master card", "standard chartered bank"];
 
-/** Sign-ins that are real people. Never deleted, never counted as sample. */
-const REAL_USERS = "%@shareviral.cash";
+/**
+ * The address this file gives the sign-ins it creates, and the only ones the
+ * wipe deletes.
+ *
+ * It was the other way round — "delete anything that is not @shareviral.cash"
+ * — which is a rule about who is *not* real, and it was wrong on the live
+ * database, where the super admin signs in as a gmail address. That wipe would
+ * have taken the owner's own account with it, and `users` cascades: the
+ * sessions, the two-factor enrolment and the forty recovery codes behind it
+ * would have gone in the same statement.
+ *
+ * Naming what this file made is the safer direction. A real person is anyone
+ * this file did not create, whatever they signed up as, and no future address
+ * can accidentally fall outside the pattern and be deleted.
+ */
+const SAMPLE_USERS = "%@demo.sharevirals.test";
 
 /** Rows go in in batches; one round trip per row would take a quarter hour. */
 const CHUNK = 250;
@@ -598,10 +612,15 @@ async function wipe(tx: Tx): Promise<void> {
     }
   }
 
-  // Sample sign-ins, and everything hanging off them — two-factor enrolments,
-  // recovery codes and sessions all cascade from `users`.
+  // The sign-ins this file made, and only those. Everything hanging off a user
+  // cascades — two-factor enrolments, recovery codes, sessions, chats — which
+  // is exactly why the pattern names what to delete rather than what to spare.
+  //
+  // The role check is belt and braces: nothing here is created as a super
+  // admin, and if that ever changes this still refuses to delete one.
   const gone = await tx.execute(
-    sql`delete from users where email not ilike ${REAL_USERS}`,
+    sql`delete from users
+         where email ilike ${SAMPLE_USERS} and role <> 'super_admin'`,
   );
   if (gone.rowCount) {
     console.log(`  ${"users".padEnd(22)} ${gone.rowCount} removed`);
@@ -620,9 +639,16 @@ async function wipe(tx: Tx): Promise<void> {
     console.log(`  ${"accounts".padEnd(22)} ${dropped.rowCount} removed`);
   }
 
+  const [{ kept }] = (
+    await tx.execute<{ kept: number }>(
+      sql`select count(*)::int as kept from users`,
+    )
+  ).rows;
+
   console.log(
-    "\nKept: the two accounts, the five real sign-ins and their sessions,\n" +
-      "the category tree, the settings row, the tax policy, the audit log.\n",
+    `\nKept: the two accounts, ${kept} real sign-in(s) with their sessions,\n` +
+      "two-factor and recovery codes, the category tree, the settings row,\n" +
+      "the tax policy and the audit log.\n",
   );
 }
 
