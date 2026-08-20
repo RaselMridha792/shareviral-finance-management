@@ -1,6 +1,10 @@
 "use client";
 
-import { EMPLOYMENT_STATUS_LABELS, type Paginated } from "@finance/shared";
+import {
+  EMPLOYMENT_STATUS_LABELS,
+  EMPLOYMENT_TYPE_LABELS,
+  type Paginated,
+} from "@finance/shared";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -163,16 +167,26 @@ export function TeamScreen({
     m.status === "active" || m.status === "on_leave";
 
   /**
-   * Current / Past and Employees / Contractors are both split here, out of the
-   * twenty rows this page happens to hold — which is why neither split carries
-   * a count any more. See the note on the Segmented group below.
+   * Current / Past is split here, out of the twenty rows this page happens to
+   * hold — which is why it carries no count. See the note on the Segmented
+   * group below.
    */
   const current = data.items.filter(isCurrent);
   const past = data.items.filter((m) => !isCurrent(m));
 
+  /**
+   * One list, not two.
+   *
+   * There were two panels here — Employees and Contractors — cut from this
+   * page by `engagementType`. They are gone, and the fact they carried is the
+   * Employment type column instead: every contractor reads Contractual, which
+   * is the same fact in the place somebody scanning a directory is already
+   * looking. Two panels for one page of twenty rows also meant the second one
+   * appeared and vanished depending on whether that page happened to contain a
+   * contractor, which reads as the company having hired and fired one between
+   * page one and page two.
+   */
   const shown = tab === "current" ? current : past;
-  const employees = shown.filter((m) => m.engagementType === "employee");
-  const contractors = shown.filter((m) => m.engagementType === "contractor");
 
   return (
     <>
@@ -286,38 +300,31 @@ export function TeamScreen({
               </p>
             </Card>
           ) : (
-            <>
-              <Section
-                title="Employees"
-                subtitle={
-                  tab === "past"
-                    ? "No longer on the salary sheet"
-                    : "Drawn on the monthly salary sheet"
-                }
-                members={employees}
-                page={page}
-                past={tab === "past"}
-                showPay={canSeePay}
-                salaries={salaries}
-                onEdit={canWrite ? setEditing : undefined}
-                onStatus={canWrite ? goToProfile : undefined}
-              />
-              <Section
-                title="Contractors"
-                subtitle={
-                  tab === "past"
-                    ? "No longer billing"
-                    : "Paid against bills — not on the salary sheet"
-                }
-                members={contractors}
-                page={page}
-                past={tab === "past"}
-                showPay={canSeePay}
-                salaries={salaries}
-                onEdit={canWrite ? setEditing : undefined}
-                onStatus={canWrite ? goToProfile : undefined}
-              />
-            </>
+            /*
+              The heading names the rows, not the tab.
+
+              The obvious title here is the tab's own name — and it would then
+              sit a few pixels under a selected tab already saying it, which
+              is a heading whose whole content is on screen twice. What the
+              rows have in common is the thing that actually changed: the
+              employees and the contractors are one list now. The description
+              is what varies with the tab, because that is what varies.
+            */
+            <Section
+              title="Employees and contractors"
+              subtitle={
+                tab === "past"
+                  ? "No longer on the salary sheet, and no longer billing"
+                  : "Everyone drawing a salary or billing right now"
+              }
+              members={shown}
+              page={page}
+              past={tab === "past"}
+              showPay={canSeePay}
+              salaries={salaries}
+              onEdit={canWrite ? setEditing : undefined}
+              onStatus={canWrite ? goToProfile : undefined}
+            />
           )}
         </>
       )}
@@ -329,10 +336,9 @@ export function TeamScreen({
           written inside it vanishes on exactly the page somebody needs it on:
           the one that came up blank, with Previous the only way back.
 
-          One, because there is one request behind all of this. Employees and
-          Contractors are two tables cut from a single fetched page, and the
-          tab cuts it again; none of those four views is a page of its own, so
-          none of them gets its own control. What this pages is the team.
+          One, because there is one request behind all of this. The tab cuts a
+          single fetched page in two, and neither half is a page of its own, so
+          neither gets its own control. What this pages is the team.
       */}
       <Pagination
         page={page}
@@ -403,16 +409,18 @@ function Section({
      * That number counted the employees among the rows this page holds, not
      * the employees. Once a page is twenty people it says 12 on page one and
      * 8 on page two about a company whose payroll has not changed, and the
-     * engagement split is made here rather than asked for, so the whole set
-     * never sends a figure that could replace it. A heading that names a
-     * quantity has to be right about it; this one now names the group.
+     * split was made here rather than asked for, so the whole set never sent a
+     * figure that could replace it. A heading that names a quantity has to be
+     * right about it; this one now names the group. The honest total is on the
+     * pager below, which is the one figure this screen fetches.
      */
-    <DataPanel
-      title={title}
-      icon={title === "Contractors" ? "badge" : "groups"}
-      description={subtitle}
-    >
-      <table className="table-data min-w-[960px] text-sm">
+    <DataPanel title={title} icon="groups" description={subtitle}>
+      {/* 960 before Employment type. The fixed columns alone now come to
+          roughly a thousand pixels, and a min-width under them lets the
+          browser squeeze Designation instead of scrolling — which wraps
+          "Business Development Executive" onto three lines. The panel's own
+          overflow-x-auto keeps the scroll inside the card, off the page. */}
+      <table className="table-data min-w-[1080px] text-sm">
         <thead>
           <tr className="text-left">
             {/*
@@ -442,6 +450,19 @@ function Section({
               </Th>
             ) : null}
             <Th width="w-40">Designation</Th>
+            {/*
+              Where and on what footing somebody works, next to what they do.
+
+              It sits after Designation because the two are read together —
+              "Motion Designer, Remote" is one answer to one question, and the
+              department is a different one. It also carries what the removed
+              Contractors panel used to: a contractor reads Contractual here.
+
+              Not a badge. Every row has a value, so twenty tinted pills down
+              one column would be the loudest thing on a screen whose subject
+              is the people, and a badge on every row distinguishes nobody.
+            */}
+            <Th width="w-32">Employment type</Th>
             <Th width="w-32">Department</Th>
             <Th width="w-28">Status</Th>
             {/*
@@ -481,10 +502,12 @@ function Section({
                 >
                   {member.fullName}
                 </Link>
-                {/* No "Employee" under the name: the panel heading above says
-                    "Employees · 18", and the Contractors panel says
-                    Contractors. The label only ever carried information on a
-                    table that mixed the two, which this screen does not. */}
+                {/* No "Employee" or "Contractor" under the name. This table
+                    does now mix the two — the second panel is gone — but the
+                    Employment type column says Contractual on exactly the rows
+                    such a label would have appeared on, and a fact printed
+                    twice on one row is a row that is harder to read, not a row
+                    that says more. */}
               </td>
               {/*
                     Must appear under exactly the same condition as its header.
@@ -526,6 +549,22 @@ function Section({
               ) : null}
               <td className="text-muted-foreground">
                 {member.designation ?? "—"}
+              </td>
+              {/*
+                    An em dash, not "Onsite".
+
+                    The column is new and only contractors were given a value
+                    when it was added — because a contractor is engaged
+                    contractually, which is a fact and not a guess. Nobody has
+                    been asked where anyone else works, and filling the gap
+                    with the commonest answer would put a hundred and twenty
+                    unverified claims on a screen people answer questions from.
+                    The dash says "not recorded", which is true.
+                  */}
+              <td className="text-muted-foreground">
+                {member.employmentType
+                  ? EMPLOYMENT_TYPE_LABELS[member.employmentType]
+                  : "—"}
               </td>
               <td className="text-muted-foreground">
                 {member.department ?? "—"}

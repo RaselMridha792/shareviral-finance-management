@@ -4,6 +4,7 @@ import type {
   CreateTeamMemberInput,
   EducationLevel,
   EmploymentStatus,
+  EmploymentType,
   EngagementType,
   TdsBasis,
   Gender,
@@ -34,6 +35,15 @@ export type TeamMemberDto = {
   id: string;
   fullName: string;
   engagementType: EngagementType;
+  /**
+   * Where and on what footing they work — null until somebody says.
+   *
+   * Not the same field as `engagementType` above and not derived from it: that
+   * one decides whether payroll draws them, this one is the employment record.
+   * The only overlap is that every contractor was backfilled to `contractual`,
+   * which is the same fact under a second name.
+   */
+  employmentType: EmploymentType | null;
   department: string | null;
   designation: string | null;
   joinedOn: string;

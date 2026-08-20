@@ -43,6 +43,8 @@ export type TeamMemberDto = {
   id: string;
   fullName: string;
   engagementType: "employee" | "contractor";
+  /** Null until somebody says. Not defaulted — see the migration's note. */
+  employmentType: "onsite" | "remote" | "hybrid" | "contractual" | null;
   department: string | null;
   designation: string | null;
   joinedOn: string;
@@ -518,6 +520,7 @@ const projection = {
   id: teamMembers.id,
   fullName: teamMembers.fullName,
   engagementType: teamMembers.engagementType,
+  employmentType: teamMembers.employmentType,
   department: teamMembers.department,
   designation: teamMembers.designation,
   joinedOn: teamMembers.joinedOn,

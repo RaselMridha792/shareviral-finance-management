@@ -59,6 +59,38 @@ export const ENGAGEMENT_LABELS: Record<EngagementType, string> = {
   contractor: "Contractor",
 };
 
+/**
+ * Where and on what footing somebody works.
+ *
+ * A different question from `engagementType` above, and deliberately a
+ * separate field. `engagementType` is what payroll runs on — employee means
+ * the salary sheet draws them, contractor means they bill — and it must not
+ * change meaning because HR marked somebody Remote.
+ *
+ * `contractual` sits in this list beside the three places of work rather than
+ * duplicating `contractor`, because that is how the company describes it: the
+ * question is one question, and "how are they engaged" is one of the answers
+ * people give to it.
+ *
+ * Optional everywhere. Nobody has been asked yet, and a required field with no
+ * answer is a field somebody invents an answer for.
+ */
+export const EMPLOYMENT_TYPES = [
+  "onsite",
+  "remote",
+  "hybrid",
+  "contractual",
+] as const;
+export const employmentTypeSchema = z.enum(EMPLOYMENT_TYPES);
+export type EmploymentType = z.infer<typeof employmentTypeSchema>;
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  onsite: "Onsite",
+  remote: "Remote",
+  hybrid: "Hybrid",
+  contractual: "Contractual",
+};
+
 export const EMPLOYMENT_STATUSES = [
   "active",
   "on_leave",
@@ -167,6 +199,13 @@ export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
 export const createTeamMemberSchema = z.strictObject({
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
   engagementType: engagementTypeSchema.default("employee"),
+  /**
+   * No default. Every other enum here either has an obvious starting answer
+   * (`employee`, `unknown`) or is left out; this one has none, and guessing
+   * `onsite` on behalf of whoever fills the form in is how a directory ends up
+   * full of a value nobody chose.
+   */
+  employmentType: employmentTypeSchema.optional(),
   department: optionalText(60),
   designation: optionalText(80),
   joinedOn: isoDateSchema,

@@ -6,6 +6,8 @@ import {
   EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUSES,
   EMPLOYMENT_STATUS_LABELS,
+  EMPLOYMENT_TYPES,
+  EMPLOYMENT_TYPE_LABELS,
   ENGAGEMENT_LABELS,
   ENGAGEMENT_TYPES,
   GENDERS,
@@ -34,7 +36,12 @@ import { teamApi, type TeamMemberDto } from "@/lib/payroll";
  * Enums on the API side, where "" is not a valid answer. An unanswered one is
  * left out of the request rather than sent empty.
  */
-const OMIT_WHEN_BLANK = ["gender", "bloodGroup", "educationLevel"] as const;
+const OMIT_WHEN_BLANK = [
+  "gender",
+  "bloodGroup",
+  "educationLevel",
+  "employmentType",
+] as const;
 
 export function TeamMemberForm({
   open,
@@ -133,7 +140,18 @@ export function TeamMemberForm({
         className="flex flex-col gap-4"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Type" required>
+          {/*
+              Two questions that look like one, and are not.
+
+              "Type" decides whether payroll draws somebody on the salary sheet
+              or whether they bill — it is what the monthly run reads, and the
+              wrong answer here is a missing payslip. "Employment type" is the
+              employment record: where and on what footing they work. They sit
+              side by side because whoever fills this in answers both at once,
+              and the hints say which is which so the pair cannot be read as a
+              duplicate.
+          */}
+          <Field label="Type" required hint="What payroll does with them">
             <Select
               name="engagementType"
               defaultValue={member?.engagementType ?? "employee"}
@@ -141,6 +159,27 @@ export function TeamMemberForm({
               {ENGAGEMENT_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {ENGAGEMENT_LABELS[type]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {/*
+              "Not set" is a real answer and stays selectable.
+
+              Nobody has been asked this about the people already on record, so
+              the blank is what most of them hold; an option list that cannot
+              express it would make the first person to open somebody's drawer
+              pick a value on their behalf just to save an unrelated edit.
+          */}
+          <Field label="Employment type" hint="Where and on what footing">
+            <Select
+              name="employmentType"
+              defaultValue={member?.employmentType ?? ""}
+            >
+              <option value="">Not set</option>
+              {EMPLOYMENT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {EMPLOYMENT_TYPE_LABELS[type]}
                 </option>
               ))}
             </Select>

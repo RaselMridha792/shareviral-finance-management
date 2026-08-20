@@ -28,6 +28,24 @@ export const engagementTypeEnum = pgEnum("engagement_type", [
   "contractor",
 ]);
 
+/**
+ * Where and on what footing somebody works.
+ *
+ * Not `engagementType`, which is the payroll question — whether the salary
+ * sheet draws them or whether they bill. The two are separate columns so that
+ * marking somebody Remote can never change what payroll does with them.
+ *
+ * Order is the order it was created in and cannot be changed: a value added to
+ * a Postgres enum goes on the end unless the whole type is rewritten, so this
+ * list and EMPLOYMENT_TYPES in packages/shared/src/payroll.ts must agree.
+ */
+export const employmentTypeEnum = pgEnum("employment_type", [
+  "onsite",
+  "remote",
+  "hybrid",
+  "contractual",
+]);
+
 export const employmentStatusEnum = pgEnum("employment_status", [
   "active",
   "on_leave",
@@ -70,6 +88,16 @@ export const teamMembers = pgTable(
     engagementType: engagementTypeEnum("engagement_type")
       .notNull()
       .default("employee"),
+
+    /**
+     * Nullable, and null means nobody has said yet.
+     *
+     * A default of `onsite` would have written an answer for everybody already
+     * on record that no one was asked, and there would then be no telling a
+     * deliberate Onsite from a column nobody has touched. The team list prints
+     * an em dash for null, which is the honest reading.
+     */
+    employmentType: employmentTypeEnum("employment_type"),
 
     department: text("department"),
     /**

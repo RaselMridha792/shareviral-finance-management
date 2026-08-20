@@ -20,6 +20,76 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — Team gets an Employment type column, and loses its second table
+
+**Done.** The owner's two asks on the **Team** page, and nothing else on it.
+
+*A new column, after Designation.* **Employment type** — Onsite, Remote, Hybrid, Contractual.
+It is a new field, `team_members.employment_type`, and it is **not** `engagement_type`. That one
+is the payroll question — employee means the salary sheet draws them, contractor means they bill
+— and it stays exactly where it was, because marking somebody Remote must not change what the
+monthly run does with them. The new one is the employment record: where and on what footing.
+
+Nullable, and null prints an em dash. The migration seeds one value and only one: every
+contractor became `contractual`, which is the same fact under a second name rather than a guess.
+Nobody has been asked where anyone else works, so 45 of the 50 local rows read "—" and will until
+HR opens their drawer. Defaulting the lot to Onsite would have put a hundred and twenty
+unverified claims on a screen people answer questions from.
+
+*The Contractors panel is gone, and its people are not.* One table now. Removing the panel on its
+own would have dropped every contractor off the page — so the split by `engagementType` went with
+it, and the fact that panel carried is the new column instead: a contractor reads **Contractual**
+where somebody scanning the directory is already looking. Two panels over a page of twenty rows
+also meant the second appeared and vanished depending on whether that page happened to hold a
+contractor.
+
+The panel heading is "Employees and contractors" rather than the tab's own name, which would have
+restated a selected tab four pixels above it. The description still changes with the tab.
+
+*The drawer can set it.* Two selects side by side — Type ("What payroll does with them") and
+Employment type ("Where and on what footing"), hinted so the pair does not read as a duplicate.
+"Not set" is a real option and stays selectable.
+
+Commits: `ada36db` (migration, pushed alone and first), `HASH` (the page).
+
+**Watch out.** **The migration travels alone and had to land first** — Drizzle names every column
+in its SELECT, so the code without the column kills the team list, every profile, payroll and the
+payslip. `deploy/sql/2026-08-21-employment-type.sql` is idempotent and its backfill only touches
+rows still null, so a value HR sets later survives a re-run. Applied locally with `node .sql.mjs`
+and measured: the enum has its four values, the column is nullable, 5 contractors carry
+`contractual`, 45 employees are null.
+
+`packages/shared/src/payroll.ts` gained `EMPLOYMENT_TYPES`, `employmentTypeSchema`,
+`EMPLOYMENT_TYPE_LABELS` and one optional field on `createTeamMemberSchema`. Purely additive —
+no existing caller changes behaviour, and the AI intake's `labelFor` already renders an unmapped
+key as "Employment type" without help. Nothing else under `components/ui/`, `components/money/`
+or `lib/` was touched.
+
+Measured rather than argued, with `.teamcol.mjs`, `.teampast.mjs` and `.teamwrite.mjs`
+(untracked). Both tabs, 1440/1024/768/390, both themes: **one** panel, **0px** of page overflow
+everywhere, the column at index 5 on Current and index 6 on Past — after Designation, before
+Department, in both — and **0** rows whose cell count disagrees with the header, which is the
+failure the Last day column produced last time it was added. The table's `min-w` went 960 → 1080
+for the extra column; the panel's own `overflow-x-auto` keeps the scroll inside the card (11px at
+1440, 424px at 1024, which is ordinary for this app — the subscriptions table is 2064px wide).
+End to end through the UI: an em dash, drawer defaulting to "Not set", pick Hybrid, save — the
+cell reads Hybrid and the database column holds `hybrid`. Four CI steps run separately, all green
+(308 tests).
+
+**Open.** Three surfaces know nothing about the new field, deliberately, because they are not this
+page:
+
+- **The profile at `/team/[id]`** shows the engagement type and not this one. HR can set it from
+  the list drawer and then not see it on the record it belongs to. Worth its own session.
+- **The team export** (`exports.controller.ts`) has an Engagement column and no Employment type
+  column.
+- **Clearing it back to "Not set" is not possible from the drawer.** A blank enum is omitted from
+  the PATCH rather than sent as null, so an existing value stays — the same behaviour gender and
+  blood group have had all along. Fixing it means the nullable-patch treatment `endedOn` gets, for
+  all four fields at once.
+
+---
+
 ## 2026-08-21 — the filter segments become tabs, and the rate stops being printed twice
 
 **Done.** Two small things the owner asked for on the heading page, on top of this morning's
