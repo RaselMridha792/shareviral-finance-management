@@ -793,8 +793,29 @@ async function load(tx: Tx): Promise<void> {
   const catByName = new Map(
     childrenOnly.map((c) => [c.name.toLowerCase(), c.id]),
   );
-  const cat = (name: string) =>
-    catByName.get(name.toLowerCase()) ?? pick(outCats).id;
+
+  /*
+   * Falls back to a fixed heading, and never to `pick()`.
+   *
+   * It was `?? pick(outCats).id`, and the right-hand side of `??` only runs
+   * when the name is missing — so whether this consumed a random draw depended
+   * on what was already in the database. In `dry` the new categories are built
+   * and not inserted, so "AI tools" was missing and `pick` ran; in a real load
+   * the same call found the row and `pick` did not. One different draw shifts
+   * every number after it, which is how a dry run reported a register that
+   * never went below nine lakh and the load that followed put it seventy-two
+   * lakh under.
+   *
+   * A dry run is only worth having if it is the same run. Nothing that decides
+   * whether the generator advances may depend on what is already stored.
+   */
+  const missingCats = new Set<string>();
+  const cat = (name: string) => {
+    const found = catByName.get(name.toLowerCase());
+    if (found) return found;
+    missingCats.add(name);
+    return outCats[0].id;
+  };
 
   /* --- vendors ---------------------------------------------------------- */
 
@@ -1762,6 +1783,89 @@ async function load(tx: Tx): Promise<void> {
       updatedBy: actor.id,
     };
   });
+
+  /* --- top-ups, so the register cannot go under --------------------------
+   *
+   * Everything above invents a month at a time and hopes the funding covers
+   * it. Twice it did not, and the second time only after the load had already
+   * committed: the bank reached seventy-two lakh below zero in the middle of
+   * the two years while still closing ahead. Raising the wire size fixes one
+   * draw of the dice and leaves the next one to chance.
+   *
+   * This walks the finished bank ledger in date order instead, and where the
+   * balance would fall through the floor it puts a further transfer in on that
+   * day, large enough to clear it. The company being topped up when the
+   * account runs low is what actually happens; more to the point, the register
+   * now cannot go under whatever the generator rolled, which is a property
+   * rather than a result.
+   */
+
+  const FLOOR = 500_000;
+  const HEADROOM = 2_500_000;
+
+  const topUps: Txn[] = [];
+  {
+    const ledger = txns
+      .filter((t) => t.accountId === bank.id)
+      .sort((a, b) => (a.txnDate as string).localeCompare(b.txnDate as string));
+
+    let running = Number(bank.openingBalance);
+    for (const t of ledger) {
+      const delta = (t.direction === "in" ? 1 : -1) * Number(t.amount);
+      if (running + delta < FLOOR) {
+        // Round up to the lakh: a wire is a round number, and an amount
+        // computed to the paisa reads as a figure somebody derived.
+        const amount =
+          Math.ceil((FLOOR + HEADROOM - (running + delta)) / 100_000) * 100_000;
+        // The day before the entry it rescues, never earlier than the books
+        // begin. Dated the same day it would sort after it — `sort` is stable
+        // and these are appended last — and the register would still show the
+        // dip this exists to remove.
+        const earlier = new Date(`${t.txnDate as string}T00:00:00Z`);
+        earlier.setUTCDate(earlier.getUTCDate() - 1);
+        const date = iso(earlier) < ledgerStart ? ledgerStart : iso(earlier);
+        const rate = usdRateOn(date);
+        topUps.push({
+          id: randomUUID(),
+          refNo: nextRef(date),
+          accountId: bank.id,
+          direction: "in",
+          txnDate: date,
+          amount: amount.toFixed(2),
+          currency: "BDT",
+          categoryId: cat("CEO funding"),
+          description: `Additional funding from CEO — ${date.slice(0, 7)}`,
+          originalAmount: (amount / Number(rate)).toFixed(2),
+          originalCurrency: "USD",
+          fxRate: rate,
+          fxRateSource: "manual",
+          usdRate: rate,
+          senderBankName: "Wise",
+          senderAccountName: "ShareViral Corp",
+          paymentMethod: "bank_transfer",
+          reference: `FT${String(topUps.length + 1).padStart(11, "0")}`,
+          createdVia: "manual",
+          notes: `Bulk sample ${TAG}`,
+          ...stamp,
+        });
+        running += amount;
+      }
+      running += delta;
+    }
+  }
+  txns.push(...topUps);
+  if (topUps.length) {
+    console.log(
+      `  ${"(top-ups added)".padEnd(22)} ${topUps.length} to keep the bank above ${FLOOR.toLocaleString("en-IN")}`,
+    );
+  }
+
+  if (missingCats.size) {
+    console.log(
+      `  ! ${missingCats.size} category name(s) not in the tree, filed under ` +
+        `"${outCats[0].name}": ${[...missingCats].join(", ")}`,
+    );
+  }
 
   /* --- the money, and everything that hangs off it ----------------------- */
 
