@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   integer,
@@ -114,6 +115,20 @@ export const appSettings = pgTable(
      * Never leaves the server. The API returns only whether it is set and the
      * last four characters.
      */
+    /**
+     * Email, and the provider's key sealed the way the Anthropic one is.
+     *
+     * `emailEnabled` is separate from having a key on purpose: a mailer that
+     * starts sending the moment somebody pastes a key is how a test message
+     * reaches a customer.
+     */
+    resendApiKey: text("resend_api_key"),
+    resendKeySetAt: timestamp("resend_key_set_at", { withTimezone: true }),
+    resendKeySetBy: uuid("resend_key_set_by"),
+    emailFrom: varchar("email_from", { length: 200 }),
+    emailAdminAddress: varchar("email_admin_address", { length: 200 }),
+    emailEnabled: boolean("email_enabled").notNull().default(false),
+
     anthropicApiKey: text("anthropic_api_key"),
     anthropicKeySetAt: timestamp("anthropic_key_set_at", {
       withTimezone: true,

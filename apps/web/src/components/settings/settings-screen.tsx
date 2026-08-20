@@ -12,6 +12,7 @@ import { CompanyPanel } from "./company-panel";
 import { FxPanel } from "./fx-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
+import { EmailPanel } from "./email-panel";
 import { SecurityPanel } from "./security-panel";
 import { TaxPanel } from "./tax-panel";
 import { UsersPanel } from "./users-panel";
@@ -34,6 +35,7 @@ const TABS = [
   { id: "users", label: "People who can sign in", permission: "users.manage" },
   { id: "audit", label: "What changed", permission: "audit.read" },
   { id: "assistant", label: "Assistant", permission: "settings.write" },
+  { id: "email", label: "Email", permission: "settings.write" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -112,6 +114,7 @@ export function SettingsScreen({
       ) : null}
       {tab === "audit" && canReadAudit ? <AuditPanel /> : null}
       {tab === "assistant" && canWriteSettings ? <AssistantPanel /> : null}
+      {tab === "email" && canWriteSettings ? <EmailPanel /> : null}
     </>
   );
 }

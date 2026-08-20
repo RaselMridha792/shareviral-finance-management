@@ -10,7 +10,10 @@ import { AuditSafetyNetInterceptor } from "./common/interceptors/audit-safety-ne
 import { validateEnv } from "./config/env";
 import { DbModule } from "./db/db.module";
 import { AccountsModule } from "./modules/accounts/accounts.module";
+import { ScheduleModule } from "@nestjs/schedule";
+
 import { AiIntakeModule } from "./modules/ai-intake/ai-intake.module";
+import { EmailModule } from "./modules/email/email.module";
 import { AuditLogModule } from "./modules/audit/audit-log.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
@@ -32,6 +35,14 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
 
 @Module({
   imports: [
+    /*
+     * Process-wide, and registered once.
+     *
+     * Two `forRoot()` calls would give two schedulers and therefore two of
+     * every cron — which for a mailer means everybody told twice, on a job
+     * whose whole design is about not doing that.
+     */
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [".env.local", ".env"],
@@ -59,6 +70,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     ReportsModule,
     AuditLogModule,
     AiIntakeModule,
+    EmailModule,
   ],
   providers: [
     // Order matters: reject cross-site writes, then authenticate, then check

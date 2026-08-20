@@ -14,6 +14,7 @@
 export * from "./enums";
 export * from "./users";
 export * from "./two-factor";
+export * from "./notifications";
 export * from "./audit";
 export * from "./accounts";
 export * from "./categories";

@@ -362,3 +362,59 @@ export function uploadSignature(file: File) {
 export function deleteStoredFile(fileId: string) {
   return apiFetch<void>(`/files/${fileId}`, { method: "DELETE" });
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Email                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type NotificationLogRow = {
+  id: string;
+  kind: string;
+  subjectId: string | null;
+  subjectDate: string | null;
+  recipient: string;
+  sentAt: string;
+  outcome: string;
+  error: string | null;
+};
+
+export type EmailStatus = {
+  configured: boolean;
+  keySetAt: string | null;
+  from: string | null;
+  adminAddress: string | null;
+  enabled: boolean;
+  /** Null when it can send; otherwise the one thing still missing. */
+  blockedBy: string | null;
+  recent: NotificationLogRow[];
+};
+
+export const emailApi = {
+  status: () => apiFetch<EmailStatus>("/email/status", { cache: "no-store" }),
+  setKey: (apiKey: string) =>
+    apiFetch<{ saved: boolean; message: string | null }>("/email/key", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    }),
+  clearKey: () =>
+    apiFetch<{ saved: boolean }>("/email/key", { method: "DELETE" }),
+  update: (input: {
+    from?: string;
+    adminAddress?: string;
+    enabled?: boolean;
+  }) =>
+    apiFetch<{ saved: boolean }>("/email/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  test: () =>
+    apiFetch<{ sent: boolean; message: string }>("/email/test", {
+      method: "POST",
+    }),
+  runReminders: () =>
+    apiFetch<{ sent: number; message: string }>("/email/run-reminders", {
+      method: "POST",
+    }),
+};
