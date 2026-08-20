@@ -15,9 +15,13 @@ OnBootSec=2min
 # This said `OnUnitActiveSec`, which schedules relative to the service's last
 # activation — and so schedules nothing at all while that activation is still
 # considered active. One run that does not exit cleanly is enough: the timer
-# reports `Trigger: n/a` and never fires again, silently, which is exactly how
-# a release sat unnoticed on the server for two hours while `systemctl status`
-# said `active (running)` and looked healthy.
+# reports `Trigger: n/a` and never fires again, silently, while `systemctl
+# status` still says `active (running)` and looks healthy.
+#
+# Whether that is what stalled the server on 2026-08-20 is not settled — the
+# journal would have said, and it was not read before the deploy was run by
+# hand. The change is worth making either way: this is the failure mode the
+# unit had, and none of it was visible from outside the box.
 #
 # `OnUnitInactiveSec` cannot stall that way. It measures from the moment the
 # service goes inactive, so the next check is always scheduled by the end of
