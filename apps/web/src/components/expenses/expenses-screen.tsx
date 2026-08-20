@@ -1,77 +1,68 @@
 "use client";
 
-import { LoaderCircle, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { TransactionForm } from "@/components/ledger/transaction-form";
-import { TransactionTable } from "@/components/ledger/transaction-table";
-import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SummaryBar } from "@/components/ui/patterns";
 import { ApiError } from "@/lib/api-client";
+import { ledgerApi, type ExpenseSummary } from "@/lib/ledger";
+import { categoriesApi, type CategoryNode } from "@/lib/masters";
 import {
-  ledgerApi,
-  type ExpenseSummary,
-  type TransactionDto,
-} from "@/lib/ledger";
-import type { AccountDto, CategoryNode } from "@/lib/masters";
-import { HeadingChooser, useHiddenHeadings } from "./heading-chooser";
+  HeadingChooser,
+  headingsFor,
+  isShown,
+  useHeadingChoice,
+} from "./heading-chooser";
 import { MonthPicker, type Range } from "./month-picker";
-
-/** One screenful. Anything past this is said out loud rather than dropped. */
-const PAGE_SIZE = 100;
 
 export function ExpensesScreen({
   initialSummary,
   initialRange,
-  accounts,
   categories,
 }: {
   initialSummary: ExpenseSummary;
   initialRange: Range;
-  accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
   const [range, setRange] = useState(initialRange);
   const [summary, setSummary] = useState(initialSummary);
-  const [rows, setRows] = useState<TransactionDto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tree, setTree] = useState(categories);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [total, setTotal] = useState(0);
-  const [editing, setEditing] = useState<TransactionDto | null>(null);
-  const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
   /*
    * The cards on screen, and the ones the reader has put away.
    *
    * Only the cards. The summary above them counts every heading the period
-   * has, and the table below shows every entry — hiding a card is a preference
-   * about this screen, not a filter on the company's money.
+   * has — hiding a card is a preference about this screen, not a filter on the
+   * company's money — and a card can be here with nothing against it yet,
+   * because somebody asked to watch that heading.
    */
-  const hiddenIds = useHiddenHeadings();
-  const shown = summary.groups.filter((g) => !hiddenIds.includes(g.id));
-  const hidden = summary.groups.filter((g) => hiddenIds.includes(g.id));
+  const picked = useHeadingChoice();
+  const headings = useMemo(
+    () => headingsFor(summary.groups, tree),
+    [summary.groups, tree],
+  );
+  const cards = headings.filter((h) => isShown(picked, h));
+  const hidden = headings.filter((h) => h.hasSpend && !isShown(picked, h));
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [next, list] = await Promise.all([
+      // Both, because a heading created from the drawer has to reach the list
+      // it is ticked on in, and it has no spend to bring it back in the
+      // summary.
+      const [next, categoriesNow] = await Promise.all([
         ledgerApi.expenseSummary({ from: range.from, to: range.to }),
-        ledgerApi.list({
-          from: range.from,
-          to: range.to,
-          direction: "out",
-          page: 1,
-          pageSize: PAGE_SIZE,
-        }),
+        categoriesApi.tree(),
       ]);
       setSummary(next);
-      setRows(list.items);
-      setTotal(list.total);
+      setTree(categoriesNow);
     } catch (caught) {
       // Without this the screen sat on "Loading…" for ever and never said why.
       setError(
@@ -117,8 +108,8 @@ export function ExpensesScreen({
           <>
             <MonthPicker range={range} onChange={setRange} />
             <HeadingChooser
-              headings={summary.groups}
-              categories={categories}
+              headings={headings}
+              categories={tree}
               onCreated={load}
             />
           </>
@@ -147,29 +138,39 @@ export function ExpensesScreen({
         value={<Amount value={summary.total} tone="neutral" />}
       />
 
-      {summary.groups.length === 0 ? (
+      {cards.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
             <Receipt className="size-6" />
           </span>
+          {/* An empty grid has two causes and they are not the same news:
+              nothing was spent, or everything that was is ticked off. */}
           <div>
             <p className="text-lg font-semibold">
-              Nothing spent in {range.label}
+              {summary.groups.length === 0
+                ? `Nothing spent in ${range.label}`
+                : "Every heading is ticked off this screen"}
             </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Record an expense, or step back a month to see an earlier one.
+              {summary.groups.length === 0
+                ? "Record an expense, step back a month to see an earlier one, or use add category to keep a heading on screen from now on."
+                : "The money is still in the total above. Use add category to put the cards back."}
             </p>
           </div>
         </Card>
       ) : (
         <div
-          className="grid gap-4"
+          aria-busy={loading}
+          className={`grid gap-4 transition-opacity ${loading ? "opacity-60" : ""}`}
           style={{
             gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
           }}
         >
-          {shown.map((group) => {
-            const share = (Number(group.total) / Number(summary.total)) * 100;
+          {cards.map((group) => {
+            // A month with nothing in it makes every share 0/0. Nought is the
+            // honest answer there, not NaN%.
+            const spent = Number(summary.total);
+            const share = spent > 0 ? (Number(group.total) / spent) * 100 : 0;
             return (
               // One tile per category — see the note in team-screen.tsx.
               <Link
@@ -210,48 +211,6 @@ export function ExpensesScreen({
           })}
         </div>
       )}
-
-      <Card>
-        <CardHeader
-          title="Every expense this month"
-          description={
-            total > rows.length
-              ? `Showing the most recent ${rows.length} of ${total} — narrow the month or use All transactions to see the rest`
-              : `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`
-          }
-        />
-        <CardBody className="p-0">
-          {loading ? (
-            <p className="flex items-center justify-center gap-2 px-6 py-10 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading…
-            </p>
-          ) : (
-            <TransactionTable
-              rows={rows}
-              onEdit={setEditing}
-              onVoid={setVoiding}
-              emptyMessage="No expenses recorded in this month."
-            />
-          )}
-        </CardBody>
-      </Card>
-
-      <TransactionForm
-        key={editing?.id}
-        open={Boolean(editing)}
-        transaction={editing ?? undefined}
-        accounts={accounts}
-        categories={categories}
-        lockDirection
-        onClose={() => setEditing(null)}
-        onSaved={load}
-      />
-      <VoidDialog
-        transaction={voiding}
-        onClose={() => setVoiding(null)}
-        onVoided={load}
-      />
     </>
   );
 }

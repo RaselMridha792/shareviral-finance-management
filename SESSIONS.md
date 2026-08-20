@@ -20,6 +20,60 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — a heading becomes a card because somebody asked, not because money moved
+
+**Done.** Three things on the Expenses overview, all asked for by the owner.
+
+*"add category" now adds.* The drawer used to list only the headings this month's spend had
+gone to, which meant ticking a box could never put a new card on screen — it could only swap
+between the ones already there — and a heading created from the drawer appeared nowhere until
+its first bill was recorded. It now lists **every** active `out` heading in the books, the quiet
+ones under a "Nothing spent under these this period" rule, each row carrying its colour and
+either its figure or "nothing yet". Tick as many as you like; a heading created here is ticked
+on as it is made, so its card is there before a taka has been spent against it.
+
+That needed the stored preference to change shape. It was a bare array of hidden ids, which
+cannot express "show this one that has no spend" — the localStorage key `svf-expense-headings`
+now holds `{on, off}`, and a bare array left by the old version is still read, as `off`. A
+heading with spend is a card unless it is in `off`; one without spend is a card only if it is in
+`on`. The load also refreshes the category tree now, not just the summary, because a heading
+that was created a second ago has nothing in the summary to bring it back.
+
+*The month's transaction table is gone.* "Every expense this month" is off the overview on the
+owner's instruction — the cards are the page, and each heading has its own table one click away.
+With it went the edit form, the void dialog and the accounts fetch that fed them; the page is
+2033px of scroll shorter.
+
+*The page scrolls again after a drawer closes.* Measured, not guessed — `.scrolllock.mjs`
+(untracked) walked it: open the chooser, open "Create a heading" inside it, close both, and
+`body` was still `overflow: hidden` until a reload.
+
+**Watch out — this last one is a shared change, made with the owner's go-ahead.** `Drawer` and
+`overlay.tsx`'s `useDismissable` each saved `body.style.overflow` on open and put it back on
+close, which is only correct while exactly one of them exists. Nested — and they nest all over
+this app: the category drawer opens from inside a transaction form, a confirm dialog from inside
+a drawer — the inner one finds `hidden` and records *that* as the value to restore. Both now
+call `useScrollLock` in `components/ui/scroll-lock.ts`, which counts holders: the first reads and
+locks, the last restores. Its effect deliberately depends on `open` alone, because callers pass
+inline `onClose` handlers whose identity changes every render and that churn was the other half
+of the bug.
+
+Sixteen files use `Drawer` and eight use the overlays, so this was measured across the app rather
+than on one screen: `.drawerlock.mjs` (untracked) opened and closed 16 dialogs on 8 screens and
+none left the page locked, and `node .sweep.mjs` is unchanged — every route 0px of sideways
+scroll, h1 28, pad 32/34, gap 20. `.headings.mjs` (untracked) drove the real page: created a
+heading, watched the card appear at once reading 0% · 0 entries with the other seven untouched,
+reloaded, unticked it, unticked one with spend and put it back, then deleted its row again.
+
+Four CI steps run separately, all green (308 tests). Commits: `TBD`.
+
+**Open.** Nothing half-done on the page. Two things noticed and deliberately left alone, each
+wanting its own session: `components/ledger/documents-dialog.tsx`, `dashboard/expense-row.tsx`
+and `subscriptions/screenshot-dialog.tsx` render `role="dialog"` by hand and take no scroll lock
+at all — harmless today, but they are the three that will not get the fix above. And the
+heading choice is still a browser preference; if it should follow the owner between machines it
+is a column and a migration.
+
 ## 2026-08-21 — the dashboard's account order is the owner's to set
 
 **Done.** An `Edit` button in the top-right corner of the dashboard puts the account blocks in

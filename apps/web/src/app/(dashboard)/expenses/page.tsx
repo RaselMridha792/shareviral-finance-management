@@ -2,7 +2,7 @@ import { monthRange, todayInDhaka } from "@finance/shared";
 
 import { ExpensesScreen } from "@/components/expenses/expenses-screen";
 import { ledgerApi } from "@/lib/ledger";
-import { accountsApi, categoriesApi } from "@/lib/masters";
+import { categoriesApi } from "@/lib/masters";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +15,11 @@ export default async function ExpensesPage() {
     Number(today.slice(5, 7)),
   );
 
-  const [summary, accounts, categories] = await Promise.all([
+  // No accounts here any more. They were only ever for the edit form under
+  // the month's transaction table, and this screen no longer carries one —
+  // the headings below are the page, and each has its own table.
+  const [summary, categories] = await Promise.all([
     ledgerApi.expenseSummary({ from: month.start, to: month.end }),
-    accountsApi.list(),
     categoriesApi.tree(),
   ]);
 
@@ -25,7 +27,6 @@ export default async function ExpensesPage() {
     <ExpensesScreen
       initialSummary={summary}
       initialRange={{ from: month.start, to: month.end, label: month.label }}
-      accounts={accounts}
       categories={categories}
     />
   );

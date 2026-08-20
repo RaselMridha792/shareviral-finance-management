@@ -3,6 +3,8 @@
 import { X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 
+import { useScrollLock } from "@/components/ui/scroll-lock";
+
 /**
  * Slide-over panel for create and edit forms.
  *
@@ -24,19 +26,17 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  // Separate from the key handler below, which has to follow `onClose` and so
+  // re-runs whenever the caller passes a fresh one. The lock must not.
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    // Stop the page behind from scrolling while the panel is open.
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;

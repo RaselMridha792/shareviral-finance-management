@@ -4,14 +4,22 @@ import { Download, X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useScrollLock } from "@/components/ui/scroll-lock";
 
 /**
  * Escape closes it, and the page behind stops scrolling while it is open.
  *
  * Shared by both overlays below rather than written twice, because the second
  * copy is the one that forgets to put the scrollbar back.
+ *
+ * The scrolling half is counted rather than saved and restored — a confirm
+ * dialog is routinely raised from inside a drawer that is already holding the
+ * page still, and two of these each putting back what they found is what left
+ * the page unscrollable. See `useScrollLock`.
  */
 export function useDismissable(open: boolean, onClose: () => void) {
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
 
@@ -20,13 +28,7 @@ export function useDismissable(open: boolean, onClose: () => void) {
     };
     document.addEventListener("keydown", onKey);
 
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 }
 
