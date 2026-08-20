@@ -46,7 +46,7 @@ and `challan-form.tsx` are deleted with it and are one `git show` away. `tdsApi.
 `createDeposit`, `updateDeposit` and `allocate` still answer and now have no caller, which is what
 the note at the top of `lib/tax.ts` already says about most of that file.
 
-Commits: `a3c3be2` (migration, pushed alone and first), `<CODE>` (the page).
+Commits: `a3c3be2` (migration, pushed alone and first), `d4fac46` (the page).
 
 **Watch out.** **The migration travels alone and had to land first** — Drizzle names every column
 in its SELECT, so shipping the code without it kills the payroll run, every payslip and this
