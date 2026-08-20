@@ -83,6 +83,11 @@ attribute. Give each its own session and its own push.
   replaying that directory in filename order puts the older rule back on top of the newer one.
   Idempotent is not the same as order-independent, which is why migrations are recorded rather
   than re-run.
+- **A command run inside a container runs the built image, not this working copy.**
+  `docker compose exec -T api node apps/api/dist/…` executes what CI built, so a commit that has
+  not been pushed and deployed is simply not in there. A seeder was nearly run this way with a
+  change that had been written, reviewed and left unpushed — it would have created 120 sign-in
+  accounts on the live site.
 - **Money is `numeric(14,2)` strings.** Sum in SQL, never with JS floats.
 - **`accounts.currency` marks which account is for foreign spend. It does not denominate the
   figures** — every amount in this app is BDT, including a USD card's.
