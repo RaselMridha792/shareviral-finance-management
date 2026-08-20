@@ -20,6 +20,38 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — the dashboard's account order is the owner's to set
+
+**Done.** An `Edit` button in the top-right corner of the dashboard puts the account blocks in
+hand: drag one, or move it with the arrows beside its heading, then `Done`. `Reset` puts the
+default back. The blocks and the ordering moved out of `overview-screen.tsx` into
+`components/dashboard/account-blocks.tsx`, which now holds the store, the default order and the
+block itself; the screen renders one `<AccountBlocks>`.
+
+**The order is a browser preference, not a database change** — the owner's choice. `sort_order`
+still belongs to the accounts page and every dropdown that follows it, and arranging the
+dashboard no longer moves them. Kept exactly the way the expense row keeps its chosen cards:
+`localStorage`, versioned key `sfm.dashboard.account-order.v1`, read through
+`useSyncExternalStore` so there is no flash and no setState-in-effect. It does not follow anybody
+to another machine; that is the point at which it earns a column.
+
+The default, when nothing is saved, is **bank, mobile wallet, cash, card** rather than the
+server's `sort_order`. On the live data that alone answers the ask — Standard Chartered Bank
+above Master card — without touching a row in the live database.
+
+Measured on the running page with `.dashorder.mjs` (untracked): default order correct, 20 move
+buttons for 10 blocks, an arrow moves and saves, a dispatched drag lands the bottom block on top,
+the order survives a reload, the arrows disappear when not editing, and `Reset` returns the
+default and clears the key. Four CI steps run separately, all green. Commits: `PENDING`.
+
+**Watch out.** Dragging reads the carried block from a ref rather than from state: `dragover` can
+arrive in the same tick as `dragstart`, before React has re-rendered, and the first version of
+this did nothing at all when it did. If you rewrite the drag handlers, keep the ref.
+
+**Open.** Nothing on the page is left half-done. If the order should follow the owner between
+laptop and phone, that is a column on `app_settings` and a migration — its own session, by the
+rule about schema changes travelling alone.
+
 ## 2026-08-21 — the dashboard shows every account, one block each
 
 **Done.** The overview's balance blocks are per account rather than per currency. It used to

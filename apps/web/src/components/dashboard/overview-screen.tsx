@@ -1,29 +1,21 @@
 "use client";
 
 import {
-  ACCOUNT_TYPE_LABELS,
   MONTH_NAMES,
   formatMoney,
   isSelectableMonth,
   nearestSelectableMonth,
   todayInDhaka,
-  type AccountGroup,
-  type AccountType,
   type OverviewReport,
 } from "@finance/shared";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
+import { AccountBlocks } from "@/components/dashboard/account-blocks";
 import { ExpenseRow } from "@/components/dashboard/expense-row";
 import { useSettings } from "@/components/settings-provider";
 import { Select } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icon";
-import {
-  SectionHeading,
-  ShareBar,
-  StatCell,
-  StatStrip,
-} from "@/components/ui/patterns";
 
 /**
  * The screen somebody opens first, and often the only one they open.
@@ -174,17 +166,14 @@ export function OverviewScreen({
         </div>
       </div>
 
-      {/* --- one block of figures per account ---------------------------- */}
-      {report.groups.map((group) => (
-        <AccountBlock
-          key={group.key}
-          group={group}
-          ended={periodHasEnded}
-          // December's opening is carried from November, and January's from
-          // December — hence the wrap rather than `month - 2`.
-          previousMonthName={MONTH_NAMES[(month + 10) % 12]}
-        />
-      ))}
+      {/* --- one block per account, in the order somebody chose ---------- */}
+      <AccountBlocks
+        groups={report.groups}
+        ended={periodHasEnded}
+        // December's opening is carried from November, and January's from
+        // December — hence the wrap rather than `month - 2`.
+        previousMonthName={MONTH_NAMES[(month + 10) % 12]}
+      />
 
       {/*
         The four figures at the top of the screen, and which four is now a
@@ -200,168 +189,4 @@ export function OverviewScreen({
       <ExpenseRow report={report} money={money} />
     </>
   );
-}
-
-/**
- * The same four the Accounts screen uses, so a card is a card on both.
- *
- * Deliberately a copy rather than a shared export: it is four lines, and
- * lifting it into `lib/` to save them would put a file every screen imports in
- * the path of a dashboard change.
- */
-const ICONS: Record<AccountType, string> = {
-  bank: "account_balance",
-  cash: "payments",
-  mobile_wallet: "smartphone",
-  card: "credit_card",
-};
-
-/**
- * One account: where it started, what moved, where it stands.
- *
- * The four read left to right as a sentence, and they tie —
- * opening + in − out is exactly current. Four figures in a box that do not add
- * up are four unrelated numbers, and a reader who checks once and finds they
- * disagree stops trusting the whole screen. The footnote under the last cell
- * says the arithmetic out loud so nobody has to work out whether it holds.
- */
-function AccountBlock({
-  group,
-  ended,
-  previousMonthName,
-}: {
-  group: AccountGroup;
-  /** True when the month on screen is over, so the figure is a close. */
-  ended: boolean;
-  /** Where the opening figure came from — "Carried forward from July". */
-  previousMonthName: string;
-}) {
-  const inflow = Number(group.moneyIn);
-  const outflow = Number(group.moneyOut);
-  // In plus out, not in minus out: this is the denominator the two share bars
-  // divide by, so it is how much moved rather than which way it went.
-  const moved = inflow + outflow;
-
-  return (
-    <section className="flex flex-col gap-3">
-      {/*
-        One heading per account, and the account names itself.
-
-        This block used to be a whole currency: "BD Bank overview" over the sum
-        of the bank, the card and the petty cash, their names crammed into the
-        grey line beside it. Two accounts, one row of figures, and no way to
-        read either one on its own. Now the name is the heading and the sub-line
-        says what kind of place the money sits in, which is the one thing the
-        name does not always tell you.
-      */}
-      <SectionHeading
-        title={group.label}
-        icon={ICONS[group.type] ?? "account_balance"}
-        iconTone="text-primary-text"
-        qualifier={ACCOUNT_TYPE_LABELS[group.type] ?? group.type}
-      />
-
-      <StatStrip>
-        {/* "Opening balance", not "Opening bank balance": the heading above
-            already says which account this is, and the longer label was the one
-            that wrapped. */}
-        <StatCell
-          label="Opening balance"
-          icon="history"
-          value={money(group.opening)}
-          secondary={usd(group.usd.opening)}
-          footnote={`Carried forward from ${previousMonthName}`}
-        />
-
-        <StatCell
-          label="Cash inflow"
-          tone="positive"
-          icon="south_west"
-          iconTone="text-positive"
-          value={money(group.moneyIn)}
-          secondary={usd(group.usd.moneyIn)}
-        >
-          {/* How the month split between arriving and leaving. Drawn only when
-              something moved: a full-width bar over two zeroes reads as a
-              hundred per cent of nothing. */}
-          {moved > 0 ? (
-            <>
-              <ShareBar share={inflow / moved} tone="bg-positive" />
-              <p className="text-[13px] text-muted-foreground">
-                {Math.round((inflow / moved) * 100)}% of total movement
-              </p>
-            </>
-          ) : null}
-        </StatCell>
-
-        <StatCell
-          label="Cash outflow"
-          tone="negative"
-          icon="north_east"
-          iconTone="text-negative"
-          value={money(group.moneyOut)}
-          secondary={usd(group.usd.moneyOut)}
-        >
-          {moved > 0 ? (
-            <>
-              <ShareBar share={outflow / moved} tone="bg-negative" />
-              <p className="text-[13px] text-muted-foreground">
-                {Math.round((outflow / moved) * 100)}% of total movement
-              </p>
-            </>
-          ) : null}
-        </StatCell>
-
-        {/*
-          The same figure under two names, and both are accurate.
-
-          It has always been the *period's* close — opening as at the first of
-          the month, plus what moved during it. On the month in progress that is
-          what the accounts hold right now, so "Current balance" is the honest
-          word. Look back at July from August and the number does not change
-          meaning, but the word does: it is what July closed at, which is
-          exactly what August opened with. Calling that "current" invites
-          somebody to read a two-month-old figure as today's cash.
-        */}
-        <StatCell
-          emphasis
-          label={ended ? "Closing balance" : "Current balance"}
-          icon="account_balance_wallet"
-          iconTone="text-primary-text"
-          value={money(group.closing)}
-          secondary={usd(group.usd.closing)}
-          footnote={
-            ended
-              ? "what the month closed at, and what the next opened with"
-              : "opening + in − out"
-          }
-        />
-      </StatStrip>
-    </section>
-  );
-}
-
-/**
- * The dollar line under a figure.
- *
- * Grouped and marked approximate. It was printing the raw string, so a
- * thirty-two-thousand-dollar balance read as "$32579.88" — the one number on
- * the screen with no separators, directly under one that had them.
- */
-function usd(value: string | null): string | null {
-  return value === null ? null : `≈ ${formatMoney(value, { currency: "USD" })}`;
-}
-
-/**
- * Taka, always — including the card's block.
- *
- * `group.currency` says what the card is *denominated* in; it does not say
- * what these four figures are in. Every amount in this system is recorded in
- * BDT, the card's included, with the foreign figure kept beside it on the
- * transaction. Formatting the block in dollars because the account is a dollar
- * one printed "$69,537.00" over "≈ $587.80" — the same money, two currencies,
- * off by a factor of a hundred and eighteen.
- */
-function money(value: string): string {
-  return formatMoney(value, { currency: "BDT" });
 }
