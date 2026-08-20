@@ -108,6 +108,18 @@ another when you need one.
 Before saying something works: run it, load the page, query the database. "It compiles" and "the
 tests pass" are not the same claim as "it does the thing".
 
+**When CI is red, read it — do not guess.** `gh` is installed and signed in, so the failure is
+one command away rather than a screenshot away:
+
+```bash
+gh run list --limit 5          # what happened, and to which commit
+gh run view --log-failed       # the failing step, and the lines that failed
+```
+
+Not having this cost two hours once: three whitespace errors failed `lint`, `test` gates `build`,
+so no image was published and the server sat nine commits behind while every log said nothing.
+The answer was one command the whole time.
+
 **Check the exit code, not the last three lines.** `npm run lint | tail -3 && git commit` cannot
 fail: the pipe makes the exit status `tail`'s, and the tail shows the last workspace rather than
 the one that broke. Four commits went out that way before CI caught three formatting errors, and
