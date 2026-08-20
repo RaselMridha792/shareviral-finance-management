@@ -39,6 +39,7 @@ export class EmailController {
         from: appSettings.emailFrom,
         admin: appSettings.emailAdminAddress,
         enabled: appSettings.emailEnabled,
+        toStaff: appSettings.emailToStaff,
       })
       .from(appSettings)
       .where(eq(appSettings.id, 1))
@@ -52,6 +53,7 @@ export class EmailController {
       from: row?.from ?? null,
       adminAddress: row?.admin ?? null,
       enabled: row?.enabled ?? false,
+      toStaff: row?.toStaff ?? true,
       /** Null when it can send; otherwise the one thing still missing. */
       blockedBy: ready.ok ? null : ready.reason,
       recent: await this.email.recent(20),
@@ -125,7 +127,12 @@ export class EmailController {
   @RequirePermission("settings.write")
   async update(
     @Body()
-    body: { from?: string; adminAddress?: string; enabled?: boolean },
+    body: {
+      from?: string;
+      adminAddress?: string;
+      enabled?: boolean;
+      toStaff?: boolean;
+    },
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.audit.mutate({
@@ -148,6 +155,9 @@ export class EmailController {
             ...(body.enabled !== undefined
               ? { emailEnabled: body.enabled }
               : {}),
+            ...(body.toStaff !== undefined
+              ? { emailToStaff: body.toStaff }
+              : {}),
             updatedAt: new Date(),
             updatedBy: actor.id,
           })
@@ -158,10 +168,22 @@ export class EmailController {
   }
 
   /**
-   * Send one to yourself.
+   * Send one to everybody a reminder would reach that we can reach on demand.
    *
-   * The only honest way to know whether a domain is verified and a key works.
-   * Everything before this point is a form that accepted some text.
+   * It used to go to the signed-in person and nobody else, which proved the
+   * key and the domain and left the question somebody actually asks —
+   * "does the address I typed into 'copy every reminder to' work?" — with no
+   * answer short of waiting for a real renewal. The owner set that field to an
+   * address on a different domain, pressed the button, and went looking for
+   * mail in an inbox this endpoint had never sent to.
+   *
+   * So it sends to both, and the message says which addresses it used. The
+   * admin address is the one worth proving: it is on somebody else's domain
+   * more often than not, and that is where mail quietly fails.
+   *
+   * Every recipient is attempted even when an earlier one fails. One bad
+   * address must not hide whether the other works — which is the same rule the
+   * reminder job itself follows.
    */
   @Post("test")
   @HttpCode(200)
@@ -170,22 +192,52 @@ export class EmailController {
     const config = await this.email.config();
     if (!config.ok) return { sent: false, message: config.reason };
 
-    const result = await this.email.send(
-      config.config,
-      actor.email,
-      "ShareViral Finance — test message",
-      `<div style="font-family:system-ui,sans-serif;font-size:15px">
+    // A Set, because the admin address is often the person pressing the
+    // button — and "sent 2 messages" to one inbox reads as a bug.
+    const targets = [...
+      new Set(
+        [actor.email, config.config.adminAddress]
+          .filter((address): address is string => Boolean(address))
+          .map((address) => address.trim().toLowerCase()),
+      ),
+    ];
+
+    const results: { to: string; ok: boolean; reason?: string }[] = [];
+    for (const to of targets) {
+      const result = await this.email.send(
+        config.config,
+        to,
+        "ShareViral Finance — test message",
+        `<div style="font-family:system-ui,sans-serif;font-size:15px">
         <p>This is the test message from Settings → Email.</p>
         <p style="color:#71717a;font-size:13px">
           If it arrived, the key works and the domain is verified. Renewal
           reminders go out at 9am Dhaka time, three days before a plan renews.
         </p>
       </div>`,
-    );
+      );
+      results.push(
+        result.ok
+          ? { to, ok: true }
+          : { to, ok: false, reason: result.reason },
+      );
+    }
 
-    return result.ok
-      ? { sent: true, message: `Sent to ${actor.email}.` }
-      : { sent: false, message: result.reason };
+    const sent = results.filter((r) => r.ok).map((r) => r.to);
+    const failed = results.filter((r) => !r.ok);
+
+    if (failed.length === 0) {
+      return { sent: true, message: `Sent to ${sent.join(" and ")}.` };
+    }
+
+    // Partly worked is its own answer, and the useful half of it is which
+    // address failed rather than that something did.
+    return {
+      sent: false,
+      message: sent.length
+        ? `Sent to ${sent.join(" and ")}, but ${failed[0].to} failed: ${failed[0].reason}`
+        : `${failed[0].to} failed: ${failed[0].reason}`,
+    };
   }
 
   /**

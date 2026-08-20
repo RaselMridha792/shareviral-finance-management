@@ -128,6 +128,21 @@ export const appSettings = pgTable(
     emailFrom: varchar("email_from", { length: 200 }),
     emailAdminAddress: varchar("email_admin_address", { length: 200 }),
     emailEnabled: boolean("email_enabled").notNull().default(false),
+    /**
+     * Whether reminders also go to the people who can sign in.
+     *
+     * A sign-in address is a login, not necessarily a mailbox. This company's
+     * super admin signs in as an address with no inbox behind it, so every
+     * reminder to it bounces — and a provider that scores senders counts those
+     * bounces against the mail that matters. Somebody who has that arrangement
+     * needs to be able to say "only the address I typed", which is what this
+     * is.
+     *
+     * On by default, because for most installations the sign-in address is a
+     * real person's mailbox and turning this off silently would leave the CFO
+     * uninformed.
+     */
+    emailToStaff: boolean("email_to_staff").notNull().default(true),
 
     /**
      * Which events raise a bell notification.

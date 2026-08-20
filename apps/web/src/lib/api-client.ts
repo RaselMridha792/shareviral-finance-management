@@ -412,6 +412,8 @@ export type EmailStatus = {
   from: string | null;
   adminAddress: string | null;
   enabled: boolean;
+  /** Whether reminders also reach the people who can sign in. */
+  toStaff: boolean;
   /** Null when it can send; otherwise the one thing still missing. */
   blockedBy: string | null;
   recent: NotificationLogRow[];
@@ -430,6 +432,7 @@ export const emailApi = {
     from?: string;
     adminAddress?: string;
     enabled?: boolean;
+    toStaff?: boolean;
   }) =>
     apiFetch<{ saved: boolean }>("/email/settings", {
       method: "POST",

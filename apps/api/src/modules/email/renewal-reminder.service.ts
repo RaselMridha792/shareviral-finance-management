@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { formatMoney, todayInDhaka } from "@finance/shared";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import { appSettings, subscriptions, users } from "../../db/schema";
@@ -148,25 +148,36 @@ export class RenewalReminderService {
       to.add(loginEmail.trim().toLowerCase());
     }
 
-    const staff = await this.db.client
-      .select({ email: users.email, role: users.role })
-      .from(users)
-      .where(
-        and(
-          inArray(users.role, ["cfo", "super_admin"]),
-          eq(users.status, "active"),
-          isNull(users.deletedAt),
-        ),
-      );
-    for (const person of staff) to.add(person.email.toLowerCase());
-
     const [row] = await this.db.client
-      .select({ admin: appSettings.emailAdminAddress })
+      .select({
+        admin: appSettings.emailAdminAddress,
+        toStaff: appSettings.emailToStaff,
+      })
       .from(appSettings)
-      .where(
-        and(eq(appSettings.id, 1), isNotNull(appSettings.emailAdminAddress)),
-      )
+      .where(eq(appSettings.id, 1))
       .limit(1);
+
+    /*
+     * The people who can sign in — unless the owner has said not to.
+     *
+     * A sign-in address is a login and not always a mailbox. Where it is not,
+     * every reminder bounces, and a provider that scores senders counts those
+     * against the mail that matters. So this is a switch rather than a rule.
+     */
+    if (row?.toStaff !== false) {
+      const staff = await this.db.client
+        .select({ email: users.email, role: users.role })
+        .from(users)
+        .where(
+          and(
+            inArray(users.role, ["cfo", "super_admin"]),
+            eq(users.status, "active"),
+            isNull(users.deletedAt),
+          ),
+        );
+      for (const person of staff) to.add(person.email.toLowerCase());
+    }
+
     if (row?.admin) to.add(row.admin.toLowerCase());
 
     return [...to];

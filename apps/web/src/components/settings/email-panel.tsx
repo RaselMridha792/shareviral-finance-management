@@ -197,7 +197,7 @@ export function EmailPanel() {
 
             <Field
               label="Copy every reminder to"
-              hint="The admin address. Reminders also go to the login account, every CFO and every super admin."
+              hint="The admin address. Reminders also go to the login account, every CFO and every super admin — and the test button below sends here too, so you can check it now rather than at the next renewal."
             >
               <Input
                 type="email"
@@ -243,6 +243,41 @@ export function EmailPanel() {
             </span>
           </label>
 
+          {/*
+            Who else a reminder reaches.
+
+            Separate from the address above because they answer different
+            questions: that one is "who do I want copied", this one is "are the
+            sign-in addresses real inboxes". This company's super admin signs in
+            as an address with no mailbox behind it, so every reminder sent
+            there bounces — and a provider that scores senders counts those
+            against the mail that matters.
+          */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={status.toStaff}
+              disabled={!canWrite || busy !== null}
+              className="mt-0.5 size-4 accent-[var(--primary)]"
+              onChange={(e) =>
+                run("staff", async () => {
+                  await emailApi.update({ toStaff: e.target.checked });
+                  return e.target.checked
+                    ? "Reminders will also go to everybody who can sign in."
+                    : "Reminders will go only to the addresses above.";
+                })
+              }
+            />
+            <span className="text-sm">
+              Also send to everybody who can sign in as CFO or super admin
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Turn this off if those are logins rather than real mailboxes.
+                Mail to an address that does not exist bounces, and enough
+                bounces send the rest to spam.
+              </span>
+            </span>
+          </label>
+
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
@@ -260,7 +295,7 @@ export function EmailPanel() {
               ) : (
                 <Send className="size-3.5" />
               )}
-              Send a test to myself
+              Send a test
             </Button>
 
             <Button
@@ -277,9 +312,18 @@ export function EmailPanel() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            The test proves the key and the domain. The second proves the
-            reminder — which plans it finds and who it tells — and it obeys the
-            same rule as the daily job, so pressing it twice still sends once.
+            The test goes to you <em>and</em> to the address above, so it proves
+            the key, the domain, and the inbox the copies are meant to reach —
+            which is the one worth proving, since it is usually on somebody
+            else&apos;s domain. The second button proves the reminder itself:
+            which plans it finds and who it tells. It obeys the same rule as
+            the daily job, so pressing it twice still sends once.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            &ldquo;Sent&rdquo; means Resend accepted it, which is not the same
+            as it arriving — an address with no mailbox behind it is accepted
+            and bounces afterwards. If a test says it sent and nothing turns
+            up, that address is where to look first.
           </p>
         </CardBody>
       </Card>
