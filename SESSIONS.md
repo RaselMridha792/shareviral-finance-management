@@ -20,6 +20,63 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — the sub-category pills become the control they were pretending to be
+
+**Done.** The heading page (`/expenses/<heading>`) gets the owner's redesign of its first
+section, from the handoff in `Downloads/Total and category button redesign`. The thin total strip
+and the loose row of rounded pills are now one panel: a total block with a stat cluster and a
+composition bar, and welded under it a filter track — an "All" segment plus one per
+sub-category, in descending amount order. New file
+`components/expenses/category-summary-panel.tsx`; the screen hands it the numbers and holds the
+one piece of state.
+
+**The pills were dead links, and now they filter.** They pointed at
+`/expenses/<sub-category-slug>`, and that route resolves top-level headings only —
+`tree.find(node => node.slug === slug)` never looks at `children` — so every one of them landed
+on a 404. Measured, not assumed: `/expenses/hosting-servers` and `/expenses/domains` both render
+the 404 page while `/expenses/technology` renders. Picking a segment now re-scopes the big
+figure, its dollar line and the table below it, in place; picking it again, or "All", lets go.
+
+Where the handoff and this codebase disagreed, the codebase won, and here is each one:
+
+- **Colour.** The handoff is a dark-only palette of raw hex (`#0d0d0d`, `#0a0a0a`, `#1d1d1d`).
+  This app has a light theme, so every surface, border and text colour goes through the existing
+  tokens — panel `bg-surface`, track `bg-background`, segments `bg-surface` on it. Verified in
+  both themes at 1440/1024/768/390.
+- **Width.** No `max-width:1400px`. `MainRegion` deliberately has no maximum — there is a comment
+  in it about the two columns of empty space that `max-w-7xl` used to leave — so the panel takes
+  the content column.
+- **Short amounts.** `৳82L`, `৳6.2k` from the existing `formatCompactMoney`, not the handoff's
+  `৳2.56L`. That function's own comment explains why it stops at one decimal, and a second
+  rounding rule for money on one screen is how the two drift apart.
+- **Sub-category colour is derived, not stored.** Every sub-category in this database inherits
+  its heading's colour — all four of Technology's are `#0d9488` — so a composition bar drawn from
+  stored colours is one solid teal block. The panel uses the handoff's six-hue ramp by descending
+  amount, walking the wheel in 55° steps past the sixth.
+- **A 2px floor on composition-bar segments.** A sub-category worth 0.06% of the month draws as
+  nothing, which reads as one fewer sub-category than the count beside it claims.
+
+Measured with `.catpanel.mjs` (untracked) on the running page: at 1440/1024/768/390 in both
+themes, 0px of page overflow, 0px inside the track, nothing clipped, the track wrapping 1 → 2 → 3
+rows and the stat cluster dropping under the amount, and long names ellipsizing rather than
+pushing out. Picking `Office & premises` took the figure from ৳1,04,11,700.00 to ৳81,83,700.00,
+the sub-line to "1 entry · Office & premises" and the table from 6 rows to 1; picking it again
+and pressing "All" both restored all three. `.catbar.mjs` (untracked) confirms no bar segment
+draws at less than a pixel. `node .sweep.mjs` on the three expense routes: h1 28, pad 32/34, gap
+20, 0px sideways at every width. Four CI steps run separately, all green (308 tests).
+
+**Watch out.** The page is keyed `${heading.id}:${from}:${to}` in `[category]/page.tsx`. That is
+load-bearing, not decoration: `changeRange` is a client-side `router.push` to the same route, so
+without the key the screen keeps its state and August's table stays scoped to a sub-category
+somebody picked in July. If you add state to that screen, it resets on a month change — which is
+what the handoff asks for.
+
+**Open.** Nothing half-done. Two things noticed and left alone: the table still shows one capped
+page of 200 rows while the segment counts come from the server's own count, so a heading with
+more than 200 entries in a month would show a segment saying more entries than the filtered table
+lists — pre-existing, and its own session. And `/expenses/<sub-category-slug>` still 404s; nothing
+links to it any more, but the route could either learn to resolve children or say so plainly.
+
 ## 2026-08-21 — a heading becomes a card because somebody asked, not because money moved
 
 **Done.** Three things on the Expenses overview, all asked for by the owner.

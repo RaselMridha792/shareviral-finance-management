@@ -44,6 +44,14 @@ export default async function CategoryPage({
 
   return (
     <CategoryDetailScreen
+      /*
+       * Keyed by heading and month, so the screen is a fresh one when either
+       * changes. The sub-category filter it holds belongs to the month it was
+       * picked in — a client-side `router.push` to the same route would keep
+       * the old one alive and scope August's table to a heading somebody was
+       * reading in July.
+       */
+      key={`${heading.id}:${from}:${to}`}
       heading={heading}
       breakdown={breakdown}
       rows={list.items}

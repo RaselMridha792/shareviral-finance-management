@@ -10,12 +10,11 @@ import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
-import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { type ExpenseSummary, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { CategorySummaryPanel } from "./category-summary-panel";
 import { MonthPicker, type Range } from "./month-picker";
 
 export function CategoryDetailScreen({
@@ -42,6 +41,21 @@ export function CategoryDetailScreen({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
+
+  /*
+   * Which sub-category the panel and the table are scoped to, or null for the
+   * whole heading.
+   *
+   * It resets on a month change without being told to: the page keys this
+   * screen by the range, so stepping a month remounts it rather than carrying
+   * a filter that belongs to a month nobody is looking at any more.
+   */
+  const [scope, setScope] = useState<string | null>(null);
+  const scoped = scope
+    ? rows.filter((row) => row.categoryId === scope)
+    : rows;
+  const scopeName =
+    breakdown.groups.find((group) => group.id === scope)?.name ?? null;
 
   function changeRange(next: Range) {
     router.push(`/expenses/${heading.slug}?from=${next.from}&to=${next.to}`);
@@ -100,70 +114,36 @@ export function CategoryDetailScreen({
         }
       />
 
-      <Card className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <span
-            className="size-3 shrink-0 rounded-full"
-            style={{ background: heading.color }}
-          />
-          <div>
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Total
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {entries} entr{entries === 1 ? "y" : "ies"}
-            </p>
-          </div>
-        </div>
-        <Amount
-          value={breakdown.total}
-          tone="neutral"
-          className="text-2xl font-semibold"
-        />
-      </Card>
-
       {/*
-        The sub-categories as a row of chips, not a table.
+        The total and the sub-categories, welded into one panel.
 
-        It was a panel with six columns — name, bar, share, entries, amount —
-        which is a table's worth of chrome to say where inside one heading the
-        money went. The owner asked for the row instead, and it keeps the two
-        things people actually read: which sub-categories exist, and roughly
-        how the money splits.
-
-        It is also the only way into a sub-category from here, which is what
-        makes the breadcrumb's second level reachable. Removing the panel
-        without this would have left the page with no way down.
+        They were two blocks: a thin full-width total strip, and under it a
+        wrapping row of rounded pills. The pills read as decorative tags —
+        nothing said they were this heading's sub-categories, and nothing said
+        what clicking one did. What it did was navigate to
+        `/expenses/<sub-slug>`, and that route resolves top-level headings
+        only, so every one of them landed on a 404. They filter in place now.
       */}
-      {breakdown.groups.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {breakdown.groups.map((group) => (
-            <Link
-              key={group.id}
-              href={`/expenses/${group.slug}?from=${range.from}&to=${range.to}`}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm transition hover:border-primary/50 hover:bg-surface-muted"
-            >
-              <span
-                aria-hidden
-                className="size-2 shrink-0 rounded-full"
-                style={{ background: group.color ?? heading.color }}
-              />
-              {group.name}
-              <Amount
-                value={group.total}
-                tone="neutral"
-                className="num text-xs text-muted-foreground"
-              />
-            </Link>
-          ))}
-        </div>
-      ) : null}
+      <CategorySummaryPanel
+        headingName={heading.name}
+        headingColor={heading.color}
+        rangeLabel={range.label}
+        total={breakdown.total}
+        entries={entries}
+        groups={breakdown.groups}
+        selectedId={scope}
+        onSelect={setScope}
+      />
 
       <TransactionTable
-        rows={rows}
+        rows={scoped}
         onEdit={setEditing}
         onVoid={setVoiding}
-        emptyMessage={`Nothing filed under ${heading.name} in ${range.label}.`}
+        emptyMessage={
+          scopeName
+            ? `Nothing filed under ${scopeName} in ${range.label}.`
+            : `Nothing filed under ${heading.name} in ${range.label}.`
+        }
       />
 
       <TransactionForm
