@@ -20,6 +20,59 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-20 — a hundred rows in every table, on two accounts
+
+**Done.** The live database — the `db` container, not the Neon one in `apps/api/.env` — now
+carries sample data at a size pagination, filters and totals can actually be tested against. 686
+transactions, 2,700 payroll lines, 408 compensation rows, 354 TDS allocations, and 120 each of
+vendors, team members, subscriptions, files, statements, notifications, imports, exchange rates
+and the rest: **25 of 33 tables at a hundred or more**. Accounts are down to the two that were
+asked for, Master card and Standard Chartered Bank; `Petty cash (demo)` and `USD card` are gone.
+Commits: `3020509`, `e60360c`, `34eec1c`.
+
+Both registers were checked **in SQL** rather than taken from the seeder's own arithmetic —
+`opening_balance + sum(signed_amount)` with a window function for the running minimum. Standard
+Chartered: opening 18,50,000, low 8,97,013, closing 1,52,75,006. Master card: opening 10,00,000,
+low 6,48,863, closing 39,78,140. Neither goes negative at any point in the two years.
+
+**Watch out.**
+
+- **It runs from the image, not the working copy**: `docker compose exec -T api node
+  apps/api/dist/db/seed-bulk.js reset`. A commit that is not pushed and deployed is not in it —
+  the first attempt at the no-users change would have created the users anyway.
+- **It creates no sign-ins.** `users`, `user_two_factor` and `recovery_codes` are left exactly as
+  found, the same treatment as `app_settings`: read, never written, in either direction. So is
+  `schema_migrations`. The five real accounts, their sessions, 2FA and 40 recovery codes are
+  untouched, and the Resend key survived.
+- `reset` empties 22 tables and writes ~5,500 rows **inside one transaction**, so a failure
+  anywhere rolls the wipe back with it. This only works because the pool is node-postgres over
+  the wire protocol; Neon's http driver would make `transaction()` a batch.
+- **The 30 old `files` rows are gone and their bytes are still in `/data/uploads`**, and the 120
+  new rows have no bytes behind them. `deploy/sql`-style cleanup is `deploy/sweep-orphan-files.sh`,
+  which reports both directions; `--delete` removes only the orphaned bytes, never rows.
+- **Sample data must not decide who gets production email.** Two rows nearly did, on the day
+  Resend went live: sample users with role `cfo`, and `loginEmail` on every plan — the renewal
+  reminder mails both. No CFOs are created now, and `loginEmail` holds free text that cannot
+  parse as an address.
+- **A dry run is only worth having if it is the same run.** `cat(name)` fell back through `??` to
+  `pick()`, which only evaluates when the name is missing — so whether it consumed a random draw
+  depended on what was already in the database. The rehearsal reported a register never below
+  nine lakh and the load that followed put it seventy-two lakh under. Nothing that decides
+  whether the generator advances may depend on what is already stored.
+- The bank's floor is now a property, not a tuning. A pass over the finished ledger inserts a
+  further transfer, dated the day before, wherever the balance would fall through 5,00,000.
+  Raising the wire size twice is what shipped the negative register.
+
+**Open.**
+
+- **The seeder creates no voided transactions**; the one it replaced did. A struck-through row is
+  a state no screen has been checked against. One block to add, but it costs a deploy and another
+  reset.
+- Three tables will never reach a hundred and each is a decision: `accounts` (2, asked for),
+  `app_settings` (1, `CHECK (id = 1)`), `tax_policies` (20, one row per fiscal year). `users` (5),
+  `user_two_factor` (4), `recovery_codes` (40) and `schema_migrations` (20) are left alone.
+- **The verification pass over every page is now unblocked** — that was the reason for this work.
+
 ## 2026-08-20 — email, notifications, and the pipeline that hid its own failures
 
 **Done.**
