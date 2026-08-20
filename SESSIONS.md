@@ -42,7 +42,7 @@ above Master card — without touching a row in the live database.
 Measured on the running page with `.dashorder.mjs` (untracked): default order correct, 20 move
 buttons for 10 blocks, an arrow moves and saves, a dispatched drag lands the bottom block on top,
 the order survives a reload, the arrows disappear when not editing, and `Reset` returns the
-default and clears the key. Four CI steps run separately, all green. Commits: `PENDING`.
+default and clears the key. Four CI steps run separately, all green. Commits: `1092318`.
 
 **Watch out.** Dragging reads the carried block from a ref rather than from state: `dragover` can
 arrive in the same tick as `dragstart`, before React has re-rendered, and the first version of
