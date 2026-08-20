@@ -50,7 +50,6 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-import { seal } from "../common/crypto/secret-box";
 import { poolOptionsFor } from "./connection";
 import * as schema from "./schema";
 import {
@@ -69,7 +68,6 @@ import {
   notifications,
   payrollLines,
   payrollRuns,
-  recoveryCodes,
   statements,
   subscriptionUsers,
   subscriptions,
@@ -79,7 +77,6 @@ import {
   tdsDeposits,
   teamMembers,
   transactions,
-  userTwoFactor,
   users,
   vendors,
   withholdingReturns,
@@ -135,23 +132,6 @@ const TARGET = 120;
 
 /** The two that stay. Compared lower-cased, like the unique index does. */
 const KEEP_ACCOUNTS = ["master card", "standard chartered bank"];
-
-/**
- * The address this file gives the sign-ins it creates, and the only ones the
- * wipe deletes.
- *
- * It was the other way round — "delete anything that is not @shareviral.cash"
- * — which is a rule about who is *not* real, and it was wrong on the live
- * database, where the super admin signs in as a gmail address. That wipe would
- * have taken the owner's own account with it, and `users` cascades: the
- * sessions, the two-factor enrolment and the forty recovery codes behind it
- * would have gone in the same statement.
- *
- * Naming what this file made is the safer direction. A real person is anyone
- * this file did not create, whatever they signed up as, and no future address
- * can accidentally fall outside the pattern and be deleted.
- */
-const SAMPLE_USERS = "%@demo.sharevirals.test";
 
 /** Rows go in in batches; one round trip per row would take a quarter hour. */
 const CHUNK = 250;
@@ -579,11 +559,8 @@ const SEEDED = new Set([
   ...WIPE_ORDER,
   "accounts",
   "categories",
-  "recovery_codes",
   "tax_policies",
   "tax_policy_bands",
-  "user_two_factor",
-  "users",
 ]);
 
 /**
@@ -600,6 +577,38 @@ const LEFT_ALONE = new Set([
   // Live sessions. A fabricated token is a row nobody holds the other half of,
   // and deleting the real ones signs the owner out.
   "refresh_tokens",
+  /*
+   * Sign-ins and the two things that protect them.
+   *
+   * A user row is a door on an internet-facing finance portal, and this file
+   * is not in the business of adding doors — the owner's decision, and the
+   * right one. The five that exist are the five there are; people go in the
+   * Team section, which is `team_members` and not a login.
+   *
+   * The other two follow from it rather than being separate decisions. A
+   * two-factor secret this file invented is one no authenticator app holds,
+   * and recovery codes it invented are ten strings nobody was ever shown —
+   * both are the appearance of a second factor without the fact of one, which
+   * is worse than none. And both cascade from `users`, so leaving that alone
+   * means leaving these alone too.
+   */
+  "users",
+  "user_two_factor",
+  "recovery_codes",
+  /*
+   * Not application data at all — the deploy's own record of which files in
+   * deploy/sql it has already applied, written by remote-deploy.sh.
+   *
+   * Both directions are wrong here. Seeding it would invent a history of
+   * migrations that never ran. Wiping it would throw away the record the next
+   * deploy reads, so every file in deploy/sql would be applied again from the
+   * top — and idempotent is not the same as order-independent. Three files in
+   * there drop and recreate `files_one_owner`, each counting one more owner
+   * column, so replaying the directory in filename order puts the older rule
+   * back over the newer one. That is the whole reason migrations are recorded
+   * rather than re-run.
+   */
+  "schema_migrations",
 ]);
 
 async function wipe(tx: Tx): Promise<void> {
@@ -612,19 +621,11 @@ async function wipe(tx: Tx): Promise<void> {
     }
   }
 
-  // The sign-ins this file made, and only those. Everything hanging off a user
-  // cascades — two-factor enrolments, recovery codes, sessions, chats — which
-  // is exactly why the pattern names what to delete rather than what to spare.
-  //
-  // The role check is belt and braces: nothing here is created as a super
-  // admin, and if that ever changes this still refuses to delete one.
-  const gone = await tx.execute(
-    sql`delete from users
-         where email ilike ${SAMPLE_USERS} and role <> 'super_admin'`,
-  );
-  if (gone.rowCount) {
-    console.log(`  ${"users".padEnd(22)} ${gone.rowCount} removed`);
-  }
+  // `users` is not touched, in either direction. This file no longer creates
+  // sign-ins, so it has none of its own to clear, and everything hanging off a
+  // user cascades — two-factor enrolments, recovery codes, sessions. A delete
+  // here that was slightly too broad would take a real person's account and
+  // their way back into it in one statement.
 
   // Every account except the two. Safe now: the transactions, payroll runs and
   // challans that pointed at them were deleted above, and those were the only
@@ -1055,48 +1056,41 @@ async function load(tx: Tx): Promise<void> {
   });
   await put(tx, "compensation_history", compensationHistory, compRows);
 
-  /* --- sign-ins ----------------------------------------------------------
+  /* --- sign-ins: none ----------------------------------------------------
    *
-   * A bcrypt hash of nothing. These exist so the Users screen has rows to page
-   * through and roles to filter by; none of them can sign in, and that is the
-   * point — a sample account with a known password on a live site is a door.
+   * This file used to create a hundred and twenty of them, with an unusable
+   * password hash, so the Users screen had rows to page through. That was the
+   * wrong trade on this system and the owner has settled it: the only sign-ins
+   * are the five that already exist.
+   *
+   * A user row is a door on an internet-facing finance portal. A hundred and
+   * twenty doors that nobody can currently open are still a hundred and twenty
+   * doors — one weak reset flow, one password-hash bug, one careless UPDATE,
+   * and the "unusable" hash is a detail rather than a defence. And they would
+   * all have to be deleted again before the site held real money.
+   *
+   * People belong in the Team section, which is a `team_members` row and not a
+   * login. That stays at a hundred and twenty, because that is the part that
+   * was actually wanted.
+   *
+   * `users`, `user_two_factor` and `recovery_codes` are therefore left exactly
+   * as found — the same treatment as `app_settings`. What follows still needs
+   * somebody to own a chat or a notification, so it draws on the real
+   * sign-ins rather than inventing any.
    */
 
-  const unusable =
-    "$2b$12$0000000000000000000000000000000000000000000000000000";
-  const userRows = Array.from({ length: TARGET }, (_, i) => ({
-    id: randomUUID(),
-    email: `sample${i}@demo.sharevirals.test`,
-    fullName: `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
-    passwordHash: unusable,
-    /*
-     * No CFOs, and that is not an oversight about roles.
-     *
-     * The renewal reminder mails everybody who is `cfo` or `super_admin` and
-     * active. A fifth of a hundred and twenty sample sign-ins would have been
-     * around nineteen active CFOs at demo.sharevirals.test, and every morning
-     * at nine the job would have posted a real Resend message to each of them.
-     * They all bounce — the address does not exist and `.test` never resolves
-     * — and a provider that scores senders counts those against the mail that
-     * matters. The service says so itself, in the comment above that query.
-     *
-     * Sample data is not allowed to change who gets production email. There is
-     * no CFO on this system today; there is still none afterwards. Add a real
-     * one on the Users screen if the role is wanted.
-     */
-    role: pick(["admin", "finance", "hr", "ceo"] as const),
-    status: maybe(0.12)
-      ? ("disabled" as const)
-      : maybe(0.1)
-        ? ("invited" as const)
-        : ("active" as const),
-    teamMemberId: i < memberRows.length ? (memberRows[i].id as string) : null,
-    lastLoginAt: maybe(0.6)
-      ? new Date(`${dayBefore(between(1, 120))}T09:${between(10, 59)}:00Z`)
-      : null,
-    mustChangePassword: maybe(0.2),
-  }));
-  await put(tx, "users", users, userRows);
+  const realUsers = await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`deleted_at is null`);
+
+  if (!realUsers.length) {
+    throw new Error(
+      "No sign-ins at all. Run `npm run db:seed` first — chats, corrections " +
+        "and bell notifications each have to belong to somebody.",
+    );
+  }
+  console.log(`  ${"users".padEnd(22)} ${realUsers.length} kept, none created`);
 
   /* --- transactions ------------------------------------------------------
    *
@@ -1982,7 +1976,7 @@ async function load(tx: Tx): Promise<void> {
     const day = dayBefore(i + 1);
     const tool = TOOLS[i % TOOLS.length][0];
     return {
-      userId: i < 24 ? actor.id : pick(userRows).id,
+      userId: i % 5 === 0 ? actor.id : pick(realUsers).id,
       kind,
       dedupeKey: `${kind}:${i}:${day}`,
       title:
@@ -2032,7 +2026,7 @@ async function load(tx: Tx): Promise<void> {
     const question = QUESTIONS[i % QUESTIONS.length];
     return {
       id: randomUUID(),
-      userId: i < 12 ? actor.id : pick(userRows).id,
+      userId: i % 5 === 0 ? actor.id : pick(realUsers).id,
       title: question.slice(0, 60),
       messages: [
         { role: "user", content: question },
@@ -2076,43 +2070,10 @@ async function load(tx: Tx): Promise<void> {
       "1,200.00",
       "2026-07-15",
     ]),
-    userId: i < 10 ? actor.id : (pick(userRows).id as string),
+    userId: i % 5 === 0 ? actor.id : pick(realUsers).id,
     createdAt: new Date(`${dayBefore(i + 1)}T09:00:00Z`),
   }));
   await put(tx, "ai_corrections", aiCorrections, correctionRows);
-
-  /* --- two-factor, on the sample sign-ins only ---------------------------
-   *
-   * Never on the five real accounts: a second factor enrolled behind somebody's
-   * back, whose secret is in no authenticator app, is a lockout.
-   */
-
-  const twoFactorRows = userRows.map((u, i) => ({
-    userId: u.id,
-    secretEncrypted: seal(`DEMOSECRET${String(i).padStart(6, "0")}`),
-    confirmedAt: maybe(0.6)
-      ? new Date(`${dayBefore(between(1, 200))}T10:00:00Z`)
-      : null,
-    lastStep: between(50_000_000, 60_000_000),
-    failedCount: maybe(0.2) ? between(1, 4) : 0,
-  }));
-  await put(tx, "user_two_factor", userTwoFactor, twoFactorRows);
-
-  const codeRows: Record<string, unknown>[] = [];
-  for (const u of userRows.slice(0, 16)) {
-    for (let n = 0; n < 10; n += 1) {
-      codeRows.push({
-        userId: u.id,
-        codeHash: createHash("sha256")
-          .update(`${u.email}-recovery-${n}`)
-          .digest("hex"),
-        usedAt: maybe(0.15)
-          ? new Date(`${dayBefore(between(1, 90))}T10:00:00Z`)
-          : null,
-      });
-    }
-  }
-  await put(tx, "recovery_codes", recoveryCodes, codeRows);
 
   /* --- tax policies for earlier years ------------------------------------
    *
