@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { formatMoney } from "@finance/shared";
+
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
@@ -126,10 +128,47 @@ export function BankStatementScreen({
       </FilterBar>
 
       <Card className="overflow-hidden p-0">
+        {/*
+          Where the balance starts, said above the rows rather than inside them.
+
+          This was the table's first row, and it was the only row with no
+          serial, no date of its own doing, no debit and no credit — an empty
+          line that looked like a movement somebody had failed to fill in. The
+          figure is not dummy data and cannot simply go: it is what the account
+          held the day before the range opens, and every balance in the column
+          below is built on it. So it leaves the rows and becomes their
+          preamble, which is also how a bank prints it.
+        */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-border px-4 py-3">
+          <span className="text-sm font-medium">
+            {register.account.bankName ?? register.account.name}
+            {range.from ? (
+              <span className="text-muted-foreground">
+                {" · "}
+                <span className="num">{range.from}</span>
+                {range.to ? (
+                  <>
+                    {" → "}
+                    <span className="num">{range.to}</span>
+                  </>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Brought forward at{" "}
+            <span className="num">{register.account.openingBalanceOn}</span>
+            {" — "}
+            <span className="num font-medium text-ink">
+              {formatMoney(register.openingBalance, { currency: "BDT" })}
+            </span>
+          </span>
+        </div>
+
         <TableScroll>
-          <table className="table-data min-w-[900px] text-sm">
+          <table className="table-data min-w-[1000px] text-sm">
             <thead>
-              {/* Eight columns: SL, Date, Description, then this table's own
+              {/* Nine columns: SL, Date, Description, then this table's own
                   subject — the two figures and the total they move — the
                   reference, and the actions. Debit, Credit and Balance sit
                   together because that is the arithmetic a reader checks in one
@@ -148,41 +187,19 @@ export function BankStatementScreen({
                     them, not what you read the statement by, so it sits after
                     the figures. It still opens the row's documents. */}
                 <Th>Transaction ID</Th>
+                {/* The paper behind the movement. Every entry can carry one,
+                    and the two references sit together because a reader
+                    matching this statement against a file is looking for
+                    either. */}
+                <Th>Invoice</Th>
                 <RowActionsHead />
               </tr>
             </thead>
             <tbody>
-              {/* The opening figure is a row, not a caption. A statement that
-                  starts mid-air gives a reader no way to check the first
-                  balance against anything. */}
-              <tr className="row-finance bg-surface-muted/30">
-                <td />
-                <td className="num whitespace-nowrap">
-                  {register.account.openingBalanceOn}
-                </td>
-                {/* 3: Description, Debit, Credit — the label runs up to the
-                    balance it is the label for. */}
-                <td className="text-muted-foreground" colSpan={3}>
-                  Balance brought forward
-                </td>
-                <td className="text-right">
-                  <Amount
-                    value={register.openingBalance}
-                    tone="neutral"
-                    className="block font-medium"
-                  />
-                </td>
-                {/* Transaction ID and actions: an opening balance is not a
-                    movement, so it has neither a reference of its own nor
-                    anything to edit or void. */}
-                <td />
-                <td />
-              </tr>
-
               {register.rows.length === 0 ? (
-                // 8: SL, Date, Description, Debit, Credit, Balance, Txn ID,
-                // actions.
-                <TableMessageRow colSpan={8}>
+                // 9: SL, Date, Description, Debit, Credit, Balance, Txn ID,
+                // Invoice, actions.
+                <TableMessageRow colSpan={9}>
                   Nothing on this account in that period.
                 </TableMessageRow>
               ) : (
@@ -239,6 +256,19 @@ export function BankStatementScreen({
                         {row.reference ?? row.refNo}
                       </button>
                     </td>
+                    <td>
+                      {row.invoiceNo ? (
+                        <button
+                          type="button"
+                          onClick={() => setDocumentsFor(row)}
+                          className="num cursor-pointer rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
+                        >
+                          {row.invoiceNo}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     {/* The statement is read-only today — nothing on this
                         screen edits or voids a movement. The pair still renders,
                         disabled, so the column reads as "not from here" rather
@@ -280,8 +310,9 @@ export function BankStatementScreen({
                     className="block font-semibold"
                   />
                 </td>
-                {/* Transaction ID and actions: a total has no reference of its
-                    own, and nothing about it is editable. */}
+                {/* Transaction ID, Invoice and actions: a total has no
+                    references of its own, and nothing about it is editable. */}
+                <td />
                 <td />
                 <td />
               </tr>
