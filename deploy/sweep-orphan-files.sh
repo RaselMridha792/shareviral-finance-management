@@ -13,6 +13,17 @@
 # The second half matters more. A row whose file is missing is a broken
 # download waiting for the person who needs it most, and it is exactly what a
 # restore that brought back the database and forgot the uploads looks like.
+#
+# Which is why the sample rows are counted and not listed. The bulk seeder
+# writes `demo/<uuid>` as a storage key and never writes a file behind it, so
+# every one of its rows is a "broken download" that was never anything else.
+# A hundred and twenty of them would report a missing upload every single run —
+# and an alarm that always sounds is not an alarm. The day a restore really
+# does lose the uploads, that warning has to arrive on its own.
+#
+# Only this direction ignores them. Bytes on disk under `demo/` would still be
+# orphans worth removing; nothing writes any today, and if something starts, it
+# should be found.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -61,7 +72,18 @@ fi
 
 echo
 echo "--- row, no file on disk (broken downloads)"
-MISSING="$(comm -23 "${KNOWN}" "${ONDISK}")"
+ALL_MISSING="$(comm -23 "${KNOWN}" "${ONDISK}")"
+
+# `|| true` on both: grep exits 1 when it matches nothing, which under `set -e`
+# would end the run at exactly the moment there is nothing wrong.
+SEEDED="$(printf '%s' "${ALL_MISSING}" | grep -c '^demo/' || true)"
+MISSING="$(printf '%s' "${ALL_MISSING}" | grep -v '^demo/' || true)"
+
+if [ "${SEEDED}" -gt 0 ]; then
+  echo "    (${SEEDED} sample row(s) under demo/ skipped — the seeder never"
+  echo "     wrote a file for them, and they are not a fault)"
+fi
+
 if [ -z "${MISSING}" ]; then
   echo "    none"
 else
