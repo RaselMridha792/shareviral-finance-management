@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCan } from "@/components/auth/session-provider";
 import { useSettings } from "@/components/settings-provider";
 import { SubscriptionForm } from "@/components/subscriptions/subscription-form";
+import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { ScreenshotDialog } from "@/components/subscriptions/screenshot-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -74,6 +75,18 @@ export function SubscriptionsScreen({
    * register that has more than twenty plans in it.
    */
   const [page, setPage] = useState(1);
+
+  /**
+   * Which plan's paperwork is open, and which half of it.
+   *
+   * A subscription is a money row like any other and carries the same two
+   * documents — our bill and the bank's record of the charge — so the two
+   * columns open different things rather than the same list twice.
+   */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: SubscriptionDto;
+    kinds: readonly string[];
+  } | null>(null);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -297,7 +310,7 @@ export function SubscriptionsScreen({
             {/* SL, then fourteen columns in the order the owner reads them,
               then the unnamed cell the row's two buttons live in. Sixteen,
               which is what the message row below spans. */}
-            <table className="table-data w-full min-w-[1808px]">
+            <table className="table-data w-full min-w-[2064px]">
               <thead>
                 <tr>
                   <SerialHead />
@@ -308,6 +321,10 @@ export function SubscriptionsScreen({
                   <Th align="right">Cost (USD)</Th>
                   <Th align="right">USD Rate</Th>
                   <Th>Payment Method</Th>
+                  {/* The same pair every other money table carries, in the
+                      same place: ours, then theirs. */}
+                  <Th width="w-32">Invoice No.</Th>
+                  <Th width="w-32">Transaction ID</Th>
                   <Th>Notes</Th>
                   <Th>Login accounts</Th>
                   <Th>User Name</Th>
@@ -320,7 +337,7 @@ export function SubscriptionsScreen({
               </thead>
               <tbody>
                 {loading ? (
-                  <TableMessageRow colSpan={16}>Loading…</TableMessageRow>
+                  <TableMessageRow colSpan={18}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => {
                     // Names rather than a headcount: the column is asked "who is
@@ -384,6 +401,41 @@ export function SubscriptionsScreen({
                             )
                           ) : (
                             "—"
+                          )}
+                        </td>
+                        <td className="num text-xs">
+                          {row.invoiceNo ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentsFor({ row, kinds: ["invoice"] })
+                              }
+                              title="Show the invoice"
+                              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+                            >
+                              {row.invoiceNo}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="num text-xs">
+                          {row.reference ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentsFor({
+                                  row,
+                                  kinds: ["bank_statement", "receipt", "other"],
+                                })
+                              }
+                              title="Show the bank's record of this charge"
+                              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+                            >
+                              {row.reference}
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="text-sm text-muted-foreground">
@@ -522,6 +574,17 @@ export function SubscriptionsScreen({
           canWrite={canWrite}
           onClose={() => setScreenshotOf(null)}
           onChanged={() => void load()}
+        />
+      ) : null}
+
+      {documentsFor ? (
+        <DocumentsDialog
+          owner="subscription"
+          transactionId={documentsFor.row.id}
+          refNo={documentsFor.row.invoiceNo ?? documentsFor.row.toolName}
+          title={documentsFor.row.toolName}
+          kinds={documentsFor.kinds}
+          onClose={() => setDocumentsFor(null)}
         />
       ) : null}
     </>

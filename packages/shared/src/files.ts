@@ -121,7 +121,10 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   ],
   transaction: ["receipt", "invoice", "bank_statement", "other"],
   // One kind, and that is the point: this is the plan page, not a folder.
-  subscription: ["subscription_screenshot"],
+  // The plan page, and now the paperwork for what was paid for it: a
+  // subscription is a money row like any other, so it carries the same two
+  // documents — our bill and the bank's record of the charge.
+  subscription: ["subscription_screenshot", "invoice", "bank_statement"],
   // One kind, and there is one of it. Two signatures on file would mean a
   // payslip had to pick.
   settings: ["signature"],

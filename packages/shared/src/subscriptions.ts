@@ -261,6 +261,11 @@ const subscriptionFieldsSchema = z.strictObject({
   boughtFor: optionalSubText(160),
   loginEmail: optionalSubText(200),
 
+  /** Ours — the bill this plan was charged against. */
+  invoiceNo: optionalSubText(60),
+  /** Theirs — what the bank or the card statement calls the payment. */
+  reference: optionalSubText(120),
+
   notes: optionalSubText(2000),
 
   users: z.array(subscriptionUserSchema).max(60).default([]),

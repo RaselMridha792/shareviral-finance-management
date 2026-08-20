@@ -52,6 +52,8 @@ export type SubscriptionDto = {
   accountName: string | null;
   boughtFor: string | null;
   loginEmail: string | null;
+  invoiceNo: string | null;
+  reference: string | null;
   /** Derived from the file that points at this row, not a column here. */
   screenshotFileId: string | null;
   notes: string | null;
@@ -124,6 +126,24 @@ export function listSubscriptionFiles(subscriptionId: string) {
  * same transaction — there is never a moment with two, and no screen has to
  * decide which is current.
  */
+/**
+ * The invoice, or the bank's record of the charge.
+ *
+ * Separate from the screenshot helper because the screenshot's kind is
+ * singular — uploading a second retires the first — and these are not: a plan
+ * can carry a bill and a bank record at once.
+ */
+export function uploadSubscriptionFile(
+  subscriptionId: string,
+  file: File,
+  kind: "invoice" | "bank_statement",
+) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  return apiUpload<StoredFile>(`/files/subscription/${subscriptionId}`, form);
+}
+
 export function uploadSubscriptionScreenshot(
   subscriptionId: string,
   file: File,

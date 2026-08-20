@@ -9,6 +9,7 @@ import {
   listTransactionFiles,
   type StoredFile,
 } from "@/lib/api-client";
+import { listSubscriptionFiles } from "@/lib/subscriptions";
 
 /**
  * A PDF, drawn from bytes this page fetched itself.
@@ -119,12 +120,23 @@ function isPdf(file: StoredFile): boolean {
  */
 export function DocumentsDialog({
   transactionId,
+  owner = "transaction",
   refNo,
   kinds,
   title,
   onClose,
 }: {
+  /** The row the documents hang on — a transaction, or a subscription. */
   transactionId: string;
+  /**
+   * Which kind of row that is.
+   *
+   * A subscription is a money row like any other and carries the same bill and
+   * the same bank record, so it reaches the same dialog. Defaulted to
+   * `transaction` because that is what every existing caller means, and a
+   * required argument here would be four edits to say what was already true.
+   */
+  owner?: "transaction" | "subscription";
   refNo: string;
   /**
    * Which of the entry's documents this opening is about.
@@ -147,7 +159,10 @@ export function DocumentsDialog({
 
   useEffect(() => {
     let live = true;
-    listTransactionFiles(transactionId)
+    (owner === "subscription"
+      ? listSubscriptionFiles(transactionId)
+      : listTransactionFiles(transactionId)
+    )
       .then((next) => {
         if (live) setFiles(next);
       })
@@ -157,7 +172,7 @@ export function DocumentsDialog({
     return () => {
       live = false;
     };
-  }, [transactionId]);
+  }, [transactionId, owner]);
 
   /**
    * Narrowed to what was actually clicked, and only when a caller says so.

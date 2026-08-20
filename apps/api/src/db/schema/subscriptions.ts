@@ -134,6 +134,17 @@ export const subscriptions = pgTable(
      */
     loginEmail: varchar("login_email", { length: 200 }),
 
+    /**
+     * The same two numbers every other money row carries.
+     *
+     * `invoiceNo` is ours — the bill the plan was charged against. `reference`
+     * is theirs — what the bank or the card statement calls the payment. One
+     * field would hold whichever was typed first and the other fact would have
+     * nowhere to be.
+     */
+    invoiceNo: varchar("invoice_no", { length: 60 }),
+    reference: varchar("reference", { length: 120 }),
+
     notes: text("notes"),
 
     createdAt: timestamp("created_at", { withTimezone: true })

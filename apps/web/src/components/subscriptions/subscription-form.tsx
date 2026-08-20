@@ -34,6 +34,7 @@ import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import {
   subscriptionsApi,
+  uploadSubscriptionFile,
   uploadSubscriptionScreenshot,
   type SubscriptionDto,
 } from "@/lib/subscriptions";
@@ -77,6 +78,61 @@ function methodOfAccount(
  * third is derived from the two that were typed, and typing over a derived one
  * re-derives the other rather than letting the triple drift apart.
  */
+/**
+ * A text box with the paper it refers to on a clip beside it.
+ *
+ * The same shape the transaction and cash-in forms use, because it is the same
+ * question: a number is a pointer to a document, and asking for the number
+ * without offering to attach the document is how a register fills with
+ * references to paper nobody can find.
+ */
+function Clip({
+  picker,
+  file,
+  onPick,
+  label,
+  children,
+}: {
+  picker: React.RefObject<HTMLInputElement | null>;
+  file: File | null;
+  onPick: (next: File | null) => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {children}
+        <input
+          ref={picker}
+          type="file"
+          accept="image/*,application/pdf"
+          className="sr-only"
+          onChange={(event) => {
+            onPick(event.target.files?.[0] ?? null);
+            // Cleared so picking the same file twice still fires.
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => picker.current?.click()}
+          title={label}
+          aria-label={label}
+          className="shrink-0 cursor-pointer rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+        >
+          <Paperclip className="size-4" />
+        </button>
+      </div>
+      {file ? (
+        <span className="truncate text-xs text-muted-foreground">
+          {file.name}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function SubscriptionForm({
   subscription,
   toolNames,
@@ -118,6 +174,21 @@ export function SubscriptionForm({
    */
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const screenshotPicker = useRef<HTMLInputElement>(null);
+
+  /**
+   * The paperwork, on the same terms as the screenshot: chosen while typing,
+   * posted once the row exists.
+   *
+   * Two numbers because the paperwork has two — our bill, and what the bank
+   * calls the charge — and each gets the paper it refers to on the clip beside
+   * it, the way every other money form in this app asks for them.
+   */
+  const [invoiceNo, setInvoiceNo] = useState(subscription?.invoiceNo ?? "");
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const invoicePicker = useRef<HTMLInputElement>(null);
+  const [reference, setReference] = useState(subscription?.reference ?? "");
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const referencePicker = useRef<HTMLInputElement>(null);
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
   const [category, setCategory] = useState<SubscriptionCategory>(
     subscription?.category ?? "ai_tool",
@@ -253,6 +324,8 @@ export function SubscriptionForm({
         accountId,
         boughtFor,
         loginEmail,
+        invoiceNo,
+        reference,
         notes,
         users: seats.map((teamMemberId) => ({
           teamMemberId,
@@ -285,6 +358,30 @@ export function SubscriptionForm({
             `The plan is saved, but the screenshot did not upload: ${
               caught instanceof ApiError ? caught.message : "try it again"
             }. Click the tool's name on the list to attach it.`,
+          );
+          return;
+        }
+      }
+
+      /*
+       * The paperwork, after the row exists for the same reason the screenshot
+       * does. A failure here is reported and does not claim the plan was lost
+       * — it was saved a moment ago, and sending somebody back to type it
+       * again would be false.
+       */
+      for (const [file, kind, what] of [
+        [invoiceFile, "invoice", "invoice"],
+        [referenceFile, "bank_statement", "bank record"],
+      ] as const) {
+        if (!file) continue;
+        try {
+          await uploadSubscriptionFile(saved.id, file, kind);
+        } catch (caught) {
+          onSaved();
+          setError(
+            `The plan is saved, but the ${what} did not upload: ${
+              caught instanceof ApiError ? caught.message : "try it again"
+            }.`,
           );
           return;
         }
@@ -548,6 +645,47 @@ export function SubscriptionForm({
               maxLength={200}
               onChange={(e) => setLoginEmail(e.target.value)}
             />
+          </Field>
+
+          <Field
+            label="Invoice No."
+            error={fieldErrors.invoiceNo}
+            hint="The bill this plan was charged against. Ours."
+          >
+            <Clip
+              picker={invoicePicker}
+              file={invoiceFile}
+              onPick={setInvoiceFile}
+              label="Attach the invoice"
+            >
+              <Input
+                className="num min-w-0 flex-1"
+                value={invoiceNo}
+                maxLength={60}
+                placeholder="INV-002"
+                onChange={(e) => setInvoiceNo(e.target.value)}
+              />
+            </Clip>
+          </Field>
+
+          <Field
+            label="Transaction ID"
+            error={fieldErrors.reference}
+            hint="What the bank or the card statement calls it. Theirs."
+          >
+            <Clip
+              picker={referencePicker}
+              file={referenceFile}
+              onPick={setReferenceFile}
+              label="Attach the bank's record"
+            >
+              <Input
+                className="num min-w-0 flex-1"
+                value={reference}
+                maxLength={120}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </Clip>
           </Field>
         </div>
 

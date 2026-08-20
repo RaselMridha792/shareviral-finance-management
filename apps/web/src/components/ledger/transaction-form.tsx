@@ -652,7 +652,7 @@ export function TransactionForm({
           Two reference numbers, because the paperwork has two, and each with
           the paper it refers to on the clip beside it. The first is the
           company's own — the number on the invoice or the payroll sheet the
-          money was against, which is the column the sheet calls Reference No.
+          money was against — the sheet's Invoice No.
           The second is the bank's: what to quote when asking them about the
           movement. A single box would hold whichever was typed first.
 
@@ -662,7 +662,7 @@ export function TransactionForm({
         */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="Reference No."
+              label="Invoice No."
               error={fieldErrors.invoiceNo}
               hint="The document this was against — INV-002, SAL-JUL. Ours."
             >

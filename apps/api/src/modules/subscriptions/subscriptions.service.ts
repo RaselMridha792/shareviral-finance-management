@@ -208,6 +208,8 @@ export class SubscriptionsService {
             accountId: input.accountId ?? null,
             boughtFor: input.boughtFor ?? null,
             loginEmail: input.loginEmail ?? null,
+            invoiceNo: input.invoiceNo ?? null,
+            reference: input.reference ?? null,
             notes: input.notes ?? null,
             createdBy: actor.id,
             updatedBy: actor.id,
@@ -358,6 +360,8 @@ export class SubscriptionsService {
       accountName: accounts.name,
       boughtFor: subscriptions.boughtFor,
       loginEmail: subscriptions.loginEmail,
+      invoiceNo: subscriptions.invoiceNo,
+      reference: subscriptions.reference,
       /**
        * The plan screenshot, found rather than pointed at.
        *
@@ -519,6 +523,8 @@ type SubscriptionRow = {
   accountName: string | null;
   boughtFor: string | null;
   loginEmail: string | null;
+  invoiceNo: string | null;
+  reference: string | null;
   screenshotFileId: string | null;
   notes: string | null;
 };

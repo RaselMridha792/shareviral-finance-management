@@ -85,7 +85,16 @@ export function OtherExpensesScreen({
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
   /** Which entry's attachments are open. Set by clicking a reference number. */
-  const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  /**
+   * Which entry's documents are open, and which half of them.
+   *
+   * The bill and the bank's record of the payment are different papers, and
+   * the two columns ask for different ones — so the dialog is told which.
+   */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: TransactionDto;
+    kinds: readonly string[];
+  } | null>(null);
 
   /**
    * A new month is a new and usually shorter list, and page 4 of it may not
@@ -305,7 +314,7 @@ export function OtherExpensesScreen({
               its edit and void.
             */
             <TableScroll>
-              <table className="table-data min-w-[1280px] text-sm">
+              <table className="table-data min-w-[1408px] text-sm">
                 <thead>
                   <tr className="text-left">
                     {/* Row order, like the sheet's own SL — not a stored
@@ -328,12 +337,12 @@ export function OtherExpensesScreen({
                     </Th>
                     <Th width="w-36">Account</Th>
                     <Th width="w-32">Payment Method</Th>
-                    {/* The company's own document number — the invoice the
-                        money went against. The bank's number is a different
-                        fact under a different name, Transaction ID, and the
-                        sheet has one reference column: this is the one it
-                        means. */}
-                    <Th width="w-32">Reference No.</Th>
+                    {/* Two numbers, because the paperwork has two: ours on the
+                        invoice, theirs on the bank's record of the movement.
+                        One column held whichever was typed, and the other fact
+                        had nowhere to be. */}
+                    <Th width="w-32">Invoice No.</Th>
+                    <Th width="w-32">Transaction ID</Th>
                     {/* Eleventh column. It is not on the owner's sheet, but
                         the pair sits in the same place on every table in the
                         app, and riding inside Description made the widest
@@ -487,12 +496,10 @@ export function OtherExpensesScreen({
                           {row.invoiceNo ? (
                             <button
                               type="button"
-                              onClick={() => setDocumentsFor(row)}
-                              title={
-                                row.documentCount > 0
-                                  ? `${row.documentCount} attached`
-                                  : "Nothing attached to this entry"
+                              onClick={() =>
+                                setDocumentsFor({ row, kinds: ["invoice"] })
                               }
+                              title="Show the invoice"
                               className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
                             >
                               {row.documentCount === 0 ? (
@@ -502,6 +509,27 @@ export function OtherExpensesScreen({
                             </button>
                           ) : (
                             <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td>
+                          {row.reference ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDocumentsFor({
+                                  row,
+                                  kinds: ["bank_statement", "receipt", "other"],
+                                })
+                              }
+                              title="Show the bank's record of this payment"
+                              className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-xs transition hover:bg-surface-muted hover:text-primary"
+                            >
+                              {row.reference}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         {/* Both buttons always render. A voided row, or a
@@ -547,11 +575,12 @@ export function OtherExpensesScreen({
 
       {documentsFor ? (
         <DocumentsDialog
-          transactionId={documentsFor.id}
+          transactionId={documentsFor.row.id}
           // The reference that was clicked, falling back to the app's own
           // entry number — `refNo` is what this row is called everywhere else,
-          // and the sheet's ten columns no longer show it.
-          refNo={documentsFor.invoiceNo ?? documentsFor.refNo}
+          // and the sheet's columns no longer show it.
+          refNo={documentsFor.row.invoiceNo ?? documentsFor.row.refNo}
+          kinds={documentsFor.kinds}
           onClose={() => setDocumentsFor(null)}
         />
       ) : null}

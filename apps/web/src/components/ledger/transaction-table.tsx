@@ -70,7 +70,20 @@ export function TransactionTable({
   const canWrite = useCan("transactions.write");
   const canVoid = useCan("transactions.void");
   /** Which entry's attachments are open. Set by clicking a reference. */
-  const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  /**
+   * Which entry's documents are open, and which half of them.
+   *
+   * `DocumentsDialog` has taken a `kinds` filter since the owner asked that
+   * clicking one field show that field's document — but no caller passed one,
+   * so both numbers opened the same list of everything. The bill and the
+   * bank's record of the payment are different papers and the two columns ask
+   * for different ones.
+   */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: TransactionDto;
+    kinds: readonly string[];
+    label: string;
+  } | null>(null);
 
   if (rows.length === 0) {
     return (
@@ -328,14 +341,32 @@ export function TransactionTable({
                     </td>
                   ) : null}
                   {/*
-                    The company's own number, and the one a person searches
-                    for. Plain text: it opens nothing, because what is attached
-                    hangs off the entry rather than off the invoice, and two
-                    buttons a cell apart doing the same job is how people learn
-                    to press the wrong one.
+                    The company's own number, and the bill behind it.
+
+                    It was plain text, on the reasoning that documents hang off
+                    the entry rather than off the invoice and two buttons a
+                    cell apart doing the same job teaches people to press the
+                    wrong one. That reasoning holds only while both buttons do
+                    the same job — they no longer do. This one opens the
+                    invoice; its neighbour opens the bank's record.
                   */}
                   <td className="num text-xs">
-                    {row.invoiceNo ?? (
+                    {row.invoiceNo ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDocumentsFor({
+                            row,
+                            kinds: ["invoice"],
+                            label: "invoice",
+                          })
+                        }
+                        title="Show the invoice"
+                        className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+                      >
+                        {row.invoiceNo}
+                      </button>
+                    ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
@@ -354,8 +385,14 @@ export function TransactionTable({
                   <td>
                     <button
                       type="button"
-                      onClick={() => setDocumentsFor(row)}
-                      title="Show the attached documents"
+                      onClick={() =>
+                        setDocumentsFor({
+                          row,
+                          kinds: ["bank_statement", "receipt", "other"],
+                          label: "payment",
+                        })
+                      }
+                      title="Show the bank's record of this payment"
                       className="group cursor-pointer text-left"
                     >
                       {/*
@@ -456,8 +493,9 @@ export function TransactionTable({
 
       {documentsFor ? (
         <DocumentsDialog
-          transactionId={documentsFor.id}
-          refNo={documentsFor.refNo}
+          transactionId={documentsFor.row.id}
+          refNo={documentsFor.row.refNo}
+          kinds={documentsFor.kinds}
           onClose={() => setDocumentsFor(null)}
         />
       ) : null}
