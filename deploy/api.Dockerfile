@@ -28,6 +28,15 @@ FROM node:22-alpine AS runtime
 WORKDIR /repo
 ENV NODE_ENV=production
 
+# Which commit this image was built from.
+#
+# `/api/health` reports it, which is what lets a deploy be *verified* rather
+# than assumed: the pipeline pushes an image and waits for the live health
+# check to name that same commit. Without it, "deployed" means "a command
+# exited 0" — which it did on the evening this stack was green and down.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 # Runs as a non-root user. The official image ships one.
 COPY --from=build --chown=node:node /repo/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/packages/shared/dist ./packages/shared/dist

@@ -1,0 +1,18 @@
+# Every minute.
+#
+# The cost of asking is one `git fetch` against GitHub, which is cheaper than
+# the alternative: a deploy that waits for somebody to notice it did not
+# happen. Nothing is pulled and nothing restarts unless a new commit's images
+# are actually in the registry.
+[Unit]
+Description=SFM — check for a new release every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+# So a box that was off does not fire a burst of catch-up runs on boot.
+AccuracySec=15s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

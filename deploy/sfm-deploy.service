@@ -1,0 +1,19 @@
+# Deploys whatever is on main, when its images are ready.
+#
+# Oneshot rather than a long-running service: it does its check, deploys if
+# there is something to deploy, and exits. The timer beside it is what makes it
+# happen again. A daemon looping on a sleep would survive a bad state that this
+# cannot.
+[Unit]
+Description=SFM — deploy main when its images are ready
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/sfm/deploy
+ExecStart=/usr/bin/env bash /opt/sfm/deploy/watch-and-deploy.sh
+
+# A deploy pulls two images, restarts the stack and waits for nginx. Fifteen
+# minutes is the same ceiling the pipeline used when it still had SSH.
+TimeoutStartSec=15min

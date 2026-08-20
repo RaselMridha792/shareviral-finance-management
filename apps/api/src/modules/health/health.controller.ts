@@ -15,7 +15,22 @@ export class HealthController {
   @Public()
   @Get()
   check() {
-    return { status: "ok", service: "sfm-api" };
+    return {
+      status: "ok",
+      service: "sfm-api",
+      /**
+       * The commit this build came from, baked in by the Dockerfile.
+       *
+       * It is here so a deploy can be verified instead of assumed. The
+       * pipeline pushes an image and then waits for this to name the commit it
+       * just built — "deployed" then means the new code is answering requests,
+       * rather than that a command exited 0, which it did on the evening this
+       * stack was green and down.
+       *
+       * "unknown" outside Docker, which is every developer's machine.
+       */
+      version: process.env.GIT_SHA ?? "unknown",
+    };
   }
 
   /**
