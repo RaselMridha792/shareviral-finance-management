@@ -39,16 +39,44 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 async function request(path: string, init: RequestInit): Promise<Response> {
+  /*
+   * `Headers`, not an object literal, and that is a bug fix rather than taste.
+   *
+   * Header names are case-insensitive on the wire and case-*sensitive* as
+   * object keys. Spreading `{"Content-Type": ...}` and a caller's
+   * `{"content-type": ...}` therefore produced two entries rather than one, and
+   * `fetch` joins same-named headers with a comma — so the request went out as
+   * `content-type: application/json, application/json`, which no JSON body
+   * parser matches. The server saw no body at all: `@Body()` arrived as
+   * `undefined` and the handler died reading a field off it.
+   *
+   * It only bit the two calls that spelled the header in lower case, and only
+   * in a browser, which is why it survived a run through the API by hand.
+   * `Headers.set` replaces by normalised name, so the spelling stops mattering.
+   */
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    // Cookie auth needs a CSRF countermeasure: this header can't be set by a
+    // cross-origin form post, and the API rejects mutations without it.
+    "X-Requested-With": "finance-web",
+  });
+
+  for (const [name, value] of Object.entries(await authHeaders())) {
+    headers.set(name, value);
+  }
+  if (init.headers) {
+    new Headers(init.headers).forEach((value, name) =>
+      headers.set(name, value),
+    );
+  }
+
+  // A multipart upload has to carry the boundary the browser generates, and it
+  // only does that when nothing has already claimed the header.
+  if (init.body instanceof FormData) headers.delete("Content-Type");
+
   return fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      // Cookie auth needs a CSRF countermeasure: this header can't be set by a
-      // cross-origin form post, and the API rejects mutations without it.
-      "X-Requested-With": "finance-web",
-      ...(await authHeaders()),
-      ...init.headers,
-    },
+    headers,
     // Both auth cookies are httpOnly.
     credentials: "include",
   });
@@ -394,7 +422,6 @@ export const emailApi = {
   setKey: (apiKey: string) =>
     apiFetch<{ saved: boolean; message: string | null }>("/email/key", {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ apiKey }),
     }),
   clearKey: () =>
@@ -406,7 +433,6 @@ export const emailApi = {
   }) =>
     apiFetch<{ saved: boolean }>("/email/settings", {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     }),
   test: () =>
