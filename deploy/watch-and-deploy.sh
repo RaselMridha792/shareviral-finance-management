@@ -103,6 +103,18 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev
 
 if ! docker manifest inspect "$IMAGE_API:$REMOTE" >/dev/null 2>&1; then
   # Not an error. CI is still building, and the next minute will ask again.
+  #
+  # But say so once, because silence here is indistinguishable from a broken
+  # watcher — and today that cost an hour of looking in the wrong places while
+  # the log said nothing at all. Once per commit rather than once a minute: a
+  # line every sixty seconds is a log nobody reads, and the useful fact is
+  # "this is what it is waiting for", which does not change until CI finishes
+  # or somebody pushes again.
+  WAITING="$PWD/.waiting"
+  if [ "$(cat "$WAITING" 2>/dev/null || true)" != "$REMOTE" ]; then
+    printf '%s' "$REMOTE" > "$WAITING"
+    say "waiting for CI to publish the image for ${REMOTE:0:7}"
+  fi
   exit 0
 fi
 

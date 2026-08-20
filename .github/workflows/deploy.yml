@@ -23,8 +23,19 @@ on:
 concurrency:
   # Two deploys overlapping on one small server is how a half-updated stack
   # happens. A newer push cancels an older run that has not finished.
+  #
+  # This said `false`, which is the opposite of the sentence above it and cost
+  # an hour to notice. `false` does not prevent overlap — it queues, and the
+  # queue is where the time went: `verify` waits twenty minutes before giving
+  # up, so three pushes in an hour left the newest one's `build` job unstarted
+  # while the server sat on a release two commits old.
+  #
+  # Cancelling is also the only honest setting here, because the server deploys
+  # `origin/main`'s tip and nothing else. A run for a commit that is no longer
+  # the tip is verifying something that will never be live: it cannot pass, and
+  # it holds the lane while it fails.
   group: deploy-vps
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
