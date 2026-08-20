@@ -50,7 +50,7 @@ restated a selected tab four pixels above it. The description still changes with
 Employment type ("Where and on what footing"), hinted so the pair does not read as a duplicate.
 "Not set" is a real option and stays selectable.
 
-Commits: `ada36db` (migration, pushed alone and first), `HASH` (the page).
+Commits: `ada36db` (migration, pushed alone and first), `393a7a7` (the page).
 
 **Watch out.** **The migration travels alone and had to land first** — Drizzle names every column
 in its SELECT, so the code without the column kills the team list, every profile, payroll and the
