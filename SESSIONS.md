@@ -65,7 +65,7 @@ scroll, h1 28, pad 32/34, gap 20. `.headings.mjs` (untracked) drove the real pag
 heading, watched the card appear at once reading 0% · 0 entries with the other seven untouched,
 reloaded, unticked it, unticked one with spend and put it back, then deleted its row again.
 
-Four CI steps run separately, all green (308 tests). Commits: `TBD`.
+Four CI steps run separately, all green (308 tests). Commits: `f1f2a68`.
 
 **Open.** Nothing half-done on the page. Two things noticed and deliberately left alone, each
 wanting its own session: `components/ledger/documents-dialog.tsx`, `dashboard/expense-row.tsx`
