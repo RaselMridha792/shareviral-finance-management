@@ -10,6 +10,7 @@ import {
   type FxReportBasis,
   type GoverningRateSource,
   type ListFxRatesQuery,
+  type Paginated,
   type SetFxRateInput,
 } from "@finance/shared";
 import {
@@ -40,17 +41,44 @@ export class FxService {
     private readonly settings: SettingsService,
   ) {}
 
+  /**
+   * A page of rates, newest first, with the whole count beside it.
+   *
+   * It used to take a `limit` and return a bare array — so the screen showed
+   * its newest ninety and there was no way to reach the ninety-first, and no
+   * indication one existed. A `Paginated` envelope is what lets the table say
+   * how many there are and offer the rest.
+   */
   async list(query: ListFxRatesQuery) {
     const where: SQL[] = [];
     if (query.from) where.push(gte(fxRates.rateDate, query.from));
     if (query.to) where.push(lte(fxRates.rateDate, query.to));
+    const filter = where.length ? and(...where) : undefined;
 
-    return this.db.client
-      .select()
-      .from(fxRates)
-      .where(where.length ? and(...where) : undefined)
-      .orderBy(desc(fxRates.rateDate))
-      .limit(query.limit);
+    const [items, [counted]] = await Promise.all([
+      this.db.client
+        .select()
+        .from(fxRates)
+        .where(filter)
+        .orderBy(desc(fxRates.rateDate))
+        .limit(query.pageSize)
+        .offset((query.page - 1) * query.pageSize),
+      // Counted over the same filter, not over the page — a total that means
+      // the visible rows is the wrong number on every screen in this app.
+      this.db.client
+        .select({ total: sql<number>`count(*)::int` })
+        .from(fxRates)
+        .where(filter),
+    ]);
+
+    const total = counted?.total ?? 0;
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    };
   }
 
   /** Records a rate by hand. Re-recording the same day replaces it. */

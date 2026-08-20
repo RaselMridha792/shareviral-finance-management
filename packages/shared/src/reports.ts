@@ -37,7 +37,15 @@ export type SetFxRateInput = z.infer<typeof setFxRateSchema>;
 export const listFxRatesQuerySchema = z.strictObject({
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
-  limit: z.coerce.number().int().min(1).max(400).default(90),
+  /**
+   * A page, not a cap.
+   *
+   * This was `limit` alone, which is how the rate history came to show its
+   * newest ninety and offer no way to the ninety-first — a screen that
+   * silently stops is worse than one that says there is more.
+   */
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(20),
 });
 export type ListFxRatesQuery = z.infer<typeof listFxRatesQuerySchema>;
 

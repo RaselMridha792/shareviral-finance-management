@@ -17,6 +17,7 @@ import {
   TableScroll,
   Th,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/ui/pagination";
 import { ApiError } from "@/lib/api-client";
 import { fxApi, type FxRateDto } from "@/lib/reports";
 
@@ -32,6 +33,9 @@ export function RateHistory() {
   const [rates, setRates] = useState<FxRateDto[] | null>(null);
   /** A failed load is not an empty one, and must not read as one. */
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [adding, setAdding] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +44,15 @@ export function RateHistory() {
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  async function load() {
+  async function load(target = page) {
     try {
       setLoadError(null);
-      setRates(await fxApi.rates(30));
+      // Was `rates(30)` — a cap, so the thirty-first rate existed and could
+      // not be reached from anywhere.
+      const result = await fxApi.rates(target);
+      setRates(result.items);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
     } catch (caught) {
       /*
        * This set `[]`, which the table renders as "No rates recorded. Until one
@@ -64,8 +73,9 @@ export function RateHistory() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, []);
+    void load(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -247,6 +257,16 @@ export function RateHistory() {
           </table>
         </TableScroll>
       </Card>
+
+      {/* Outside the Card, so it survives the page that has no rows on it —
+          which is the page somebody most needs it to get back from. */}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        noun="rate"
+        onPage={setPage}
+      />
 
       {/*
         A rate is not one row's worth of data — it governs every dollar figure

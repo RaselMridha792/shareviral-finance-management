@@ -204,7 +204,7 @@ export function CashInForm({
       .rates(1)
       .then((rates) => {
         if (cancelled) return;
-        const last = rates[0]?.rate ?? null;
+        const last = rates.items[0]?.rate ?? null;
         setLatestRate(last);
         // Never overwrite what the person has already started typing.
         setUsdRate((current) => current || (last ?? ""));

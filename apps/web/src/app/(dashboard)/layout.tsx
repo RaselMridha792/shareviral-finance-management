@@ -34,7 +34,8 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
    */
   const [settings, rates] = await Promise.all([
     settingsApi.get(),
-    fxApi.rates(1).catch(() => []),
+    // Page one is the newest; only its first row is wanted here.
+    fxApi.rates(1).catch(() => null),
   ]);
 
   return (
@@ -46,8 +47,8 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
           with the page and the confirmation would flash and vanish.
         */}
         <RateProvider
-          rate={rates[0]?.rate ?? null}
-          asOf={rates[0]?.rateDate ?? null}
+          rate={rates?.items[0]?.rate ?? null}
+          asOf={rates?.items[0]?.rateDate ?? null}
         >
           <ToastProvider>
             {/*

@@ -64,3 +64,5 @@ apps/api/test/integration/*.xlsx
 .demo.mjs
 .cols2.mjs
 .navchk.mjs
+.pager.mjs
+.count.mjs

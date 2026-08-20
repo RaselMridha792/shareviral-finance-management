@@ -17,13 +17,14 @@ export default async function AccountsPage() {
    */
   const [accounts, rates] = await Promise.all([
     accountsApi.list(true),
-    fxApi.rates(1).catch(() => []),
+    // Page one is the newest; only its first row is wanted here.
+    fxApi.rates(1).catch(() => null),
   ]);
 
   return (
     <AccountsScreen
       initialAccounts={accounts}
-      usdRate={rates[0]?.rate ?? null}
+      usdRate={rates?.items[0]?.rate ?? null}
     />
   );
 }

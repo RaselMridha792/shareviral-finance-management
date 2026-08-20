@@ -31,7 +31,8 @@
     "test:integration": "npm run test:integration -w @finance/api --",
     "test:reset": "npm run test:reset -w @finance/api",
     "test:browser": "npm run test:browser -w @finance/web",
-    "test:all": "npm run test && npm run test:integration && npm run test:browser"
+    "test:all": "npm run test && npm run test:integration && npm run test:browser",
+    "db:bulk": "npm run db:bulk --workspace @finance/api --"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

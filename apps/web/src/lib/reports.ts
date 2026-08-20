@@ -5,11 +5,14 @@ import type {
   FundingReport,
   Granularity,
   OverviewReport,
+  Paginated,
   PeriodReport,
   SaveStatementInput,
   SetFxRateInput,
   StatementSignatory,
 } from "@finance/shared";
+
+import { PAGE_SIZE } from "@/lib/pagination";
 
 import { apiFetch } from "./api-client";
 
@@ -145,8 +148,11 @@ export const reportsApi = {
 };
 
 export const fxApi = {
-  rates: (limit = 90) =>
-    apiFetch<FxRateDto[]>(`/fx/rates?limit=${limit}`, fresh),
+  rates: (page = 1) =>
+    apiFetch<Paginated<FxRateDto>>(
+      `/fx/rates?page=${page}&pageSize=${PAGE_SIZE}`,
+      fresh,
+    ),
   set: (input: SetFxRateInput) =>
     apiFetch<FxRateDto>("/fx/rates", { method: "POST", ...json(input) }),
   remove: (id: string) =>

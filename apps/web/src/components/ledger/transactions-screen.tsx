@@ -23,11 +23,10 @@ import {
   type TransactionDto,
 } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { PAGE_SIZE } from "@/lib/pagination";
 import { TransactionForm } from "./transaction-form";
 import { TransactionTable } from "./transaction-table";
 import { VoidDialog } from "./void-dialog";
-
-const PAGE_SIZE = 50;
 
 /**
  * What this screen asks the API for — and, unchanged, what the Excel export
