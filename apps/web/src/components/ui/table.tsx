@@ -71,7 +71,23 @@ export function TableScroll({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn("overflow-x-auto", className)}>{children}</div>;
+  /*
+   * `relative` is not decoration.
+   *
+   * A statically-positioned `overflow-x: auto` box does not contain its own
+   * scrollable overflow as far as the document is concerned: the profile's
+   * sixteen-column tools table scrolled inside its box exactly as intended,
+   * and still added a thousand pixels to `documentElement.scrollWidth`, so the
+   * whole page slid sideways under a table that was already scrolling.
+   *
+   * Giving the scroller a position stops it. The tables that never showed this
+   * were the ones inside a card with `overflow-hidden`, which was clipping the
+   * leak by accident rather than by design — so this belongs here, once, where
+   * every table gets it.
+   */
+  return (
+    <div className={cn("relative overflow-x-auto", className)}>{children}</div>
+  );
 }
 
 /**
