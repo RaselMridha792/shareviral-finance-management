@@ -444,3 +444,57 @@ export const emailApi = {
       method: "POST",
     }),
 };
+
+/* -------------------------------------------------------------------------- */
+/*  Notifications                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row of the bell.
+ *
+ * Not the same thing as `NotificationLogRow` above, and the difference is the
+ * `readAt`: that one records that a message left the building, this one records
+ * whether *this person* has seen it.
+ */
+export type NotificationRow = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type NotificationSwitches = {
+  renewals: boolean;
+  tdsDeadline: boolean;
+  payrollUnpaid: boolean;
+  significantChanges: boolean;
+};
+
+export const notificationsApi = {
+  list: () =>
+    apiFetch<{ items: NotificationRow[]; unread: number }>("/notifications", {
+      cache: "no-store",
+    }),
+  read: (id: string) =>
+    apiFetch<{ marked: boolean }>(`/notifications/${id}/read`, {
+      method: "POST",
+    }),
+  readAll: () =>
+    apiFetch<{ marked: number }>("/notifications/read-all", { method: "POST" }),
+  settings: () =>
+    apiFetch<NotificationSwitches>("/notifications/settings", {
+      cache: "no-store",
+    }),
+  updateSettings: (input: Partial<NotificationSwitches>) =>
+    apiFetch<{ saved: boolean }>("/notifications/settings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  run: () =>
+    apiFetch<{ raised: number; message: string }>("/notifications/run", {
+      method: "POST",
+    }),
+};

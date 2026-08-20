@@ -129,6 +129,35 @@ export const appSettings = pgTable(
     emailAdminAddress: varchar("email_admin_address", { length: 200 }),
     emailEnabled: boolean("email_enabled").notNull().default(false),
 
+    /**
+     * Which events raise a bell notification.
+     *
+     * Four columns rather than one JSON blob, because these are read by the
+     * job that raises each event and a typo in a key is a feature that
+     * silently never fires. On by default: a bell that has to be switched on
+     * before it says anything is a bell nobody knows exists.
+     *
+     * Separate from the email switches on purpose. The reminder that renews in
+     * three days is worth a bell whether or not mail is configured, and
+     * somebody who turns mail off has not asked to be told nothing.
+     */
+    notifyRenewals: boolean("notify_renewals").notNull().default(true),
+    notifyTdsDeadline: boolean("notify_tds_deadline").notNull().default(true),
+    notifyPayrollUnpaid: boolean("notify_payroll_unpaid")
+      .notNull()
+      .default(true),
+    /**
+     * Off by default, and the one that has to be.
+     *
+     * The audit log catches every write in this app. A bell wired to all of it
+     * is a bell nobody looks at within a week, so this raises one only for the
+     * three the owner named — a voided money row, a changed salary, an edit
+     * inside a locked period — and even then only to super admins.
+     */
+    notifySignificantChanges: boolean("notify_significant_changes")
+      .notNull()
+      .default(false),
+
     anthropicApiKey: text("anthropic_api_key"),
     anthropicKeySetAt: timestamp("anthropic_key_set_at", {
       withTimezone: true,

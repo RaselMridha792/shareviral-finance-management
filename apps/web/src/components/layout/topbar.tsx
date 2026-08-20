@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 import { trailFor, useLeafCrumb } from "@/components/layout/breadcrumb";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { MobileSidebar } from "@/components/layout/sidebar";
 import {
   toggleSidebar,
@@ -146,6 +147,11 @@ export function Topbar() {
               </span>
             </span>
           ) : null}
+
+          {/* Before the theme toggle: the bell is the one control up here
+              that can be asking for something, and it should be the last thing
+              a reader passes rather than the first thing after it. */}
+          <NotificationBell />
 
           <ThemeToggle />
         </div>
