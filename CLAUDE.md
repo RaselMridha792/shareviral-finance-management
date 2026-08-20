@@ -59,6 +59,16 @@ another when you need one.
 Before saying something works: run it, load the page, query the database. "It compiles" and "the
 tests pass" are not the same claim as "it does the thing".
 
+**Check the exit code, not the last three lines.** `npm run lint | tail -3 && git commit` cannot
+fail: the pipe makes the exit status `tail`'s, and the tail shows the last workspace rather than
+the one that broke. Four commits went out that way before CI caught three formatting errors, and
+because the `test` job gates `build`, no image was published and the server sat two releases
+behind while every log said nothing. Run the four CI steps as CI runs them, each on its own:
+
+```bash
+npm run build:shared && npm run typecheck && npm run lint && npm test
+```
+
 ## Working with the owner
 
 - Explanations in **plain Bangla**; code, commands and commit messages in English.

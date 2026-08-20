@@ -194,8 +194,8 @@ export class EmailController {
 
     // A Set, because the admin address is often the person pressing the
     // button — and "sent 2 messages" to one inbox reads as a bug.
-    const targets = [...
-      new Set(
+    const targets = [
+      ...new Set(
         [actor.email, config.config.adminAddress]
           .filter((address): address is string => Boolean(address))
           .map((address) => address.trim().toLowerCase()),
@@ -217,9 +217,7 @@ export class EmailController {
       </div>`,
       );
       results.push(
-        result.ok
-          ? { to, ok: true }
-          : { to, ok: false, reason: result.reason },
+        result.ok ? { to, ok: true } : { to, ok: false, reason: result.reason },
       );
     }
 
