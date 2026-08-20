@@ -6,7 +6,11 @@ import { useState } from "react";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
-import { controlClass } from "@/components/ui/field";
+import {
+  DateRangeField,
+  FilterBar,
+  FilterSelect,
+} from "@/components/ui/filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
@@ -48,13 +52,26 @@ export function BankStatementScreen({
   const router = useRouter();
   const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
 
-  function go(next: { account?: string; from?: string; to?: string }) {
+  /**
+   * Every control writes the whole query rather than a patch of it.
+   *
+   * This screen's state is the URL — the account and the two dates are query
+   * parameters and the page re-renders on the server from them, which is what
+   * lets a statement somebody is reading be sent to somebody else and open on
+   * the same page. So a filter change is a navigation, and the navigation has
+   * to carry all three.
+   *
+   * It used to fall back field by field with `??`, which held only while a
+   * cleared date arrived as "". The range control reports a cleared end as
+   * `undefined`, and `undefined ?? range.from` would have read "cleared" as
+   * "unchanged" and put the old date straight back. Passing the full triple
+   * removes the question; the query string built from it is unchanged.
+   */
+  function go(next: { account: string; from?: string; to?: string }) {
     const params = new URLSearchParams();
-    params.set("account", next.account ?? accountId);
-    const from = next.from ?? range.from;
-    const to = next.to ?? range.to;
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
+    params.set("account", next.account);
+    if (next.from) params.set("from", next.from);
+    if (next.to) params.set("to", next.to);
     router.push(`/statement?${params}`);
   }
 
@@ -64,39 +81,49 @@ export function BankStatementScreen({
         title="Bank statement"
         icon="description"
         description="One account's movements, in date order, with the balance after each."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Account"
-              value={accountId}
-              onChange={(e) => go({ account: e.target.value })}
-              className={cn(controlClass, "h-9 w-auto min-w-44")}
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              aria-label="From"
-              title="From"
-              value={range.from ?? ""}
-              onChange={(e) => go({ from: e.target.value })}
-              className={cn(controlClass, "num h-9 w-auto")}
-            />
-            <input
-              type="date"
-              aria-label="To"
-              title="To"
-              value={range.to ?? ""}
-              onChange={(e) => go({ to: e.target.value })}
-              className={cn(controlClass, "num h-9 w-auto")}
-            />
-          </div>
-        }
       />
+
+      {/*
+        The filters below the title, above the table they decide.
+
+        They were in the header's actions slot, which is where a screen puts
+        what acts on it — New, Export — not what chooses its contents. Every
+        other screen in the app carries this row directly above its table, and
+        a reader who learnt where to look for it on Transactions was looking in
+        the wrong place here. Nothing about the filtering changed; only where
+        the row sits and which components draw it.
+
+        Account first, and it has no "all" option: a running balance is the
+        balance of one account, so this is the question the table cannot be
+        read without an answer to. The dates narrow what it has already chosen.
+      */}
+      <FilterBar>
+        {/* `wide` because the options come from the database — an account named
+            after its bank and its branch would otherwise size the control to
+            itself. */}
+        <FilterSelect
+          label="Account"
+          value={accountId}
+          onChange={(account) => go({ account, ...range })}
+          wide
+        >
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </FilterSelect>
+
+        {/* One bordered control with a hairline between the ends, not two
+            boxes: the rule is what says these are the ends of a range. The
+            labels ride on the inputs — a caption above each is what made rows
+            like this two lines high. */}
+        <DateRangeField
+          from={range.from}
+          to={range.to}
+          onChange={(next) => go({ account: accountId, ...next })}
+        />
+      </FilterBar>
 
       <Card className="overflow-hidden p-0">
         <TableScroll>

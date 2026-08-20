@@ -16,6 +16,7 @@ import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
+import { FilterBar } from "@/components/ui/filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
@@ -279,35 +280,58 @@ export function CashInScreen({
         title="Cash in"
         icon="savings"
         actions={
-          <>
-            <input
-              type="month"
-              value={month}
-              onChange={(event) => {
-                setMonth(event.target.value || todayInDhaka().slice(0, 7));
-                // A different month is a different, differently sized set.
-                // Staying on page three of it opens on an empty table.
-                setPage(1);
-              }}
-              // Named for a screen reader rather than by a caption above it:
-              // this row is one line of h-9 controls, and a stacked label
-              // would be the only thing in it standing two rows tall.
-              aria-label="Month"
-              className={cn(controlClass, "num h-9 w-44")}
-            />
-            {canWrite ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => setRecording(true)}
-              >
-                <Plus className="size-4" />
-                Add cash
-              </Button>
-            ) : null}
-          </>
+          canWrite ? (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setRecording(true)}
+            >
+              <Plus className="size-4" />
+              Add cash
+            </Button>
+          ) : null
         }
       />
+
+      {/*
+        The month, in the row every other screen keeps its filters in.
+
+        It moved out of the header for two reasons. A filter next to the title
+        sits beside the one control that is not a filter — the button that adds
+        a receipt — and reads as another action; and a reader who has learnt
+        where filtering lives on Transactions should not have to look somewhere
+        else here. Above the strip rather than below it, because the strip
+        answers to this control: "Received in July" and the rate underneath it
+        are both this month's, so cause reads above effect.
+
+        Still a month picker, not the shared date range. This screen is
+        organised by month all the way down — the totals are a month's, and the
+        rate is the month's rate, asked for by fiscal year and period index. A
+        free from/to would name no period to ask about, and would quietly turn
+        the two figures above the table into something else.
+      */}
+      <FilterBar>
+        <input
+          type="month"
+          value={month}
+          onChange={(event) => {
+            setMonth(event.target.value || todayInDhaka().slice(0, 7));
+            // A different month is a different, differently sized set.
+            // Staying on page three of it opens on an empty table.
+            setPage(1);
+          }}
+          // Named for a screen reader rather than by a caption above it: the
+          // row carries no visible captions by design, and a stacked one would
+          // be the only thing in it standing two rows tall.
+          aria-label="Month"
+          // h-10 arrives with controlClass, which is the row's height — what
+          // the date pair and the selects on other screens are already drawn
+          // at. The h-9 this used to carry was for the header it has left.
+          // Fixed width because a month field sizes itself to "mm/yyyy" plus a
+          // picker button and would otherwise stretch across the whole row.
+          className={cn(controlClass, "num w-44 shrink-0")}
+        />
+      </FilterBar>
 
       {/* One strip rather than two cards. They are two figures about the same
           month, and a strip is how every other screen here says that. */}

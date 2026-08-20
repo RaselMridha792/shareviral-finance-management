@@ -25,13 +25,13 @@ import { TabStrip } from "@/components/reports/granularity-tabs";
 import { useSettings } from "@/components/settings-provider";
 import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Select } from "@/components/ui/field";
+import { FilterBar, FilterSelect } from "@/components/ui/filters";
 import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
+import { Segmented } from "@/components/ui/segmented";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { tdsApi } from "@/lib/tax";
-import { cn } from "@/lib/utils";
 
 /**
  * Who was taxed this period, and how much — and nothing else.
@@ -68,6 +68,18 @@ const PERIOD_NAMES: Record<Granularity, string> = {
   half: "Half year",
   year: "Yearly",
 };
+
+/**
+ * The same four in the shape `<Segmented>` reads them, in GRANULARITIES order.
+ *
+ * Derived rather than typed out a second time: the order the strip draws and
+ * the order the API validates against are then one list, and a period added to
+ * the type cannot quietly fail to appear here.
+ */
+const PERIOD_TABS = GRANULARITIES.map((id) => ({
+  id,
+  label: PERIOD_NAMES[id],
+}));
 
 /**
  * SL, Month, Employee, Salary, Tax deducted, and the payslip link.
@@ -217,34 +229,28 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             }
           />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-border p-0.5">
-              {GRANULARITIES.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={granularity === option}
-                  onClick={() => chooseGranularity(option)}
-                  className={cn(
-                    "cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition",
-                    granularity === option
-                      ? "bg-primary text-white"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {PERIOD_NAMES[option]}
-                </button>
-              ))}
-            </div>
+          <FilterBar>
+            <Segmented
+              options={PERIOD_TABS}
+              value={granularity}
+              onChange={chooseGranularity}
+              label="Period length"
+            />
 
             {/* A financial year holds one yearly period, so there is nothing
                 to pick between. */}
             {periods.length > 1 ? (
-              <Select
-                aria-label="Period"
-                className="h-9 w-40"
-                value={index}
-                onChange={(event) => setIndex(Number(event.target.value))}
+              <FilterSelect
+                label="Period"
+                // `wide` because this list is built at runtime by
+                // `periodsInFiscalYear` — twelve months or four quarters, in a
+                // financial-year mode this file does not decide. The widest
+                // label is not something the source knows, so the control gets
+                // the cap rather than the freedom to size itself to whatever it
+                // is handed.
+                wide
+                value={String(index)}
+                onChange={(next) => setIndex(Number(next))}
               >
                 {/* A period that has not begun, or one that ended before the
                     books did, is greyed rather than dropped: not offered is a
@@ -252,32 +258,35 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                 {periods.map((range, position) => (
                   <option
                     key={range.label}
-                    value={position + 1}
+                    value={String(position + 1)}
                     disabled={!isSelectable(range)}
                   >
                     {range.label}
                   </option>
                 ))}
-              </Select>
+              </FilterSelect>
             ) : null}
 
             {/* Named rather than a bare "2026": under the July–June setting a
-                financial year spans two of the years a person would name. */}
-            <Select
-              aria-label="Financial year"
-              title={
-                mode === "bd_july_june" ? "July to June" : "January to December"
+                financial year spans two of the years a person would name. The
+                span rides in the label because a filter row carries no visible
+                captions — it used to be a `title`, which said it to a mouse and
+                to nobody else. */}
+            <FilterSelect
+              label={
+                mode === "bd_july_june"
+                  ? "Financial year, July to June"
+                  : "Financial year, January to December"
               }
-              className="h-9 w-auto"
-              value={fiscalYear}
-              onChange={(event) => chooseYear(Number(event.target.value))}
+              value={String(fiscalYear)}
+              onChange={(next) => chooseYear(Number(next))}
             >
               {years.map((year) => (
-                <option key={year} value={year}>
+                <option key={year} value={String(year)}>
                   {fiscalYearLabel(year, mode)}
                 </option>
               ))}
-            </Select>
+            </FilterSelect>
 
             {loading ? (
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -285,7 +294,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                 Reading {periods[index - 1]?.label ?? "that period"}…
               </span>
             ) : null}
-          </div>
+          </FilterBar>
 
           {error ? (
             <p

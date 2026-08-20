@@ -13,7 +13,11 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DateInput, Select } from "@/components/ui/field";
+import {
+  DateRangeField,
+  FilterBar,
+  FilterSelect,
+} from "@/components/ui/filters";
 import { SearchField } from "@/components/ui/search-field";
 import {
   SerialCell,
@@ -97,92 +101,109 @@ export function AuditPanel() {
         itself, so a change cannot exist without its record.
       </p>
 
-      <Card className="flex flex-wrap items-end gap-2 p-3">
-        {/* No Search button: this list filters as you type. The clear cross
-            is what was missing — the trail is long and there was no way back
-            to all of it except selecting the text and deleting it. */}
-        <SearchField
-          value={search}
-          onChange={setSearch}
-          placeholder="Search what happened…"
-          label="Search the trail"
-          className="flex-1"
-          inputClassName="h-9"
-        />
+      <Card className="p-3">
+        <FilterBar>
+          {/* No Search button: this list filters as you type. The clear cross
+              is what was missing — the trail is long and there was no way back
+              to all of it except selecting the text and deleting it.
 
-        <Select
-          aria-label="Action"
-          className="h-9 w-40"
-          value={filters.action ?? ""}
-          onChange={(e) =>
-            change({ action: (e.target.value || undefined) as AuditAction })
-          }
-        >
-          <option value="">Any action</option>
-          {AUDIT_ACTIONS.map((action) => (
-            <option key={action} value={action}>
-              {AUDIT_ACTION_LABELS[action]}
-            </option>
-          ))}
-        </Select>
+              The one control here allowed to grow, because it is the only one
+              whose content has no length limit. The minimum is the width below
+              which the row gives up and wraps, not the width it usually gets. */}
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search what happened…"
+            label="Search the trail"
+            className="min-w-32 flex-1"
+          />
 
-        <Select
-          aria-label="Area"
-          className="h-9 w-36"
-          value={filters.module ?? ""}
-          onChange={(e) => change({ module: e.target.value || undefined })}
-        >
-          <option value="">Any area</option>
-          {options.modules.map((module) => (
-            <option key={module} value={module}>
-              {module}
-            </option>
-          ))}
-        </Select>
-
-        <Select
-          aria-label="Who"
-          className="h-9 w-44"
-          value={filters.actorUserId ?? ""}
-          onChange={(e) => change({ actorUserId: e.target.value || undefined })}
-        >
-          <option value="">Anyone</option>
-          {options.actors.map((actor) => (
-            <option key={actor.id} value={actor.id}>
-              {actor.fullName}
-            </option>
-          ))}
-        </Select>
-
-        <DateInput
-          aria-label="From"
-          className="h-9 w-36"
-          value={filters.from ?? ""}
-          onChange={(e) => change({ from: e.target.value || undefined })}
-        />
-        <DateInput
-          aria-label="To"
-          className="h-9 w-36"
-          value={filters.to ?? ""}
-          onChange={(e) => change({ to: e.target.value || undefined })}
-        />
-
-        {Object.values(filters).some(Boolean) ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              // The search box too, not just the filters. Emptying `filters.q`
-              // alone left the typed words on screen, and the debounce then
-              // put the search straight back 300ms after it was cleared.
-              setSearch("");
-              setFilters({});
-              setPage(1);
-            }}
+          {/* Content-sized, uncapped: the actions are written out in
+              AUDIT_ACTIONS, so the widest label — "Settings changed" — is known
+              here and cannot grow behind our backs. */}
+          <FilterSelect
+            label="Action"
+            value={filters.action ?? ""}
+            onChange={(next) =>
+              change({ action: (next || undefined) as AuditAction })
+            }
           >
-            Clear
-          </Button>
-        ) : null}
+            <option value="">Any action</option>
+            {AUDIT_ACTIONS.map((action) => (
+              <option key={action} value={action}>
+                {AUDIT_ACTION_LABELS[action]}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {/* Capped: the areas are whatever the trail has recorded, so a long
+              module name would otherwise size this control to itself and take
+              the room out of the search box. */}
+          <FilterSelect
+            label="Area"
+            wide
+            value={filters.module ?? ""}
+            onChange={(next) => change({ module: next || undefined })}
+          >
+            <option value="">Any area</option>
+            {options.modules.map((module) => (
+              <option key={module} value={module}>
+                {module}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {/* Capped for the same reason and more so: these are people's full
+              names out of the users table. Past the cap the browser ellipsises
+              the name, which is the right thing to lose — "Anyone" is what this
+              reads for as long as nobody has been chosen. */}
+          <FilterSelect
+            label="Who"
+            wide
+            value={filters.actorUserId ?? ""}
+            onChange={(next) => change({ actorUserId: next || undefined })}
+          >
+            <option value="">Anyone</option>
+            {options.actors.map((actor) => (
+              <option key={actor.id} value={actor.id}>
+                {actor.fullName}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {/* One bordered control rather than two boxes. Two boxes read as two
+              unrelated dates; the hairline between them is what says they are
+              the ends of one range, and the border and padding it saves are
+              worth about thirty pixels to the search box.
+
+              `change` is passed whole, so a date still resets to page one —
+              narrowing the trail while standing on page four otherwise leaves
+              you looking at a page that no longer exists. */}
+          <DateRangeField
+            from={filters.from}
+            to={filters.to}
+            onChange={change}
+          />
+
+          {Object.values(filters).some(Boolean) ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => {
+                // The search box too, not just the filters. Emptying
+                // `filters.q` alone left the typed words on screen, and the
+                // debounce then put the search straight back 300ms after it
+                // was cleared.
+                setSearch("");
+                setFilters({});
+                setPage(1);
+              }}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </FilterBar>
       </Card>
 
       {error ? (
@@ -259,16 +280,6 @@ export function AuditPanel() {
                         className="row-finance cursor-pointer"
                         onClick={toggle}
                       >
-                        {/*
-                          Counted across pages, not within one — page two of
-                          the trail starts where page one stopped.
-
-                          It is off today, and not by this table's doing:
-                          `auditApi.list` asks the API for `pageSize: "50"`
-                          while `serial` counts in PAGE_SIZE (20), so page two
-                          restates 21-50. The number here is right the moment
-                          that request stops naming its own page size.
-                        */}
                         <SerialCell n={serial(page, index)} />
                         <td className="num">{formatWhen(row.occurredAt)}</td>
 
