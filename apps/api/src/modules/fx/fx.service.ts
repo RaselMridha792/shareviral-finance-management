@@ -10,7 +10,6 @@ import {
   type FxReportBasis,
   type GoverningRateSource,
   type ListFxRatesQuery,
-  type Paginated,
   type SetFxRateInput,
 } from "@finance/shared";
 import {

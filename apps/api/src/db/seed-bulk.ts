@@ -30,7 +30,6 @@ import { poolOptionsFor } from "./connection";
 import * as schema from "./schema";
 import {
   accounts,
-  auditLogs,
   categories,
   compensationHistory,
   fxRates,
@@ -38,12 +37,10 @@ import {
   payrollRuns,
   subscriptionUsers,
   subscriptions,
-  tdsAllocations,
   tdsDeposits,
   teamMembers,
   transactions,
   users,
-  vendors,
 } from "./schema";
 
 config({ path: ".env.local" });
@@ -76,7 +73,8 @@ function rnd(): number {
   seed = (seed * 1103515245 + 12345) % 2147483648;
   return seed / 2147483648;
 }
-const pick = <T>(list: readonly T[]): T => list[Math.floor(rnd() * list.length)];
+const pick = <T>(list: readonly T[]): T =>
+  list[Math.floor(rnd() * list.length)];
 const between = (lo: number, hi: number) => Math.floor(rnd() * (hi - lo)) + lo;
 const money = (lo: number, hi: number) => (between(lo, hi) * 100).toFixed(2);
 
@@ -124,7 +122,8 @@ async function wipe() {
       "sign-ins",
       // By email rather than by a tag: `users` has no notes column, and an
       // address nobody outside this file writes is the safest handle there is.
-      () => db.delete(users).where(like(users.email, "%@demo.sharevirals.test")),
+      () =>
+        db.delete(users).where(like(users.email, "%@demo.sharevirals.test")),
     ],
   ];
 
@@ -148,55 +147,150 @@ function noop() {
 /* -------------------------------------------------------------------------- */
 
 const FIRST_NAMES = [
-  "Arif", "Nusrat", "Tanvir", "Sadia", "Rakib", "Mim", "Shakib", "Farhana",
-  "Imran", "Tasnim", "Rifat", "Jannat", "Naeem", "Sumaiya", "Fahim", "Anika",
-  "Sabbir", "Maliha", "Rezaul", "Nabila", "Hasib", "Tania", "Mahfuz", "Rumana",
-  "Shafin", "Lamia", "Zahid", "Priya", "Aminul", "Sharmin",
+  "Arif",
+  "Nusrat",
+  "Tanvir",
+  "Sadia",
+  "Rakib",
+  "Mim",
+  "Shakib",
+  "Farhana",
+  "Imran",
+  "Tasnim",
+  "Rifat",
+  "Jannat",
+  "Naeem",
+  "Sumaiya",
+  "Fahim",
+  "Anika",
+  "Sabbir",
+  "Maliha",
+  "Rezaul",
+  "Nabila",
+  "Hasib",
+  "Tania",
+  "Mahfuz",
+  "Rumana",
+  "Shafin",
+  "Lamia",
+  "Zahid",
+  "Priya",
+  "Aminul",
+  "Sharmin",
 ];
 const LAST_NAMES = [
-  "Ahmed", "Rahman", "Islam", "Chowdhury", "Hossain", "Karim", "Akter",
-  "Sarker", "Bhuiyan", "Mollah", "Talukder", "Siddique",
+  "Ahmed",
+  "Rahman",
+  "Islam",
+  "Chowdhury",
+  "Hossain",
+  "Karim",
+  "Akter",
+  "Sarker",
+  "Bhuiyan",
+  "Mollah",
+  "Talukder",
+  "Siddique",
 ];
 const DESIGNATIONS = [
-  "Software Engineer", "Senior Software Engineer", "Product Designer",
-  "QA Engineer", "Content Writer", "Video Editor", "Motion Designer",
-  "Account Manager", "Media Buyer", "Data Analyst", "DevOps Engineer",
-  "HR Executive", "Accounts Officer", "Project Coordinator",
+  "Software Engineer",
+  "Senior Software Engineer",
+  "Product Designer",
+  "QA Engineer",
+  "Content Writer",
+  "Video Editor",
+  "Motion Designer",
+  "Account Manager",
+  "Media Buyer",
+  "Data Analyst",
+  "DevOps Engineer",
+  "HR Executive",
+  "Accounts Officer",
+  "Project Coordinator",
 ];
 const DEPARTMENTS = [
-  "Engineering", "Design", "Marketing", "Finance", "People", "Operations",
+  "Engineering",
+  "Design",
+  "Marketing",
+  "Finance",
+  "People",
+  "Operations",
 ];
 
 const TOOLS = [
-  ["Claude", "Max plan", "ai_tool"], ["ChatGPT", "Team", "ai_tool"],
-  ["Midjourney", "Standard", "ai_tool"], ["GitHub", "Team", "development"],
-  ["Vercel", "Pro", "development"], ["Sentry", "Team", "development"],
-  ["Linear", "Standard", "management"], ["Notion", "Plus", "productivity"],
-  ["Slack", "Pro", "productivity"], ["Figma", "Organisation", "design"],
-  ["Adobe CC", "All Apps", "design"], ["Canva", "Teams", "design"],
-  ["Meta Ads", "Business", "marketing"], ["Google Ads", "Business", "marketing"],
-  ["Ahrefs", "Standard", "marketing"], ["Buffer", "Team", "marketing"],
-  ["BambooHR", "Essentials", "hr"], ["Deel", "Standard", "hr"],
-  ["Airalo", "Data plan", "esim"], ["Hetzner", "CX32", "server_support"],
+  ["Claude", "Max plan", "ai_tool"],
+  ["ChatGPT", "Team", "ai_tool"],
+  ["Midjourney", "Standard", "ai_tool"],
+  ["GitHub", "Team", "development"],
+  ["Vercel", "Pro", "development"],
+  ["Sentry", "Team", "development"],
+  ["Linear", "Standard", "management"],
+  ["Notion", "Plus", "productivity"],
+  ["Slack", "Pro", "productivity"],
+  ["Figma", "Organisation", "design"],
+  ["Adobe CC", "All Apps", "design"],
+  ["Canva", "Teams", "design"],
+  ["Meta Ads", "Business", "marketing"],
+  ["Google Ads", "Business", "marketing"],
+  ["Ahrefs", "Standard", "marketing"],
+  ["Buffer", "Team", "marketing"],
+  ["BambooHR", "Essentials", "hr"],
+  ["Deel", "Standard", "hr"],
+  ["Airalo", "Data plan", "esim"],
+  ["Hetzner", "CX32", "server_support"],
   ["DigitalOcean", "Droplets", "server_support"],
-  ["Cloudflare", "Business", "server_support"], ["Xero", "Growing", "finance"],
-  ["Wise", "Business", "finance"], ["Zoom", "Business", "productivity"],
-  ["Loom", "Business", "productivity"], ["Grammarly", "Business", "productivity"],
-  ["Postman", "Team", "development"], ["Datadog", "Pro", "server_support"],
+  ["Cloudflare", "Business", "server_support"],
+  ["Xero", "Growing", "finance"],
+  ["Wise", "Business", "finance"],
+  ["Zoom", "Business", "productivity"],
+  ["Loom", "Business", "productivity"],
+  ["Grammarly", "Business", "productivity"],
+  ["Postman", "Team", "development"],
+  ["Datadog", "Pro", "server_support"],
   ["Intercom", "Advanced", "marketing"],
 ] as const;
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const SPEND = [
-  "Office rent", "Electricity", "Internet", "Office supplies", "Tea and snacks",
-  "Courier", "Cleaning", "Water", "Generator fuel", "Server hosting",
-  "Domain renewal", "Facebook ads", "Google ads", "Printing", "Repairs",
-  "Staff lunch", "Mobile bills", "Travel", "Training", "Legal fees",
-  "Audit fees", "Bank charges", "Equipment", "Furniture", "Software licence",
+  "Office rent",
+  "Electricity",
+  "Internet",
+  "Office supplies",
+  "Tea and snacks",
+  "Courier",
+  "Cleaning",
+  "Water",
+  "Generator fuel",
+  "Server hosting",
+  "Domain renewal",
+  "Facebook ads",
+  "Google ads",
+  "Printing",
+  "Repairs",
+  "Staff lunch",
+  "Mobile bills",
+  "Travel",
+  "Training",
+  "Legal fees",
+  "Audit fees",
+  "Bank charges",
+  "Equipment",
+  "Furniture",
+  "Software licence",
 ];
 
 async function load() {
@@ -237,7 +331,7 @@ async function load() {
       .insert(accounts)
       .values({
         name,
-        type: type as "bank" | "cash" | "mobile_wallet",
+        type: type,
         bankName: bank,
         currency: "BDT",
         openingBalance: money(2000, 40000),
@@ -255,7 +349,9 @@ async function load() {
   const outCats = await db
     .select({ id: categories.id, name: categories.name })
     .from(categories)
-    .where(and(eq(categories.kind, "out"), sql`${categories.parentId} is null`));
+    .where(
+      and(eq(categories.kind, "out"), sql`${categories.parentId} is null`),
+    );
 
   console.log(`  categories      ${outCats.length} headings already there`);
 
@@ -510,7 +606,7 @@ async function load() {
   if (runs.length < 20 && members.length) {
     let made = 0;
     for (let back = 0; back < 26; back += 1) {
-      const month = ((7 - back) % 12 + 12) % 12 + 1;
+      const month = ((((7 - back) % 12) + 12) % 12) + 1;
       const year = 2026 - Math.floor((back + 4) / 12);
 
       const [run] = await db
@@ -568,7 +664,7 @@ async function load() {
           // The month whose deductions this challan covers, which is what the
           // deposit deadline is counted from — not the day it was paid.
           periodYear: 2026 - Math.floor(i / 12),
-          periodMonth: ((7 - i) % 12 + 12) % 12 + 1,
+          periodMonth: ((((7 - i) % 12) + 12) % 12) + 1,
           amount: money(500, 9000),
           bankName: pick(["Sonali Bank", "Janata Bank", "City Bank"]),
           notes: `Bulk sample ${TAG}`,
