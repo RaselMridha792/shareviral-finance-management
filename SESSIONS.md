@@ -57,7 +57,7 @@ a second row at 390 rather than scrolling sideways. Picking `Office & premises` 
 from ৳1,04,11,700.00 to ৳81,83,700.00, the sub-line to "1 entry · Office & premises" and the
 table from 6 rows to 1; "All" put all three back. `node .sweep.mjs` on the three affected routes
 is unchanged — h1 28, pad 32/34, gap 20, 0px sideways. Four CI steps run separately, all green
-(308 tests).
+(308 tests). Commits: `29dd33d`.
 
 **Open.** The composition bar's six hues no longer key to anything the reader can name — the tabs
 are neutral, so the bar is now proportion without a legend. It still says how the month divides,
