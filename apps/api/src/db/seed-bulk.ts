@@ -1069,7 +1069,22 @@ async function load(tx: Tx): Promise<void> {
     email: `sample${i}@demo.sharevirals.test`,
     fullName: `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
     passwordHash: unusable,
-    role: pick(["admin", "finance", "hr", "ceo", "cfo"] as const),
+    /*
+     * No CFOs, and that is not an oversight about roles.
+     *
+     * The renewal reminder mails everybody who is `cfo` or `super_admin` and
+     * active. A fifth of a hundred and twenty sample sign-ins would have been
+     * around nineteen active CFOs at demo.sharevirals.test, and every morning
+     * at nine the job would have posted a real Resend message to each of them.
+     * They all bounce — the address does not exist and `.test` never resolves
+     * — and a provider that scores senders counts those against the mail that
+     * matters. The service says so itself, in the comment above that query.
+     *
+     * Sample data is not allowed to change who gets production email. There is
+     * no CFO on this system today; there is still none afterwards. Add a real
+     * one on the Users screen if the role is wanted.
+     */
+    role: pick(["admin", "finance", "hr", "ceo"] as const),
     status: maybe(0.12)
       ? ("disabled" as const)
       : maybe(0.1)
@@ -1664,7 +1679,28 @@ async function load(tx: Tx): Promise<void> {
       boughtFor: pick(DEPARTMENTS),
       invoiceNo: maybe(0.7) ? `INV-SUB-${between(1000, 9999)}` : null,
       reference: maybe(0.8) ? `CRD${between(100000, 999999)}` : null,
-      loginEmail: `${slugify(tool)}@sharevirals.test`,
+      /*
+       * Free text, never an address — and this one is load-bearing.
+       *
+       * The renewal reminder mails `loginEmail` whenever it parses as an
+       * address, on top of the staff list. A hundred and twenty plans with
+       * renewal dates spread over the next ten weeks means one or two of these
+       * every morning, each a real Resend message to a `.test` domain that
+       * cannot resolve, each a bounce counted against a sender reputation the
+       * owner has just set up.
+       *
+       * The column is free text by design — the service's own comment says it
+       * holds "shared account", or two addresses, or a note. So these are what
+       * it actually tends to hold. None of them parses as an address, which is
+       * what keeps the job from posting them.
+       */
+      loginEmail: pick([
+        "shared team account",
+        "SSO — Google Workspace",
+        "billing login (see 1Password)",
+        "finance shared login",
+        "owner's personal account",
+      ]),
       notes: `Bulk sample ${TAG}`,
       ...stamp,
     };
