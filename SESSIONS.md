@@ -20,6 +20,24 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-20 — one session, one page
+
+**Done.** `CLAUDE.md` now carries how revisions are run: a page at a time, one session per page,
+in sequence rather than side by side. The owner's reason is the one that matters — a single
+session carrying twenty screens runs out of room and starts forgetting the first ones. Running
+them in sequence also retires the collision problem that cost this repository an afternoon: two
+sessions in one working tree, one rewriting a file the other had just committed.
+
+The rule that came with it, and it is the owner's: **shared code is asked about before it is
+changed.** A page-scoped session cannot see what a change to `TableScroll` does to the other
+twenty tables, so it finds every screen that uses the component, says which ones they are, and
+waits for a decision. Measuring afterwards — `node .sweep.mjs` — is the check, not the argument.
+
+**Watch out.** Three kinds of change now travel alone rather than inside a page's work: schema
+and migrations, deploy or CI configuration, and auth or permissions. Each of those breaks the
+whole site when it breaks, and a failure folded into a page's diff is a failure nobody can
+attribute — which is exactly what happened on the 20th.
+
 ## 2026-08-20 — a hundred rows in every table, on two accounts
 
 **Done.** The live database — the `db` container, not the Neon one in `apps/api/.env` — now
@@ -29,7 +47,7 @@ at — 2,700 payroll lines, 408 compensation rows, 354 TDS allocations, and 120 
 vendors, team members, subscriptions, files, statements, notifications, imports, exchange rates
 and the rest: **26 of 33 tables at a hundred or more**. Accounts are down to the two that were
 asked for, Master card and Standard Chartered Bank; `Petty cash (demo)` and `USD card` are gone.
-Commits: `3020509`, `e60360c`, `34eec1c`.
+Commits: `3020509`, `e60360c`, `34eec1c`, `bf89d17`.
 
 Both registers were checked **in SQL** rather than taken from the seeder's own arithmetic —
 `opening_balance + sum(signed_amount)` with a window function for the running minimum. Standard

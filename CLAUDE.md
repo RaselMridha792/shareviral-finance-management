@@ -26,6 +26,44 @@ somebody else's half-finished change by tripping over it costs an hour.
 - If a file changes under you mid-task, somebody else owns it. Leave it and say so.
 - Push when the work is finished, not to save progress. **Every push deploys.**
 
+## One session, one page
+
+Revisions are done a page at a time, one session per page, one after another. This is not a
+preference — a single session carrying twenty screens runs out of room and starts forgetting the
+first ones, which is how a change gets made twice and a decision gets quietly reversed. A fresh
+session per page is the fix, and because the sessions run in sequence rather than side by side,
+nobody overwrites anybody.
+
+So the shape of a session is: read `SESSIONS.md`, do **that one page**, run the four checks,
+write the entry, push, stop. Do not wait for the deploy — it runs on its own, and the next
+session starts while it does.
+
+**Stay inside the page you were given.** Something else being obviously wrong is not permission
+to fix it; say so in the handover instead and let the owner decide when it gets its own session.
+A page's diff should be readable as that page's work, so that when the site breaks there is one
+suspect and not twenty.
+
+**Shared code is the exception, and it has a rule: ask first.**
+
+Most of this app's screens are built from the same pieces — `TableScroll`, `Th`, `SerialCell`,
+`RowActions`, `FilterBar`, `Amount`, the drawers under `ui/`. One line in `TableScroll` reaches
+all twenty-one tables. A page-scoped session cannot see what it just broke.
+
+So before changing anything under `components/ui/`, `components/money/`, `lib/`, or
+`packages/shared`:
+
+1. Find every screen that uses it — `grep -rn "<ComponentName>" apps/web/src` is enough.
+2. **Tell the owner which pages those are, and wait.** They decide whether it is a shared change
+   or a local one. A shared fix made without asking is a change to nineteen screens nobody
+   reviewed.
+3. If it goes ahead, measure afterwards rather than reasoning about it: `node .sweep.mjs`
+   walks every screen and prints the numbers.
+
+**Three kinds of change travel alone**, never folded into a page's work: schema and migrations,
+deploy or CI configuration, and anything touching auth or permissions. When one of those breaks
+it takes the whole site with it, and a failure mixed into a page's diff is a failure nobody can
+attribute. Give each its own session and its own push.
+
 ## The things that have actually cost time here
 
 - **`packages/shared` is consumed as built `dist/`.** Editing its `src` changes nothing until
