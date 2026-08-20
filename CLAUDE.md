@@ -36,9 +36,15 @@ somebody else's half-finished change by tripping over it costs an hour.
   Neon; production is the `db` container (`postgres://…@db:5432/sfm`). Seeding or migrating from
   a laptop reaches Neon and changes nothing on the live site.
 - **Schema changes go in `deploy/sql` as idempotent SQL** (`IF NOT EXISTS`). The deploy applies
-  every file there before the containers swap. Apply them locally yourself with `node .sql.mjs`.
-  Shipping code whose migration has not run takes the site down — Drizzle names every column in
-  its SELECT, so one missing column kills the whole query.
+  each new file once, before the containers swap, and records it in `schema_migrations`. Apply
+  them locally yourself with `node .sql.mjs`. Shipping code whose migration has not run takes the
+  site down — Drizzle names every column in its SELECT, so one missing column kills the whole
+  query.
+- **Never redefine in a later file what an earlier one already defined.** Three separate files
+  drop and recreate the `files_one_owner` constraint, each counting one more owner column, and
+  replaying that directory in filename order puts the older rule back on top of the newer one.
+  Idempotent is not the same as order-independent, which is why migrations are recorded rather
+  than re-run.
 - **Money is `numeric(14,2)` strings.** Sum in SQL, never with JS floats.
 - **`accounts.currency` marks which account is for foreign spend. It does not denominate the
   figures** — every amount in this app is BDT, including a USD card's.

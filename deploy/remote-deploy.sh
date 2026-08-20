@@ -132,17 +132,73 @@ if [ -d ./sql ]; then
       sleep 1
     done
 
+    # A one-line query, for asking the database about itself.
+    psql_query() {
+      docker exec -i "$db_container"         sh -c 'psql -tAq -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<<"$1"
+    }
+
+    # --------------------------------------------------------------------
+    # Once each, recorded — not all of them, every time.
+    # --------------------------------------------------------------------
+    # The first version of this ran every file on every deploy, on the
+    # reasoning that `IF NOT EXISTS` makes re-running harmless. That is true
+    # of a file taken alone and false of this directory taken together: three
+    # separate files drop and recreate the `files_one_owner` constraint, each
+    # counting one more owner column than the last. Run in filename order,
+    # the August 20th definition lands on top of the August 21st one, and the
+    # row that only the newer rule allows then fails the older one. The deploy
+    # stopped, correctly, and stayed stopped every minute after.
+    #
+    # Idempotent is not the same as order-independent. So the database
+    # remembers which files it has seen, and each runs once.
+    psql_query "create table if not exists schema_migrations (
+      filename text primary key,
+      applied_at timestamptz not null default now()
+    );" >/dev/null
+
+    # An existing database is already at whatever hand-applied SQL made it,
+    # and replaying its history is precisely the hazard above. So the first
+    # time this ledger appears on a database that already has tables, it is
+    # filled in rather than acted on — and says so, loudly, because a step
+    # that silently decides to do nothing is worse than one that fails.
+    baseline=0
+    if [ "$(psql_query "select count(*) from schema_migrations")" = "0" ] &&
+       [ "$(psql_query "select count(*) from information_schema.tables
+                         where table_schema = 'public' and table_name = 'files'")" = "1" ]; then
+      baseline=1
+      echo "schema: existing database — recording the current files as already applied"
+    fi
+
+    ran=0
     for file in ./sql/*.sql; do
       [ -e "$file" ] || continue
-      # ON_ERROR_STOP, so a broken migration stops the deploy rather than
-      # printing a message into a log and letting the release go out anyway.
-      if ! psql_in_db < "$file" >/dev/null; then
-        echo "migration failed: $file" >&2
-        echo "the stack has NOT been updated; fix the migration and deploy again" >&2
-        exit 1
+      name="$(basename "$file")"
+
+      if [ "$(psql_query "select 1 from schema_migrations
+                           where filename = '$name'")" = "1" ]; then
+        continue
       fi
+
+      if [ "$baseline" = "0" ]; then
+        # ON_ERROR_STOP, so a broken migration stops the deploy rather than
+        # printing into a log and letting the release go out anyway.
+        if ! psql_in_db < "$file" >/dev/null; then
+          echo "migration failed: $file" >&2
+          echo "the stack has NOT been updated; fix the migration and deploy again" >&2
+          exit 1
+        fi
+        ran=$((ran + 1))
+      fi
+
+      psql_query "insert into schema_migrations (filename) values ('$name')
+                  on conflict do nothing" >/dev/null
     done
-    echo "schema: applied $(ls ./sql/*.sql 2>/dev/null | wc -l) migration file(s)"
+
+    if [ "$baseline" = "1" ]; then
+      echo "schema: baseline recorded; nothing was run"
+    else
+      echo "schema: $ran new migration file(s) applied"
+    fi
   else
     # No local database service. Nothing here knows how to reach a managed one
     # safely, and guessing would be worse than saying so.
