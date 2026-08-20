@@ -14,8 +14,9 @@ import {
   type Granularity,
   type PeriodRange,
   type SalaryTdsRegister,
+  type SalaryTdsRow,
 } from "@finance/shared";
-import { LoaderCircle, Printer } from "lucide-react";
+import { LoaderCircle, Paperclip, Pencil, Printer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,7 +24,8 @@ import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { TabStrip } from "@/components/reports/granularity-tabs";
 import { useSettings } from "@/components/settings-provider";
-import { ChallansPanel } from "@/components/tax/challans-panel";
+import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { LineChallanForm } from "@/components/tax/line-challan-form";
 import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
 import { FilterBar, FilterSelect } from "@/components/ui/filters";
@@ -31,6 +33,7 @@ import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/segmented";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { tdsApi } from "@/lib/tax";
 
@@ -48,6 +51,12 @@ import { tdsApi } from "@/lib/tax";
  * and returns are still recorded — they are the compliance trail, and they are
  * one `git show` away from a page of their own. Same treatment income tax and
  * the retired reports got.
+ *
+ * The challans panel that used to sit under this table went the same way, on
+ * the owner’s instruction, and its 28 rows are untouched in `tds_deposits`.
+ * What replaced it is the Challan column below: the number is read against the
+ * person it was deposited for, which is the question this screen is opened
+ * with, rather than in a second table underneath that repeats the month.
  */
 const TABS = [
   { id: "register", label: "Salary deductions" },
@@ -83,14 +92,17 @@ const PERIOD_TABS = GRANULARITIES.map((id) => ({
 }));
 
 /**
- * SL, Month, Employee, Salary, Tax deducted, and the payslip link.
+ * SL, Month, Employee, Salary, Tax deducted, Challan, and the payslip link.
  *
  * The month used to be drawn only when the table crossed one, which made the
  * count a variable feeding three separate spans — the empty state, the footer
  * label and the cell padding the footer out to the edge. A date column is not
  * optional, so the count is not either, and the three cannot disagree.
  */
-const COLUMNS = 6;
+const COLUMNS = 7;
+
+/** Everything to the left of the tax column, which the footer label spans. */
+const COLUMNS_BEFORE_TAX = 4;
 
 export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
   const { fiscalYearMode: mode } = useSettings();
@@ -98,6 +110,10 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
   // holding `tds.read` alone is given the figures without a link that would
   // answer 403.
   const canSeePayslips = useCan("payroll.read");
+  // Writing a challan number onto a salary row is a tax entry, so it follows
+  // the tax permission rather than payroll’s.
+  const canRecordChallans = useCan("tds.write");
+  const toast = useToast();
 
   const [tab, setTab] = useState<Tab>("register");
   const [granularity, setGranularity] = useState(initial.period.granularity);
@@ -107,6 +123,13 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
   const [register, setRegister] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** The row whose challan is being written, and the one whose paper is open. */
+  const [editing, setEditing] = useState<SalaryTdsRow | null>(null);
+  const [viewing, setViewing] = useState<{
+    lineId: string;
+    challanNumber: string;
+  } | null>(null);
 
   const years = useMemo(() => selectableFiscalYears(mode), [mode]);
   const periods = useMemo(
@@ -156,6 +179,26 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
       live = false;
     };
   }, [granularity, fiscalYear, index]);
+
+  /**
+   * Read the period on screen again, after something on it has changed.
+   *
+   * Not the effect above: that one deliberately does nothing while the filter
+   * has not moved, which is exactly the case here. A challan written on one row
+   * lands on every taxed row of its month, so re-reading the table is the only
+   * honest way to show what the save actually did — patching the one row that
+   * was edited would leave twenty-four rows on screen saying something the
+   * database no longer agrees with.
+   */
+  async function reload() {
+    try {
+      setRegister(
+        await tdsApi.salaryRegister({ granularity, fiscalYear, index }),
+      );
+    } catch {
+      setError("Saved, but the table could not be read again. Reload the page.");
+    }
+  }
 
   /**
    * Keep the reader where they were in the year.
@@ -312,7 +355,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
               description="Everyone on a finalised payroll run in this period who owes tax. Somebody who owed none is not listed — the total below counts them at zero either way."
             />
             <TableScroll>
-              <table className="table-data min-w-172 text-sm">
+              <table className="table-data min-w-224 text-sm">
                 <thead>
                   <tr className="text-left">
                     <SerialHead />
@@ -326,6 +369,15 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                     <Th>Employee</Th>
                     <Th align="right">Salary</Th>
                     <Th align="right">Tax deducted</Th>
+                    {/*
+                      The challan the tax was deposited under. One A-Challan
+                      usually covers everybody in a month, so this column holds
+                      the same number down a run — which is the point: an
+                      employee asking which challan their tax went in under is
+                      asking about their own row, and the answer used to live
+                      in a second table that never mentioned them.
+                    */}
+                    <Th width="w-56">Challan number</Th>
                     <Th align="right" />
                   </tr>
                 </thead>
@@ -417,6 +469,63 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                             className="block font-medium"
                           />
                         </td>
+                        <td>
+                          <div className="flex items-center gap-1.5">
+                            {row.challanNumber ? (
+                              row.challanFileLineId ? (
+                                /*
+                                  The number is the link to the paper, which is
+                                  the same gesture as an invoice number on the
+                                  cash-in table — and the file it opens may
+                                  hang on somebody else’s row, because a
+                                  month’s challan is uploaded once.
+                                */
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewing({
+                                      lineId: row.challanFileLineId!,
+                                      challanNumber: row.challanNumber!,
+                                    })
+                                  }
+                                  className="num inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-primary-text underline-offset-2 hover:underline"
+                                >
+                                  <Paperclip className="size-3.5" />
+                                  {row.challanNumber}
+                                </button>
+                              ) : (
+                                <span
+                                  className="num text-muted-foreground"
+                                  title="Nothing attached to this challan yet — the pencil adds it."
+                                >
+                                  {row.challanNumber}
+                                </span>
+                              )
+                            ) : (
+                              /*
+                                Said in words rather than left blank. An empty
+                                cell on a tax table reads as a figure that
+                                failed to load; this says which of the two it
+                                is.
+                              */
+                              <span className="text-xs text-muted-foreground">
+                                Challan not recorded yet
+                              </span>
+                            )}
+
+                            {canRecordChallans ? (
+                              <button
+                                type="button"
+                                onClick={() => setEditing(row)}
+                                aria-label={`Record the challan for ${row.fullName}, ${row.periodLabel}`}
+                                title="Record the challan"
+                                className="ml-auto cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                              >
+                                <Pencil className="size-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="text-right">
                           {canSeePayslips ? (
                             <Link
@@ -438,7 +547,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                     <tr className="border-t border-border bg-surface-muted/40">
                       {/* Everything to the left of the tax column, so the
                           total sits under the figures it is the total of. */}
-                      <td className="font-medium" colSpan={COLUMNS - 2}>
+                      <td className="font-medium" colSpan={COLUMNS_BEFORE_TAX}>
                         Deducted in {period.label}
                       </td>
                       {/*
@@ -453,7 +562,9 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                           className="block font-semibold"
                         />
                       </td>
-                      <td />
+                      {/* The challan column and the payslip link, which a
+                          total has nothing to say about. */}
+                      <td colSpan={COLUMNS - COLUMNS_BEFORE_TAX - 1} />
                     </tr>
                   </tfoot>
                 ) : null}
@@ -461,16 +572,31 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             </TableScroll>
           </Card>
 
-          {/*
-            The challans, under the deductions they settle.
+          <LineChallanForm
+            // Keyed by the row, so the number in the field is the row’s own
+            // rather than whichever one the drawer was opened on first.
+            key={editing?.payrollLineId ?? "none"}
+            open={Boolean(editing)}
+            line={editing}
+            onClose={() => setEditing(null)}
+            onSaved={async (message) => {
+              toast.show(message, "success");
+              await reload();
+            }}
+          />
 
-            A second table rather than a column on the first: one A-Challan
-            usually covers the tax withheld from everybody in a month, so a
-            challan number on a person's row would be the same number written
-            down seventeen times with an amount beside it that belongs to none
-            of them.
-          */}
-          <ChallansPanel year={fiscalYear} />
+          {viewing ? (
+            <DocumentsDialog
+              // The row that holds the file, which is not always the row that
+              // was clicked — see `challanFileLineId`.
+              transactionId={viewing.lineId}
+              owner="payroll_line"
+              kinds={["challan"]}
+              title="Challan"
+              refNo={viewing.challanNumber}
+              onClose={() => setViewing(null)}
+            />
+          ) : null}
         </>
       )}
     </>

@@ -6,6 +6,7 @@ import type {
   Granularity,
   PendingItem,
   SalaryTdsRegister,
+  SetLineChallanInput,
   TdsDepositType,
   UpdateTdsDepositInput,
 } from "@finance/shared";
@@ -205,6 +206,47 @@ export const tdsApi = {
 /* -------------------------------------------------------------------------- */
 /*  The challan's scan                                                         */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The challan a salary row's tax was deposited under.
+ *
+ * Answers with what actually changed — the number, the month, and how many
+ * rows it reached — so the toast can say "written on 25 rows" rather than
+ * "saved", which is the difference between somebody checking the month and
+ * somebody trusting it.
+ */
+export function setLineChallan(
+  payrollLineId: string,
+  input: SetLineChallanInput,
+) {
+  return apiFetch<{
+    challanNumber: string | null;
+    period: string;
+    rowsChanged: number;
+  }>(`/tds/salary-deductions/${payrollLineId}/challan`, {
+    method: "PATCH",
+    ...json(input),
+  });
+}
+
+/** What is attached to one salary row — at most one challan scan. */
+export function listLineChallanFiles(payrollLineId: string) {
+  return apiFetch<StoredFile[]>(`/files/payroll-line/${payrollLineId}`, fresh);
+}
+
+/**
+ * The scan, attached to the row it was uploaded from.
+ *
+ * One kind and a singular one, so attaching a second replaces the first in the
+ * same transaction. Everybody else on that month's run reads it through the
+ * challan number they share rather than through a copy of their own.
+ */
+export function uploadLineChallanFile(payrollLineId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", "challan");
+  return apiUpload<StoredFile>(`/files/payroll-line/${payrollLineId}`, form);
+}
 
 export function listChallanFiles(depositId: string) {
   return apiFetch<StoredFile[]>(`/files/tds_deposit/${depositId}`, fresh);

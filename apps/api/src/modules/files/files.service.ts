@@ -53,6 +53,14 @@ const SINGULAR_KINDS: readonly FileKind[] = [
    * on file would mean a payslip had to choose one.
    */
   "signature",
+  /**
+   * And the challan. It is opened from a challan number as *the* paper behind
+   * that number, so two of them means the register has to pick one — and
+   * "the newest" would be a rule invented in whichever screen drew it last.
+   * Attaching another replaces it, which is what the form already says it
+   * does.
+   */
+  "challan",
 ];
 
 /** Which permission a file's owner demands, to read it and to change it. */
@@ -74,6 +82,11 @@ const OWNER_PERMISSIONS: Record<
   // proof the deposit happened; whoever may record one may attach it, and
   // whoever may read the register may see it.
   tds_deposit: { read: "tds.read", write: "tds.write" },
+  // The withholding register's own pair. What hangs on a payroll line here is
+  // the challan its tax was deposited under, and it is read and written on
+  // that screen — `payroll.read` guards the payslip, which is a different
+  // document answering a different question.
+  payroll_line: { read: "tds.read", write: "tds.write" },
 };
 
 @Injectable()
@@ -108,6 +121,16 @@ export class FilesService {
       return { owner: "subscription", id: row.subscriptionId };
     if (row.settingsId)
       return { owner: "settings", id: String(row.settingsId) };
+    /*
+     * These two were missing, which made a challan scan unreadable even where
+     * one could be stored: `open` calls this before it streams, so a file
+     * owned by a deposit answered "not attached to anything" — a 404 on a file
+     * that was right there. The table's own constraint had the same gap and is
+     * repaired in 2026-08-21-tds-line-challan.sql.
+     */
+    if (row.tdsDepositId) return { owner: "tds_deposit", id: row.tdsDepositId };
+    if (row.payrollLineId)
+      return { owner: "payroll_line", id: row.payrollLineId };
     // The table has a check constraint making this unreachable. If it is ever
     // reached, refusing is the only safe reading of a file owned by nothing.
     throw new NotFoundException("This file is not attached to anything");
@@ -175,6 +198,7 @@ export class FilesService {
       subscription: files.subscriptionId,
       settings: files.settingsId,
       tds_deposit: files.tdsDepositId,
+      payroll_line: files.payrollLineId,
     } satisfies Record<FileOwner, unknown>;
     return columns[owner];
   }
@@ -374,6 +398,8 @@ export class FilesService {
               transactionId: owner === "transaction" ? ownerId : null,
               importBatchId: owner === "import_batch" ? ownerId : null,
               subscriptionId: owner === "subscription" ? ownerId : null,
+              tdsDepositId: owner === "tds_deposit" ? ownerId : null,
+              payrollLineId: owner === "payroll_line" ? ownerId : null,
               // The one owner keyed by a number rather than a uuid.
               settingsId: owner === "settings" ? Number(ownerId) : null,
               uploadedBy: actor.id,

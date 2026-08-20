@@ -10,6 +10,7 @@ import {
   type StoredFile,
 } from "@/lib/api-client";
 import { listSubscriptionFiles } from "@/lib/subscriptions";
+import { listLineChallanFiles } from "@/lib/tax";
 
 /**
  * A PDF, drawn from bytes this page fetched itself.
@@ -126,17 +127,22 @@ export function DocumentsDialog({
   title,
   onClose,
 }: {
-  /** The row the documents hang on — a transaction, or a subscription. */
+  /** The row the documents hang on — a transaction, a subscription, a salary row. */
   transactionId: string;
   /**
    * Which kind of row that is.
    *
    * A subscription is a money row like any other and carries the same bill and
-   * the same bank record, so it reaches the same dialog. Defaulted to
-   * `transaction` because that is what every existing caller means, and a
-   * required argument here would be four edits to say what was already true.
+   * the same bank record, so it reaches the same dialog. A payroll line
+   * carries the challan its withheld tax was deposited under, opened from the
+   * challan number on the withholding register — the same gesture as
+   * opening an invoice from its number.
+   *
+   * Defaulted to `transaction` because that is what every existing caller
+   * means, and a required argument here would be four edits to say what was
+   * already true.
    */
-  owner?: "transaction" | "subscription";
+  owner?: "transaction" | "subscription" | "payroll_line";
   refNo: string;
   /**
    * Which of the entry's documents this opening is about.
@@ -161,7 +167,9 @@ export function DocumentsDialog({
     let live = true;
     (owner === "subscription"
       ? listSubscriptionFiles(transactionId)
-      : listTransactionFiles(transactionId)
+      : owner === "payroll_line"
+        ? listLineChallanFiles(transactionId)
+        : listTransactionFiles(transactionId)
     )
       .then((next) => {
         if (live) setFiles(next);

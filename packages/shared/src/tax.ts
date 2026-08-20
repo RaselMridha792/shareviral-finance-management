@@ -130,6 +130,29 @@ export type SalaryTdsRow = {
    * is the kind of half-truth a payroll screen should not print.
    */
   isPaid: boolean;
+  /**
+   * The challan this person's withheld tax was deposited under, or null while
+   * it has not been deposited yet.
+   *
+   * On the line rather than on the deposit, because this is what the register
+   * is read for: an employee asking which challan their tax went in under is
+   * asking about their own row. One A-Challan usually covers everybody in a
+   * month, so the same number is written on every line of that month — the
+   * form does it in one go.
+   */
+  challanNumber: string | null;
+  /**
+   * Which row holds the scan behind that number, if anybody attached one.
+   *
+   * A line rather than a file id, because that is what the documents popup
+   * asks for — and it is not always this row: the file is uploaded once, from
+   * whichever row the person had open, and every other line carrying the same
+   * number opens that one. Uploading it again for each of twenty-five people
+   * would be twenty-five copies of one PDF on disk.
+   *
+   * Null means the number was written down and no paper was attached to it.
+   */
+  challanFileLineId: string | null;
 };
 
 export type SalaryTdsRegister = {
@@ -174,6 +197,31 @@ export const allocateDepositSchema = z.strictObject({
   transactionIds: z.array(z.string().uuid()).default([]),
 });
 export type AllocateDepositInput = z.infer<typeof allocateDepositSchema>;
+
+/**
+ * Writing a challan number onto the register.
+ *
+ * The number and nothing else: the deposit's own date, bank and amount belong
+ * to `tds_deposits`, and asking for them again on a salary row would be the
+ * same facts recorded twice, disagreeing by next month.
+ */
+export const setLineChallanSchema = z.strictObject({
+  /**
+   * Empty clears it. A challan typed against the wrong month has to be
+   * removable, and a form that can only ever write means the correction is
+   * "type something else and hope".
+   */
+  challanNumber: z.string().trim().max(60),
+  /**
+   * Write it on every line of the same payroll month, not only this one.
+   *
+   * On by default because that is what actually happens: one A-Challan settles
+   * the tax withheld from everybody that month, so the alternative is typing
+   * the same number twenty-five times.
+   */
+  applyToMonth: z.boolean().default(true),
+});
+export type SetLineChallanInput = z.infer<typeof setLineChallanSchema>;
 
 export const listDepositsQuerySchema = z.strictObject({
   year: z.coerce.number().int().min(2000).max(2200).optional(),

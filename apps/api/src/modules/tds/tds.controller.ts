@@ -9,6 +9,7 @@ import {
   listDepositsQuerySchema,
   pendingQuerySchema,
   salaryTdsRegisterQuerySchema,
+  setLineChallanSchema,
   tdsLiabilityQuerySchema,
   type AllocateDepositInput,
   type CalculateTdsInput,
@@ -21,6 +22,7 @@ import {
   type PendingQuery,
   type SalaryTdsRegisterQuery,
   type SaveTdsPolicyInput,
+  type SetLineChallanInput,
   type TdsLiabilityQuery,
 } from "@finance/shared";
 import { z } from "zod";
@@ -127,6 +129,24 @@ export class TdsController {
     @ZodQuery(salaryTdsRegisterQuerySchema) query: SalaryTdsRegisterQuery,
   ) {
     return this.tds.salaryRegister(query);
+  }
+
+  /**
+   * The challan a salary row's tax was deposited under.
+   *
+   * Under `salary-deductions` rather than beside `deposits/:id`, because that
+   * is the record being changed: a payroll line, read on the register. It
+   * writes the number on every taxed row of the month by default — see
+   * `TdsService.setLineChallan` for why.
+   */
+  @Patch("salary-deductions/:id/challan")
+  @RequirePermission("tds.write")
+  setLineChallan(
+    @Param("id") id: string,
+    @ZodBody(setLineChallanSchema) body: SetLineChallanInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tds.setLineChallan(uuidSchema.parse(id), body, actor);
   }
 
   @Get("pending")

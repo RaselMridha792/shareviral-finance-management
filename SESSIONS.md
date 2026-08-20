@@ -20,6 +20,80 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — The challan moves onto the person, and the challans table goes
+
+**Done.** The owner's ask on the **TDS** page, and nothing else on it.
+
+*A Challan number column, after Tax deducted.* Empty rows say **"Challan not recorded yet"** in
+words rather than sitting blank — an empty cell on a tax table reads as a figure that failed to
+load. A row that has one shows the number with a paperclip, and clicking it opens the same
+documents popup the cash-in table's invoice number opens (`DocumentsDialog`, image or PDF, with a
+download). A pencil in the same cell opens a drawer holding two fields and one switch: the challan
+number, the file, and **"Everybody taxed in <month>"**, ticked by default.
+
+*The number lives on the payroll line.* `payroll_lines.tds_challan_number`, and the scan hangs on
+the line as a seventh file owner (`files.payroll_line_id`, kind `challan`, singular — attaching
+another replaces it). The month switch writes the number on every taxed row of that payroll run and
+leaves the zero-tax rows alone; unticked it writes one row. **The file is uploaded once**, from
+whichever row was open, and every row carrying that number opens it — the register resolves the
+scan by challan number, not by line, so twenty-five people do not mean twenty-five copies of one
+PDF. Clearing a number hides its scan rather than deleting it; writing the number back on that row
+shows it again.
+
+*The Challans panel under the table is gone*, on the owner's instruction, and **its 28 rows are
+untouched in `tds_deposits`** — nothing was migrated, backfilled or deleted. `challans-panel.tsx`
+and `challan-form.tsx` are deleted with it and are one `git show` away. `tdsApi.deposits`,
+`createDeposit`, `updateDeposit` and `allocate` still answer and now have no caller, which is what
+the note at the top of `lib/tax.ts` already says about most of that file.
+
+Commits: `a3c3be2` (migration, pushed alone and first), `<CODE>` (the page).
+
+**Watch out.** **The migration travels alone and had to land first** — Drizzle names every column
+in its SELECT, so shipping the code without it kills the payroll run, every payslip and this
+register. `deploy/sql/2026-08-21-tds-line-challan.sql` is idempotent, applied locally with
+`node .sql.mjs` and measured: both columns nullable, both indexes present, no row changed.
+
+**It also repairs a bug that made the old challan attachment impossible.**
+`2026-08-20-challan-file.sql` added `files.tds_deposit_id` and never added it to `files_one_owner`,
+and `2026-08-21-signature.sql` then recreated that check without it — so a file owned only by a
+deposit failed the constraint with a sum of zero. `FilesService.upload` never set the column either,
+and `ownerOf` did not know it, so a challan scan could not be stored and would not have been
+readable if it had been. The check now names all seven owner columns (this is the fourth file to
+recreate it — it names every column that exists so replaying the directory cannot put a shorter
+rule back on top), `upload` sets both new columns, and `ownerOf` answers for both.
+
+Three shared things changed, all additive: `FILE_OWNERS` and `KINDS_BY_OWNER` gained
+`payroll_line`; `SalaryTdsRow` gained `challanNumber` and `challanFileLineId`;
+`DocumentsDialog` gained a third `owner` value behind the same default, so its five existing
+callers are untouched. `SINGULAR_KINDS` gained `challan`. Nothing under `components/ui/` or
+`components/money/` was touched.
+
+Measured rather than argued, against the development database and through the browser
+(`.tdswrite.mjs`, `.tdsedge.mjs`, `.tdsshot.mjs`, `.tdsflow.mjs`, untracked). Writing on one row
+reached **18 of 18** taxed rows of July 2026 and **0** zero-tax rows; unticked, exactly **1**.
+Clearing the month cleared 18 and left the file row stored; writing the number back resolved the
+scan on all 18 again. A draft run answers 400, an unknown row 404, 61 characters 400. The upload
+answered **201** and its bytes stream back at **200** — which is the constraint fix, end to end.
+On screen at 1440/1024/390: **7** header cells, **0** rows whose cell count disagrees with the
+header, the column at index 5, **18** pencils, **0px** of page overflow at every width, and the
+footer spanning 4 + 1 + 2. Through the UI: pencil, untick, type, Save — the toast named the
+person, the drawer closed, the table re-read itself and the database held 17 + 1. Four CI steps
+run separately, all green (308 tests).
+
+**Open.**
+
+- **Nothing on this page records the deposit's date, bank or amount any more.** That was the
+  challans panel's job and the owner asked for it to go; `tds_deposits` still holds all 28 rows and
+  the endpoints still write them, so a compliance screen for the trail is a routing change plus the
+  client that is already in `lib/tax.ts`, not a rebuild.
+- **The register and `tds_deposits` do not know about each other.** A number typed on a salary row
+  is not checked against a recorded challan and does not create one, deliberately — the owner chose
+  the per-row column over reusing the deposit and allocation tables. If they should agree later,
+  `tds_allocations` is the table that was built for it and it is still empty.
+- **`GET /tds/deposits` and friends have no caller now.** Left in place; see above.
+
+---
+
 ## 2026-08-21 — Team gets an Employment type column, and loses its second table
 
 **Done.** The owner's two asks on the **Team** page, and nothing else on it.

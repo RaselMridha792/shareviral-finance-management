@@ -196,6 +196,41 @@ export class FilesController {
     );
   }
 
+  /**
+   * The challan scan the withholding register opens.
+   *
+   * `tds.read` and `tds.write` rather than the payroll pair: this is the tax
+   * screen's document, and somebody who may record a deposit may attach the
+   * bank's paper for it without also being able to read everybody's salary.
+   */
+  @Get("payroll-line/:id")
+  @RequirePermission("tds.read")
+  listForPayrollLine(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("payroll_line", uuidSchema.parse(id), actor);
+  }
+
+  @Post("payroll-line/:id")
+  @RequirePermission("tds.write")
+  @upload()
+  uploadForPayrollLine(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "payroll_line",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
   @Get("import-batch/:id")
   @RequirePermission("imports.run")
   listForImportBatch(

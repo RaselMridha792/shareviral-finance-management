@@ -17,7 +17,7 @@ import { importBatches } from "./imports";
 import { appSettings } from "./settings";
 import { subscriptions } from "./subscriptions";
 import { tdsDeposits } from "./tax";
-import { teamMembers } from "./team";
+import { payrollLines, teamMembers } from "./team";
 import { transactions } from "./transactions";
 import { users } from "./users";
 
@@ -101,6 +101,17 @@ export const files = pgTable(
       onDelete: "cascade",
     }),
     /**
+     * One person's line on one month's payroll.
+     *
+     * The withholding register reads a challan per person, so its scan hangs
+     * on the line whoever attached it had open. Everybody else on that month's
+     * run reaches the same file through the challan number they share rather
+     * than through a copy of their own — see `TdsService.salaryRegister`.
+     */
+    payrollLineId: uuid("payroll_line_id").references(() => payrollLines.id, {
+      onDelete: "cascade",
+    }),
+    /**
      * The settings row, which is the company itself.
      *
      * A smallint and not a uuid, because `app_settings` is a single row keyed
@@ -138,6 +149,7 @@ export const files = pgTable(
     index("files_subscription_idx").on(t.subscriptionId),
     index("files_settings_idx").on(t.settingsId),
     index("files_tds_deposit_idx").on(t.tdsDepositId),
+    index("files_payroll_line_idx").on(t.payrollLineId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     /**
@@ -152,7 +164,9 @@ export const files = pgTable(
          + case when ${t.transactionId} is not null then 1 else 0 end
          + case when ${t.importBatchId} is not null then 1 else 0 end
          + case when ${t.subscriptionId} is not null then 1 else 0 end
-         + case when ${t.settingsId} is not null then 1 else 0 end) = 1`,
+         + case when ${t.settingsId} is not null then 1 else 0 end
+         + case when ${t.tdsDepositId} is not null then 1 else 0 end
+         + case when ${t.payrollLineId} is not null then 1 else 0 end) = 1`,
     ),
   ],
 );

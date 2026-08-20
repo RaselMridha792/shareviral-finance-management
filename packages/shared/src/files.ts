@@ -74,6 +74,16 @@ export const FILE_OWNERS = [
   "subscription",
   "settings",
   "tds_deposit",
+  /**
+   * One person's line on one month's payroll — the row the withholding
+   * register draws.
+   *
+   * The challan is deposited for a month and read for a person, so the scan
+   * hangs on the line whoever attached it was looking at. Everybody else that
+   * month reaches the same paper through the challan number they share; see
+   * `TdsService.salaryRegister`.
+   */
+  "payroll_line",
 ] as const;
 export const fileOwnerSchema = z.enum(FILE_OWNERS);
 export type FileOwner = z.infer<typeof fileOwnerSchema>;
@@ -131,6 +141,10 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   // One kind, and "other" is not among them on purpose: a document on a
   // challan row is the challan. Anything else filed there is misfiled.
   tds_deposit: ["challan"],
+  // The same one kind, for the same reason: what hangs on a payroll line here
+  // is the challan its tax was deposited under. A payslip is generated rather
+  // than uploaded, and anything else filed on a salary row is misfiled.
+  payroll_line: ["challan"],
   import_batch: ["import_source"],
 };
 

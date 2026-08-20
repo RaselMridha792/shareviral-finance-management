@@ -475,6 +475,20 @@ export const payrollLines = pgTable(
 
     remarks: text("remarks"),
 
+    /**
+     * The A-Challan this person's withheld tax was deposited under.
+     *
+     * On the line rather than only on `tds_deposits`, because the withholding
+     * register is read one person at a time: "which challan did my tax go in
+     * under" is a question about a row. One challan usually covers everybody
+     * in a month, so the same number ends up written on every line of that
+     * run — which is what the register's form does in one go.
+     *
+     * Null while nothing has been deposited yet, which is every line's state
+     * until the treasury has actually been paid.
+     */
+    tdsChallanNumber: text("tds_challan_number"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -486,6 +500,7 @@ export const payrollLines = pgTable(
   (t) => [
     uniqueIndex("payroll_lines_unique_idx").on(t.payrollRunId, t.teamMemberId),
     index("payroll_lines_member_idx").on(t.teamMemberId),
+    index("payroll_lines_challan_idx").on(t.tdsChallanNumber),
     check(
       "payroll_lines_non_negative",
       sql`${t.tdsAmount} >= 0 and ${t.otherDeductions} >= 0`,

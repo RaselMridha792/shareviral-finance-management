@@ -20,6 +20,7 @@ import {
   type PendingQuery,
   type SalaryTdsRegister,
   type SalaryTdsRegisterQuery,
+  type SetLineChallanInput,
   type TdsLiabilityQuery,
   type UpdateTdsDepositInput,
 } from "@finance/shared";
@@ -31,6 +32,7 @@ import {
   gt,
   gte,
   inArray,
+  isNull,
   lte,
   ne,
   sql,
@@ -42,6 +44,7 @@ import { DbService } from "../../db/db.service";
 import type { DbTransaction } from "../../db";
 import {
   categories,
+  files,
   payrollLines,
   payrollRuns,
   tdsAllocations,
@@ -348,6 +351,7 @@ export class TdsService {
           grossAmount: payrollLines.grossAmount,
           tdsAmount: payrollLines.tdsAmount,
           isPaid: payrollLines.isPaid,
+          challanNumber: payrollLines.tdsChallanNumber,
         })
         .from(payrollLines)
         .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
@@ -406,6 +410,14 @@ export class TdsService {
         .where(and(inPeriod, FINALISED_OR_LATER)),
     ]);
 
+    /*
+     * The scans, resolved once for the whole table rather than per row: a
+     * month shares one challan, so twenty-five rows are one lookup.
+     */
+    const scans = await this.scansByChallan(
+      rows.map((row) => row.challanNumber),
+    );
+
     return {
       period: {
         label: range.label,
@@ -421,6 +433,9 @@ export class TdsService {
       rows: rows.map((row) => ({
         ...row,
         periodLabel: monthLabel(row.periodYear, row.periodMonth),
+        challanFileLineId: row.challanNumber
+          ? (scans.get(row.challanNumber) ?? null)
+          : null,
       })),
       linesInPeriod: lineCount?.count ?? 0,
       periodTotal: periodTotal.total,
@@ -431,6 +446,141 @@ export class TdsService {
         total: monthTotal.total,
       },
     };
+  }
+
+  /**
+   * Challan number → the row holding its scan, for the numbers on screen.
+   *
+   * Keyed by the number rather than by the line, because one A-Challan covers
+   * a whole month: the paper is uploaded once, from whichever row the person
+   * had open, and every other line carrying that number opens the same file.
+   * Uploading it per person would be twenty-five copies of one PDF on disk and
+   * twenty-five chances for them to disagree.
+   *
+   * Newest wins where two rows of a month were each given one, which is what
+   * two people attaching from different rows produces. `challan` is a singular
+   * kind, so a line holds one — but a number spans lines, and picking a rule
+   * here beats letting whichever row sorted first decide.
+   */
+  private async scansByChallan(
+    numbers: readonly (string | null)[],
+  ): Promise<Map<string, string>> {
+    const wanted = [...new Set(numbers.filter((n): n is string => Boolean(n)))];
+    if (wanted.length === 0) return new Map();
+
+    const found = await this.db.client
+      .select({
+        challanNumber: payrollLines.tdsChallanNumber,
+        lineId: payrollLines.id,
+      })
+      .from(files)
+      .innerJoin(payrollLines, eq(files.payrollLineId, payrollLines.id))
+      .where(
+        and(
+          inArray(payrollLines.tdsChallanNumber, wanted),
+          eq(files.kind, "challan"),
+          isNull(files.deletedAt),
+        ),
+      )
+      .orderBy(desc(files.createdAt));
+
+    const map = new Map<string, string>();
+    for (const row of found) {
+      if (row.challanNumber && !map.has(row.challanNumber)) {
+        map.set(row.challanNumber, row.lineId);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Write a challan number onto a salary row — and, by default, onto every
+   * other taxed row of the same month.
+   *
+   * The default is what actually happens at a bank: one A-Challan settles the
+   * tax withheld from everybody that month, so row-by-row would be the same
+   * number typed twenty-five times with one of them wrong.
+   *
+   * A line at zero is left alone. It deposited nothing, and a challan number
+   * against it would claim something was paid for somebody who owed nothing —
+   * which is also why the register does not list them.
+   */
+  async setLineChallan(
+    payrollLineId: string,
+    input: SetLineChallanInput,
+    actor: AuthenticatedUser,
+  ) {
+    const [line] = await this.db.client
+      .select({
+        id: payrollLines.id,
+        runId: payrollLines.payrollRunId,
+        status: payrollRuns.status,
+        periodYear: payrollRuns.periodYear,
+        periodMonth: payrollRuns.periodMonth,
+        fullName: teamMembers.fullName,
+      })
+      .from(payrollLines)
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
+      .where(eq(payrollLines.id, payrollLineId))
+      .limit(1);
+
+    if (!line) throw new NotFoundException("That salary row does not exist");
+
+    /*
+     * Not on a draft, for the reason every other read in this file stops at
+     * draft: `generate-lines` deletes and rebuilds a draft’s lines, so a
+     * challan written on one records a deposit that disappears the next time
+     * somebody presses Regenerate.
+     */
+    if (line.status === "draft") {
+      throw new BadRequestException(
+        "That payroll run is still a draft — finalise it before recording what was deposited",
+      );
+    }
+
+    /*
+     * Empty clears it. A challan typed against the wrong month has to be
+     * removable, and a form that can only write means the correction is "type
+     * something else and hope".
+     *
+     * The scan already attached is left where it is rather than deleted: the
+     * register finds it through the number, so clearing the number hides it,
+     * and writing the number back on that row shows it again. Destroying the
+     * bank’s paper because somebody fixed a typo is not a correction.
+     */
+    const challanNumber = input.challanNumber.trim() || null;
+    const period = monthLabel(line.periodYear, line.periodMonth);
+    const who = input.applyToMonth
+      ? `every taxed salary row for ${period}`
+      : `${line.fullName} (${period})`;
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "payroll_lines",
+      entityId: line.id,
+      module: "tds",
+      summary: challanNumber
+        ? `Challan ${challanNumber} recorded against ${who}`
+        : `Challan cleared from ${who}`,
+      read: () => Promise.resolve(undefined),
+      run: async (tx) => {
+        const updated = await tx
+          .update(payrollLines)
+          .set({ tdsChallanNumber: challanNumber, updatedBy: actor.id })
+          .where(
+            input.applyToMonth
+              ? and(
+                  eq(payrollLines.payrollRunId, line.runId),
+                  gt(payrollLines.tdsAmount, "0"),
+                )
+              : eq(payrollLines.id, line.id),
+          )
+          .returning({ id: payrollLines.id });
+
+        return { challanNumber, period, rowsChanged: updated.length };
+      },
+    });
   }
 
   /* ---------------------------------------------------------------------- */
