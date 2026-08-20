@@ -31,8 +31,21 @@ const VERSION = "v1";
  * because then rotating the JWT secret does not orphan the stored key.
  */
 function derivedKey(): Buffer {
+  /*
+   * `||` and a trim, not `??`.
+   *
+   * `??` falls back on null and undefined, and an unset variable in a Docker
+   * Compose file is neither: `SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY}`
+   * with nothing in `.env` hands the container an empty string. So the
+   * fallback written for exactly this case never fired, and production threw
+   * "cannot encrypt a stored secret" while every developer machine — where
+   * the variable is genuinely absent — worked.
+   *
+   * A whitespace-only value is the same mistake wearing a space.
+   */
   const source =
-    process.env.SECRET_ENCRYPTION_KEY ?? process.env.JWT_REFRESH_SECRET;
+    process.env.SECRET_ENCRYPTION_KEY?.trim() ||
+    process.env.JWT_REFRESH_SECRET?.trim();
 
   if (!source) {
     throw new Error(
