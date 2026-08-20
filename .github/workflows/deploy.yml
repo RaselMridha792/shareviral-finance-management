@@ -188,6 +188,13 @@ jobs:
       # down.
       - name: The live site has to be running this commit
         run: |
+          # `set +e`, deliberately. GitHub runs `run:` under `bash -e` by
+          # default, and the first thing this loop does is grep a field the
+          # currently-deployed build does not have — so grep exits 1, and with
+          # `-e` the whole job dies before it has waited a single second. That
+          # is exactly what happened on the run that introduced this file: it
+          # failed in four seconds having never polled at all.
+          set +e
           set -uo pipefail
           origin="${{ vars.API_ORIGIN }}"
           want="${{ github.sha }}"

@@ -54,10 +54,23 @@ git -C "$REPO_ROOT" fetch --quiet origin main || {
   exit 0
 }
 
-LOCAL="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 REMOTE="$(git -C "$REPO_ROOT" rev-parse origin/main)"
 
-if [ "$LOCAL" = "$REMOTE" ]; then
+# What is *running*, not what git says.
+#
+# This compared `git rev-parse HEAD` against origin/main, and that was wrong in
+# a way that showed up immediately: somebody applying a SQL migration by hand
+# runs `git reset --hard origin/main` first, which moves HEAD to the newest
+# commit while the containers keep serving the old image. The watcher then saw
+# HEAD == origin/main, concluded there was nothing to do, and never deployed —
+# silently, which is the worst way to be wrong.
+#
+# A working tree can be moved by anybody with a shell. What has actually been
+# deployed is a fact this script owns, so it writes it down.
+STATE="$PWD/.deployed"
+DEPLOYED="$(cat "$STATE" 2>/dev/null || true)"
+
+if [ "$DEPLOYED" = "$REMOTE" ]; then
   exit 0
 fi
 
@@ -96,7 +109,7 @@ fi
 # --------------------------------------------------------------------------
 # Deploy.
 # --------------------------------------------------------------------------
-say "deploying ${REMOTE:0:7} (was ${LOCAL:0:7})"
+say "deploying ${REMOTE:0:7} (running ${DEPLOYED:0:7}${DEPLOYED:+; }${DEPLOYED:-nothing recorded})"
 
 git -C "$REPO_ROOT" reset --hard --quiet "$REMOTE" || {
   say "could not check out $REMOTE"
@@ -108,6 +121,9 @@ git -C "$REPO_ROOT" reset --hard --quiet "$REMOTE" || {
 export IMAGE_TAG="$REMOTE"
 
 if bash ./remote-deploy.sh >>"$LOG" 2>&1; then
+  # Written only after the deploy actually succeeded, so a failure is retried
+  # next minute rather than recorded as done.
+  printf '%s' "$REMOTE" > "$STATE"
   say "deployed ${REMOTE:0:7}"
 else
   # Loud, and it does not roll back. A half-applied deploy that reverts itself
