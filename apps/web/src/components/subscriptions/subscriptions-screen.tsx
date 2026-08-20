@@ -1,20 +1,21 @@
 "use client";
 
 import {
-  BILLING_CYCLE_LABELS,
   SUBSCRIPTION_CATEGORY_LABELS,
   SUBSCRIPTION_STATUS_TABS,
   SUBSCRIPTION_STATUS_LABELS,
-  formatMoney,
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { Image as ImageIcon, Plus } from "lucide-react";
-import Link from "next/link";
+import { Image as Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { useSettings } from "@/components/settings-provider";
+import {
+  SubscriptionBodyCells,
+  SubscriptionHeadCells,
+} from "@/components/subscriptions/subscription-columns";
 import { SubscriptionForm } from "@/components/subscriptions/subscription-form";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { ScreenshotDialog } from "@/components/subscriptions/screenshot-dialog";
@@ -31,14 +32,12 @@ import {
   SerialHead,
   TableMessageRow,
   TableScroll,
-  Th,
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
-import { cn } from "@/lib/utils";
 
 /**
  * The register of paid tools — one row per plan, not per payment.
@@ -182,9 +181,6 @@ export function SubscriptionsScreen({
     [load],
   );
 
-  const money = (value: string, currency: string) =>
-    formatMoney(value, { currency, format: settings.numberFormat });
-
   /**
    * The seats on the plans currently on screen — which is now one page of them.
    *
@@ -314,24 +310,7 @@ export function SubscriptionsScreen({
               <thead>
                 <tr>
                   <SerialHead />
-                  <Th>Start Date</Th>
-                  <Th>Tool Name</Th>
-                  <Th>Category</Th>
-                  <Th align="right">Equivalent (BDT)</Th>
-                  <Th align="right">Cost (USD)</Th>
-                  <Th align="right">USD Rate</Th>
-                  <Th>Payment Method</Th>
-                  {/* The same pair every other money table carries, in the
-                      same place: ours, then theirs. */}
-                  <Th width="w-32">Invoice No.</Th>
-                  <Th width="w-32">Transaction ID</Th>
-                  <Th>Notes</Th>
-                  <Th>Login accounts</Th>
-                  <Th>User Name</Th>
-                  <Th>User Department</Th>
-                  <Th>Billing Cycle</Th>
-                  <Th>Next Renewal Date</Th>
-                  <Th>Status</Th>
+                  <SubscriptionHeadCells />
                   <RowActionsHead />
                 </tr>
               </thead>
@@ -339,187 +318,23 @@ export function SubscriptionsScreen({
                 {loading ? (
                   <TableMessageRow colSpan={18}>Loading…</TableMessageRow>
                 ) : (
-                  rows.map((row, index) => {
-                    // Names rather than a headcount: the column is asked "who is
-                    // on this", and a number does not answer it.
-                    const seatNames = row.users
-                      .map((seat) => seat.fullName)
-                      .join(", ");
-
-                    return (
+                  rows.map((row, index) => (
                       <tr key={row.id} className="row-finance">
                         <SerialCell n={serial(page, index)} />
-                        <td className="text-sm">
-                          <span className="num">{row.startDate}</span>
-                        </td>
-                        <td>
-                          {/*
-                            The name goes to the tool's own page; the small
-                            picture beside it opens the plan as it was bought.
-
-                            The name used to open the screenshot, which was the
-                            earlier request — but a name cannot do both, and of
-                            the two the address is what somebody clicking a
-                            tool's name expects. The screenshot keeps its own
-                            affordance rather than losing one.
-                          */}
-                          <span className="flex items-center gap-1.5">
-                            {row.websiteUrl ? (
-                              <a
-                                href={row.websiteUrl}
-                                target="_blank"
-                                // Third-party addresses typed by whoever added
-                                // the plan. `noopener` is worth ruling out
-                                // once rather than per link.
-                                rel="noreferrer noopener"
-                                title={`Open ${row.toolName}`}
-                                className="font-medium underline-offset-2 transition hover:text-primary hover:underline"
-                              >
-                                {row.toolName}
-                              </a>
-                            ) : (
-                              <span
-                                className="font-medium"
-                                title="No website recorded — add one when you edit this plan."
-                              >
-                                {row.toolName}
-                              </span>
-                            )}
-                            {row.screenshotFileId ? (
-                              <button
-                                type="button"
-                                onClick={() => setScreenshotOf(row)}
-                                title="Show the plan as it was bought"
-                                aria-label={`Show the plan screenshot for ${row.toolName}`}
-                                className="cursor-pointer rounded p-0.5 text-muted-foreground transition hover:text-primary"
-                              >
-                                <ImageIcon className="size-3 shrink-0" />
-                              </button>
-                            ) : null}
-                          </span>
-                          {/* The plan rides under the name instead of taking a
-                            column. Two plans of one tool are otherwise the
-                            same row twice. */}
-                          <span className="block text-xs text-muted-foreground">
-                            {row.planName}
-                          </span>
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
-                        </td>
-                        <td className="col-amount">
-                          {row.costBdt ? money(row.costBdt, "BDT") : "—"}
-                        </td>
-                        <td className="col-amount">
-                          {money(row.costUsd, "USD")}
-                        </td>
-                        <td className="col-amount text-sm text-muted-foreground">
-                          {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {/* Opens the account itself — the card, its balance and
-                            what else it pays for — rather than leaving the
-                            reader to go and find it on the accounts list. */}
-                          {row.accountName ? (
-                            row.accountId ? (
-                              <Link
-                                href={`/accounts/${row.accountId}`}
-                                className="transition hover:text-primary hover:underline"
-                              >
-                                {row.accountName}
-                              </Link>
-                            ) : (
-                              row.accountName
-                            )
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="num text-xs">
-                          {row.invoiceNo ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDocumentsFor({ row, kinds: ["invoice"] })
-                              }
-                              title="Show the invoice"
-                              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
-                            >
-                              {row.invoiceNo}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="num text-xs">
-                          {row.reference ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDocumentsFor({
-                                  row,
-                                  kinds: ["bank_statement", "receipt", "other"],
-                                })
-                              }
-                              title="Show the bank's record of this charge"
-                              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
-                            >
-                              {row.reference}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {row.notes ? (
-                            <span
-                              title={row.notes}
-                              className="block max-w-[16rem] truncate"
-                            >
-                              {row.notes}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {row.loginEmail ?? "—"}
-                        </td>
-                        <td className="text-sm">
-                          {seatNames ? (
-                            // Clamped, with the whole list on hover, so a plan
-                            // with six seats does not stretch every row past it.
-                            <span
-                              title={seatNames}
-                              className="block max-w-[14rem] truncate"
-                            >
-                              {seatNames}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {row.boughtFor ?? "—"}
-                        </td>
-                        <td className="text-sm text-muted-foreground">
-                          {BILLING_CYCLE_LABELS[row.billingCycle]}
-                        </td>
-                        <td className="text-sm">
-                          {row.nextRenewalOn ? (
-                            <span className="num">{row.nextRenewalOn}</span>
-                          ) : (
-                            /* The note cannot be typed any more, but rows written
-                             while it could still carry one, and it is the only
-                             thing this column has to say about them. */
-                            <span className="text-muted-foreground">
-                              {row.renewalNote ?? "—"}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <StatusPill status={row.status} />
-                        </td>
+                        <SubscriptionBodyCells
+                          row={row}
+                          numberFormat={settings.numberFormat}
+                          handlers={{
+                            onInvoice: (r) =>
+                              setDocumentsFor({ row: r, kinds: ["invoice"] }),
+                            onReference: (r) =>
+                              setDocumentsFor({
+                                row: r,
+                                kinds: ["bank_statement", "receipt", "other"],
+                              }),
+                            onScreenshot: setScreenshotOf,
+                          }}
+                        />
                         {/* Both buttons render for everybody. A reader
                           without write access gets them disabled: a blank
                           cell where every other row has controls reads as a
@@ -534,8 +349,7 @@ export function SubscriptionsScreen({
                           }
                         />
                       </tr>
-                    );
-                  })
+                    ))
                 )}
               </tbody>
             </table>
@@ -643,21 +457,3 @@ function nextStatus(status: SubscriptionStatus): SubscriptionStatus {
  * renewed. A screen asked "what did we cancel this quarter" has to be able to
  * tell them apart at a glance.
  */
-function StatusPill({ status }: { status: SubscriptionStatus }) {
-  const tone: Record<SubscriptionStatus, string> = {
-    active: "bg-positive/10 text-positive",
-    paused: "bg-warning/10 text-warning",
-    canceled: "bg-negative/10 text-negative",
-    expired: "bg-surface-muted text-muted-foreground",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-        tone[status],
-      )}
-    >
-      {SUBSCRIPTION_STATUS_LABELS[status]}
-    </span>
-  );
-}

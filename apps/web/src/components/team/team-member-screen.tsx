@@ -381,7 +381,13 @@ export function TeamMemberScreen({
           </Card>
         ) : null}
 
-        <Card className="lg:col-span-2">
+        {/* `min-w-0` is load-bearing, not tidying. A grid item's default
+            `min-width: auto` sizes it to its contents, so the sixteen-column
+            tools table below pushed this card wider than its track and the
+            whole profile scrolled sideways by a thousand pixels — the inner
+            `overflow-x-auto` never got the chance to scroll, because nothing
+            had told the card it was allowed to be narrower than its table. */}
+        <Card className="min-w-0 overflow-hidden lg:col-span-2">
           <CardHeader
             title="Paid tools"
             description="What this person has a seat on, and what they used to"

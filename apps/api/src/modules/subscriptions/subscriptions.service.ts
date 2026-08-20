@@ -151,18 +151,25 @@ export class SubscriptionsService {
   }
 
   /** Every tool one person is or has been on — the team page reads this. */
+  /**
+   * The plans one person is on — the whole plan, not a summary of it.
+   *
+   * This used to select ten fields of its own, and the profile could show four
+   * columns because four was all it had. The owner asked for the same row the
+   * subscriptions screen shows, so it selects `columns()` — the one list both
+   * screens read — and adds only what is genuinely this person's rather than
+   * the plan's: their seat's status and the dates their access ran between.
+   *
+   * `status` is therefore the plan's, the same as everywhere else, and
+   * `seatStatus` is theirs. Naming the person's status `status` is what made
+   * the old shape need a second field called `planStatus`, and a screen
+   * reading the wrong one of those two is a mistake nothing catches.
+   */
   async forMember(teamMemberId: string) {
-    return this.db.client
+    const rows = await this.db.client
       .select({
-        subscriptionId: subscriptions.id,
-        planName: subscriptions.planName,
-        toolName: this.toolNameSql(),
-        category: subscriptions.category,
-        costUsd: subscriptions.costUsd,
-        billingCycle: subscriptions.billingCycle,
-        /** The person's own status, not the plan's — they are not the same. */
-        status: subscriptionUsers.status,
-        planStatus: subscriptions.status,
+        ...this.columns(),
+        seatStatus: subscriptionUsers.status,
         fromDate: subscriptionUsers.fromDate,
         untilDate: subscriptionUsers.untilDate,
       })
@@ -172,13 +179,25 @@ export class SubscriptionsService {
         eq(subscriptionUsers.subscriptionId, subscriptions.id),
       )
       .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
+      .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(
         and(
           eq(subscriptionUsers.teamMemberId, teamMemberId),
           isNull(subscriptions.deletedAt),
         ),
       )
-      .orderBy(sql`${this.toolNameSql()} asc`, asc(subscriptions.planName));
+      // Renewal first, as on the subscriptions screen. Two tables showing the
+      // same rows in two orders is two tables somebody has to read twice.
+      .orderBy(
+        sql`${subscriptions.nextRenewalOn} asc nulls last`,
+        sql`${this.toolNameSql()} asc`,
+        asc(subscriptions.planName),
+      );
+
+    // The other people on each plan. A shared plan's cost is the whole plan's,
+    // and knowing thirteen names are on it is what stops somebody reading that
+    // figure as this person's.
+    return this.attachUsers(rows);
   }
 
   async create(input: CreateSubscriptionInput, actor: AuthenticatedUser) {
@@ -390,7 +409,13 @@ export class SubscriptionsService {
    * round trips, and this list is the one screen where every row has people on
    * it.
    */
-  private async attachUsers(rows: SubscriptionRow[]) {
+  /*
+   * Generic, so what a caller selects on top of the standard row is still
+   * there on the way out. `rows: SubscriptionRow[]` widened every row to the
+   * standard shape, which meant `forMember` could not carry the seat's own
+   * dates through without the compiler forgetting they existed.
+   */
+  private async attachUsers<T extends SubscriptionRow>(rows: T[]) {
     if (rows.length === 0) return [];
 
     const seats = await this.db.client

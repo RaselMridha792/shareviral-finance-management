@@ -61,17 +61,17 @@ export type SubscriptionDto = {
   users: SubscriptionSeatDto[];
 };
 
-/** A tool on somebody's profile — the team page's side of the join. */
-export type MemberSubscriptionDto = {
-  subscriptionId: string;
-  planName: string;
-  toolName: string;
-  category: SubscriptionCategory;
-  costUsd: string;
-  billingCycle: BillingCycle;
+/**
+ * A tool on somebody's profile — the team page's side of the join.
+ *
+ * The whole plan row, plus what is this person's rather than the plan's. It
+ * used to be ten fields of its own, which is why the profile showed four
+ * columns where the subscriptions screen shows fourteen; being the same row
+ * means the two tables cannot drift apart the next time a field is added.
+ */
+export type MemberSubscriptionDto = SubscriptionDto & {
   /** Theirs, not the plan's: access can be cancelled while the plan runs on. */
-  status: SubscriptionStatus;
-  planStatus: SubscriptionStatus;
+  seatStatus: SubscriptionStatus;
   fromDate: string | null;
   untilDate: string | null;
 };
