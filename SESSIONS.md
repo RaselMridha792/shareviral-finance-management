@@ -63,7 +63,7 @@ pushing out. Picking `Office & premises` took the figure from ৳1,04,11,700.00 
 the sub-line to "1 entry · Office & premises" and the table from 6 rows to 1; picking it again
 and pressing "All" both restored all three. `.catbar.mjs` (untracked) confirms no bar segment
 draws at less than a pixel. `node .sweep.mjs` on the three expense routes: h1 28, pad 32/34, gap
-20, 0px sideways at every width. Four CI steps run separately, all green (308 tests).
+20, 0px sideways at every width. Four CI steps run separately, all green (308 tests). Commits: `d566c06`.
 
 **Watch out.** The page is keyed `${heading.id}:${from}:${to}` in `[category]/page.tsx`. That is
 load-bearing, not decoration: `changeRange` is a client-side `router.push` to the same route, so
