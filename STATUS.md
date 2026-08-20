@@ -1,5 +1,12 @@
 # SFM — where things stand
 
+> **This file is a snapshot, and the snapshot is older than the code.** It was last rewritten on
+> 2026-08-15 and describes the app as a whole. Everything since — the CFO role, the email and
+> notification systems, the self-deploying server, the table and filter standards — is in
+> [SESSIONS.md](SESSIONS.md), newest first. Read that for what is true today; read this for how
+> the app is put together and how to run it.
+
+
 ShareViral Finance Management. All phases built, deployed and audited end to end; last updated
 **2026-08-15**, after a full end-to-end audit, a test suite that runs on command, and a deploy
 verified against the live site rather than a local build.
