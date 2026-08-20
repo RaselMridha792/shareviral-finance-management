@@ -37,7 +37,7 @@ total block: the owner asked for the accounts and nothing above them.
 Measured rather than reasoned about — `.dashblocks.mjs` (untracked) loads the real page with a
 real token and reads the rendered figures: **10 accounts in the dev database, 10 blocks on the
 page, names matching, and `opening + in − out = closing` on every one of them.** Four CI steps
-run separately, all green. Commits: `PENDING`.
+run separately, all green. Commits: `40dee9f`.
 
 **Watch out.** `AccountGroup` in `packages/shared/src/reports.ts` changed shape — `accounts:
 string[]` is gone, `key` is now an id rather than `"bank" | "card"`, and `type` is new. Asked
