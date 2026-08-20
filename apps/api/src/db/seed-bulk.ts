@@ -490,6 +490,9 @@ async function load() {
         .insert(subscriptions)
         .values({
           toolName: second ? `${tool} (annual)` : tool,
+          // A plausible address, so the name on the register has somewhere to
+          // go while somebody is looking at the sample data.
+          websiteUrl: `https://${tool.toLowerCase().replace(/\W/g, "")}.com`,
           planName: plan,
           category,
           // Weighted so the Active tab — the one the screen opens on — has

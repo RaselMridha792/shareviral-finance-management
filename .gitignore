@@ -67,3 +67,4 @@ apps/api/test/integration/*.xlsx
 .pager.mjs
 .count.mjs
 .rolecheck.mjs
+.linkcheck.mjs

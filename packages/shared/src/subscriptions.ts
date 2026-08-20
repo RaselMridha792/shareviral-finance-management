@@ -261,6 +261,22 @@ const subscriptionFieldsSchema = z.strictObject({
   boughtFor: optionalSubText(160),
   loginEmail: optionalSubText(200),
 
+  /**
+   * The tool's own page, so the name on the row goes somewhere.
+   *
+   * Shape only, never reachability — a link that 404s next year is still the
+   * link somebody recorded, and refusing to save it because a request failed
+   * would block recording a plan on a bad connection.
+   */
+  websiteUrl: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? undefined : v))
+    .optional()
+    .refine((v) => v === undefined || /^https:\/\/\S+$/.test(v), {
+      message: "Paste an https:// link",
+    }),
+
   /** Ours — the bill this plan was charged against. */
   invoiceNo: optionalSubText(60),
   /** Theirs — what the bank or the card statement calls the payment. */

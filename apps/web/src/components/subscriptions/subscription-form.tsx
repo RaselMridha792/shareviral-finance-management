@@ -183,6 +183,7 @@ export function SubscriptionForm({
    * calls the charge — and each gets the paper it refers to on the clip beside
    * it, the way every other money form in this app asks for them.
    */
+  const [websiteUrl, setWebsiteUrl] = useState(subscription?.websiteUrl ?? "");
   const [invoiceNo, setInvoiceNo] = useState(subscription?.invoiceNo ?? "");
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const invoicePicker = useRef<HTMLInputElement>(null);
@@ -324,6 +325,7 @@ export function SubscriptionForm({
         accountId,
         boughtFor,
         loginEmail,
+        websiteUrl,
         invoiceNo,
         reference,
         notes,
@@ -644,6 +646,20 @@ export function SubscriptionForm({
               value={loginEmail}
               maxLength={200}
               onChange={(e) => setLoginEmail(e.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="Website"
+            error={fieldErrors.websiteUrl}
+            hint="The tool's own page — what its name on the register opens"
+          >
+            <Input
+              type="url"
+              value={websiteUrl}
+              maxLength={500}
+              placeholder="https://claude.ai"
+              onChange={(e) => setWebsiteUrl(e.target.value)}
             />
           </Field>
 

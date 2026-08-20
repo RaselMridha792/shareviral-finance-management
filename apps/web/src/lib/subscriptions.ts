@@ -52,6 +52,7 @@ export type SubscriptionDto = {
   accountName: string | null;
   boughtFor: string | null;
   loginEmail: string | null;
+  websiteUrl: string | null;
   invoiceNo: string | null;
   reference: string | null;
   /** Derived from the file that points at this row, not a column here. */

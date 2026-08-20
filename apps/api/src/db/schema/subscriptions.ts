@@ -142,6 +142,9 @@ export const subscriptions = pgTable(
      * field would hold whichever was typed first and the other fact would have
      * nowhere to be.
      */
+    /** The tool's own page — what the name on the register links to. */
+    websiteUrl: varchar("website_url", { length: 500 }),
+
     invoiceNo: varchar("invoice_no", { length: 60 }),
     reference: varchar("reference", { length: 120 }),
 

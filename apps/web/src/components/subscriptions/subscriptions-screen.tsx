@@ -353,18 +353,50 @@ export function SubscriptionsScreen({
                           <span className="num">{row.startDate}</span>
                         </td>
                         <td>
-                          {/* The name opens the screenshot — the request was that
-                            clicking the tool shows the plan as it was bought. */}
-                          <button
-                            type="button"
-                            onClick={() => setScreenshotOf(row)}
-                            className="flex cursor-pointer items-center gap-1.5 text-left font-medium transition hover:text-primary"
-                          >
-                            {row.toolName}
+                          {/*
+                            The name goes to the tool's own page; the small
+                            picture beside it opens the plan as it was bought.
+
+                            The name used to open the screenshot, which was the
+                            earlier request — but a name cannot do both, and of
+                            the two the address is what somebody clicking a
+                            tool's name expects. The screenshot keeps its own
+                            affordance rather than losing one.
+                          */}
+                          <span className="flex items-center gap-1.5">
+                            {row.websiteUrl ? (
+                              <a
+                                href={row.websiteUrl}
+                                target="_blank"
+                                // Third-party addresses typed by whoever added
+                                // the plan. `noopener` is worth ruling out
+                                // once rather than per link.
+                                rel="noreferrer noopener"
+                                title={`Open ${row.toolName}`}
+                                className="font-medium underline-offset-2 transition hover:text-primary hover:underline"
+                              >
+                                {row.toolName}
+                              </a>
+                            ) : (
+                              <span
+                                className="font-medium"
+                                title="No website recorded — add one when you edit this plan."
+                              >
+                                {row.toolName}
+                              </span>
+                            )}
                             {row.screenshotFileId ? (
-                              <ImageIcon className="size-3 shrink-0 text-muted-foreground" />
+                              <button
+                                type="button"
+                                onClick={() => setScreenshotOf(row)}
+                                title="Show the plan as it was bought"
+                                aria-label={`Show the plan screenshot for ${row.toolName}`}
+                                className="cursor-pointer rounded p-0.5 text-muted-foreground transition hover:text-primary"
+                              >
+                                <ImageIcon className="size-3 shrink-0" />
+                              </button>
                             ) : null}
-                          </button>
+                          </span>
                           {/* The plan rides under the name instead of taking a
                             column. Two plans of one tool are otherwise the
                             same row twice. */}
