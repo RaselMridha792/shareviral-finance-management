@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { amountSchema, isoDateSchema } from "./masters.ts";
+import { patchOf } from "./patch.ts";
 import {
   checkPeriodIndex,
   granularitySchema,
@@ -45,6 +46,26 @@ export const createTdsDepositSchema = z.strictObject({
   notes: optionalText(500),
 });
 export type CreateTdsDepositInput = z.infer<typeof createTdsDepositSchema>;
+
+/**
+ * Correcting a challan that is already recorded.
+ *
+ * `patchOf` rather than `.partial()`, for the reason that keeps coming up:
+ * `.partial()` leaves a field's default inside the now-optional field, so an
+ * absent key materialises as the default rather than staying absent — and a
+ * PATCH that silently rewrites `depositType` to "salary" because nobody sent
+ * it is exactly the kind of quiet wrong this app is careful about.
+ *
+ * `accountId` is deliberately absent. Creating a deposit with one writes the
+ * matching money-out row into the ledger; changing it afterwards would have to
+ * move that row between accounts, which is the thing a ledger must refuse. A
+ * challan posted against the wrong account is fixed by voiding the ledger entry
+ * and recording it again.
+ */
+export const updateTdsDepositSchema = patchOf(createTdsDepositSchema).omit({
+  accountId: true,
+});
+export type UpdateTdsDepositInput = z.infer<typeof updateTdsDepositSchema>;
 
 export const tdsLiabilityQuerySchema = z.strictObject({
   year: z.coerce.number().int().min(2000).max(2200),
@@ -122,6 +143,15 @@ export type SalaryTdsRegister = {
     index: number;
   };
   rows: SalaryTdsRow[];
+  /**
+   * How many finalised payroll lines the period has, before the tax filter.
+   *
+   * `rows` holds only the people who owe something, so an empty table has two
+   * possible meanings — no run was finalised, or one was and nobody crossed
+   * the threshold. Those are different facts and a screen that states the
+   * wrong one is worse than a screen that says nothing.
+   */
+  linesInPeriod: number;
   /** Tax deducted across the whole period. */
   periodTotal: string;
   /**

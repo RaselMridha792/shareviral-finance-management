@@ -21,8 +21,20 @@ import {
   type SalaryTdsRegister,
   type SalaryTdsRegisterQuery,
   type TdsLiabilityQuery,
+  type UpdateTdsDepositInput,
 } from "@finance/shared";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  lte,
+  ne,
+  sql,
+} from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -325,7 +337,7 @@ export class TdsService {
     const taxTotal = sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::numeric(14,2)::text`;
     const current = parseIsoDate(today);
 
-    const [rows, [periodTotal], [monthTotal]] = await Promise.all([
+    const [rows, [periodTotal], [monthTotal], [lineCount]] = await Promise.all([
       this.db.client
         .select({
           payrollLineId: payrollLines.id,
@@ -340,7 +352,22 @@ export class TdsService {
         .from(payrollLines)
         .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
         .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
-        .where(and(inPeriod, FINALISED_OR_LATER))
+        /*
+         * Only the people who actually owe tax.
+         *
+         * This listed everybody on a finalised run, zeroes included, on the
+         * reasoning that the register says who was *paid* rather than who was
+         * taxed. The owner's call is the other way: a withholding register is
+         * read to answer "whose tax do I have to deposit", and a screen of
+         * ৳0.00 rows is seventeen lines of nothing between the four that
+         * matter.
+         *
+         * The period totals below are unaffected — a row at zero contributes
+         * zero — so the table shrinks and the figure under it does not move.
+         */
+        .where(
+          and(inPeriod, FINALISED_OR_LATER, gt(payrollLines.tdsAmount, "0")),
+        )
         // Month, then name. The table is read a month at a time, and somebody
         // who moves position between months cannot be followed down it.
         .orderBy(
@@ -369,6 +396,14 @@ export class TdsService {
             FINALISED_OR_LATER,
           ),
         ),
+
+      // The unfiltered line count, so an empty table can say which kind of
+      // empty it is.
+      this.db.client
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payrollLines)
+        .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+        .where(and(inPeriod, FINALISED_OR_LATER)),
     ]);
 
     return {
@@ -380,14 +415,14 @@ export class TdsService {
         fiscalYear: range.fiscalYear,
         index: index + 1,
       },
-      // Every finalised line, including the people whose tax came to nothing.
-      // Most of a Bangladeshi payroll is under the threshold, and a register
-      // that drops them cannot answer "was anything taken from Rahim in
-      // August?" — which a zero row answers and a missing row does not.
+      // Only the people who owe tax — see the query. `linesInPeriod` carries
+      // the unfiltered count so the screen can tell "no run was finalised"
+      // apart from "a run was, and nobody crossed the threshold".
       rows: rows.map((row) => ({
         ...row,
         periodLabel: monthLabel(row.periodYear, row.periodMonth),
       })),
+      linesInPeriod: lineCount?.count ?? 0,
       periodTotal: periodTotal.total,
       currentMonth: {
         year: current.year,
@@ -570,6 +605,121 @@ export class TdsService {
           .returning();
 
         return deposit;
+      },
+    });
+  }
+
+  /**
+   * Corrects a challan that is already recorded.
+   *
+   * The challan number and its date are the pair that identifies a deposit, so
+   * changing either is checked against the same uniqueness the create path
+   * checks — two rows claiming one A-Challan is a reconciliation nobody can
+   * finish.
+   *
+   * The ledger row a deposit wrote is not touched. It is an ordinary money-out
+   * entry and it is corrected where every other entry is: on the ledger, with
+   * a void and a re-record, which leaves a trail. Silently rewriting it from
+   * here would move a figure on the bank statement with nothing to show why.
+   */
+  async updateDeposit(
+    id: string,
+    input: UpdateTdsDepositInput,
+    actor: AuthenticatedUser,
+  ) {
+    const [existing] = await this.db.client
+      .select()
+      .from(tdsDeposits)
+      .where(eq(tdsDeposits.id, id))
+      .limit(1);
+
+    if (!existing)
+      throw new NotFoundException("That challan no longer exists.");
+
+    const challanNumber = input.challanNumber ?? existing.challanNumber;
+    const challanDate = input.challanDate ?? existing.challanDate;
+    const depositDate = input.depositDate ?? existing.depositDate;
+
+    if (input.depositDate || input.challanDate) {
+      await this.settings.assertPeriodOpen(depositDate);
+      if (depositDate < challanDate) {
+        throw new BadRequestException({
+          message: "Validation failed",
+          errors: {
+            depositDate: ["The deposit cannot be dated before the challan"],
+          },
+        });
+      }
+    }
+
+    if (input.challanNumber || input.challanDate) {
+      const [clash] = await this.db.client
+        .select({ id: tdsDeposits.id })
+        .from(tdsDeposits)
+        .where(
+          and(
+            eq(tdsDeposits.challanNumber, challanNumber),
+            eq(tdsDeposits.challanDate, challanDate),
+            ne(tdsDeposits.id, id),
+          ),
+        )
+        .limit(1);
+
+      if (clash) {
+        throw new BadRequestException({
+          message: "Validation failed",
+          errors: { challanNumber: ["That challan is already recorded"] },
+        });
+      }
+    }
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "tds_deposits",
+      entityId: id,
+      summary: `Corrected challan ${challanNumber}`,
+      module: "tds",
+      read: async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(tdsDeposits)
+          .where(eq(tdsDeposits.id, id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        // Listed field by field rather than spread, so a key the schema gains
+        // later cannot reach the table without somebody deciding it should.
+        const [row] = await tx
+          .update(tdsDeposits)
+          .set({
+            ...(input.challanNumber !== undefined ? { challanNumber } : {}),
+            ...(input.challanDate !== undefined ? { challanDate } : {}),
+            ...(input.depositDate !== undefined ? { depositDate } : {}),
+            ...(input.amount !== undefined ? { amount: input.amount } : {}),
+            ...(input.bankName !== undefined
+              ? { bankName: input.bankName }
+              : {}),
+            ...(input.branch !== undefined ? { branch: input.branch } : {}),
+            ...(input.periodYear !== undefined
+              ? { periodYear: input.periodYear }
+              : {}),
+            ...(input.periodMonth !== undefined
+              ? { periodMonth: input.periodMonth }
+              : {}),
+            ...(input.depositType !== undefined
+              ? { depositType: input.depositType }
+              : {}),
+            ...(input.attachmentUrl !== undefined
+              ? { attachmentUrl: input.attachmentUrl }
+              : {}),
+            ...(input.notes !== undefined ? { notes: input.notes } : {}),
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(tdsDeposits.id, id))
+          .returning();
+        return row;
       },
     });
   }

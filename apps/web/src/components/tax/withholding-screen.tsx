@@ -23,6 +23,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { TabStrip } from "@/components/reports/granularity-tabs";
 import { useSettings } from "@/components/settings-provider";
+import { ChallansPanel } from "@/components/tax/challans-panel";
 import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
 import { FilterBar, FilterSelect } from "@/components/ui/filters";
@@ -308,7 +309,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
           <Card className="overflow-hidden">
             <CardHeader
               title={period.label}
-              description="Everyone on a finalised payroll run in this period. Somebody who owed no tax is listed at 0.00 rather than left out — this is who was paid, not only who was taxed."
+              description="Everyone on a finalised payroll run in this period who owes tax. Somebody who owed none is not listed — the total below counts them at zero either way."
             />
             <TableScroll>
               <table className="table-data min-w-172 text-sm">
@@ -341,12 +342,38 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                         colSpan={COLUMNS}
                         className="cell-prose text-center text-sm text-muted-foreground"
                       >
-                        <p>No finalised payroll run in {period.label}.</p>
-                        <p className="mt-1">
-                          A run reaches this page once it is finalised — while
-                          it is a draft its figures can still change, so nothing
-                          has been deducted from anybody yet.
-                        </p>
+                        {/*
+                          Two different empties, and saying the wrong one is
+                          worse than saying nothing. The table holds only
+                          people who owe tax, so no rows means either that no
+                          run was finalised or that one was and nobody crossed
+                          the threshold — and `linesInPeriod` is the count that
+                          tells them apart.
+                        */}
+                        {register.linesInPeriod > 0 ? (
+                          <>
+                            <p>Nobody owed tax in {period.label}.</p>
+                            <p className="mt-1">
+                              <span className="num">
+                                {register.linesInPeriod}
+                              </span>{" "}
+                              {register.linesInPeriod === 1
+                                ? "person was"
+                                : "people were"}{" "}
+                              on the sheet and every one of them came out under
+                              the threshold, so there is nothing to deposit.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p>No finalised payroll run in {period.label}.</p>
+                            <p className="mt-1">
+                              A run reaches this page once it is finalised —
+                              while it is a draft its figures can still change,
+                              so nothing has been deducted from anybody yet.
+                            </p>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -433,6 +460,17 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
               </table>
             </TableScroll>
           </Card>
+
+          {/*
+            The challans, under the deductions they settle.
+
+            A second table rather than a column on the first: one A-Challan
+            usually covers the tax withheld from everybody in a month, so a
+            challan number on a person's row would be the same number written
+            down seventeen times with an amount beside it that belongs to none
+            of them.
+          */}
+          <ChallansPanel year={fiscalYear} />
         </>
       )}
     </>

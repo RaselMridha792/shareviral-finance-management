@@ -16,6 +16,7 @@ import {
 import { importBatches } from "./imports";
 import { appSettings } from "./settings";
 import { subscriptions } from "./subscriptions";
+import { tdsDeposits } from "./tax";
 import { teamMembers } from "./team";
 import { transactions } from "./transactions";
 import { users } from "./users";
@@ -87,6 +88,18 @@ export const files = pgTable(
     subscriptionId: uuid("subscription_id").references(() => subscriptions.id, {
       onDelete: "cascade",
     }),
+
+    /**
+     * The A-Challan's own scan.
+     *
+     * A deposit is the one document on the TDS screen that had nowhere to
+     * hang: every other owner here had a column and this did not, so the
+     * bank's receipt for tax actually paid could not be attached to the row
+     * that records paying it.
+     */
+    tdsDepositId: uuid("tds_deposit_id").references(() => tdsDeposits.id, {
+      onDelete: "cascade",
+    }),
     /**
      * The settings row, which is the company itself.
      *
@@ -124,6 +137,7 @@ export const files = pgTable(
     index("files_import_batch_idx").on(t.importBatchId),
     index("files_subscription_idx").on(t.subscriptionId),
     index("files_settings_idx").on(t.settingsId),
+    index("files_tds_deposit_idx").on(t.tdsDepositId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     /**

@@ -52,6 +52,13 @@ export const FILE_KINDS = [
    * signing, and the same mark goes on everybody's slip.
    */
   "signature",
+  /**
+   * The A-Challan: the bank's receipt for tax actually deposited.
+   *
+   * Last in the list because a Postgres enum only takes new values on the end,
+   * and this array is that type's declaration order.
+   */
+  "challan",
   "import_source",
   "other",
 ] as const;
@@ -66,6 +73,7 @@ export const FILE_OWNERS = [
   "import_batch",
   "subscription",
   "settings",
+  "tds_deposit",
 ] as const;
 export const fileOwnerSchema = z.enum(FILE_OWNERS);
 export type FileOwner = z.infer<typeof fileOwnerSchema>;
@@ -82,6 +90,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   bank_statement: "Bank statement",
   subscription_screenshot: "Plan screenshot",
   signature: "Signature",
+  challan: "Challan",
   import_source: "Imported file",
   other: "Document",
 };
@@ -116,6 +125,9 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   // One kind, and there is one of it. Two signatures on file would mean a
   // payslip had to pick.
   settings: ["signature"],
+  // One kind, and "other" is not among them on purpose: a document on a
+  // challan row is the challan. Anything else filed there is misfiled.
+  tds_deposit: ["challan"],
   import_batch: ["import_source"],
 };
 
@@ -172,6 +184,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // Narrower than everything else here on purpose: a signature has to render
   // over a printed rule, and a PDF cannot. See `checkSignatureImage`.
   signature: SIGNATURE_MIME_TYPES,
+  // A screenshot from the bank's portal or the PDF it emails — the two
+  // forms an A-Challan actually arrives in.
+  challan: DOCUMENT_MIME_TYPES,
   import_source: SPREADSHEET_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
@@ -207,6 +222,9 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   // has to stop a file before multer's generic refusal; the readable one comes
   // from the shared check.
   signature: 1 * MB,
+  // A page from a bank portal. Generous for a screenshot, nowhere near
+  // nginx's 25 MB body cap.
+  challan: 10 * MB,
   import_source: 15 * MB,
   other: 15 * MB,
 };

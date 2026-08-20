@@ -160,6 +160,42 @@ export class FilesController {
     );
   }
 
+  /**
+   * The A-Challan's scan.
+   *
+   * Routes here are written one per owner rather than one generic `:owner`
+   * segment, so each carries its own permission in the decorator where a
+   * reader can see it — and so a new owner cannot arrive with nobody having
+   * decided who may read it.
+   */
+  @Get("tds_deposit/:id")
+  @RequirePermission("tds.read")
+  listForDeposit(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("tds_deposit", uuidSchema.parse(id), actor);
+  }
+
+  @Post("tds_deposit/:id")
+  @RequirePermission("tds.write")
+  @upload()
+  uploadForDeposit(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "tds_deposit",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
   @Get("import-batch/:id")
   @RequirePermission("imports.run")
   listForImportBatch(

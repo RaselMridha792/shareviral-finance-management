@@ -70,6 +70,10 @@ const OWNER_PERMISSIONS: Record<
   // The company's signature is part of its letterhead, which is a setting —
   // and everybody who can read a payslip can already see it printed on one.
   settings: { read: "settings.read", write: "settings.write" },
+  // The same pair the deposit itself is gated on. A challan's scan is the
+  // proof the deposit happened; whoever may record one may attach it, and
+  // whoever may read the register may see it.
+  tds_deposit: { read: "tds.read", write: "tds.write" },
 };
 
 @Injectable()
@@ -170,6 +174,7 @@ export class FilesService {
       import_batch: files.importBatchId,
       subscription: files.subscriptionId,
       settings: files.settingsId,
+      tds_deposit: files.tdsDepositId,
     } satisfies Record<FileOwner, unknown>;
     return columns[owner];
   }

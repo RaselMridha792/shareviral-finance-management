@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
   allocateDepositSchema,
   calculateTdsSchema,
@@ -13,6 +13,8 @@ import {
   type AllocateDepositInput,
   type CalculateTdsInput,
   type CreateTdsDepositInput,
+  updateTdsDepositSchema,
+  type UpdateTdsDepositInput,
   type FileReturnInput,
   type FiscalYearQuery,
   type ListDepositsQuery,
@@ -161,6 +163,17 @@ export class TdsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.tds.createDeposit(body, actor);
+  }
+
+  /** Correcting a challan already recorded — the number, the date, the amount. */
+  @Patch("deposits/:id")
+  @RequirePermission("tds.write")
+  updateDeposit(
+    @Param("id") id: string,
+    @ZodBody(updateTdsDepositSchema) body: UpdateTdsDepositInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tds.updateDeposit(uuidSchema.parse(id), body, actor);
   }
 
   @Post("deposits/:id/allocations")

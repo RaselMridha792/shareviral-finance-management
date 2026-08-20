@@ -7,9 +7,10 @@ import type {
   PendingItem,
   SalaryTdsRegister,
   TdsDepositType,
+  UpdateTdsDepositInput,
 } from "@finance/shared";
 
-import { apiFetch } from "./api-client";
+import { apiFetch, apiUpload, type StoredFile } from "./api-client";
 
 /**
  * Withholding only.
@@ -172,6 +173,11 @@ export const tdsApi = {
       method: "POST",
       ...json(input),
     }),
+  updateDeposit: (id: string, input: UpdateTdsDepositInput) =>
+    apiFetch<TdsDepositDto>(`/tds/deposits/${id}`, {
+      method: "PATCH",
+      ...json(input),
+    }),
   allocate: (id: string, input: AllocateDepositInput) =>
     apiFetch<DepositDetailDto>(`/tds/deposits/${id}/allocations`, {
       method: "POST",
@@ -195,3 +201,25 @@ export const tdsApi = {
   pending: (withinDays = 45) =>
     apiFetch<PendingItem[]>(`/tds/pending?withinDays=${withinDays}`, fresh),
 };
+
+/* -------------------------------------------------------------------------- */
+/*  The challan's scan                                                         */
+/* -------------------------------------------------------------------------- */
+
+export function listChallanFiles(depositId: string) {
+  return apiFetch<StoredFile[]>(`/files/tds_deposit/${depositId}`, fresh);
+}
+
+/**
+ * The bank's own receipt for the deposit.
+ *
+ * One kind, so uploading a second replaces the first in the same transaction —
+ * a challan row that carried two scans would leave somebody choosing which one
+ * the auditor gets.
+ */
+export function uploadChallanFile(depositId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", "challan");
+  return apiUpload<StoredFile>(`/files/tds_deposit/${depositId}`, form);
+}
