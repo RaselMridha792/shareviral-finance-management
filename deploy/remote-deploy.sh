@@ -81,6 +81,75 @@ fi
 if [ "$PULL" = "1" ]; then
   docker compose pull --quiet api web
 fi
+
+# --------------------------------------------------------------------------
+# The schema, before the code that expects it.
+# --------------------------------------------------------------------------
+# This step exists because of an outage it would have prevented. A release
+# added two columns and a table; the SQL was written, committed, and applied to
+# the developer's database — and the deploy carried the code to a server whose
+# database had never seen it. Drizzle names every column in its SELECT, so the
+# first query against `app_settings` failed, and with it every page that reads
+# settings. The site was down until somebody typed the migration by hand.
+#
+# Applying them here is safe because of how they are written: every file in
+# `deploy/sql` uses IF NOT EXISTS, so running all of them on every deploy is
+# the same as running the new ones. That is the property that makes "just run
+# them all, every time" better than any list of what has already been applied —
+# there is no list to get wrong.
+#
+# Before `up -d`, not after. Between the two is the window where the new code
+# is serving against the old schema, and the whole point is that the window
+# should not exist.
+if [ -d ./sql ]; then
+  # The database has to be up to be migrated, and on the first deploy of a box
+  # it is not. Bringing it up alone is harmless when it already is. The profile
+  # is named because the service carries one; the `|| true` covers the
+  # installation that points DATABASE_URL at a managed database instead and has
+  # no `db` service at all.
+  COMPOSE_PROFILES=local-db docker compose up -d db >/dev/null 2>&1 || true
+
+  db_container="$(docker ps --format '{{.Names}}' | grep -m1 -- '-db-' || true)"
+
+  if [ -n "$db_container" ]; then
+    # The credentials come from inside the container, not from this shell.
+    #
+    # `.env` is read by docker compose, not by bash, so POSTGRES_USER is not a
+    # variable here — and this script runs under `set -u`, where naming one
+    # that does not exist aborts the deploy. The database container already has
+    # both in its environment, so `sh -c` inside it is both simpler and the
+    # only version that cannot be wrong about which database this is.
+    psql_in_db() {
+      docker exec -i "$db_container"         sh -c 'psql -v ON_ERROR_STOP=1 --quiet -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+    }
+
+    # `pg_isready`, because a container that has just been created answers
+    # `docker exec` seconds before Postgres answers a connection.
+    for _ in $(seq 1 30); do
+      if docker exec "$db_container"         sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    for file in ./sql/*.sql; do
+      [ -e "$file" ] || continue
+      # ON_ERROR_STOP, so a broken migration stops the deploy rather than
+      # printing a message into a log and letting the release go out anyway.
+      if ! psql_in_db < "$file" >/dev/null; then
+        echo "migration failed: $file" >&2
+        echo "the stack has NOT been updated; fix the migration and deploy again" >&2
+        exit 1
+      fi
+    done
+    echo "schema: applied $(ls ./sql/*.sql 2>/dev/null | wc -l) migration file(s)"
+  else
+    # No local database service. Nothing here knows how to reach a managed one
+    # safely, and guessing would be worse than saying so.
+    echo "schema: no db container found — apply deploy/sql by hand" >&2
+  fi
+fi
+
 docker compose up -d --remove-orphans
 
 # --------------------------------------------------------------------------
