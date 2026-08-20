@@ -234,14 +234,18 @@ export function TransactionTable({
                           <span className="num">{row.withheldTaxAmount}</span>
                         </Badge>
                       ) : null}
-                      {row.originalAmount ? (
-                        <Badge tone="primary">
-                          <span className="num">
-                            {row.originalCurrency} {row.originalAmount} @{" "}
-                            {row.fxRate}
-                          </span>
-                        </Badge>
-                      ) : null}
+                      {/*
+                        No "USD 39.00 @ 122.043217" badge here any more.
+
+                        It printed the same two figures the Amount (USD) and
+                        USD rate columns print, on the same row, three cells to
+                        the right — and it printed them in a green chip, which
+                        made the loudest thing in the description a repeat. The
+                        one fact it carried that the columns do not is whether
+                        the dollars were really sent or only converted, and the
+                        USD column already says that: a converted figure is
+                        marked "~", a recorded one is not.
+                      */}
                       {voided ? (
                         <Badge tone="negative">
                           voided{row.voidReason ? `: ${row.voidReason}` : ""}

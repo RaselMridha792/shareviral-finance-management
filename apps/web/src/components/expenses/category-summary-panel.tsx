@@ -1,10 +1,11 @@
 "use client";
 
-import { formatCompactMoney } from "@finance/shared";
+import { useMemo } from "react";
 
 import { Amount } from "@/components/money/amount";
 import { useUsdRate } from "@/components/money/rate-provider";
-import { useMoney, useSettings } from "@/components/settings-provider";
+import { useMoney } from "@/components/settings-provider";
+import { Segmented } from "@/components/ui/segmented";
 import type { ExpenseGroup } from "@/lib/ledger";
 
 /**
@@ -17,12 +18,22 @@ import type { ExpenseGroup } from "@/lib/ledger";
  * (What it did was navigate to `/expenses/<sub-slug>`, which 404s: that route
  * only resolves top-level headings.)
  *
- * Now they are a filter track welded to the total above them. Picking one
- * re-scopes the big figure and the table below; picking it again, or "All",
- * lets go. The heading label, the stat cluster and the composition bar do not
- * move when a segment is picked — they describe the whole heading for the
- * month, which is the question the page is titled with.
+ * Now they are a tab strip welded to the total above them. Picking one
+ * re-scopes the big figure and the table below; picking "All" lets go. The
+ * heading label, the stat cluster and the composition bar do not move when a
+ * tab is picked — they describe the whole heading for the month, which is the
+ * question the page is titled with.
+ *
+ * The tabs carry a name and nothing else, on the owner's instruction. They
+ * briefly carried the amount and the share as well, which made each one three
+ * lines tall and the strip the loudest thing on the page — for figures the
+ * block above already prints the moment a tab is picked. This is the app's own
+ * `Segmented`, the same control the TDS screen filters its periods with, so
+ * "filter what is already on screen" looks like itself everywhere.
  */
+
+/** The id `Segmented` holds while nothing is filtered — it needs a string. */
+const ALL = "all";
 
 /**
  * One hue per sub-category, at a lightness and chroma that barely move.
@@ -53,8 +64,6 @@ function tone(index: number, alpha?: number): string {
     : `oklch(${l} ${c} ${h} / ${alpha})`;
 }
 
-const plural = (n: number) => `${n} entr${n === 1 ? "y" : "ies"}`;
-
 export function CategorySummaryPanel({
   headingName,
   headingColor,
@@ -78,8 +87,17 @@ export function CategorySummaryPanel({
   onSelect: (id: string | null) => void;
 }) {
   const money = useMoney();
-  const settings = useSettings();
   const rate = useUsdRate();
+
+  // "All" first, then the sub-categories the summary already ordered by
+  // amount, so the widest block of the bar above is the tab beside it.
+  const tabs = useMemo(
+    () => [
+      { id: ALL, label: "All" },
+      ...groups.map((group) => ({ id: group.id, label: group.name })),
+    ],
+    [groups],
+  );
 
   const selected = groups.find((group) => group.id === selectedId) ?? null;
   const shownTotal = selected ? selected.total : total;
@@ -104,19 +122,8 @@ export function CategorySummaryPanel({
   const shareOf = (value: string) =>
     spent > 0 ? (Number(value) / spent) * 100 : 0;
 
-  const compact = (value: string) =>
-    formatCompactMoney(value, {
-      currency: settings.baseCurrency,
-      format: settings.numberFormat,
-    });
-
   // Display only, and rounded — never a figure anybody reconciles against.
   const average = entries > 0 ? (Number(total) / entries).toFixed(2) : "0.00";
-
-  const segment =
-    "flex cursor-pointer flex-col justify-center gap-[7px] rounded-[10px] border px-[15px] py-[11px] text-left transition-[color,background-color,border-color] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-  const resting =
-    "border-border bg-surface text-muted-foreground hover:border-border-strong hover:bg-surface-muted hover:text-foreground";
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface">
@@ -240,80 +247,22 @@ export function CategorySummaryPanel({
 
       {groups.length > 0 ? (
         <div
-          role="group"
-          aria-label={`Show one sub-category of ${headingName}`}
           // A step off the panel, so the strip reads as a control rather than
-          // more of the card. Wraps onto as many rows as it needs — never a
-          // sideways scroller, which hides the segment nobody thought to look
-          // for.
-          className="flex flex-wrap items-stretch gap-2 bg-background"
+          // more of the card. The tabs wrap onto as many rows as they need —
+          // never a sideways scroller, which hides the one nobody thought to
+          // look for.
+          className="bg-background"
           style={{
             padding: "clamp(12px,1.5vw,16px) clamp(12px,1.6vw,18px)",
           }}
         >
-          <button
-            type="button"
-            onClick={() => onSelect(null)}
-            aria-pressed={selectedId === null}
-            className={`${segment} flex-none ${
-              selectedId === null
-                ? "border-border-strong bg-surface-muted text-foreground"
-                : resting
-            }`}
-          >
-            <span className="text-[13px] font-medium">All</span>
-            <span className="num text-[11px] opacity-60">
-              {plural(entries)}
-            </span>
-          </button>
-
-          <span aria-hidden className="my-1 w-px flex-none bg-border" />
-
-          {groups.map((group, index) => {
-            const on = selectedId === group.id;
-            const share = shareOf(group.total);
-            return (
-              <button
-                key={group.id}
-                type="button"
-                onClick={() => onSelect(on ? null : group.id)}
-                aria-pressed={on}
-                aria-label={`${group.name}, ${money(group.total)}, ${share.toFixed(1)}% of total`}
-                // Shrinks before it wraps, and the name ellipsizes rather
-                // than pushing the segment past the panel's edge.
-                className={`${segment} max-w-full min-w-0 shrink ${
-                  on ? "text-foreground" : resting
-                }`}
-                style={
-                  on
-                    ? {
-                        borderColor: tone(index, 0.55),
-                        background: tone(index, 0.13),
-                      }
-                    : undefined
-                }
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="size-2 flex-none rounded-full"
-                    style={{ background: tone(index), opacity: on ? 1 : 0.85 }}
-                  />
-                  <span className="truncate text-[13px] font-medium">
-                    {group.name}
-                  </span>
-                </span>
-                <span className="flex items-baseline gap-2">
-                  <span className="num text-[14px] font-semibold whitespace-nowrap">
-                    {compact(group.total)}
-                  </span>
-                  <span className="num text-[10.5px] opacity-60">
-                    {share.toFixed(1)}%
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+          <Segmented
+            label={`Sub-category of ${headingName}`}
+            options={tabs}
+            value={selectedId ?? ALL}
+            onChange={(next) => onSelect(next === ALL ? null : next)}
+            className="flex-wrap"
+          />
         </div>
       ) : null}
     </section>

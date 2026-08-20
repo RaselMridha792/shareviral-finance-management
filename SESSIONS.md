@@ -20,6 +20,50 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — the filter segments become tabs, and the rate stops being printed twice
+
+**Done.** Two small things the owner asked for on the heading page, on top of this morning's
+redesign of it.
+
+*The sub-category segments are tabs now.* They were three-line blocks carrying a colour dot, the
+name, a short amount and a share — which made the strip the loudest thing on a page whose subject
+is the number above it, for figures the total block prints the moment a tab is picked. They carry
+the name and nothing else now, in the app's own `<Segmented>` — the same control the TDS screen
+filters its four periods with, which is the shape the owner sent as the reference. Written once,
+so "filter what is already on screen" looks like itself on every screen that does it.
+
+One behaviour changed with the shape: a tab is not a toggle. Picking the selected one again used
+to clear it; now it stays, and **"All" is how you clear it** — which is what a tab strip means
+everywhere else in this app, and what the reference does.
+
+*The `USD 39.00 @ 122.043217` chip is off the description column.* It printed the same two
+figures the **Amount (USD)** and **USD rate** columns print, on the same row, three cells to the
+right — in a green chip, so the loudest thing in a description was a repeat of it. The one fact
+it carried that the columns do not is whether the dollars were really sent or only converted, and
+the USD column already says that: a converted figure is marked `~`, a recorded one is not.
+Nothing is lost.
+
+**Watch out.** That chip lived in `components/ledger/transaction-table.tsx`, which three screens
+use: **All transactions**, **the account register**, and this heading page. So it is gone from
+all three — deliberately, because the two columns that replace it are rendered by the same
+component and therefore exist wherever the chip did. Measured across them rather than argued:
+`.usdbadge.mjs` (untracked) found 21 foreign-currency transactions in the database and **zero**
+`CUR n @ rate` chips on `/transactions` and `/expenses/technology`, with both USD columns still
+in place.
+
+`.catpanel.mjs` (untracked, updated for `role="tablist"`) re-walked the panel: 1440/1024/768/390
+in both themes, 0px of page overflow, 0px inside the strip, nothing clipped, the tabs wrapping to
+a second row at 390 rather than scrolling sideways. Picking `Office & premises` took the figure
+from ৳1,04,11,700.00 to ৳81,83,700.00, the sub-line to "1 entry · Office & premises" and the
+table from 6 rows to 1; "All" put all three back. `node .sweep.mjs` on the three affected routes
+is unchanged — h1 28, pad 32/34, gap 20, 0px sideways. Four CI steps run separately, all green
+(308 tests).
+
+**Open.** The composition bar's six hues no longer key to anything the reader can name — the tabs
+are neutral, so the bar is now proportion without a legend. It still says how the month divides,
+which is most of its job, but if it should either gain a legend or go, that is the owner's call
+and its own session.
+
 ## 2026-08-21 — the sub-category pills become the control they were pretending to be
 
 **Done.** The heading page (`/expenses/<heading>`) gets the owner's redesign of its first
