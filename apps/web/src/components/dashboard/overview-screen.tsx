@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  ACCOUNT_TYPE_LABELS,
   MONTH_NAMES,
   formatMoney,
   isSelectableMonth,
   nearestSelectableMonth,
   todayInDhaka,
   type AccountGroup,
+  type AccountType,
   type OverviewReport,
 } from "@finance/shared";
 import { useRouter } from "next/navigation";
@@ -172,7 +174,7 @@ export function OverviewScreen({
         </div>
       </div>
 
-      {/* --- the figures, grouped by what the money is ------------------ */}
+      {/* --- one block of figures per account ---------------------------- */}
       {report.groups.map((group) => (
         <AccountBlock
           key={group.key}
@@ -201,7 +203,21 @@ export function OverviewScreen({
 }
 
 /**
- * One account group: where it started, what moved, where it stands.
+ * The same four the Accounts screen uses, so a card is a card on both.
+ *
+ * Deliberately a copy rather than a shared export: it is four lines, and
+ * lifting it into `lib/` to save them would put a file every screen imports in
+ * the path of a dashboard change.
+ */
+const ICONS: Record<AccountType, string> = {
+  bank: "account_balance",
+  cash: "payments",
+  mobile_wallet: "smartphone",
+  card: "credit_card",
+};
+
+/**
+ * One account: where it started, what moved, where it stands.
  *
  * The four read left to right as a sentence, and they tie —
  * opening + in − out is exactly current. Four figures in a box that do not add
@@ -229,24 +245,20 @@ function AccountBlock({
   return (
     <section className="flex flex-col gap-3">
       {/*
-        The accounts name themselves.
+        One heading per account, and the account names itself.
 
-        It read "BD Bank overview" with the account names in grey beside it — a
-        fixed label saying less than the line next to it, and the same names
-        twice on one row. The names are the heading now.
-
-        `group.label` remains the fallback. It cannot currently be reached — a
-        group with no accounts is never built — but a heading that rendered as
-        an empty string would be a worse way to find that out.
+        This block used to be a whole currency: "BD Bank overview" over the sum
+        of the bank, the card and the petty cash, their names crammed into the
+        grey line beside it. Two accounts, one row of figures, and no way to
+        read either one on its own. Now the name is the heading and the sub-line
+        says what kind of place the money sits in, which is the one thing the
+        name does not always tell you.
       */}
-      {/* The label names the kind of money, the qualifier names the accounts
-          it is in. One without the other leaves a reader either not knowing
-          which block this is, or not knowing what is in it. */}
       <SectionHeading
         title={group.label}
-        icon={group.key === "card" ? "credit_card" : "account_balance"}
+        icon={ICONS[group.type] ?? "account_balance"}
         iconTone="text-primary-text"
-        qualifier={group.accounts.join(" · ")}
+        qualifier={ACCOUNT_TYPE_LABELS[group.type] ?? group.type}
       />
 
       <StatStrip>
@@ -341,7 +353,7 @@ function usd(value: string | null): string | null {
 }
 
 /**
- * Taka, always — including the block headed "Card overview".
+ * Taka, always — including the card's block.
  *
  * `group.currency` says what the card is *denominated* in; it does not say
  * what these four figures are in. Every amount in this system is recorded in

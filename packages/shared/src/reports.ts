@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { isoDateSchema, type FxReportBasis } from "./masters.ts";
+import {
+  isoDateSchema,
+  type AccountType,
+  type FxReportBasis,
+} from "./masters.ts";
 import {
   checkPeriodIndex,
   granularitySchema,
@@ -127,17 +131,26 @@ export type OverviewQuery = z.infer<typeof overviewQuerySchema>;
  * One block of four figures on the dashboard: where an account started, what
  * moved through it, where it stands.
  *
- * Grouped by what the money *is* rather than by account row. The taka accounts
- * are one position — the bank and the petty cash tin are both company cash in
- * taka — while the prepaid card is a different thing entirely, held in dollars
- * and spent on tooling. Summing the two together would produce a number that
- * is wrong by the exchange rate and reads as perfectly normal.
+ * One block per account, not one per currency. It used to fold every taka
+ * account into a single "BD Bank overview" — the bank, the card, the petty
+ * cash tin summed into four figures with the names listed in grey beside
+ * them. That answers "how much does the company hold" and nothing else: a
+ * reader who wants to know what is on the card, or whether the payroll
+ * account can cover this month, had the two added together in front of them
+ * and no way to pull them apart.
+ *
+ * The blocks stay in taka regardless. `currency` says what an account is
+ * *denominated* in; every figure in this app is BDT, a dollar card's
+ * included, so summing across accounts was never the exchange-rate hazard —
+ * it was simply an answer to a question nobody asked.
  */
 export type AccountGroup = {
-  key: "bank" | "card";
+  /** The account's own id, so two accounts of one type never collide. */
+  key: string;
+  /** The account's name, which is the heading. */
   label: string;
-  /** The accounts folded into this block, so the reader knows what is in it. */
-  accounts: string[];
+  /** Bank, card, wallet or cash — what the block's icon and sub-line say. */
+  type: AccountType;
   currency: string;
   opening: string;
   moneyIn: string;
@@ -238,7 +251,7 @@ export type OverviewReport = {
   /** Where that rate came from. Null exactly when `usdRate` is. */
   usdRateSource: GoverningRateSource | null;
   totals: OverviewTotals;
-  /** Bank and card, each with its own opening, movement and closing. */
+  /** Every account, each with its own opening, movement and closing. */
   groups: AccountGroup[];
   expense: ExpenseOverview;
   /** The comparable period before, for the change figures. */

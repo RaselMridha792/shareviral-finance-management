@@ -408,18 +408,23 @@ export class OverviewService {
   }
 
   /**
-   * Bank and card, each with where it started, what moved, and where it stands.
+   * Every account, each with where it started, what moved, and where it stands.
    *
-   * Grouped by currency rather than by account type: the bank and the petty
-   * cash tin are one position in taka, while the prepaid card is dollars spent
-   * on tooling. Adding the two would produce a figure wrong by the exchange
-   * rate that reads as entirely normal — the mistake this app has made once
-   * already, elsewhere.
+   * One block per account. It used to be two — every taka account summed into
+   * "BD Bank overview", the dollar ones into "Card overview" — which put the
+   * bank, the card and the petty cash tin behind a single set of four figures
+   * with their names listed in grey beside it. The owner has two accounts and
+   * saw one row: the question "what is on the card" had no answer on the
+   * screen that exists to answer it.
    *
-   * Opening is every account's own opening balance plus everything that moved
-   * before the period, so `opening + in − out` lands exactly on `closing`. The
-   * dashboard's four tiles have to tie together or they are four unrelated
+   * Opening is the account's own opening balance plus everything that moved
+   * before the period, so `opening + in - out` lands exactly on `closing`. The
+   * four tiles in a block have to tie together or they are four unrelated
    * numbers in a box.
+   *
+   * Soft-deleted accounts are out; archived ones are not. An account somebody
+   * stopped using still holds whatever it held, and a dashboard that quietly
+   * drops a balance is worse than one carrying a block nobody looks at.
    */
   private async accountGroups(
     range: PeriodRange,
@@ -428,6 +433,7 @@ export class OverviewService {
       .select({
         id: accounts.id,
         name: accounts.name,
+        type: accounts.type,
         currency: accounts.currency,
         opening: accounts.openingBalance,
       })
@@ -436,8 +442,6 @@ export class OverviewService {
       .orderBy(accounts.sortOrder, accounts.name);
 
     if (!rows.length) return [];
-
-    const base = "BDT";
 
     const [movedBefore, inPeriodRows] = await Promise.all([
       this.db.client
@@ -470,48 +474,23 @@ export class OverviewService {
       ]),
     );
 
-    const build = (
-      key: AccountGroup["key"],
-      label: string,
-      of: typeof rows,
-    ): Omit<AccountGroup, "usd"> | null => {
-      if (!of.length) return null;
-
-      let opening = 0;
-      let moneyIn = 0;
-      let moneyOut = 0;
-
-      for (const account of of) {
-        opening += Number(account.opening) + (before.get(account.id) ?? 0);
-        const movement = during.get(account.id);
-        moneyIn += movement?.in ?? 0;
-        moneyOut += movement?.out ?? 0;
-      }
+    return rows.map((account) => {
+      const opening = Number(account.opening) + (before.get(account.id) ?? 0);
+      const movement = during.get(account.id);
+      const moneyIn = movement?.in ?? 0;
+      const moneyOut = movement?.out ?? 0;
 
       return {
-        key,
-        label,
-        accounts: of.map((a) => a.name),
-        currency: of[0].currency,
+        key: account.id,
+        label: account.name,
+        type: account.type,
+        currency: account.currency,
         opening: opening.toFixed(2),
         moneyIn: moneyIn.toFixed(2),
         moneyOut: moneyOut.toFixed(2),
         closing: (opening + moneyIn - moneyOut).toFixed(2),
       };
-    };
-
-    return [
-      build(
-        "bank",
-        "BD Bank overview",
-        rows.filter((r) => r.currency === base),
-      ),
-      build(
-        "card",
-        "Card overview",
-        rows.filter((r) => r.currency !== base),
-      ),
-    ].filter((group): group is Omit<AccountGroup, "usd"> => group !== null);
+    });
   }
 
   /**

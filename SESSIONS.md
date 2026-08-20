@@ -20,6 +20,35 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — the dashboard shows every account, one block each
+
+**Done.** The overview's balance blocks are per account rather than per currency. It used to
+build exactly two: every BDT account summed into "BD Bank overview" with the names listed in
+grey beside it, and anything else into "Card overview". With two accounts on the live site that
+is one row of figures for the bank and the card together — the question "what is on the card"
+had no answer on the screen that exists to answer it.
+
+`accountGroups` in `overview.service.ts` now maps the account rows straight to blocks:
+`key` is the account id, `label` its name, and a new `type` carries bank/card/wallet/cash. The
+heading is the account's name with its type as the grey qualifier (owner's choice — no bank name
+or masked number), and the icon comes from the same four the Accounts screen uses. No combined
+total block: the owner asked for the accounts and nothing above them.
+
+Measured rather than reasoned about — `.dashblocks.mjs` (untracked) loads the real page with a
+real token and reads the rendered figures: **10 accounts in the dev database, 10 blocks on the
+page, names matching, and `opening + in − out = closing` on every one of them.** Four CI steps
+run separately, all green. Commits: `PENDING`.
+
+**Watch out.** `AccountGroup` in `packages/shared/src/reports.ts` changed shape — `accounts:
+string[]` is gone, `key` is now an id rather than `"bank" | "card"`, and `type` is new. Asked
+before touching it: the only consumers are the dashboard screen and the overview service, and
+grep found no other screen. Anything reading `group.accounts` will not compile.
+
+**Open.** Archived accounts (`is_active = false`) still get a block, because dropping a balance
+silently is worse than a block nobody looks at. On live it does not arise — both accounts are
+active — but if the owner archives one and does not want it on the dashboard, that is a one-line
+filter. Nothing else on the page was touched.
+
 ## 2026-08-20 — one session, one page
 
 **Done.** `CLAUDE.md` now carries how revisions are run: a page at a time, one session per page,
