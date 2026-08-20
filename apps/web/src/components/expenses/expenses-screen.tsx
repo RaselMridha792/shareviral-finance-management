@@ -18,6 +18,7 @@ import {
   type TransactionDto,
 } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { HeadingChooser, useHiddenHeadings } from "./heading-chooser";
 import { MonthPicker, type Range } from "./month-picker";
 
 /** One screenful. Anything past this is said out loud rather than dropped. */
@@ -42,6 +43,17 @@ export function ExpensesScreen({
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
+
+  /*
+   * The cards on screen, and the ones the reader has put away.
+   *
+   * Only the cards. The summary above them counts every heading the period
+   * has, and the table below shows every entry — hiding a card is a preference
+   * about this screen, not a filter on the company's money.
+   */
+  const hiddenIds = useHiddenHeadings();
+  const shown = summary.groups.filter((g) => !hiddenIds.includes(g.id));
+  const hidden = summary.groups.filter((g) => hiddenIds.includes(g.id));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +113,16 @@ export function ExpensesScreen({
         // button names the heading it adds to — "add Office & premises" — so
         // nobody has to pick a category from a drawer to record a bill they
         // already know the kind of. This page reads; those pages write.
-        actions={<MonthPicker range={range} onChange={setRange} />}
+        actions={
+          <>
+            <MonthPicker range={range} onChange={setRange} />
+            <HeadingChooser
+              headings={summary.groups}
+              categories={categories}
+              onCreated={load}
+            />
+          </>
+        }
       />
 
       <SummaryBar
@@ -110,8 +131,17 @@ export function ExpensesScreen({
         iconTone="text-negative"
         description={
           <>
+            {/* The count is of what the period has, not of what is on
+                screen. Hiding a card is a preference about this screen; the
+                money is still spent and still in the total beside it. */}
             Across {summary.groups.length} heading
             {summary.groups.length === 1 ? "" : "s"}
+            {hidden.length > 0 ? (
+              <>
+                {" · "}
+                <span className="num">{hidden.length}</span> hidden here
+              </>
+            ) : null}
           </>
         }
         value={<Amount value={summary.total} tone="neutral" />}
@@ -138,7 +168,7 @@ export function ExpensesScreen({
             gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
           }}
         >
-          {summary.groups.map((group) => {
+          {shown.map((group) => {
             const share = (Number(group.total) / Number(summary.total)) * 100;
             return (
               // One tile per category — see the note in team-screen.tsx.

@@ -1,18 +1,19 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "@/components/auth/session-provider";
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { type ExpenseSummary, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { MonthPicker, type Range } from "./month-picker";
@@ -37,6 +38,8 @@ export function CategoryDetailScreen({
 
   const router = useRouter();
 
+  const canWrite = useCan("transactions.write");
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
 
@@ -79,6 +82,20 @@ export function CategoryDetailScreen({
         actions={
           <>
             <MonthPicker range={range} onChange={changeRange} />
+            {/* The button names the heading it adds to, so nobody has to pick
+                one from a drawer to record a bill they already know the kind
+                of. This is where "Add expense" went when it came off the
+                overview. */}
+            {canWrite ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setCreating(true)}
+              >
+                <Plus className="size-4" />
+                add {heading.name}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -105,94 +122,41 @@ export function CategoryDetailScreen({
         />
       </Card>
 
+      {/*
+        The sub-categories as a row of chips, not a table.
+
+        It was a panel with six columns — name, bar, share, entries, amount —
+        which is a table's worth of chrome to say where inside one heading the
+        money went. The owner asked for the row instead, and it keeps the two
+        things people actually read: which sub-categories exist, and roughly
+        how the money splits.
+
+        It is also the only way into a sub-category from here, which is what
+        makes the breadcrumb's second level reachable. Removing the panel
+        without this would have left the page with no way down.
+      */}
       {breakdown.groups.length > 0 ? (
-        <Card>
-          <CardHeader
-            title="By sub-category"
-            description="Where inside this heading the money went"
-          />
-          <CardBody className="p-0">
-            <TableScroll>
-              <table className="table-data min-w-[560px] text-sm">
-                <thead>
-                  <tr className="text-left">
-                    {/* Position in a list sorted by spend, nothing more. These
-                        rows are sub-categories, and a sub-category's identity
-                        is its name — a number here would invite people to
-                        quote "number 3" at each other, which changes meaning
-                        the moment the month does. */}
-                    <SerialHead />
-                    <Th>Sub-category</Th>
-                    <Th width="w-36" align="right">
-                      Amount (BDT)
-                    </Th>
-                    {/* The bar is the share drawn, and the column beside it is
-                        the same share as a figure. One heading between them,
-                        on the number — heading both "Share" would state one
-                        fact twice and read as two. The bar itself is hidden
-                        from screen readers for the same reason. */}
-                    <Th width="w-40" />
-                    <Th width="w-16" align="right">
-                      Share
-                    </Th>
-                    <Th width="w-20" align="right">
-                      Entries
-                    </Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {breakdown.groups.map((group, index) => {
-                    const share =
-                      (Number(group.total) / Number(breakdown.total)) * 100;
-                    return (
-                      <tr key={group.id} className="row-finance">
-                        <SerialCell n={index + 1} />
-                        <td className="font-medium">
-                          {/* Opens the sub-category's own page — this same
-                              screen, one level down. The slug is already on
-                              the row the server sent; nothing is guessed. */}
-                          <Link
-                            href={`/expenses/${group.slug}`}
-                            className="transition hover:text-primary hover:underline"
-                          >
-                            {group.name}
-                          </Link>
-                        </td>
-                        <td className="text-right">
-                          <Amount
-                            value={group.total}
-                            tone="neutral"
-                            className="block font-medium"
-                          />
-                        </td>
-                        <td>
-                          <div
-                            aria-hidden
-                            className="h-1.5 w-full min-w-24 overflow-hidden rounded-full bg-surface-muted"
-                          >
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${Math.max(share, 2)}%`,
-                                background: heading.color,
-                              }}
-                            />
-                          </div>
-                        </td>
-                        <td className="num text-right text-xs text-muted-foreground">
-                          {share.toFixed(0)}%
-                        </td>
-                        <td className="num text-right text-xs text-muted-foreground">
-                          {group.entries}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </TableScroll>
-          </CardBody>
-        </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          {breakdown.groups.map((group) => (
+            <Link
+              key={group.id}
+              href={`/expenses/${group.slug}?from=${range.from}&to=${range.to}`}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm transition hover:border-primary/50 hover:bg-surface-muted"
+            >
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: group.color ?? heading.color }}
+              />
+              {group.name}
+              <Amount
+                value={group.total}
+                tone="neutral"
+                className="num text-xs text-muted-foreground"
+              />
+            </Link>
+          ))}
+        </div>
       ) : null}
 
       <TransactionTable
@@ -203,13 +167,18 @@ export function CategoryDetailScreen({
       />
 
       <TransactionForm
-        key={editing?.id}
-        open={Boolean(editing)}
+        key={editing?.id ?? "new"}
+        open={creating || Boolean(editing)}
         transaction={editing ?? undefined}
+        // A new entry starts under the heading whose page this is.
+        defaultCategoryId={heading.id}
         accounts={accounts}
         categories={categories}
         lockDirection
-        onClose={() => setEditing(null)}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
         onSaved={refresh}
       />
       <VoidDialog

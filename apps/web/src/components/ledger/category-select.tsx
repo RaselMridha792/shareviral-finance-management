@@ -101,7 +101,15 @@ export function CategorySelect({
   );
 }
 
-function NewCategoryDrawer({
+/**
+ * Creating a heading, from wherever somebody is when they find it missing.
+ *
+ * Exported because the Expenses screen's "add category" opens the same drawer
+ * — a heading created from a transaction form and one created from the expense
+ * overview must be the same thing, and two drawers asking for a name, a
+ * parent and a colour would drift the first time one of them gained a field.
+ */
+export function NewCategoryDrawer({
   open,
   initialName,
   parents,

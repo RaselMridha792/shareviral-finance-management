@@ -84,6 +84,7 @@ export function TransactionForm({
   defaultDirection = "out",
   lockDirection = false,
   defaultAccountId,
+  defaultCategoryId,
   accounts,
   categories,
   onClose,
@@ -92,6 +93,17 @@ export function TransactionForm({
   open: boolean;
   transaction?: TransactionDto;
   defaultDirection?: TxnDirection;
+  /**
+   * The heading a new entry starts under.
+   *
+   * A category page's Add button names the heading it adds to — "add Office &
+   * premises" — so opening a drawer that then asks which heading would be
+   * asking a question the button already answered.
+   *
+   * Only for a new row. An existing one keeps its own, which is the whole
+   * point of it being on the record.
+   */
+  defaultCategoryId?: string;
   /**
    * Hides the in/out switch and keeps the form on `defaultDirection`.
    *
@@ -223,7 +235,9 @@ export function TransactionForm({
   const [accountId, setAccountId] = useState(
     transaction?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? "",
   );
-  const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
+  const [categoryId, setCategoryId] = useState(
+    transaction?.categoryId ?? defaultCategoryId ?? "",
+  );
 
   /**
    * A category added from inside this form is not in the tree the parent
