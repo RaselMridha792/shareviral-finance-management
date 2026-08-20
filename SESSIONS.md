@@ -23,10 +23,11 @@ must run, an assumption that is no longer true.
 ## 2026-08-20 — a hundred rows in every table, on two accounts
 
 **Done.** The live database — the `db` container, not the Neon one in `apps/api/.env` — now
-carries sample data at a size pagination, filters and totals can actually be tested against. 686
-transactions, 2,700 payroll lines, 408 compensation rows, 354 TDS allocations, and 120 each of
+carries sample data at a size pagination, filters and totals can actually be tested against. 704
+transactions — 18 of them voided, so the struck-through row is a state that exists to be looked
+at — 2,700 payroll lines, 408 compensation rows, 354 TDS allocations, and 120 each of
 vendors, team members, subscriptions, files, statements, notifications, imports, exchange rates
-and the rest: **25 of 33 tables at a hundred or more**. Accounts are down to the two that were
+and the rest: **26 of 33 tables at a hundred or more**. Accounts are down to the two that were
 asked for, Master card and Standard Chartered Bank; `Petty cash (demo)` and `USD card` are gone.
 Commits: `3020509`, `e60360c`, `34eec1c`.
 
@@ -62,12 +63,14 @@ low 6,48,863, closing 39,78,140. Neither goes negative at any point in the two y
 - The bank's floor is now a property, not a tuning. A pass over the finished ledger inserts a
   further transfer, dated the day before, wherever the balance would fall through 5,00,000.
   Raising the wire size twice is what shipped the negative register.
+- The 18 voided rows are **clones of entries already there** — a void is nearly always the same
+  payment typed twice — and transfers, payroll and challan rows are excluded, since a cloned
+  transfer leg would put a third row in a group of two. They are filtered out of the floor pass
+  and the closing balances, the same rule the application's totals use: adding them moved the
+  transaction count from 686 to 704 and left every balance figure identical.
 
 **Open.**
 
-- **The seeder creates no voided transactions**; the one it replaced did. A struck-through row is
-  a state no screen has been checked against. One block to add, but it costs a deploy and another
-  reset.
 - Three tables will never reach a hundred and each is a decision: `accounts` (2, asked for),
   `app_settings` (1, `CHECK (id = 1)`), `tax_policies` (20, one row per fiscal year). `users` (5),
   `user_two_factor` (4), `recovery_codes` (40) and `schema_migrations` (20) are left alone.

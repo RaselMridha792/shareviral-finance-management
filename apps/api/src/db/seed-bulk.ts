@@ -1784,6 +1784,64 @@ async function load(tx: Tx): Promise<void> {
     };
   });
 
+  /* --- entries that were voided ------------------------------------------
+   *
+   * A screen that has never rendered a struck-through row has never been
+   * checked for one, and money rows here are voided rather than deleted — so
+   * the state exists in the application and needs to exist in the sample.
+   *
+   * These are clones of entries that are already there, not inventions,
+   * because that is what a void nearly always is: the same payment typed
+   * twice, and the second copy struck out. Cloning also means the figures
+   * agree with something — a voided row whose amount matches nothing looks
+   * like a row that was edited rather than one that was reversed.
+   *
+   * Only plain manual payments are cloned. A transfer leg would put a third
+   * row in a group of two, and a payroll or challan row is answerable to a run
+   * or a deposit that knows how many lines it has.
+   *
+   * They carry no weight: `voided_at is not null` is excluded from the floor
+   * pass below and from the closing balances at the end, which is the same
+   * rule the application's own totals use.
+   */
+
+  const VOID_REASONS = [
+    "Duplicate entry",
+    "Wrong amount, re-entered",
+    "Posted to the wrong account",
+    "Reversed by the bank",
+  ];
+
+  const voidable = txns.filter(
+    (t) =>
+      t.createdVia === "manual" &&
+      t.direction === "out" &&
+      !t.transferGroupId &&
+      !t.payrollRunId,
+  );
+
+  const voidedRows: Txn[] = [];
+  // Spaced across the whole window rather than picked at random, so the void
+  // filter has something to find in most months instead of in one week.
+  for (let i = 0; i < 18 && voidable.length; i += 1) {
+    const original = voidable[Math.floor((i * voidable.length) / 18)];
+    const date = original.txnDate as string;
+    voidedRows.push({
+      ...original,
+      id: randomUUID(),
+      refNo: nextRef(date),
+      voidedAt: new Date(`${date}T11:00:00Z`),
+      voidedBy: actor.id,
+      voidReason: pick(VOID_REASONS),
+    });
+  }
+  txns.push(...voidedRows);
+  if (voidedRows.length) {
+    console.log(
+      `  ${"(voided rows added)".padEnd(22)} ${voidedRows.length} struck out, counted in no total`,
+    );
+  }
+
   /* --- top-ups, so the register cannot go under --------------------------
    *
    * Everything above invents a month at a time and hopes the funding covers
@@ -1806,7 +1864,7 @@ async function load(tx: Tx): Promise<void> {
   const topUps: Txn[] = [];
   {
     const ledger = txns
-      .filter((t) => t.accountId === bank.id)
+      .filter((t) => t.accountId === bank.id && !t.voidedAt)
       .sort((a, b) => (a.txnDate as string).localeCompare(b.txnDate as string));
 
     let running = Number(bank.openingBalance);
@@ -2274,7 +2332,7 @@ async function load(tx: Tx): Promise<void> {
   console.log("\nClosing balances");
   for (const account of [bank, card]) {
     const ledger = txns
-      .filter((t) => t.accountId === account.id)
+      .filter((t) => t.accountId === account.id && !t.voidedAt)
       .sort((a, b) => (a.txnDate as string).localeCompare(b.txnDate as string));
 
     let running = Number(account.openingBalance);
