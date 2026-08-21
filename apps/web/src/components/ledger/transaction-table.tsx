@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import type { TransactionDto } from "@/lib/ledger";
+import { serial } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import { DocumentsDialog } from "./documents-dialog";
 
@@ -38,6 +39,7 @@ import { DocumentsDialog } from "./documents-dialog";
  */
 export function TransactionTable({
   rows,
+  page = 1,
   onEdit,
   onVoid,
   showAccount = true,
@@ -47,6 +49,16 @@ export function TransactionTable({
   emptyMessage = "Nothing recorded yet.",
 }: {
   rows: (TransactionDto & { runningBalance?: string })[];
+  /**
+   * Which page of a larger list `rows` is, so the SL column can keep counting.
+   *
+   * 1-based, and 1 by default — a caller that hands over its whole list numbers
+   * from 1 exactly as it did before this existed. A caller that pages passes
+   * the page it sliced, because `index + 1` restarts at 1 on page two and two
+   * different entries then answer to the same number. On these screens that
+   * number is what somebody reads down a phone.
+   */
+  page?: number;
   onEdit?: (row: TransactionDto) => void;
   onVoid?: (row: TransactionDto) => void;
   /**
@@ -207,8 +219,12 @@ export function TransactionTable({
                     this replaces number their rows 1..n, and that is all this
                     is — it renumbers when the filter changes, which is correct,
                     because it was never an identifier. `refNo` is.
+
+                    Counted across the list rather than within a page: `page`
+                    is 1 unless the screen sliced the rows itself, so this is
+                    `index + 1` for everybody who hands over the whole list.
                   */}
-                  <SerialCell n={index + 1} />
+                  <SerialCell n={serial(page, index)} />
                   <td className="num">{row.txnDate}</td>
                   <td className="cell-prose">
                     <span

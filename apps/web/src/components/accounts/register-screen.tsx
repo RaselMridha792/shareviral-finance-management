@@ -4,7 +4,7 @@ import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
 import { ArrowLeft, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
@@ -16,12 +16,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { controlClass } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { type RegisterResult, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
+import { PAGE_SIZE, pageCount } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 
 /**
- * The bank register: every entry in date order with the balance after each one.
+ * The bank register: one account's entries, newest first, with the balance
+ * after each one.
  *
  * This is the screen that has to match the bank statement line for line — which
  * is why the four figures at the top are stated plainly and the running balance
@@ -44,8 +47,41 @@ export function RegisterScreen({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
+  const [page, setPage] = useState(1);
 
   const { account } = register;
+
+  /**
+   * Newest first on screen, oldest first in the arithmetic.
+   *
+   * The API orders this account's rows by date ascending because the Balance
+   * column is a window function over exactly that order — turn the query round
+   * and every figure in it changes. So the reversal happens here, after each
+   * row already carries the balance it left behind, and the Balance column is
+   * untouched: the top row is the most recent entry and the number beside it is
+   * the account's closing balance, which is what somebody opening a register
+   * has come to see. It cost a scroll past every entry the account ever had
+   * before — this one runs to 704 rows on the live data.
+   *
+   * A copy, not `register.rows.reverse()` — that reverses the array the props
+   * hold, so the next render on the same data would turn the register back
+   * round. The statement screen learnt this the same way.
+   */
+  const ordered = useMemo(() => [...register.rows].reverse(), [register.rows]);
+
+  const totalPages = pageCount(ordered.length);
+  /*
+   * Clamped rather than reset.
+   *
+   * The two dates are the only things that shorten this list, and both already
+   * send the reader back to page 1 through `setRange`. The clamp is for what a
+   * filter change cannot do anything about — a page number that outlives the
+   * rows it pointed at, most obviously when an entry is voided away or the
+   * refresh after a save returns a shorter list, which would otherwise draw an
+   * empty table on a register that plainly has entries in it.
+   */
+  const current = Math.min(page, totalPages);
+  const visible = ordered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   // The rail knows the ancestors; only this page knows the record. After the
   // destructure, not before it — `account` comes out of `register`.
@@ -57,6 +93,13 @@ export function RegisterScreen({
     const params = new URLSearchParams();
     if (next.from) params.set("from", next.from);
     if (next.to) params.set("to", next.to);
+    /*
+     * A narrower period is a shorter register, and page 6 of it may not exist.
+     * The route does not change here, only its query, so React keeps this
+     * component and its page number alive across the navigation unless it is
+     * put back.
+     */
+    setPage(1);
     router.push(`/accounts/${account.id}/register?${params}`);
   }
 
@@ -114,9 +157,10 @@ export function RegisterScreen({
             <span className="font-medium">This balance cannot be right.</span>{" "}
             {ACCOUNT_TYPE_LABELS[account.type as AccountType]} cannot hold less
             than nothing. Something is missing from the entries below — most
-            often money put into this account that was never recorded. Work down
-            the list and find the day the balance first went under; whatever
-            came in around then is what has not been entered.
+            often money put into this account that was never recorded. The list
+            runs newest first, so read the Balance column upwards from the
+            oldest entry and find the day it first went under; whatever came in
+            around then is what has not been entered.
           </span>
         </p>
       ) : null}
@@ -172,12 +216,28 @@ export function RegisterScreen({
       </div>
 
       <TransactionTable
-        rows={register.rows}
+        rows={visible}
+        // Which slice this is, so the SL column keeps counting across the page
+        // break instead of starting a second row 1 twenty lines later.
+        page={current}
         onEdit={setEditing}
         onVoid={setVoiding}
         showAccount={false}
         showBalance
         emptyMessage="No entries for this account in the chosen period."
+      />
+
+      {/* A sibling of the table, never inside its empty branch — the page
+          somebody most needs this control on is the one that came up empty, and
+          a pager drawn inside the table is the one that is not there. It draws
+          nothing at all while a register fits on one page. */}
+      <Pagination
+        page={current}
+        totalPages={totalPages}
+        total={ordered.length}
+        noun="entry"
+        nounPlural="entries"
+        onPage={setPage}
       />
 
       <TransactionForm
