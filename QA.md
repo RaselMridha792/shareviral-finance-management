@@ -351,3 +351,37 @@ shifted by a timezone, and the word "Failed" in a row of the audit log.
 That ratio is the honest summary of this pass. The application was right almost
 everywhere it was asked; the instruments were not, and each one had to be taken
 apart before anything could be reported. The harness knows all eight traps now.
+
+---
+
+## The three findings, fixed
+
+**1. Reports opens on the month it is in.** Two places had to change, which is
+why the first fix showed nothing: the page fetched the statement with one year
+and the screen then handed the view `years[1]` and re-fetched last year's month
+over the top of it. Both take `Math.max(...years)` now — an index is only right
+while the order is, and the order of that list is not either file's to know.
+
+Verified on the running page: `fiscalYear=2026&index=2`, August 2026 on screen,
+and the statement's tables carrying 8, 3, 5, 4 and 7 rows where they carried an
+empty-state line.
+
+**2. The tax warning triangle is off.** It marked a line with no stored basis,
+which was every line, and a mark that is on everything marks nothing. The cell
+is still a button, its title still says which kind of figure this is, and the
+drawer still shows the working where there is one — but the sheet no longer
+distinguishes a computed tax from a typed one at a glance. That was the trade
+the request came with.
+
+**3. Net lines up.** Built like the Tax cell beside it rather than as a bare
+`Amount` dropped into the `td` — every other money column places its figure
+through something with its own width and padding, and Net was the exception.
+
+Worth recording how that one ended: two measuring scripts disagreed about
+whether the gap was 24px or nothing, and neither could be talked out of its
+answer. A column whose alignment two instruments dispute is one to build the
+way its neighbours are built, not one to keep arguing about. Both agree now.
+
+**After the fixes**, all twelve screens sweep clean — no console errors, no
+failed requests, no sideways scroll, no misaligned heading — and the four CI
+steps pass.
