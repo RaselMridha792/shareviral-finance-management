@@ -103,3 +103,49 @@ which is the slow part and the part that cannot be skipped.
 
 **Not checked.** The category detail pages (`/expenses/[category]`), the chip
 row of sub-categories, and the add/edit/void forms on any of these screens.
+
+---
+
+## Team, Payroll and TDS — `/team`, `/team/[id]`, `/payroll`, `/payroll/[runId]`, `/tax/withholding`
+
+**Checked.** Five screens through the harness, the salary sheet measured
+column by column, and the payroll data queried behind it.
+
+| | |
+|---|---|
+| Loading | All five render. Team pages at 20 with a pager, payroll runs at 20, the salary sheet shows all 18 lines of the run. |
+| Layout | No sideways scroll on any of the five. |
+| Console / network | Nothing, on any of them. |
+| Column alignment | Measured by where the text actually lands rather than by `text-align`. Five of the salary sheet's six money columns line up exactly; one does not — see below. |
+
+### Findings
+
+**1. The salary sheet's `Net` column sits about 16px left of its heading.**
+Cosmetic, and the only column on the page that does. Its neighbours render an
+`<input class="col-amount">` whose own padding places the figure; `Net` renders
+an `Amount` directly into the cell, so the two end at different distances from
+the column edge. Every other money column on the sheet — Gross, Bonus, Other +,
+Tax, Other − — is exact.
+
+**2. The warning triangle is on every Tax row, and the owner asked for it to
+go.** Section 7.1 of the plan records the request and the reasoning, and the
+mark is still there (`salary-sheet-screen.tsx:752`). It draws when a line has no
+stored `tds_basis`, and **all 468 payroll lines in this database have none** —
+so it is on every row rather than on the exceptional one, which is the opposite
+of what a warning is for. Worth checking on the live site, where the same
+seeder made the runs.
+
+Worth one sentence before it is removed, which the plan also makes: it is the
+only mark distinguishing a tax figure the app worked out from one somebody
+typed. Removing it leaves the drawer as the only way to tell.
+
+**Two more false alarms, both fixed in the harness rather than reported.** An
+empty table draws one cell spanning every column, and counting its cells
+against the headings called every empty screen "five columns short". And the
+alignment check read `text-align` off the `<td>`, which these cells do not use
+— they right-align through an input's padding, a flex row's `justify-end`, or a
+two-line column's `items-end`. It measures the text's own box now, and went
+from six columns flagged to the one that is genuinely out.
+
+**Not checked.** Creating a payroll run, editing a line, finalising or paying;
+the TDS working drawer; the challan panel.
