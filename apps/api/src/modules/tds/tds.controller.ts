@@ -136,8 +136,8 @@ export class TdsController {
    *
    * Under `salary-deductions` rather than beside `deposits/:id`, because that
    * is the record being changed: a payroll line, read on the register. It
-   * writes the number on every taxed row of the month by default — see
-   * `TdsService.setLineChallan` for why.
+   * writes the one row unless `applyToMonth` says otherwise — see
+   * `TdsService.setLineChallan` for why that is the way round it is.
    */
   @Patch("salary-deductions/:id/challan")
   @RequirePermission("tds.write")

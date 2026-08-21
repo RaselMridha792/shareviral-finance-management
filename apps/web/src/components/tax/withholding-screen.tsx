@@ -578,6 +578,22 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             key={editing?.payrollLineId ?? "none"}
             open={Boolean(editing)}
             line={editing}
+            /*
+              Counted from the table already on screen rather than asked of the
+              server: these are the rows the switch would reach, and they are
+              the rows being looked at. That row's own month, not the period the
+              filter named — a quarter's table holds three of them.
+            */
+            othersInMonth={
+              editing
+                ? rows.filter(
+                    (other) =>
+                      other.periodYear === editing.periodYear &&
+                      other.periodMonth === editing.periodMonth &&
+                      other.payrollLineId !== editing.payrollLineId,
+                  ).length
+                : 0
+            }
             onClose={() => setEditing(null)}
             onSaved={async (message) => {
               toast.show(message, "success");

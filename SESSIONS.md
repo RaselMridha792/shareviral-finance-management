@@ -20,6 +20,50 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — The month switch becomes something you ask for
+
+**Done.** The owner recorded a challan on one person on the live site and it landed on everybody
+in July. Nothing was broken: the drawer's **"Everybody taxed in July 2026"** switch shipped
+ticked, so Save wrote the number on all eighteen rows. The default is the thing that was wrong,
+and it is now off.
+
+*The switch is opt-in and says what it would do.* It reads **"Also write it on the other 17 rows
+taxed in July 2026"** — the count comes from the table already on screen, and it is that row's own
+month rather than the period the filter names, so a quarter's table still offers the right
+eighteen. Under it: "Off, this changes Anika Akter and nobody else." It is drawn in its own
+bordered block instead of as a bare line under the number field, because the last version was
+readable and still got past somebody. On a month with one taxed person it is not drawn at all — a
+switch that does nothing invites the reading that leaving it off means something.
+
+*The API default flipped with it.* `applyToMonth` defaults to `false` in
+`setLineChallanSchema`, so a caller that omits the field changes one row. Editing a row is a
+claim about that row; writing one number eighteen times is tedious, and unpicking eighteen wrong
+ones is worse.
+
+Commit: `31a92e0`.
+
+**Watch out.** **July 2026 on the live site is carrying whatever was typed on every row**, from
+before this. Nothing here rewrites it — clearing it is: pencil on any July row, tick "Also write
+it on the other N rows", leave the number empty, Save. That clears the month, and the numbers can
+then go on one at a time.
+
+No schema change, no migration. Three files: `packages/shared/src/tax.ts` (the default),
+`line-challan-form.tsx` (the switch and its new `othersInMonth` prop), `withholding-screen.tsx`
+(counts the rows and passes it). The two API doc comments that described the old default were
+corrected — no behaviour in `tds.service.ts` or `tds.controller.ts` changed.
+
+Measured, through the API and the browser (`.tdsdefault.mjs`, untracked). PATCH with the field
+omitted: **rowsChanged 1**. Drawer opens **unticked**, labelled "the other 17 rows"; typing a
+number and pressing Save touched **1** row and left **17** empty, and the toast named the person
+rather than a count. Ticking it deliberately still reached **18**, and the toast said so. Four CI
+steps run separately, all green (308 tests).
+
+**Open.** The single-taxed-person case — where the switch is not drawn — was not exercised: every
+month in the development database has eighteen taxed rows, so there was nothing honest to point
+at. It is one condition, `othersInMonth > 0`.
+
+---
+
 ## 2026-08-21 — The challan moves onto the person, and the challans table goes
 
 **Done.** The owner's ask on the **TDS** page, and nothing else on it.

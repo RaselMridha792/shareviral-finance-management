@@ -30,6 +30,7 @@ import {
 export function LineChallanForm({
   open,
   line,
+  othersInMonth,
   onClose,
   onSaved,
 }: {
@@ -41,6 +42,15 @@ export function LineChallanForm({
     periodLabel: string;
     challanNumber: string | null;
   } | null;
+  /**
+   * How many other taxed rows that month has, counted from the table already
+   * on screen.
+   *
+   * The switch says what it would reach rather than "the month", because
+   * somebody about to write one number on eighteen rows should be told the
+   * number eighteen before they press Save rather than after.
+   */
+  othersInMonth: number;
   onClose: () => void;
   onSaved: (message: string) => Promise<void> | void;
 }) {
@@ -49,12 +59,15 @@ export function LineChallanForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   /**
-   * On by default, because that is what a bank actually does: one A-Challan
-   * settles the tax withheld from everybody that month. Off, this writes the
-   * number on one person — which is the right answer when somebody's tax went
-   * in on its own, and the wrong one twenty-four times otherwise.
+   * Off unless somebody asks for it.
+   *
+   * One A-Challan does usually settle a whole month, and this shipped ticked
+   * for that reason — so a number typed against one person landed on
+   * twenty-four others before anybody had read the switch. The pencil is
+   * pressed on a row, so a row is what it changes; reaching the rest of the
+   * month is now something somebody says out loud.
    */
-  const [applyToMonth, setApplyToMonth] = useState(true);
+  const [applyToMonth, setApplyToMonth] = useState(false);
 
   const [scan, setScan] = useState<StoredFile | null>(null);
   const [chosen, setChosen] = useState<File | null>(null);
@@ -171,21 +184,33 @@ export function LineChallanForm({
           />
         </Field>
 
-        <label className="flex items-start gap-2.5 text-sm">
-          <input
-            type="checkbox"
-            checked={applyToMonth}
-            onChange={(event) => setApplyToMonth(event.target.checked)}
-            className="mt-0.5 size-4 accent-primary"
-          />
-          <span>
-            Everybody taxed in {line?.periodLabel ?? "this month"}
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              One challan usually covers the whole month. Untick it to write
-              this number on {line?.fullName ?? "this person"} alone.
+        {/*
+          Drawn only when there is somebody else to reach. On a month with one
+          taxed person it would be a switch that does nothing, which is worse
+          than no switch: it invites the reading that leaving it off means
+          something.
+        */}
+        {othersInMonth > 0 ? (
+          <label className="flex items-start gap-2.5 rounded-lg border border-border bg-surface-muted/40 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={applyToMonth}
+              onChange={(event) => setApplyToMonth(event.target.checked)}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>
+              Also write it on the other{" "}
+              <span className="num font-medium">{othersInMonth}</span>{" "}
+              {othersInMonth === 1 ? "row" : "rows"} taxed in{" "}
+              {line?.periodLabel ?? "this month"}
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Off, this changes {line?.fullName ?? "this person"} and nobody
+                else. One A-Challan usually covers a whole month, so tick it
+                when this number settled everybody’s tax that month.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        ) : null}
 
         {/* --- the scan ------------------------------------------------- */}
         <Field

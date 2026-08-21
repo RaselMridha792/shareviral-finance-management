@@ -494,16 +494,19 @@ export class TdsService {
   }
 
   /**
-   * Write a challan number onto a salary row — and, by default, onto every
-   * other taxed row of the same month.
+   * Write a challan number onto a salary row, and onto the rest of that month
+   * only when the caller says so.
    *
-   * The default is what actually happens at a bank: one A-Challan settles the
-   * tax withheld from everybody that month, so row-by-row would be the same
-   * number typed twenty-five times with one of them wrong.
+   * `applyToMonth` shipped defaulting to on, because one A-Challan does settle
+   * a whole month at the bank — and a number typed against one person then
+   * landed on seventeen others before anybody read the switch. Editing a row
+   * is a claim about that row, so the wide behaviour is asked for rather than
+   * assumed: writing one number eighteen times is tedious, unpicking eighteen
+   * wrong ones is worse.
    *
-   * A line at zero is left alone. It deposited nothing, and a challan number
-   * against it would claim something was paid for somebody who owed nothing —
-   * which is also why the register does not list them.
+   * A line at zero is left alone either way. It deposited nothing, and a
+   * challan number against it would claim something was paid for somebody who
+   * owed nothing — which is also why the register does not list them.
    */
   async setLineChallan(
     payrollLineId: string,

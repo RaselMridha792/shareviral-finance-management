@@ -213,13 +213,17 @@ export const setLineChallanSchema = z.strictObject({
    */
   challanNumber: z.string().trim().max(60),
   /**
-   * Write it on every line of the same payroll month, not only this one.
+   * Write it on every taxed line of the same payroll month, not only this one.
    *
-   * On by default because that is what actually happens: one A-Challan settles
-   * the tax withheld from everybody that month, so the alternative is typing
-   * the same number twenty-five times.
+   * **Off unless asked for.** One A-Challan does usually settle a whole
+   * month, and this shipped defaulting to on for that reason — which meant a
+   * number typed against one person landed on twenty-four others before
+   * anybody read the switch. Editing one row is a claim about that row, and a
+   * default that quietly widens it is the wrong side to be wrong on: writing
+   * one number twenty-five times is tedious, while unpicking twenty-five
+   * wrong ones is worse.
    */
-  applyToMonth: z.boolean().default(true),
+  applyToMonth: z.boolean().default(false),
 });
 export type SetLineChallanInput = z.infer<typeof setLineChallanSchema>;
 
