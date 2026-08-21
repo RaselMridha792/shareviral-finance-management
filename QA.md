@@ -201,3 +201,60 @@ reported a mismatch the page did not have. Dates are read as text from SQL now.
 arithmetic was not verified, only that the page renders and the period it opens
 on is wrong. The assistant's chat, the export downloads from the Export tab
 (those were checked when the tab was built), and every settings panel.
+
+---
+
+## Roles, and the write path
+
+### Every role against every gated route
+
+Checked against `ROLE_PERMISSION_SETS` rather than against an opinion — the
+expectation is computed from the matrix both the sidebar and the API read, and
+compared with where each role actually lands.
+
+**13 routes × 5 roles = 65 combinations, all correct.** No role reaches a screen
+it has no permission for, and none is refused one it does have. The second
+matters as much as the first: a screen somebody cannot do their job on is not
+filed as a bug, it is quietly worked around.
+
+### CFO — the role nothing had ever exercised
+
+`cfo` exists in the matrix and no user on this system has it, so "copied the
+admin row" had been true only in the sense that nobody had looked. Exercised on
+a token carrying the claim — the proxy and the API both read the claim, so this
+needs no account invented on a live system. **All 9 gated routes behave as the
+matrix says.**
+
+### HR must not read salary — and does not
+
+Route gating says nothing about this: HR is *allowed* on Team and Payroll, and
+the filtering happens further down in the service's projection. Read both pages
+as HR and looked for the three highest gross figures in the payroll. **Neither
+page carries any of them.**
+
+### The write path, measured in the ledger
+
+Create, edit, void — asking the database what the account is worth after each
+step, against an exact expected movement.
+
+| step | expected | moved |
+|---|---|---|
+| create ৳1,234.56 out | −1,234.56 | −1,234.56 |
+| edit to ৳2,000.00 | −765.44 | −765.44 |
+| void it | +2,000.00 | +2,000.00 |
+| net against the start | 0.00 | 0.00 |
+
+The audit trail carries `create, update, void`. The probe row was removed and
+the account returned to exactly where it began.
+
+The void is the step worth having. A void that leaves the money in the total is
+the same fault in reverse, and both look plausible on screen — the row is struck
+through either way, and only the arithmetic tells them apart.
+
+**Findings: none.**
+
+**Not checked.** Writes through the forms themselves rather than the API — the
+form is the same one on five screens, and whether its fields reach the endpoint
+correctly is a separate question from whether the endpoint is right. Payroll
+finalise and pay, which move money for a whole run. Creating an account, a team
+member or a subscription.
