@@ -14,6 +14,7 @@ import {
   and,
   asc,
   count,
+  desc,
   eq,
   ilike,
   inArray,
@@ -112,14 +113,21 @@ export class SubscriptionsService {
       .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(where)
-      // Renewal first, because the question this screen answers most often is
-      // "what is about to bill". Nulls last: a row with no date is one nobody
-      // can act on, and it should not sit at the top of the list.
-      .orderBy(
-        sql`${subscriptions.nextRenewalOn} asc nulls last`,
-        sql`${this.toolNameSql()} asc`,
-        asc(subscriptions.planName),
-      )
+      /*
+       * Newest first, on the owner's instruction: something just bought is at
+       * the top, where somebody who has just added it looks for it.
+       *
+       * This used to lead with the next renewal date, on the reasoning that
+       * "what is about to bill" is the commonest question. It is not the
+       * commonest *action* — adding a plan is — and a row that lands in the
+       * middle of page one, sorted by a date the person adding it has not
+       * thought about yet, reads as not having saved.
+       *
+       * `id` breaks the tie so the order is total. Two plans added in the same
+       * second would otherwise swap places between page loads, which is how a
+       * pager starts showing the same row twice.
+       */
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
@@ -186,13 +194,9 @@ export class SubscriptionsService {
           isNull(subscriptions.deletedAt),
         ),
       )
-      // Renewal first, as on the subscriptions screen. Two tables showing the
+      // Newest first, as on the subscriptions screen. Two tables showing the
       // same rows in two orders is two tables somebody has to read twice.
-      .orderBy(
-        sql`${subscriptions.nextRenewalOn} asc nulls last`,
-        sql`${this.toolNameSql()} asc`,
-        asc(subscriptions.planName),
-      );
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id));
 
     // The other people on each plan. A shared plan's cost is the whole plan's,
     // and knowing thirteen names are on it is what stops somebody reading that
