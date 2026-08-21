@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AccountsModule } from "../accounts/accounts.module";
+import { FilesModule } from "../files/files.module";
 import { IncomeTaxModule } from "../income-tax/income-tax.module";
 import { PayrollModule } from "../payroll/payroll.module";
 import { ReportsModule } from "../reports/reports.module";
@@ -26,6 +27,9 @@ import { PdfService } from "./pdf.service";
     PayrollModule,
     TeamMembersModule,
     VendorsModule,
+    // The statement's closing page draws each signatory's scan, so this one
+    // export reads bytes as well as figures.
+    FilesModule,
   ],
   controllers: [ExportsController],
   providers: [ExcelService, PdfService],

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import {
   currentFiscalYear,
   formatMoney,
@@ -26,11 +26,13 @@ import { DbService } from "../../db/db.service";
 import {
   accounts,
   categories,
+  files,
   payrollLines,
   statements,
   transactions,
   type Statement,
 } from "../../db/schema";
+import { FilesService } from "../files/files.service";
 import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
@@ -88,6 +90,8 @@ type Entry = {
  */
 @Injectable()
 export class StatementService {
+  private readonly logger = new Logger(StatementService.name);
+
   constructor(
     private readonly db: DbService,
     private readonly settings: SettingsService,
@@ -95,6 +99,10 @@ export class StatementService {
     private readonly transactionsService: TransactionsService,
     private readonly audit: AuditService,
     private readonly tds: TdsService,
+    // Only for the signature block: attaching one is the reports controller's
+    // job, and clearing away the ones nobody points at any more is this
+    // service's, because it is the save that decides which those are.
+    private readonly files: FilesService,
   ) {}
 
   /* ---------------------------------------------------------------------- */
@@ -231,7 +239,14 @@ export class StatementService {
             payroll: payrollDetail,
             format,
           }),
-      signatories: saved?.signatories ?? [],
+      // Normalised on the way out: a row saved before signatures existed has
+      // a name and a title and no third key, and the screen and the PDF both
+      // read `signatureFileId` rather than testing for its absence.
+      signatories: (saved?.signatories ?? []).map((person) => ({
+        name: person.name,
+        title: person.title,
+        signatureFileId: person.signatureFileId ?? null,
+      })),
       generatedOn: new Date().toISOString(),
     };
   }
@@ -273,7 +288,15 @@ export class StatementService {
         : {}),
     };
 
-    return this.audit.mutate({
+    if (input.signatories?.length) {
+      await this.assertSignaturesBelongHere(
+        input.periodStart,
+        input.periodEnd,
+        input.signatories,
+      );
+    }
+
+    const saved = await this.audit.mutate({
       action: "update",
       entityTable: "statements",
       module: "reports",
@@ -307,6 +330,149 @@ export class StatementService {
         return updated;
       },
     });
+
+    // Whatever nobody points at any more goes with the save, not one day when
+    // somebody runs a sweep. The screen deletes a signature it replaces, but
+    // uploading one and then leaving the page without saving would otherwise
+    // leave a file owned by this statement that no signatory names.
+    if (input.signatories !== undefined) {
+      await this.dropUnusedSignatures(saved.id, input.signatories, actor);
+    }
+
+    return saved;
+  }
+
+  /**
+   * Signatures on this statement that no signatory names.
+   *
+   * Through `FilesService.remove`, not a direct update: that is what soft-
+   * deletes the row, takes the bytes off the disk and writes the audit line,
+   * and doing two of those three by hand here is how a file comes to be
+   * unreachable and still on the server.
+   *
+   * Failures are logged rather than thrown. The statement is already saved by
+   * the time this runs, and turning a successful save into an error because a
+   * file that nothing references could not be tidied away would be the wrong
+   * thing to tell somebody.
+   */
+  private async dropUnusedSignatures(
+    statementId: string,
+    signatories: ReadonlyArray<{ signatureFileId?: string | null }>,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    const kept = new Set(
+      signatories
+        .map((person) => person.signatureFileId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    const held = await this.db.client
+      .select({ id: files.id })
+      .from(files)
+      .where(
+        and(
+          eq(files.statementId, statementId),
+          eq(files.kind, "statement_signature"),
+          isNull(files.deletedAt),
+        ),
+      );
+
+    for (const row of held) {
+      if (kept.has(row.id)) continue;
+      try {
+        await this.files.remove(row.id, actor);
+      } catch (error) {
+        this.logger.warn(
+          `Could not remove unused signature ${row.id}: ${String(error)}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * A signature id on a signatory has to be a signature on *this* statement.
+   *
+   * Refused rather than quietly nulled. A half-filled signatory row is dropped
+   * on the way in, because a blank line is somebody who has not finished
+   * typing; an id that names a file belonging to another period is not a typo,
+   * it is a request nobody could have made from the screen, and blanking it
+   * would save a signature block that silently lost a signature.
+   */
+  private async assertSignaturesBelongHere(
+    periodStart: string,
+    periodEnd: string,
+    signatories: ReadonlyArray<{ signatureFileId?: string | null }>,
+  ): Promise<void> {
+    const wanted = [
+      ...new Set(
+        signatories
+          .map((person) => person.signatureFileId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (wanted.length === 0) return;
+
+    const rows = await this.db.client
+      .select({ id: files.id })
+      .from(files)
+      .innerJoin(statements, eq(statements.id, files.statementId))
+      .where(
+        and(
+          inArray(files.id, wanted),
+          eq(files.kind, "statement_signature"),
+          isNull(files.deletedAt),
+          eq(statements.periodStart, periodStart),
+          eq(statements.periodEnd, periodEnd),
+        ),
+      );
+
+    if (rows.length !== wanted.length) {
+      throw new BadRequestException(
+        "One of these signatures is not a signature on this statement",
+      );
+    }
+  }
+
+  /**
+   * The row for a period, created empty if there is not one yet.
+   *
+   * A signature image has to hang on something, and the thing it hangs on is
+   * this row — which may not exist, because a statement is computed from the
+   * ledger and only gets a row once somebody edits it. So the upload creates
+   * it rather than refusing, and the person uploading is not asked to press
+   * Save first to make a record they cannot see appear.
+   *
+   * Nothing is written but the period itself. The defaults — draft, no notes,
+   * no signatories — are what `build` already reports for a period with no row
+   * at all, so this changes nothing anybody can read.
+   */
+  async ensureRow(periodStart: string, periodEnd: string): Promise<Statement> {
+    const period = and(
+      eq(statements.periodStart, periodStart),
+      eq(statements.periodEnd, periodEnd),
+    );
+
+    const [existing] = await this.db.client
+      .select()
+      .from(statements)
+      .where(period)
+      .limit(1);
+    if (existing) return existing;
+
+    const [created] = await this.db.client
+      .insert(statements)
+      .values({ periodStart, periodEnd })
+      .onConflictDoNothing()
+      .returning();
+    if (created) return created;
+
+    // Lost the race to a concurrent upload. The row is there now.
+    const [row] = await this.db.client
+      .select()
+      .from(statements)
+      .where(period)
+      .limit(1);
+    return row;
   }
 
   /* ---------------------------------------------------------------------- */

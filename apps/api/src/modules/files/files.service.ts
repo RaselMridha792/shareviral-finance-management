@@ -1,5 +1,6 @@
 import {
   ALLOWED_MIME_TYPES,
+  checkPrintableSignature,
   checkSignatureImage,
   readImageSize,
   COMPENSATION_FILE_KINDS,
@@ -9,6 +10,7 @@ import {
   KINDS_BY_OWNER,
   MAX_FILE_BYTES,
   safeDisplayName,
+  SIGNATURE_KINDS,
   type FileDto,
   type FileKind,
   type FileOwner,
@@ -87,6 +89,11 @@ const OWNER_PERMISSIONS: Record<
   // that screen — `payroll.read` guards the payslip, which is a different
   // document answering a different question.
   payroll_line: { read: "tds.read", write: "tds.write" },
+  // The statement's own pair, exactly as `ReportsController` gates the page:
+  // `reports.view` to read it, `transactions.write` to change it. Whoever may
+  // reconcile a period may say who signed it and attach their hand; whoever
+  // may read the statement may see the signature printed on it.
+  statement: { read: "reports.view", write: "transactions.write" },
 };
 
 @Injectable()
@@ -131,6 +138,7 @@ export class FilesService {
     if (row.tdsDepositId) return { owner: "tds_deposit", id: row.tdsDepositId };
     if (row.payrollLineId)
       return { owner: "payroll_line", id: row.payrollLineId };
+    if (row.statementId) return { owner: "statement", id: row.statementId };
     // The table has a check constraint making this unreachable. If it is ever
     // reached, refusing is the only safe reading of a file owned by nothing.
     throw new NotFoundException("This file is not attached to anything");
@@ -199,6 +207,7 @@ export class FilesService {
       settings: files.settingsId,
       tds_deposit: files.tdsDepositId,
       payroll_line: files.payrollLineId,
+      statement: files.statementId,
     } satisfies Record<FileOwner, unknown>;
     return columns[owner];
   }
@@ -259,6 +268,44 @@ export class FilesService {
     }
 
     return { row, stream: this.storage.stream(row.storageKey) };
+  }
+
+  /**
+   * The bytes themselves, for a document that *embeds* a file rather than
+   * serving it.
+   *
+   * The statement PDF draws each signatory's mark onto the closing page, so it
+   * needs the image in hand rather than a URL a reader's browser would fetch —
+   * a PDF is a single file that has to work on a laptop with no session.
+   *
+   * Null rather than an exception at every step where the answer is "there is
+   * no usable image here": the file was removed, the actor may not read it, or
+   * the row survived a restore that missed the disk. None of those is a reason
+   * to fail the whole export — the page prints a ruled line with a name over
+   * it, exactly as it did before signatures existed.
+   */
+  async bytes(id: string, actor: AuthenticatedUser): Promise<Buffer | null> {
+    const [row] = await this.db.client
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), isNull(files.deletedAt)))
+      .limit(1);
+
+    if (!row) return null;
+    try {
+      this.assertAccess(row, actor, "read");
+    } catch {
+      return null;
+    }
+
+    try {
+      return await this.storage.read(row.storageKey);
+    } catch (error) {
+      this.logger.warn(
+        `File ${id} is recorded but could not be read: ${String(error)}`,
+      );
+      return null;
+    }
   }
 
   /* ---------------------------------------------------------------------- */
@@ -325,8 +372,13 @@ export class FilesService {
      * words on screen and this refusal cannot say different things — and the
      * dimensions come from the bytes rather than from anything the browser
      * claimed, because the browser is where the first check already ran.
+     *
+     * Both signature kinds go through it. The statement's closing page prints
+     * a signatory's mark the same way a payslip prints the company's, and a
+     * rule that held in one place and not the other would be found by whoever
+     * uploaded a 2 MB photograph of a whiteboard.
      */
-    if (kind === "signature") {
+    if (SIGNATURE_KINDS.includes(kind)) {
       const size = readImageSize(upload.buffer);
       const verdict = size
         ? checkSignatureImage({
@@ -340,6 +392,18 @@ export class FilesService {
           } as const);
 
       if (!verdict.ok) throw new BadRequestException(verdict.reason);
+
+      /*
+       * And one more, for the mark that ends up inside a PDF rather than
+       * inside a web page. An interlaced PNG or a progressive JPEG opens fine
+       * everywhere a person would check it and cannot be embedded in the
+       * statement at all — which would surface a month later as an empty
+       * signature box on the one document that leaves the company.
+       */
+      if (kind === "statement_signature") {
+        const printable = checkPrintableSignature(upload.buffer);
+        if (!printable.ok) throw new BadRequestException(printable.reason);
+      }
     }
 
     const stored = await this.storage.write(upload.buffer, mimeType);
@@ -400,6 +464,7 @@ export class FilesService {
               subscriptionId: owner === "subscription" ? ownerId : null,
               tdsDepositId: owner === "tds_deposit" ? ownerId : null,
               payrollLineId: owner === "payroll_line" ? ownerId : null,
+              statementId: owner === "statement" ? ownerId : null,
               // The one owner keyed by a number rather than a uuid.
               settingsId: owner === "settings" ? Number(ownerId) : null,
               uploadedBy: actor.id,

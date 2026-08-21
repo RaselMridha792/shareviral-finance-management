@@ -40,6 +40,7 @@ import {
   type BankStatsQuery,
   type CurrencyView,
   type ExportSubscriptionsQuery,
+  type FinancialStatement,
   type FiscalYearQuery,
   type FundingQuery,
   type ListDepositsQuery,
@@ -63,6 +64,7 @@ import {
 } from "../../common/decorators/auth.decorators";
 import { ZodQuery } from "../../common/pipes/zod-validation.pipe";
 import { AccountsService } from "../accounts/accounts.service";
+import { FilesService } from "../files/files.service";
 import {
   TransactionsService,
   type TransactionDto,
@@ -116,6 +118,9 @@ export class ExportsController {
     private readonly reports: ReportsService,
     private readonly statement: StatementService,
     private readonly vendors: VendorsService,
+    // Only the statement uses this, and only to read a signatory's scan into
+    // the closing page. Every other export writes figures.
+    private readonly files: FilesService,
   ) {}
 
   /**
@@ -137,6 +142,7 @@ export class ExportsController {
   async statementPdf(
     @ZodQuery(statementQuerySchema) query: StatementQuery,
     @Res({ passthrough: true }) response: Response,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
     const [statement, settings] = await Promise.all([
       this.statement.build(query),
@@ -147,6 +153,7 @@ export class ExportsController {
       buildStatementReport(statement, {
         numberFormat: settings.numberFormat,
         generatedOn: todayInDhaka(),
+        signatures: await this.signaturesFor(statement, actor),
       }),
     );
 
@@ -166,6 +173,42 @@ export class ExportsController {
       response,
       buffer,
       `statement-${statement.period.start}-to-${statement.period.end}.pdf`,
+    );
+  }
+
+  /**
+   * The signatories' scanned hands, read once and handed to the layout.
+   *
+   * Fetched here rather than inside `buildStatementReport` on purpose: that
+   * function turns a statement into a document and touches nothing else, which
+   * is what lets the closing page be laid out from a fixture. Reading the disk
+   * is this controller's job.
+   *
+   * `FilesService.bytes` answers null for anything unreadable — a removed
+   * file, a row whose bytes went missing in a restore — so a missing scan
+   * costs that box its ink and nothing else. Distinct ids only: four
+   * signatories are usually two people signing twice a year, and this is the
+   * one place the same file could be read four times.
+   */
+  private async signaturesFor(
+    statement: FinancialStatement,
+    actor: AuthenticatedUser,
+  ): Promise<Map<string, Buffer>> {
+    const ids = [
+      ...new Set(
+        statement.signatories
+          .map((person) => person.signatureFileId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (ids.length === 0) return new Map();
+
+    const loaded = await Promise.all(
+      ids.map(async (id) => [id, await this.files.bytes(id, actor)] as const),
+    );
+
+    return new Map(
+      loaded.filter((pair): pair is [string, Buffer] => pair[1] !== null),
     );
   }
 

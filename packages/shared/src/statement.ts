@@ -133,6 +133,16 @@ export type AccountLedger = {
 export type StatementSignatory = {
   name: string;
   title: string;
+  /**
+   * The scan of this person's own hand, or null.
+   *
+   * A file id rather than the bytes: the image is stored like every other
+   * document in this app, owned by the statement it was signed for, and read
+   * back through `/files/:id/content`. Null is the ordinary state — a name and
+   * a title over a ruled line is still a signature block, and it is what the
+   * page printed before this existed.
+   */
+  signatureFileId: string | null;
 };
 
 export type FinancialStatement = {
@@ -189,6 +199,12 @@ export const saveStatementSchema = z.strictObject({
       z.strictObject({
         name: z.string().trim().min(2).max(80),
         title: z.string().trim().min(2).max(120),
+        /**
+         * Optional on the way in and null on the way out. A statement saved
+         * before the upload field existed sends no such key, and defaulting it
+         * to null rather than refusing the row means an old draft still saves.
+         */
+        signatureFileId: z.string().uuid().nullish().default(null),
       }),
     )
     .max(4)

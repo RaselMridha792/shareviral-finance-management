@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { CategoryDonut } from "@/components/charts/category-donut";
+import { SignatoryFields } from "@/components/reports/signatory-fields";
 import { WaterfallChart } from "@/components/charts/waterfall-chart";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
@@ -1019,84 +1020,12 @@ export function StatementView({
             </label>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-border pt-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold">Signed by</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                type="button"
-                disabled={sample || signatories.length >= 4}
-                onClick={() =>
-                  editSignatories((current) => [
-                    ...current,
-                    { name: "", title: "" },
-                  ])
-                }
-              >
-                <Plus className="size-4" />
-                Add
-              </Button>
-            </div>
-
-            {signatories.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nobody has signed this statement.
-              </p>
-            ) : null}
-
-            {signatories.map((person, i) => (
-              <div key={i} className="flex flex-wrap items-start gap-2">
-                <Input
-                  aria-label={`Signatory ${i + 1} name`}
-                  placeholder="Name"
-                  className="min-w-40 flex-1"
-                  value={person.name}
-                  disabled={sample}
-                  onChange={(event) =>
-                    editSignatories((current) =>
-                      current.map((existing, at) =>
-                        at === i
-                          ? { ...existing, name: event.target.value }
-                          : existing,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  aria-label={`Signatory ${i + 1} title`}
-                  placeholder="Title"
-                  className="min-w-40 flex-1"
-                  value={person.title}
-                  disabled={sample}
-                  onChange={(event) =>
-                    editSignatories((current) =>
-                      current.map((existing, at) =>
-                        at === i
-                          ? { ...existing, title: event.target.value }
-                          : existing,
-                      ),
-                    )
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="md"
-                  type="button"
-                  aria-label={`Remove signatory ${i + 1}`}
-                  disabled={sample}
-                  className="shrink-0"
-                  onClick={() =>
-                    editSignatories((current) =>
-                      current.filter((_, at) => at !== i),
-                    )
-                  }
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+          <SignatoryFields
+            signatories={signatories}
+            onChange={editSignatories}
+            period={{ start: period.start, end: period.end }}
+            disabled={sample}
+          />
 
           {saveError ? (
             <p
@@ -1482,8 +1411,18 @@ const SAMPLE: FinancialStatement = {
   ],
 
   signatories: [
-    { name: "Mirza Ashiqul Islam", title: "Managing Director" },
-    { name: "Farhana Rahman", title: "Head of Finance" },
+    // No signature ids: the sample is invented figures, and pointing at a real
+    // file would put a real person's hand under them.
+    {
+      name: "Mirza Ashiqul Islam",
+      title: "Managing Director",
+      signatureFileId: null,
+    },
+    {
+      name: "Farhana Rahman",
+      title: "Head of Finance",
+      signatureFileId: null,
+    },
   ],
 
   generatedOn: "2026-08-12",

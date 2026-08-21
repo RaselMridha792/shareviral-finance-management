@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   SIGNATURE_MAX_BYTES,
   SIGNATURE_RULE,
+  checkPrintableSignature,
   checkSignatureImage,
   readImageSize,
 } from "./files.ts";
@@ -164,6 +165,84 @@ describe("checkSignatureImage", () => {
     assert.match(
       SIGNATURE_RULE,
       new RegExp(String(Math.round(SIGNATURE_MAX_BYTES / 1024))),
+    );
+  });
+});
+
+/**
+ * The statement's signature ends up inside a PDF rather than inside a web
+ * page, and two perfectly ordinary encodings cannot go there: an interlaced
+ * PNG and a progressive JPEG. Both open fine in every browser somebody would
+ * check them in, which is exactly why the refusal has to happen at the door —
+ * the alternative is an empty signature box on the document that leaves the
+ * company, found a month later by whoever it was sent to.
+ */
+describe("checkPrintableSignature", () => {
+  /** A PNG header with the interlace byte written where a decoder looks. */
+  function pngWith(interlace: number): Uint8Array {
+    const bytes = new Uint8Array(29);
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+    bytes.set([0, 0, 0, 13], 8);
+    bytes.set([73, 72, 68, 82], 12); // "IHDR"
+    new DataView(bytes.buffer).setUint32(16, 600);
+    new DataView(bytes.buffer).setUint32(20, 200);
+    bytes[24] = 8; // bit depth
+    bytes[25] = 6; // colour type: RGBA
+    bytes[26] = 0; // compression
+    bytes[27] = 0; // filter
+    bytes[28] = interlace;
+    return bytes;
+  }
+
+  /** A JPEG carrying one start-of-frame marker of the given kind. */
+  function jpegWith(marker: number): Uint8Array {
+    return new Uint8Array([
+      0xff, 0xd8, // SOI
+      0xff, marker, 0x00, 0x11, // the frame, and its length
+      0x08, 0x00, 0xc8, 0x02, 0x58, // precision, height 200, width 600
+      0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+    ]);
+  }
+
+  it("passes a plain PNG", () => {
+    assert.equal(checkPrintableSignature(pngWith(0)).ok, true);
+  });
+
+  it("refuses an interlaced PNG, and says how to fix it", () => {
+    const verdict = checkPrintableSignature(pngWith(1));
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.ok ? "" : verdict.reason, /interlaced/i);
+    assert.match(verdict.ok ? "" : verdict.reason, /re-save/i);
+  });
+
+  it("passes a baseline JPEG", () => {
+    assert.equal(checkPrintableSignature(jpegWith(0xc0)).ok, true);
+  });
+
+  /** Extended sequential is what a PDF's DCTDecode reads as well. */
+  it("passes an extended sequential JPEG", () => {
+    assert.equal(checkPrintableSignature(jpegWith(0xc1)).ok, true);
+  });
+
+  it("refuses a progressive JPEG", () => {
+    const verdict = checkPrintableSignature(jpegWith(0xc2));
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.ok ? "" : verdict.reason, /progressive/i);
+  });
+
+  /**
+   * Anything that is not a PNG or a JPEG has already been refused by
+   * `checkSignatureImage`, which can name the problem. A second refusal here
+   * would only ever fire on a file that never reaches it.
+   */
+  it("leaves a file it cannot read to the rule that can name it", () => {
+    assert.equal(checkPrintableSignature(new Uint8Array([1, 2, 3])).ok, true);
+  });
+
+  it("does not spin on a truncated JPEG", () => {
+    assert.equal(
+      checkPrintableSignature(new Uint8Array([0xff, 0xd8, 0xff])).ok,
+      true,
     );
   });
 });

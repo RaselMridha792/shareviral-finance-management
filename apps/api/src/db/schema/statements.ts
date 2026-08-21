@@ -15,8 +15,20 @@ import {
 
 import { entityKey } from "./shared-columns";
 
-/** Who signs the page off. Stored as written, not resolved against `users`. */
-export type StatementSignatoryRow = { name: string; title: string };
+/**
+ * Who signs the page off. Stored as written, not resolved against `users`.
+ *
+ * `signatureFileId` points at a `files` row of kind `statement_signature`
+ * owned by this same statement. A file id rather than the bytes, and inside
+ * the jsonb rather than in a column, because the number of signatories is 0–4
+ * and a column per signatory is a table nobody wants to migrate the day
+ * somebody asks for a fifth.
+ */
+export type StatementSignatoryRow = {
+  name: string;
+  title: string;
+  signatureFileId?: string | null;
+};
 
 /**
  * The parts of the monthly financial statement a ledger cannot derive.

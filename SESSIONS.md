@@ -20,6 +20,100 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — The statement's signature block gets the signature
+
+**Done.** The owner's ask on **Reports**, and nothing else on it. "Signed by" held a name and a
+title, and the PDF's closing page drew a ruled line with nothing above it. Each signatory now
+carries their own scanned mark, and the closing page prints it — laid out as a grid rather than
+as the two boxes it used to be.
+
+*On screen, the block is the document.* Two cards across, up to four, each holding the name, the
+title and the signature on a white plate — the same slip of paper the PDF draws under the ink,
+because a black scan on this app's dark card is invisible and reads as a failed upload. A
+signatory with no mark says so in words: "No signature. The PDF prints a ruled line with the name
+under it." The rule for what may be uploaded is printed under the block *before* a file is
+chosen, not only after one is refused.
+
+*In the PDF, up to four in a 2×2 grid.* The rule sits at the same height in every box whether or
+not there is a mark above it — that is what makes the block read as a grid rather than as boxes
+that closed up around what was missing. Three fills three cells and leaves the fourth empty.
+
+*Four refusals, all measured through the real endpoint.* Not a PNG or JPEG; over 300 KB; under
+300px wide; outside 1.5:1–8:1. And a fifth that is new: **an interlaced PNG or a progressive
+JPEG is refused at the door**, because both open perfectly in any browser somebody would check
+them in and neither can be embedded in a PDF at all — the failure would otherwise surface a month
+later as an empty signature box on the document being sent out. `checkPrintableSignature` in
+`packages/shared/src/files.ts`, with seven tests. It applies to the statement's kind only: the
+payslip's `signature` is drawn by a browser, which is happy with both, and newly refusing a file
+that has been printing correctly for months would be a bug rather than a check.
+
+Commits: `291080b` (the migration, pushed alone and first), then this one.
+
+**Watch out.**
+
+- **The migration travels alone and had to land first.** `deploy/sql/2026-08-21-who-signs.sql`
+  adds `files.statement_id` and the `statement_signature` file kind. Drizzle names every column
+  in its SELECT, so the code without it kills every document list and every upload. Applied
+  locally with a one-file runner and run twice; the kind, the column, the index and the
+  constraint are all present and the file already stored stayed readable.
+- **It is named "who-signs" so it sorts last.** `files_one_owner` is replaced for the fifth time,
+  and replaying this directory alphabetically must not put a shorter rule back on top of a longer
+  one. Every existing name sorts below "who". That is also why a migration about signatures is
+  not called "signature".
+- **The signature hangs on the statement, not on settings.** A settings file is written by
+  `settings.write`, which only super_admin holds, and the people who reconcile a statement are
+  Finance. A statement-owned file follows the statement's own pair — `reports.view` to read,
+  `transactions.write` to change — which is exactly who may edit the page it appears on. The kind
+  is deliberately **not** singular: four signatories need four marks.
+- **Shared code was touched**, additively: `packages/shared/src/files.ts` gains a kind, an owner
+  and `checkPrintableSignature`; `statement.ts` gains `signatureFileId` on a signatory. No
+  existing screen's behaviour changes — the records keyed by file kind simply gained an entry,
+  which the compiler required everywhere. `apps/api` gains `FilesService.bytes` and
+  `StorageService.read`, both for the one caller that has to *embed* a file rather than serve it.
+- **A save now prunes the signatures nobody points at.** Uploading one and leaving the page
+  without saving used to leave a file owned by the statement that no signatory named. Measured:
+  three uploads then a save naming one left **1 live row and eleven files off the disk**, and the
+  one the statement named survived.
+- **`node .sql.mjs` cannot replay this directory any more**, and has not been able to since
+  `2026-08-20-subscriptions.sql` — that file re-adds the five-column `files_one_owner`, which
+  rows created since then violate. It aborts there and every file after it is skipped. The deploy
+  is unaffected: it records each file in `schema_migrations` and runs it once. Apply a single new
+  file with `.apply1.mjs` instead.
+- **The development database carries test signatories** on August 2025 and August 2026 —
+  "Mirza Ashiqul Islam", "Farhana Rahman" and two more, with synthetic scrawls. Local only; the
+  live database has none of it. `.sigclean.mjs` clears the company signature if a probe leaves
+  one behind.
+
+**Measured, not read off the diff.** The layout bug this found was invisible in the source: at
+the old box height the second row of four signatures ran **9.8pt into the big figures** anchored
+at the foot of the closing page. `.pdfgeom.mjs` inflates the PDF's content streams and reads the
+drawing operators back out; `.siggrid.mjs` walks one, two, three and four signatories and reports
+where each grid lands. After the fix: one row at 422.3→534.3, two rows at 412.3 and 532.3 ending
+644.3, against figures that start at 659.9 — **clear by 15.6pt**, with the rules level across
+each row even when one signatory in it has no mark.
+
+`.pdfink.mjs` answers the question the geometry cannot: it inflates each embedded image, undoes
+the PNG row filters and counts dark pixels — **four images, 720×180, 2.8% ink each**. That check
+earned itself: the first fixture wrote an invalid filter byte on every scanline, producing a PNG
+that decoded to the right size and drew as a blank white plate on screen and in the PDF. Without
+counting pixels it would have passed as "the image is there".
+
+Four CI steps run separately, all green (315 tests). The screen was loaded at 1440, 640 and
+390px: no overflow at any of them, three signatures loading at 720×180, the fourth showing its
+empty state.
+
+**Open.**
+
+- **Nothing carries a signature forward between periods.** Every month's statement wants its own
+  upload, even when the same two people sign every month. That is deliberate for now — this
+  screen's own note says carrying a sign-off across periods "would silently attach one period's
+  sign-off to another's figures" — but if the owner finds re-uploading tedious, a "reuse last
+  period's" control is where to start.
+- The screen still offers Save to any role that can open Reports, and a read-only role gets a 403
+  from the button. That was true before this work and is not changed by it.
+
+---
+
 ## 2026-08-21 — The month switch becomes something you ask for
 
 **Done.** The owner recorded a challan on one person on the live site and it landed on everybody

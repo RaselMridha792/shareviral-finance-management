@@ -15,6 +15,7 @@ import {
 
 import { importBatches } from "./imports";
 import { appSettings } from "./settings";
+import { statements } from "./statements";
 import { subscriptions } from "./subscriptions";
 import { tdsDeposits } from "./tax";
 import { payrollLines, teamMembers } from "./team";
@@ -112,6 +113,19 @@ export const files = pgTable(
       onDelete: "cascade",
     }),
     /**
+     * The financial statement one signatory signed.
+     *
+     * The signature block on the closing page carries up to four people, and
+     * each of them has their own hand — so this is not the company's single
+     * `signature`, which lives on the settings row below and is singular by
+     * rule. Owned by the period rather than by settings so that the pair
+     * guarding it is the statement's own: Finance reconciles these pages and
+     * Finance does not hold `settings.write`.
+     */
+    statementId: uuid("statement_id").references(() => statements.id, {
+      onDelete: "cascade",
+    }),
+    /**
      * The settings row, which is the company itself.
      *
      * A smallint and not a uuid, because `app_settings` is a single row keyed
@@ -150,6 +164,7 @@ export const files = pgTable(
     index("files_settings_idx").on(t.settingsId),
     index("files_tds_deposit_idx").on(t.tdsDepositId),
     index("files_payroll_line_idx").on(t.payrollLineId),
+    index("files_statement_idx").on(t.statementId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
     /**
@@ -166,7 +181,8 @@ export const files = pgTable(
          + case when ${t.subscriptionId} is not null then 1 else 0 end
          + case when ${t.settingsId} is not null then 1 else 0 end
          + case when ${t.tdsDepositId} is not null then 1 else 0 end
-         + case when ${t.payrollLineId} is not null then 1 else 0 end) = 1`,
+         + case when ${t.payrollLineId} is not null then 1 else 0 end
+         + case when ${t.statementId} is not null then 1 else 0 end) = 1`,
     ),
   ],
 );

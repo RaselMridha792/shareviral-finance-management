@@ -390,6 +390,44 @@ const CONTENT = SHEET.width - MARGIN * 2;
 const BOX_GAP = 11.4;
 const BOX_WIDTH = (CONTENT - BOX_GAP) / 2;
 
+/**
+ * The signature grid on the closing page: two across, two down, four in all —
+ * which is the most signatories a statement may carry.
+ */
+const SIGN_GRID = { columns: 2, rows: 2 };
+
+/**
+ * Where the parts of one signature box sit, measured from its own top.
+ *
+ * Named rather than sprinkled through the renderer because the numbers are
+ * load-bearing: `rule` has to be identical in every box for the block to read
+ * as a grid, and two `height`s plus `rowGap` have to clear the big figures
+ * anchored 182pt off the foot of the page. The closing page pays for the
+ * second row out of the gap above the block; see `buildStatementReport`.
+ */
+const SIGN_BOX = {
+  height: 112,
+  /** Between the two rows. Tighter than the gap between the columns, and it
+   * has to be: at 11.4 the second row of four signatories ran 9.8pt into the
+   * figures below it — measured off the drawing operators, because two boxes
+   * overlapping by a tenth of an inch is invisible in a diff and obvious on
+   * paper. */
+  rowGap: 8,
+  pad: 14,
+  caps: 14,
+  plateTop: 25,
+  plateHeight: 36,
+  rule: 68,
+  name: 76,
+  title: 96,
+};
+
+/**
+ * The paper a signature is drawn on — the cream sheet's own panel colour, so
+ * the slip reads as paper laid on the page rather than as a white box.
+ */
+const SIGNATURE_PLATE = "#fbfaf5";
+
 const EYEBROW_Y = 62;
 /** Where a page's composed content starts, under the eyebrow. */
 const HEAD_BOTTOM = 85;
@@ -541,7 +579,21 @@ export type PdfPagedBlock =
       slices: Array<{ label: string; share: number; color?: string | null }>;
     }
   | { kind: "notes"; items: string[] }
-  | { kind: "signatures"; items: Array<{ name: string; title: string }> };
+  | {
+      kind: "signatures";
+      items: Array<{
+        name: string;
+        title: string;
+        /**
+         * PNG or JPEG bytes of this person's own hand, drawn over the rule.
+         *
+         * The bytes rather than a file id or a URL: a PDF is one file that has
+         * to open on a laptop with no session, so a signature it fetches is a
+         * signature that is missing everywhere it matters.
+         */
+        image?: Buffer | null;
+      }>;
+    };
 
 /** What the footer pass needs to know about a physical page. */
 type PageChrome = {
@@ -1965,56 +2017,119 @@ export class PdfService {
     });
   }
 
-  /** Two ruled boxes: the line, the name, the title. */
+  /**
+   * Who signed, in a grid: the mark, the rule, the name, the title.
+   *
+   * Two across and up to two down, because the statement takes up to four
+   * signatories and a row of four across an A4 leaves each name 100pt it does
+   * not fit in. Three fills three cells of the four and leaves the last empty,
+   * which is what a grid does — shuffling the odd one to the middle would put
+   * the third signature somewhere the first two are not.
+   *
+   * The rule sits at the same height in every box whether or not there is an
+   * image above it. That is the whole reason this reads as a grid: a box that
+   * closed up around a missing signature would put one name a centimetre above
+   * its neighbour, and the block would look broken rather than incomplete.
+   */
   private renderSignatures(
     doc: PDFKit.PDFDocument,
-    items: Array<{ name: string; title: string }>,
+    items: Array<{ name: string; title: string; image?: Buffer | null }>,
     p: Palette,
   ): void {
     const top = doc.y;
-    const height = 105;
-    const pad = 15;
+    const shown = items.slice(0, SIGN_GRID.columns * SIGN_GRID.rows);
+    const rows = Math.max(1, Math.ceil(shown.length / SIGN_GRID.columns));
+    const pad = SIGN_BOX.pad;
+    const inner = BOX_WIDTH - pad * 2;
 
-    items.slice(0, 2).forEach((item, index) => {
-      const x = MARGIN + index * (BOX_WIDTH + BOX_GAP);
-      const inner = BOX_WIDTH - pad * 2;
+    shown.forEach((item, index) => {
+      const x = MARGIN + (index % SIGN_GRID.columns) * (BOX_WIDTH + BOX_GAP);
+      const y =
+        top +
+        Math.floor(index / SIGN_GRID.columns) *
+          (SIGN_BOX.height + SIGN_BOX.rowGap);
 
       doc
-        .rect(x, top, BOX_WIDTH, height)
+        .rect(x, y, BOX_WIDTH, SIGN_BOX.height)
         .lineWidth(0.8)
         .strokeColor(p.panelRule)
         .stroke();
 
       this.caps(doc, "Signature", {
         x: x + pad,
-        y: top + 18,
+        y: y + SIGN_BOX.caps,
         width: inner,
         color: p.faint,
       });
 
-      this.hairline(doc, top + 50, p.panelRule, 0.8, x + pad, inner);
+      this.signatureInk(doc, item.image, x + pad, y, inner);
+      this.hairline(doc, y + SIGN_BOX.rule, p.panelRule, 0.8, x + pad, inner);
 
       doc
         .font(BOLD)
         .fontSize(13)
         .fillColor(p.ink)
-        .text(fit(doc, drawable(item.name), inner), x + pad, top + 60, {
-          width: inner,
-          lineBreak: false,
-        });
+        .text(
+          fit(doc, drawable(item.name), inner),
+          x + pad,
+          y + SIGN_BOX.name,
+          { width: inner, lineBreak: false },
+        );
 
       doc
         .font(BODY)
         .fontSize(8)
         .fillColor(p.muted)
-        .text(fit(doc, drawable(item.title), inner), x + pad, top + 81, {
-          width: inner,
-          lineBreak: false,
-        });
+        .text(
+          fit(doc, drawable(item.title), inner),
+          x + pad,
+          y + SIGN_BOX.title,
+          { width: inner, lineBreak: false },
+        );
     });
 
     doc.x = MARGIN;
-    doc.y = top + height;
+    doc.y = top + rows * SIGN_BOX.height + (rows - 1) * SIGN_BOX.rowGap;
+  }
+
+  /**
+   * The scan itself, laid over the rule on a slip of paper.
+   *
+   * The plate is not decoration. A signature is dark ink and this page is dark
+   * green, so a PNG with a transparent background would be invisible on it and
+   * a JPEG would arrive carrying a white rectangle of its own anyway. Drawing
+   * the paper deliberately makes both look like the same thing rather than one
+   * of them looking like a mistake.
+   *
+   * It refuses to fail. An image PDFKit cannot decode leaves the ruled line
+   * with a name under it, which is the document this page printed before
+   * signatures existed — a statement that will not export at all because one
+   * scan is an interlaced PNG is a worse outcome than one missing a mark. The
+   * upload refuses those, so this is the belt to that brace.
+   */
+  private signatureInk(
+    doc: PDFKit.PDFDocument,
+    image: Buffer | null | undefined,
+    x: number,
+    boxTop: number,
+    width: number,
+  ): void {
+    if (!image?.length) return;
+
+    const top = boxTop + SIGN_BOX.plateTop;
+    doc.rect(x, top, width, SIGN_BOX.plateHeight).fill(SIGNATURE_PLATE);
+
+    try {
+      doc.image(image, x + 5, top + 4, {
+        fit: [width - 10, SIGN_BOX.plateHeight - 8],
+        align: "center",
+        valign: "center",
+      });
+    } catch {
+      // Decoded on the way in, so reaching here means a file that changed
+      // underneath us. The plate stays: an empty slip of paper over the rule
+      // says a signature was meant to be here rather than that nobody signed.
+    }
   }
 
   /* ---------------------------------------------------------------------- */

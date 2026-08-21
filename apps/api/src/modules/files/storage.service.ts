@@ -94,6 +94,19 @@ export class StorageService implements OnModuleInit {
     return createReadStream(this.absolute(storageKey));
   }
 
+  /**
+   * The whole file in memory.
+   *
+   * `stream` is what every download uses and is the right default. This exists
+   * for the one caller that has to *embed* bytes rather than send them — the
+   * statement PDF, which draws a signature onto its closing page. The only
+   * kinds read this way are signatures, capped at 300 KB by
+   * `checkSignatureImage`, so the buffer is small and bounded.
+   */
+  async read(storageKey: string): Promise<Buffer> {
+    return fs.readFile(this.absolute(storageKey));
+  }
+
   async exists(storageKey: string): Promise<boolean> {
     try {
       await fs.access(this.absolute(storageKey));

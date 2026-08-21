@@ -114,6 +114,16 @@ function deltaOf(step: WaterfallStep, format: NumberFormat) {
 export type StatementReportOptions = {
   numberFormat: NumberFormat;
   generatedOn: string;
+  /**
+   * Each signatory's scanned hand, keyed by the file id on their row.
+   *
+   * Read by the caller rather than here, because this function builds a
+   * document from a statement and nothing else — it touches no database and no
+   * disk, which is what makes the layout testable from a fixture. A signatory
+   * whose id is missing from the map prints a ruled line with their name under
+   * it, exactly as the page did before signatures existed.
+   */
+  signatures?: ReadonlyMap<string, Buffer>;
 };
 
 export function buildStatementReport(
@@ -809,12 +819,24 @@ export function buildStatementReport(
             `${card ? ` — with a further ${bdt(card.bdt, fmt)}${money(card)} on ${cardLedger ? cardLedger.name.toLowerCase() : "the prepaid card"}` : ""}. ` +
             `${auditWord}.`,
         },
-        { kind: "gap", height: 22 },
+        /*
+         * Two signatories fit on one row; a third or a fourth needs a second
+         * row, and the room for it comes out of this gap rather than out of
+         * the figures anchored at the foot. Measured, not reasoned about: at
+         * the old spacing four signatures ran 9.8pt into them.
+         */
+        { kind: "gap", height: statement.signatories.length > 2 ? 12 : 22 },
         {
           kind: "signatures",
           items: statement.signatories.length
-            ? statement.signatories
-            : [{ name: " ", title: "Prepared by" }],
+            ? statement.signatories.map((person) => ({
+                name: person.name,
+                title: person.title,
+                image: person.signatureFileId
+                  ? (options.signatures?.get(person.signatureFileId) ?? null)
+                  : null,
+              }))
+            : [{ name: " ", title: "Prepared by", image: null }],
         },
         { kind: "anchor", fromBottom: 182 },
         {

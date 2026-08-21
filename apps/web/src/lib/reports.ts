@@ -14,7 +14,7 @@ import type {
 
 import { PAGE_SIZE } from "@/lib/pagination";
 
-import { apiFetch } from "./api-client";
+import { apiFetch, apiUpload, type StoredFile } from "./api-client";
 
 export type AvailablePeriods = {
   fiscalYearMode: "bd_july_june" | "calendar";
@@ -145,6 +145,38 @@ export const reportsApi = {
       method: "PATCH",
       ...json(input),
     }),
+
+  /**
+   * One signatory's scanned hand, for the closing page of the PDF.
+   *
+   * Keyed by the period rather than by a statement id, because the screen has
+   * never needed one: the same two dates identify the row whether it was
+   * opened from the month picker or by drilling into a quarter, and the server
+   * creates the row if this is the first thing anybody has saved about the
+   * period.
+   *
+   * The file id comes back and goes onto the signatory in the browser; nothing
+   * is written against the statement until Save. This kind is deliberately not
+   * singular — four signatories need four marks — so replacing one deletes the
+   * file it replaced rather than relying on the server to retire it, and the
+   * one case that still leaves a stray file is uploading and then leaving the
+   * page without saving.
+   */
+  uploadStatementSignature: (
+    period: { start: string; end: string },
+    file: File,
+  ) => {
+    const search = new URLSearchParams({
+      periodStart: period.start,
+      periodEnd: period.end,
+    });
+    const form = new FormData();
+    form.append("file", file);
+    return apiUpload<StoredFile>(
+      `/reports/statement/signature?${search}`,
+      form,
+    );
+  },
 };
 
 export const fxApi = {

@@ -55,10 +55,21 @@ export const FILE_KINDS = [
   /**
    * The A-Challan: the bank's receipt for tax actually deposited.
    *
-   * Last in the list because a Postgres enum only takes new values on the end,
-   * and this array is that type's declaration order.
+   * Added on the end, because a Postgres enum only takes new values there and
+   * this array is that type's declaration order. `import_source` and `other`
+   * below it predate the rule and stay where they are; moving them would
+   * rewrite an enum the database has already committed to.
    */
   "challan",
+  /**
+   * One signatory's own hand, on one financial statement.
+   *
+   * Deliberately not `signature`. That one is the company's single mark, kept
+   * on the settings row and singular by rule — a second upload replaces the
+   * first, which is right for a payslip and wrong here: a statement carries up
+   * to four signatories and each signs for themselves.
+   */
+  "statement_signature",
   "import_source",
   "other",
 ] as const;
@@ -84,6 +95,18 @@ export const FILE_OWNERS = [
    * `TdsService.salaryRegister`.
    */
   "payroll_line",
+  /**
+   * One period's financial statement — the document the signature block is on.
+   *
+   * The signatures hang here rather than on `settings` for a permissions
+   * reason, not a filing one: a settings file is written by `settings.write`,
+   * which only super_admin holds, while the people who reconcile a statement
+   * are Finance. Owned by the statement, a signature follows the statement's
+   * own pair — read it with `reports.view`, change it with
+   * `transactions.write` — which is exactly who may edit the page it appears
+   * on.
+   */
+  "statement",
 ] as const;
 export const fileOwnerSchema = z.enum(FILE_OWNERS);
 export type FileOwner = z.infer<typeof fileOwnerSchema>;
@@ -100,6 +123,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   bank_statement: "Bank statement",
   subscription_screenshot: "Plan screenshot",
   signature: "Signature",
+  statement_signature: "Signatory's signature",
   challan: "Challan",
   import_source: "Imported file",
   other: "Document",
@@ -145,6 +169,11 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   // is the challan its tax was deposited under. A payslip is generated rather
   // than uploaded, and anything else filed on a salary row is misfiled.
   payroll_line: ["challan"],
+  // One kind, and up to four of them: the marks of the people who signed this
+  // period off. Nothing else belongs on a statement — the figures are
+  // recomputed from the ledger on every request, so there is no attachment a
+  // statement could be evidence for.
+  statement: ["statement_signature"],
   import_batch: ["import_source"],
 };
 
@@ -201,6 +230,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // Narrower than everything else here on purpose: a signature has to render
   // over a printed rule, and a PDF cannot. See `checkSignatureImage`.
   signature: SIGNATURE_MIME_TYPES,
+  // The same narrow pair, for the same reason: it has to render over a printed
+  // rule on the closing page, and a PDF cannot.
+  statement_signature: SIGNATURE_MIME_TYPES,
   // A screenshot from the bank's portal or the PDF it emails — the two
   // forms an A-Challan actually arrives in.
   challan: DOCUMENT_MIME_TYPES,
@@ -239,6 +271,9 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   // has to stop a file before multer's generic refusal; the readable one comes
   // from the shared check.
   signature: 1 * MB,
+  // Same again. The readable limit is SIGNATURE_MAX_BYTES; this one only has
+  // to stop a file before multer refuses it without naming a rule.
+  statement_signature: 1 * MB,
   // A page from a bank portal. Generous for a screenshot, nowhere near
   // nginx's 25 MB body cap.
   challan: 10 * MB,
@@ -341,7 +376,8 @@ export function formatFileSize(bytes: number): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The shape and size a payslip signature is allowed to be.
+ * The shape and size a signature is allowed to be — on a payslip, and on the
+ * statement's closing page.
  *
  * The owner asked for these to be *stated and required*, and the second half is
  * the easy half — a rule nobody can read before they pick a file is a rule they
@@ -352,8 +388,8 @@ export function formatFileSize(bytes: number): string {
  * The numbers are chosen for what a signature is: a scan of ink on paper,
  * cropped close. Wide and short — nobody signs in a square — which is what the
  * ratio bounds express, and generously wide so a 3:1 and a 5:1 are both fine.
- * The width floor exists because the payslip prints it about 110pt across; a
- * 200px scan lands there as a smear.
+ * The width floor exists because the payslip prints it about 110pt across and
+ * the statement about 150pt; a 200px scan lands at either size as a smear.
  */
 export const SIGNATURE_MAX_BYTES = 300 * 1024;
 export const SIGNATURE_MIN_WIDTH = 300;
@@ -379,6 +415,18 @@ export const SIGNATURE_RULE = `PNG or JPEG, under ${Math.round(
  * Returns the reason rather than a boolean, because every one of these is
  * something a person can go and fix, and "invalid image" tells them none of it.
  */
+/**
+ * The kinds this rule applies to.
+ *
+ * Two of them now — the company's mark on a payslip and a signatory's on a
+ * statement — and they are listed rather than checked one at a time, so the
+ * next place somebody signs something cannot quietly skip the shape check.
+ */
+export const SIGNATURE_KINDS: readonly FileKind[] = [
+  "signature",
+  "statement_signature",
+];
+
 export function checkSignatureImage(image: {
   width: number;
   height: number;
@@ -402,7 +450,7 @@ export function checkSignatureImage(image: {
   if (image.width < SIGNATURE_MIN_WIDTH) {
     return {
       ok: false,
-      reason: `It is ${image.width}px wide. Under ${SIGNATURE_MIN_WIDTH}px it prints on the payslip as a smear.`,
+      reason: `It is ${image.width}px wide. Under ${SIGNATURE_MIN_WIDTH}px it prints as a smear.`,
     };
   }
   if (image.width > SIGNATURE_MAX_WIDTH) {
@@ -437,6 +485,89 @@ export function checkSignatureImage(image: {
  * whose dimensions cannot be read is refused by the caller with a reason, not
  * by an exception from a parser.
  */
+/**
+ * Can a PDF actually draw this image?
+ *
+ * Two encodings read perfectly well in a browser and cannot be embedded in a
+ * PDF at all: an **interlaced** PNG, which PDFKit refuses outright, and a
+ * **progressive** JPEG, which has no equivalent in the DCTDecode filter a PDF
+ * carries images through. Both are ordinary outputs — "save for web" in an
+ * image editor produces them, and so do several phone scanner apps.
+ *
+ * Checked at the door rather than at export time, because the failure would
+ * otherwise surface a month later, on the one document that leaves the
+ * company, as a signature box that is simply empty. The header is already
+ * being parsed for the dimensions; this reads two more bytes of it.
+ *
+ * Applies to `statement_signature` only. The payslip's `signature` is drawn by
+ * a browser, which is happy with both — a rule that newly refused a file that
+ * has been printing correctly for months would be a bug, not a check.
+ */
+export function checkPrintableSignature(
+  bytes: Uint8Array,
+): { ok: true } | { ok: false; reason: string } {
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length >= 29 && PNG.every((b, i) => bytes[i] === b)) {
+    // IHDR runs from byte 16; its last field, at 28, is the interlace method.
+    // 0 is "none" and 1 is Adam7, and Adam7 is the one nothing can embed.
+    if (bytes[28] !== 0) {
+      return {
+        ok: false,
+        reason:
+          "This PNG is interlaced, which cannot be drawn into a PDF. " +
+          "Re-save it without interlacing — or as a JPEG — and it will print.",
+      };
+    }
+    return { ok: true };
+  }
+
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 3 < bytes.length) {
+      if (bytes[offset] !== 0xff) break;
+      const marker = bytes[offset + 1];
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) {
+        offset += 2;
+        continue;
+      }
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (length < 2) break;
+
+      const isFrame =
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc;
+      if (isFrame) {
+        // 0xC0 baseline and 0xC1 extended sequential are what a PDF's
+        // DCTDecode understands. 0xC2 is progressive; the rest are lossless
+        // and arithmetic-coded variants nothing in this chain reads.
+        if (marker !== 0xc0 && marker !== 0xc1) {
+          return {
+            ok: false,
+            reason:
+              "This JPEG is saved progressively, which cannot be drawn into a " +
+              "PDF. Re-save it as a baseline JPEG — or as a PNG — and it will " +
+              "print.",
+          };
+        }
+        return { ok: true };
+      }
+      offset += 2 + length;
+    }
+  }
+
+  // Neither header matched, or the walk ran out. `checkSignatureImage` has
+  // already refused anything that is not a PNG or a JPEG, so saying yes here
+  // leaves the one refusal that can name the problem in charge of it.
+  return { ok: true };
+}
+
 export function readImageSize(
   bytes: Uint8Array,
 ): { width: number; height: number } | null {
