@@ -250,13 +250,34 @@ export class EmailController {
   @HttpCode(200)
   @RequirePermission("settings.write")
   async runReminders() {
-    const sent = await this.reminders.run();
+    const { found, sent } = await this.reminders.run();
+
+    /*
+     * Three outcomes, and they used to collapse into two.
+     *
+     * The old message read "nothing renews in three days" whenever `sent` was
+     * zero — including when it had found four plans and every send had failed.
+     * Pressing the button and being told nothing was due, while eight refused
+     * messages sat in the log, is the kind of answer that sends somebody
+     * looking in the wrong place for an hour.
+     */
+    if (found === 0) {
+      return {
+        sent: 0,
+        message: "Nothing renews in the next three days.",
+      };
+    }
+
+    if (sent === 0) {
+      return {
+        sent: 0,
+        message: `${found} plan${found === 1 ? "" : "s"} renewing, and nothing new to send — everybody has already been told, or the sends failed. Check what has gone out below.`,
+      };
+    }
+
     return {
       sent,
-      message:
-        sent > 0
-          ? `Sent ${sent} reminder${sent === 1 ? "" : "s"}.`
-          : "Nothing renews in three days, or everybody has already been told.",
+      message: `${found} plan${found === 1 ? "" : "s"} renewing; sent ${sent} reminder${sent === 1 ? "" : "s"}.`,
     };
   }
 }

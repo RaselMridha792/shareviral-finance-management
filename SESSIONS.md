@@ -20,6 +20,44 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — a reminder that only fired on one exact day
+
+**Done.** The owner set a plan to renew in two days, waited, got no mail and no bell, pressed
+"Run today's reminders now" and was told nothing renews. All three were one bug: both jobs matched
+`next_renewal_on = today + 3` **exactly**, so a plan two days out was never a candidate.
+
+Two failures share that shape and neither is exotic. A plan bought inside its own notice period —
+Monday for a Wednesday renewal — was never reminded about at all. And one missed run, from a
+restart or a deploy landing at nine in the morning, silently spent that plan's only chance. Both
+jobs now take the window from today to three days out; `notification_log` and the unique index on
+`notifications` keep it to one message per plan per renewal, keyed on the plan's own date rather
+than on the moving target.
+
+The button's answer was wrong in its own right: it said "nothing renews in three days" whenever
+nothing *sent*, including when it had found four plans and every send had failed. Three outcomes
+read differently now — nothing due, nothing new to send, and sent.
+
+`BILLING_CYCLE_LABELS` lost its sentences: "Every month" → "Monthly", and the other three with it,
+since "Monthly" beside "Every quarter" is worse than either style used throughout. The email body
+was printing the raw enum (`monthly`) where the screen prints a label; it uses the label now.
+
+Measured rather than reasoned about: a plan put two days out on the dev database, then the jobs
+run. Before, one of the four plans in the window would have fired; after, the bell raised four
+with each plan's own date in its title, a second run raised none, and the mail job attempted eight
+messages — four plans, two recipients each. The table and drawer were read from the rendered page:
+`["Monthly","Yearly"]` in the column, `Not recurring / Monthly / Quarterly / Yearly` in the select,
+and no "Every month" left anywhere on the screen.
+
+**Watch out.** `BILLING_CYCLE_LABELS` is in `packages/shared` and reaches three screens — the
+subscriptions table, that same table on a team member's profile under Paid tools, and the
+subscription drawer. Asked before changing it. `BILLING_CYCLE_HABIT_LABELS` ("About monthly") is a
+different constant, used only by exports, and was left alone.
+
+`RenewalReminderService.run()` returns `{ found, sent }` now, not a number.
+
+**Open.** Nothing from this piece. The window is three days because that is what was asked for; if
+it should be configurable, that is a column on `app_settings` and its own session.
+
 ## 2026-08-21 — Cash In's month becomes a dropdown, and moves next to Add cash
 
 **Done.** One page, on the owner's instruction. Cash In's month was a native `<input

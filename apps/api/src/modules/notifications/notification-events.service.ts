@@ -6,7 +6,7 @@ import {
   deadlineStatus,
   todayInDhaka,
 } from "@finance/shared";
-import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import {
@@ -84,7 +84,17 @@ export class NotificationEventsService {
   /* --- 1. a plan renews in three days ------------------------------------ */
 
   private async renewals(): Promise<number> {
-    const target = this.plusDays(todayInDhaka(), 3);
+    /*
+     * A window, not one exact day. See the same change in the renewal
+     * reminder: matching `nextRenewalOn = today + 3` exactly meant a plan
+     * bought inside its own notice period was never mentioned at all, and a
+     * single missed morning spent a plan's only chance in silence.
+     *
+     * The unique index on `notifications` keyed by the plan's own renewal date
+     * is what keeps it to one, so the window can be as wide as it needs to be.
+     */
+    const today = todayInDhaka();
+    const horizon = this.plusDays(today, 3);
 
     const due = await this.db.client
       .select({
@@ -93,11 +103,13 @@ export class NotificationEventsService {
         planName: subscriptions.planName,
         costUsd: subscriptions.costUsd,
         costBdt: subscriptions.costBdt,
+        renewsOn: subscriptions.nextRenewalOn,
       })
       .from(subscriptions)
       .where(
         and(
-          eq(subscriptions.nextRenewalOn, target),
+          gte(subscriptions.nextRenewalOn, today),
+          lte(subscriptions.nextRenewalOn, horizon),
           // A cancelled plan does not renew, and telling somebody it does is
           // how people learn to ignore the bell.
           eq(subscriptions.status, "active"),
@@ -122,9 +134,11 @@ export class NotificationEventsService {
         kind: "subscription_renewal",
         // Per plan per date: the same plan renewing next month is a different
         // thing to be told about.
-        dedupeKey: `subscription:${plan.id}:${target}`,
-        title: `${plan.toolName ?? "A plan"} renews on ${target}`,
-        body: `${plan.planName} — ${price}. Three days' notice, so it can still be cancelled or changed.`,
+        // The plan's own date. Keyed on the moving target, a plan would be
+        // raised again on each morning of the window.
+        dedupeKey: `subscription:${plan.id}:${plan.renewsOn ?? horizon}`,
+        title: `${plan.toolName ?? "A plan"} renews on ${plan.renewsOn ?? horizon}`,
+        body: `${plan.planName} — ${price}. There is still time to cancel or change it.`,
         href: "/subscriptions",
       });
     }

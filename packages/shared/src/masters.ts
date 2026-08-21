@@ -246,11 +246,19 @@ export const BILLING_CYCLES = [
 export const billingCycleSchema = z.enum(BILLING_CYCLES);
 export type BillingCycle = z.infer<typeof billingCycleSchema>;
 
+/**
+ * What the column says under "Billing Cycle".
+ *
+ * The adjective, not the sentence. "Every month" reads as a phrase where the
+ * heading has already asked the question, and in a table of one-word cells it
+ * is the only entry that answers in prose. All four move together: "Monthly"
+ * beside "Every quarter" would be worse than either style used consistently.
+ */
 export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
   none: "Not recurring",
-  monthly: "Every month",
-  quarterly: "Every quarter",
-  yearly: "Every year",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
 };
 
 /** Months per cycle, for putting a yearly and a monthly cost on one scale. */

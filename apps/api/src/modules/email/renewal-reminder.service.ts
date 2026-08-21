@@ -1,7 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { formatMoney, todayInDhaka } from "@finance/shared";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import {
+  BILLING_CYCLE_LABELS,
+  formatMoney,
+  todayInDhaka,
+  type BillingCycle,
+} from "@finance/shared";
+import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import { appSettings, subscriptions, users } from "../../db/schema";
@@ -41,8 +46,10 @@ export class RenewalReminderService {
    */
   @Cron("0 9 * * *", { timeZone: "Asia/Dhaka" })
   async daily() {
-    const sent = await this.run();
-    if (sent > 0) this.log.log(`Sent ${sent} renewal reminder(s).`);
+    const { found, sent } = await this.run();
+    if (found > 0) {
+      this.log.log(`${found} plan(s) renewing; sent ${sent} reminder(s).`);
+    }
   }
 
   /**
@@ -51,17 +58,33 @@ export class RenewalReminderService {
    * Settings has a "send a test" button, and a job that only exists inside a
    * cron decorator cannot be tried without waiting until tomorrow.
    */
-  async run(): Promise<number> {
+  async run(): Promise<{ found: number; sent: number }> {
     const config = await this.email.config();
     if (!config.ok) {
       // Not an error worth shouting about — most days this app has no mailer
       // configured at all, and a daily error log about a feature nobody has
       // switched on is noise that hides real ones.
       this.log.debug(`Skipping renewal reminders: ${config.reason}`);
-      return 0;
+      return { found: 0, sent: 0 };
     }
 
-    const target = this.inThreeDays();
+    /*
+     * Anything renewing between today and three days out — not the one day
+     * that happens to be exactly three days away.
+     *
+     * It used to match `nextRenewalOn = today + 3` exactly, and that has two
+     * failures with the same shape. A plan added inside its own notice period
+     * — bought on Monday, renewing Wednesday — was never reminded about at
+     * all. And one missed run, from a restart or a deploy landing at nine in
+     * the morning, silently spent that plan's only chance.
+     *
+     * A window cannot miss. Telling somebody twice is prevented by the sent
+     * log rather than by the arithmetic, which is the right place for it:
+     * `subject_date` is the plan's own renewal date, so one message goes per
+     * plan per renewal however many mornings the window covers it.
+     */
+    const today = todayInDhaka();
+    const horizon = this.plusDays(today, 3);
 
     const due = await this.db.client
       .select({
@@ -78,7 +101,8 @@ export class RenewalReminderService {
       .from(subscriptions)
       .where(
         and(
-          eq(subscriptions.nextRenewalOn, target),
+          gte(subscriptions.nextRenewalOn, today),
+          lte(subscriptions.nextRenewalOn, horizon),
           // Only plans that are actually live. A cancelled plan does not renew,
           // and mailing about one is how people learn to ignore these.
           eq(subscriptions.status, "active"),
@@ -86,19 +110,22 @@ export class RenewalReminderService {
         ),
       );
 
-    if (!due.length) return 0;
+    if (!due.length) return { found: 0, sent: 0 };
 
     let sent = 0;
     for (const plan of due) {
       const recipients = await this.recipientsFor(plan.loginEmail);
-      const subject = `${plan.toolName} renews on ${target}`;
-      const html = this.body(plan, target);
+      // The plan's own date, not the end of the window: a plan renewing
+      // tomorrow must not be described as renewing in three days.
+      const on = plan.renewsOn ?? horizon;
+      const subject = `${plan.toolName} renews on ${on}`;
+      const html = this.body(plan, on);
 
       for (const to of recipients) {
         const result = await this.email.sendOnce(config.config, {
           kind: KIND,
           subjectId: plan.id,
-          subjectDate: target,
+          subjectDate: on,
           to,
           subject,
           html,
@@ -107,21 +134,19 @@ export class RenewalReminderService {
       }
     }
 
-    return sent;
+    return { found: due.length, sent };
   }
 
   /**
-   * Three days out, counted in Dhaka.
+   * A date walked forward as a date, in Dhaka.
    *
-   * `todayInDhaka()` returns an ISO date, so this walks it forward as a date
-   * rather than adding milliseconds — 72 hours is not three days on the two
-   * mornings a year a clock changes, and Bangladesh has tried daylight saving
-   * before.
+   * Not by adding milliseconds: 72 hours is not three days on the two mornings
+   * a year a clock changes, and Bangladesh has tried daylight saving before.
    */
-  private inThreeDays(): string {
-    const [y, m, d] = todayInDhaka().split("-").map(Number);
+  private plusDays(from: string, days: number): string {
+    const [y, m, d] = from.split("-").map(Number);
     const at = new Date(Date.UTC(y, m - 1, d));
-    at.setUTCDate(at.getUTCDate() + 3);
+    at.setUTCDate(at.getUTCDate() + days);
     return at.toISOString().slice(0, 10);
   }
 
@@ -215,11 +240,11 @@ export class RenewalReminderService {
   <table style="border-collapse:collapse;margin:0 0 4px">
     <tr><td style="padding:2px 16px 2px 0;color:#71717a">Plan</td><td>${escapeHtml(plan.planName)}</td></tr>
     <tr><td style="padding:2px 16px 2px 0;color:#71717a">Cost</td><td>${price}</td></tr>
-    <tr><td style="padding:2px 16px 2px 0;color:#71717a">Billed</td><td>${escapeHtml(plan.billingCycle)}</td></tr>
+    <tr><td style="padding:2px 16px 2px 0;color:#71717a">Billed</td><td>${escapeHtml(BILLING_CYCLE_LABELS[plan.billingCycle as BillingCycle] ?? plan.billingCycle)}</td></tr>
   </table>
   ${link}
   <p style="margin:20px 0 0;font-size:13px;color:#71717a">
-    Three days' notice, so this can still be cancelled or changed.<br>
+    Sent while there is still time to cancel or change it.<br>
     Sent by ShareViral Finance.
   </p>
 </div>`;
