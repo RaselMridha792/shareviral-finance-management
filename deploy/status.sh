@@ -86,14 +86,34 @@ DB="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -- '-db-')"
 if [ -z "$DB" ]; then
   echo "  no database container found"
 else
-  docker exec -i "$DB" sh -c 'psql -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' 2>/dev/null | sed 's/^/  /'
-select 'sign-ins      ' || count(*) from users where deleted_at is null
-union all select 'transactions  ' || count(*) from transactions where deleted_at is null
-union all select 'team members  ' || count(*) from team_members where deleted_at is null
-union all select 'migrations    ' || count(*) from schema_migrations
-union all select 'unread bells  ' || count(*) from notifications where read_at is null;
+  # stderr is kept, not sent to /dev/null.
+  #
+  # The first version of this asked `transactions` for `deleted_at`, a column
+  # that table does not have — it marks a reversed entry with `voided_at`.
+  # psql said so on stderr, the redirect swallowed it, and the section printed
+  # nothing at all: no counts, no complaint. "Nothing to report" and "I could
+  # not ask" looked identical, which is the exact failure this whole script
+  # was written to stop happening elsewhere.
+  OUT="$(docker exec -i "$DB" sh -c 'psql -tAq -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' 2>&1
+-- Six statements, not one UNION.
+-- Running this against a database without `schema_migrations` — a fresh box,
+-- or any machine the deploy script has never touched — killed the whole query
+-- and printed none of the six counts. psql carries on after a failed statement
+-- when ON_ERROR_STOP is off, so one missing table now costs one line instead
+-- of the section. Which is the rule this script's own header states.
+select 'sign-ins      ' || count(*) from users where deleted_at is null;
+select 'transactions  ' || count(*) from transactions where voided_at is null;
+select 'voided        ' || count(*) from transactions where voided_at is not null;
+select 'team members  ' || count(*) from team_members where deleted_at is null;
+select 'migrations    ' || count(*) from schema_migrations;
+select 'unread bells  ' || count(*) from notifications where read_at is null;
 SQL
-  [ "${PIPESTATUS[0]}" != "0" ] && echo "  (the database did not answer)"
+  )"
+  if [ -z "$OUT" ]; then
+    echo "  (the database answered nothing at all — that is itself a fault)"
+  else
+    echo "$OUT" | sed 's/^/  /'
+  fi
 fi
 
 echo

@@ -350,8 +350,24 @@ for attempt in $(seq 1 15); do
   sleep 2
 done
 
-# Images pile up fast on 50 GB. Keep the current ones, drop the rest — dangling
-# only, so a tagged rollback target survives.
-docker image prune -f
+# --------------------------------------------------------------------------
+# Everything not in use, now that the new containers have answered.
+# --------------------------------------------------------------------------
+# This said `docker image prune -f` under a comment claiming it dropped the
+# rest. It does not: without `-a` it removes only *dangling* images, and every
+# image here is tagged with a commit sha, so none of them is ever dangling.
+# The line ran on every deploy, reported "Total reclaimed space: 0B" every
+# time, and that reads identically to "there was nothing to remove".
+#
+# Forty-nine images and 48 of the box's 50 GB later, git could not write, the
+# database went unhealthy, and the deploy failed on `no space left on device`
+# every minute for an hour.
+#
+# `-a` keeps only what a container is actually using. Nothing local survives
+# to roll back to, which is the deliberate part of the trade: the images are
+# all still in GHCR, `docker compose pull` fetches one back in a minute, and a
+# rollback cache nobody used is what filled the disk. This runs last, after the
+# app has answered through nginx, so the images it keeps are the ones serving.
+docker image prune -af
 
 docker compose ps
