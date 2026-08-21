@@ -12,7 +12,9 @@ import { TransactionTable } from "@/components/ledger/transaction-table";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { type ExpenseSummary, type TransactionDto } from "@/lib/ledger";
+import { PAGE_SIZE, pageCount } from "@/lib/pagination";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { CategorySummaryPanel } from "./category-summary-panel";
 import { MonthPicker, type Range } from "./month-picker";
@@ -56,6 +58,27 @@ export function CategoryDetailScreen({
     : rows;
   const scopeName =
     breakdown.groups.find((group) => group.id === scope)?.name ?? null;
+
+  /*
+   * Twenty rows to a page, newest first — the app's rule, and `rows` arrives
+   * here whole rather than capped, so a page number always points at rows that
+   * exist.
+   *
+   * `current` is clamped rather than reset. Voiding the last row of the last
+   * page shortens the list under the reader, and a page number past the end
+   * would leave them on an empty table until they touched the control. Picking
+   * a sub-category *does* reset it: page 3 of everything is not page 3 of one
+   * heading's corner, and landing there would look like an empty result.
+   */
+  const [page, setPage] = useState(1);
+  const totalPages = pageCount(scoped.length);
+  const current = Math.min(page, totalPages);
+  const visible = scoped.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  function changeScope(next: string | null) {
+    setScope(next);
+    setPage(1);
+  }
 
   function changeRange(next: Range) {
     router.push(`/expenses/${heading.slug}?from=${next.from}&to=${next.to}`);
@@ -132,11 +155,15 @@ export function CategoryDetailScreen({
         entries={entries}
         groups={breakdown.groups}
         selectedId={scope}
-        onSelect={setScope}
+        onSelect={changeScope}
       />
 
       <TransactionTable
-        rows={scoped}
+        rows={visible}
+        // So the SL column keeps counting across pages: the first row of page
+        // two is 21, not 1. On a finance screen that number is what somebody
+        // reads down the phone.
+        page={current}
         onEdit={setEditing}
         onVoid={setVoiding}
         emptyMessage={
@@ -144,6 +171,18 @@ export function CategoryDetailScreen({
             ? `Nothing filed under ${scopeName} in ${range.label}.`
             : `Nothing filed under ${heading.name} in ${range.label}.`
         }
+      />
+
+      {/* A sibling of the table, never inside its empty branch — the page
+          somebody most needs this control on is the one that came up empty.
+          It draws nothing at all while the month fits on one page. */}
+      <Pagination
+        page={current}
+        totalPages={totalPages}
+        total={scoped.length}
+        noun="entry"
+        nounPlural="entries"
+        onPage={setPage}
       />
 
       <TransactionForm

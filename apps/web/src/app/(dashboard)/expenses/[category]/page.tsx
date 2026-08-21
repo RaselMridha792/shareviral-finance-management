@@ -30,16 +30,9 @@ export default async function CategoryPage({
   const heading = tree.find((node) => node.slug === slug);
   if (!heading) notFound();
 
-  const [breakdown, list] = await Promise.all([
+  const [breakdown, rows] = await Promise.all([
     ledgerApi.expenseSummary({ from, to, categorySlug: slug }),
-    ledgerApi.list({
-      from,
-      to,
-      direction: "out",
-      categorySlug: slug,
-      page: 1,
-      pageSize: 200,
-    }),
+    everyRowFor({ from, to, slug }),
   ]);
 
   return (
@@ -54,12 +47,50 @@ export default async function CategoryPage({
       key={`${heading.id}:${from}:${to}`}
       heading={heading}
       breakdown={breakdown}
-      rows={list.items}
+      rows={rows}
       range={{ from, to, label: labelFor(from) }}
       accounts={accounts}
       categories={tree}
     />
   );
+}
+
+/** As many rows as the API will hand over in one request. Not a page size. */
+const REQUEST_MAX = 200;
+
+/**
+ * Every entry the month put under this heading — all of them, not the first
+ * two hundred.
+ *
+ * This asked for `pageSize: 200` and handed the answer straight to the table,
+ * which meant a heading with a busy month stopped at row 200 and the two
+ * hundred and first was not reachable from anywhere: no pager, no warning, no
+ * hint that the list had ended early. Two hundred is the API's ceiling per
+ * request and it is shared, so the fix is more requests rather than a bigger
+ * one — the first reply says how many there are, and the rest are fetched
+ * together. The table pages through what comes back at the app's `PAGE_SIZE`.
+ */
+async function everyRowFor({
+  from,
+  to,
+  slug,
+}: {
+  from: string;
+  to: string;
+  slug: string;
+}) {
+  const query = { from, to, direction: "out" as const, categorySlug: slug };
+
+  const first = await ledgerApi.list({ ...query, page: 1, pageSize: REQUEST_MAX });
+  const pages = Math.ceil(first.total / REQUEST_MAX);
+  if (pages <= 1) return first.items;
+
+  const rest = await Promise.all(
+    Array.from({ length: pages - 1 }, (_, i) =>
+      ledgerApi.list({ ...query, page: i + 2, pageSize: REQUEST_MAX }),
+    ),
+  );
+  return [...first.items, ...rest.flatMap((reply) => reply.items)];
 }
 
 function labelFor(from: string): string {

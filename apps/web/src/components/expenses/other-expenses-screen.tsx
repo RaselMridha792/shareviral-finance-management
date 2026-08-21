@@ -30,16 +30,49 @@ import { cn } from "@/lib/utils";
 import { MonthPicker, type Range } from "./month-picker";
 
 /**
- * The whole month in one request, up to the API's cap of 200.
+ * As many rows as the API hands over in one request. Not a page size.
  *
- * Not a page size, and deliberately not paged: `spent` below — the headline
- * "Spent in August" — is added up from these rows, because no server figure
- * answers "money out with tooling excluded" (the reason is written out there).
- * Fetch twenty and that headline silently becomes the spend of twenty rows.
- * So the fetch stays whole and the table pages through what came back, at the
- * app's `PAGE_SIZE`.
+ * The fetch is deliberately not paged: `spent` below — the headline "Spent in
+ * August" — is added up from these rows, because no server figure answers
+ * "money out with tooling excluded" (the reason is written out there). Fetch
+ * twenty and that headline silently becomes the spend of twenty rows. So the
+ * fetch stays whole and the table pages through it at the app's `PAGE_SIZE`.
+ *
+ * Two hundred is where the API stops, and it used to be where this screen
+ * stopped too: a month with more than that showed a line saying so and left
+ * the rest unreachable from here. The ceiling is per request, so the answer is
+ * more requests — `everyRow` below asks for the pages the first reply says
+ * exist.
  */
-const FETCH_CAP = 200;
+const REQUEST_MAX = 200;
+
+/**
+ * Every entry this screen owns for a month, however many requests that takes.
+ *
+ * The first reply carries the count, so the remaining pages are known and can
+ * be asked for together rather than one after another.
+ */
+async function everyRow({ from, to }: { from: string; to: string }) {
+  const query = { from, to, direction: "out" as const, excludeToolSpend: true };
+
+  const first = await ledgerApi.list({
+    ...query,
+    page: 1,
+    pageSize: REQUEST_MAX,
+  });
+  const pages = Math.ceil(first.total / REQUEST_MAX);
+  if (pages <= 1) return first;
+
+  const rest = await Promise.all(
+    Array.from({ length: pages - 1 }, (_, i) =>
+      ledgerApi.list({ ...query, page: i + 2, pageSize: REQUEST_MAX }),
+    ),
+  );
+  return {
+    ...first,
+    items: [...first.items, ...rest.flatMap((reply) => reply.items)],
+  };
+}
 
 /**
  * Everything the company spent in a month except what renews.
@@ -66,7 +99,6 @@ export function OtherExpensesScreen({
   const [range, setRange] = useState(initialRange);
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [recurringRows, setRecurringRows] = useState(0);
-  const [fetched, setFetched] = useState(0);
   /** How many rows this screen has, tooling already excluded. */
   const [screenTotal, setScreenTotal] = useState(0);
   /**
@@ -122,19 +154,11 @@ export function OtherExpensesScreen({
           page: 1,
           pageSize: 1,
         }),
-        ledgerApi.list({
-          from: range.from,
-          to: range.to,
-          direction: "out",
-          excludeToolSpend: true,
-          page: 1,
-          pageSize: FETCH_CAP,
-        }),
+        everyRow({ from: range.from, to: range.to }),
       ]);
 
       setRows(list.items);
-      setRecurringRows(all.total - list.total);
-      setFetched(list.items.length);
+      setRecurringRows(all.total - list.items.length);
       setScreenTotal(list.total);
     } catch (caught) {
       // Without this the screen sits on "Loading…" for ever and never says why.
@@ -184,24 +208,13 @@ export function OtherExpensesScreen({
   );
 
   /*
-   * Shown against fetchable, not shown against every money-out row.
+   * Pages of the whole month, because the whole month is what arrived.
    *
-   * This compared `fetched` against the month's *whole* money-out count, and
-   * those are different populations: `fetched` is this screen's rows — the
-   * month minus tooling — while that count included it. Any month holding a
-   * single subscription therefore made the two differ, and the screen told
-   * somebody to "narrow the month" while it was showing them everything it
-   * had.
-   */
-  const truncated = fetched < screenTotal;
-
-  /*
-   * Pages of what arrived, not of what exists.
-   *
-   * `rows.length` rather than `screenTotal`: past the cap those are different
-   * numbers, and a pager offering page 17 of a fetch that stopped at 200 rows
-   * would send somebody to a blank table. The card's heading already says how
-   * many of the month's entries are here.
+   * This used to page `rows.length` and warn, above the table, that it was
+   * "showing the most recent 200 of 340" — a sentence that existed only
+   * because the fetch stopped early. It does not stop early any more, so
+   * `rows.length` and `screenTotal` are the same number and there is nothing
+   * left to apologise for.
    */
   const totalPages = pageCount(rows.length);
   /* Clamped rather than reset: voiding the last row of the last page shortens
@@ -265,13 +278,9 @@ export function OtherExpensesScreen({
       <Card>
         <CardHeader
           title={`Every other expense in ${range.label}`}
-          description={
-            truncated
-              ? `Showing the most recent ${fetched} of ${screenTotal} entries — narrow the month or use All transactions to see the rest`
-              : // The envelope's count of the whole month, not the length of
-                // the page below it.
-                `${screenTotal} entr${screenTotal === 1 ? "y" : "ies"}`
-          }
+          // The envelope's count of the whole month, not the length of the
+          // page below it.
+          description={`${screenTotal} entr${screenTotal === 1 ? "y" : "ies"}`}
         />
         <CardBody className="p-0">
           {loading ? (

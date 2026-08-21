@@ -20,6 +20,57 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — the month becomes a list, and a heading's month stops ending at row 200
+
+**Done.** Two things across the three expense screens, on the owner's instruction.
+
+*The month stepper is a dropdown.* `‹ August 2026 ›` was one click to last month and eleven to
+last September, and it never showed how far back the books went. It is a native `<select>` now —
+the app's own `Select`, so it carries the same border, height and lime focus ring as every other
+control in a filter row, and on a phone it opens the operating system's own wheel. It lists every
+month from this one back to `RECORDS_START`, newest first, **with nothing greyed**: the list is
+built from months that happened rather than fixed at twelve, so it has nothing to explain. Today
+that is four rows, and it grows on its own.
+
+The owner chose to change **all three** screens that share `MonthPicker` — Expense overview,
+Other expenses, and the heading page — rather than the two they first named, so no two sibling
+screens disagree about what picking a month looks like.
+
+*The heading page's table pages, and neither expense screen stops at 200 any more.* The heading
+page had no pager at all: it asked for `pageSize: 200` and rendered the answer whole, so a busy
+month ended at row 200 with no pager, no warning and no way to the 201st. It now shows twenty to
+a page, newest first, `serial(current, index)` so the first row of page two is 21, and the pager
+is a sibling of the table rather than a child of its empty branch. Picking a sub-category tab
+returns to page one; voiding the last row of the last page clamps instead of stranding.
+
+Two hundred is the API's ceiling **per request**, and `paginationQuerySchema` is shared, so the
+fix is more requests rather than a bigger one: the first reply carries the count and the rest are
+fetched together. Other expenses got the same treatment — it already paged correctly, but over a
+capped fetch, and it carried a line reading "Showing the most recent 200 of 340 — narrow the
+month". That line is gone because the condition can no longer happen, and with it the `fetched`
+state that only existed to detect it.
+
+**Watch out.** Other expenses sums its own headline from these rows — no server figure answers
+"money out with tooling excluded" — so the fetch there must stay whole. If anybody is tempted to
+page it at the request, the headline silently becomes the spend of one page. The comment above
+`REQUEST_MAX` says so; please leave it there.
+
+Measured on the running pages, not read off the diff. `.catpage.mjs` and `.otherpage.mjs`
+(untracked) seed a month past a page, walk every page front to back, then delete what they
+seeded. Heading page, 52 rows: pages of 20/20/12, serials 1..52 unbroken across both breaks,
+every seeded row reachable exactly once, dates never climbing back up, Next dead on the last page
+and Previous on the first, a tab change landing back on page one, and no pager at all on a month
+that fits. Other expenses, 82 rows: 20/20/20/20/2, serials 1..82, the card's heading and the walk
+agreeing at 82, and the "Spent in July" headline equal to the sum of every row across all five
+pages rather than the page's — ৳12,68,41,084.00 both ways. Both scripts also check the dropdown:
+four real months, none disabled, and picking one re-scopes the screen. Four CI steps run
+separately, all green (315 tests).
+
+**Open.** Nothing half-done. The account register got the same twenty-row treatment in another
+session this morning; the two arrived independently and both use `@/lib/pagination`, so there is
+nothing to reconcile. Screens still on a fetch cap elsewhere in the app were not surveyed — that
+is worth its own pass.
+
 ## 2026-08-21 — The rate caption comes off every screen
 
 **Done.** On the owner's instruction, and after telling them what it reached first. The line at
