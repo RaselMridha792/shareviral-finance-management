@@ -2026,11 +2026,30 @@ function describeFilter(query: ListTransactionsQuery, total: number): string[] {
   ];
 }
 
+/**
+ * `Content-Disposition`, for a filename made out of somebody's typing.
+ *
+ * These names carry account and person names, and a header value may only hold
+ * Latin-1. Three accounts on this system are called things like "BRAC Bank —
+ * payroll"; the em-dash in that name made `setHeader` throw `ERR_INVALID_CHAR`
+ * and the download came back as a 500. It is a Bangladesh company, so a name
+ * in Bengali would have done the same thing, and more often.
+ *
+ * Both forms, which is what RFC 5987 is for: a plain `filename=` stripped down
+ * to characters any client can read, and a `filename*=` carrying the real one
+ * percent-encoded. Every browser in use takes the second and ignores the first;
+ * the first is there so nothing is left holding an empty name.
+ */
+function disposition(filename: string): string {
+  const plain = filename.replace(/[^ -~]/g, "-").replace(/"/g, "'");
+  return `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
 function send(response: Response, buffer: Buffer, filename: string) {
   response.set({
     "Content-Type":
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Disposition": disposition(filename),
     "Content-Length": String(buffer.length),
   });
   return new StreamableFile(buffer);
@@ -2039,7 +2058,7 @@ function send(response: Response, buffer: Buffer, filename: string) {
 function sendPdf(response: Response, buffer: Buffer, filename: string) {
   response.set({
     "Content-Type": "application/pdf",
-    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Disposition": disposition(filename),
     "Content-Length": String(buffer.length),
   });
   return new StreamableFile(buffer);
