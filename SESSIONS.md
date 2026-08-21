@@ -20,6 +20,51 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — The rate caption comes off every screen
+
+**Done.** On the owner's instruction, and after telling them what it reached first. The line at
+the foot of nearly every page — "Dollar figures are approximate, translated from BDT at 121.50
+per USD as of Aug 20. Every amount in this system is recorded in BDT." — is gone from the whole
+app. Commits: `7cefe54`.
+
+**This was a shared change, and it touched twenty screens.** `RateCaption` lived in
+`components/money/` but was rendered by the shell, `layout/main-region.tsx`, under every route
+except `/` and the full-bleed `/assistant`. So it was never one page's text: `/accounts`,
+`/accounts/[id]`, `/accounts/[id]/register`, `/accounts/cash-in`, `/expenses`,
+`/expenses/[category]`, `/expenses/other`, `/import`, `/payroll`, `/payroll/[runId]`,
+`/payroll/[runId]/payslip`, `/reports`, `/settings`, `/statement`, `/subscriptions`,
+`/tax/withholding`, `/team`, `/team/[id]`, `/transactions`, `/no-access`. The owner was given
+that list and chose app-wide over per-page, so the render, the `NO_RATE_CAPTION` list it was
+gated by, and `components/money/rate-caption.tsx` itself are all gone — an unreferenced component
+left behind is the next session's puzzle.
+
+**Watch out.**
+
+- **The FX chip in the top bar is now the only place the rate is stated.** "FX locked ৳121.50 /
+  $1" is on every screen and carries the promise the caption used to: a translated figure says
+  what rate produced it. `rate-caption.tsx` used to say in its own comment that removing it was
+  not a cosmetic decision; that note now lives in `main-region.tsx`, where the empty space is.
+  **If that chip is ever removed, the sentence has to come back somewhere.**
+- **`RateProvider` stays.** `useUsdRate` still feeds `Amount`'s dollar counterparts and
+  `expenses/category-summary-panel.tsx`, and `useUsdRateContext` feeds the topbar chip. Only the
+  caption's consumer went.
+- **STATUS.md line 801 is stale**, and was before this: its "what differs from the table as it
+  stands" comparison still says Rate is carried by "the page-foot caption", along with several
+  other things about that table that stopped being true sessions ago. Left alone rather than
+  half-corrected — it wants its own pass.
+
+**Measured, not read off the diff.** `.capsweep.mjs` (untracked, at the root) signs in and visits
+all **21 routes**, dynamic ones with real ids from the database, and checks three things on each:
+the sentence is nowhere in the page text, the FX chip still is, and the page actually drew — so
+"the caption is gone" cannot be satisfied by a screen that failed to load. All 21 clean. `node
+.sweep.mjs` then re-measured the layout across every screen: `h1` 28, padding 32/34, gap 20, and
+no horizontal page scroll at 1440, 1180 or 900 anywhere — removing a bordered `<p>` from the foot
+of the column moved nothing above it.
+
+*One thing that check caught about itself, not about the app:* `/payroll/[runId]/payslip` takes a
+payroll **line** id, not a run id, and the payslip is a print document with no heading element at
+all. Both were the script's assumptions; the route is fine.
+
 ## 2026-08-21 — Twenty entries to a page on the account register, newest first
 
 **Done.** The owner's ask on **the account register** (`/accounts/[id]/register`), and nothing
