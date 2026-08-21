@@ -10,6 +10,13 @@ import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
 import { appSettings, subscriptions, users } from "../../db/schema";
+import {
+  button,
+  detailPanel,
+  detailRow,
+  escapeHtml,
+  layout,
+} from "./email-layout";
 import { EmailService } from "./email.service";
 
 /**
@@ -211,10 +218,11 @@ export class RenewalReminderService {
   /**
    * The message.
    *
-   * Plain, and it leads with what somebody has to decide rather than with a
-   * greeting: what renews, when, and for how much. Inline styles because email
-   * clients drop a stylesheet, and no images because half of them are blocked
-   * by default and a reminder that renders as an empty box has failed.
+   * It leads with what somebody has to decide rather than with a greeting:
+   * what renews, when, and for how much. The shape comes from `email-layout`,
+   * which every message here shares — a header that identifies the sender at a
+   * glance, because a renewal notice that looks like a stranger's is one
+   * people learn to delete.
    */
   private body(
     plan: {
@@ -228,39 +236,35 @@ export class RenewalReminderService {
     on: string,
   ): string {
     const price = plan.costBdt
-      ? `${formatMoney(plan.costBdt, { currency: "BDT" })} (${formatMoney(plan.costUsd, { currency: "USD" })})`
+      ? `${formatMoney(plan.costBdt, { currency: "BDT" })} <span style="color:#71717a;font-weight:400">(${formatMoney(plan.costUsd, { currency: "USD" })})</span>`
       : formatMoney(plan.costUsd, { currency: "USD" });
 
-    const link = plan.websiteUrl
-      ? `<p style="margin:16px 0 0"><a href="${plan.websiteUrl}" style="color:#4d7c0f">Open ${escapeHtml(plan.toolName)}</a></p>`
-      : "";
+    const rows = [
+      detailRow("Plan", escapeHtml(plan.planName)),
+      detailRow("Cost", price),
+      detailRow(
+        "Billed",
+        escapeHtml(
+          BILLING_CYCLE_LABELS[plan.billingCycle as BillingCycle] ??
+            plan.billingCycle,
+        ),
+      ),
+      detailRow("Renews on", escapeHtml(on)),
+    ].join("");
 
-    return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#18181b">
-  <p style="margin:0 0 12px"><strong>${escapeHtml(plan.toolName)}</strong> renews on <strong>${on}</strong>.</p>
-  <table style="border-collapse:collapse;margin:0 0 4px">
-    <tr><td style="padding:2px 16px 2px 0;color:#71717a">Plan</td><td>${escapeHtml(plan.planName)}</td></tr>
-    <tr><td style="padding:2px 16px 2px 0;color:#71717a">Cost</td><td>${price}</td></tr>
-    <tr><td style="padding:2px 16px 2px 0;color:#71717a">Billed</td><td>${escapeHtml(BILLING_CYCLE_LABELS[plan.billingCycle as BillingCycle] ?? plan.billingCycle)}</td></tr>
-  </table>
-  ${link}
-  <p style="margin:20px 0 0;font-size:13px;color:#71717a">
-    Sent while there is still time to cancel or change it.<br>
-    Sent by ShareViral Finance.
-  </p>
-</div>`;
+    return layout({
+      preview: `${plan.toolName} renews on ${on} — there is still time to change it.`,
+      heading: `${plan.toolName} renews on ${on}`,
+      body: `
+        <div style="font-size:20px;font-weight:600;line-height:1.3;letter-spacing:-.01em">
+          ${escapeHtml(plan.toolName)} renews on ${escapeHtml(on)}
+        </div>
+        <div style="margin:6px 0 0;color:#71717a;font-size:14px">
+          This is a reminder while there is still time to cancel or change it.
+        </div>
+        ${detailPanel(rows)}
+        ${plan.websiteUrl ? button(plan.websiteUrl, `Open ${plan.toolName}`) : ""}
+      `,
+    });
   }
-}
-
-/**
- * A tool's name goes into the message, and a tool's name is typed by a person.
- *
- * Nothing in this app currently has an apostrophe in a plan name, which is the
- * argument for doing this now rather than after something does.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

@@ -8,6 +8,7 @@ import {
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
 import { seal } from "../../common/crypto/secret-box";
+import { layout } from "./email-layout";
 import { DbService } from "../../db/db.service";
 import { appSettings } from "../../db/schema";
 import { EmailService } from "./email.service";
@@ -208,13 +209,26 @@ export class EmailController {
         config.config,
         to,
         "ShareViral Finance — test message",
-        `<div style="font-family:system-ui,sans-serif;font-size:15px">
-        <p>This is the test message from Settings → Email.</p>
-        <p style="color:#71717a;font-size:13px">
-          If it arrived, the key works and the domain is verified. Renewal
-          reminders go out at 9am Dhaka time, three days before a plan renews.
-        </p>
-      </div>`,
+        // The same wrapper the reminders use, deliberately. A test that looks
+        // different from the real thing tests the sending and not the message.
+        layout({
+          preview: "If this arrived, the key works and the domain is verified.",
+          heading: "Test message",
+          body: `
+            <div style="font-size:20px;font-weight:600;line-height:1.3;letter-spacing:-.01em">
+              This is the test message
+            </div>
+            <div style="margin:8px 0 0">
+              Sent from Settings &rarr; Email. If it arrived, the key works and
+              the domain is verified — which is the part that decides whether
+              anything else this app sends reaches an inbox.
+            </div>
+            <div style="margin:16px 0 0;color:#71717a;font-size:14px">
+              Renewal reminders go out at 9am Dhaka time, for anything renewing
+              within the next three days.
+            </div>
+          `,
+        }),
       );
       results.push(
         result.ok ? { to, ok: true } : { to, ok: false, reason: result.reason },
