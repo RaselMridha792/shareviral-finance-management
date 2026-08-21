@@ -20,6 +20,72 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — Twenty entries to a page on the account register, newest first
+
+**Done.** The owner's ask on **the account register** (`/accounts/[id]/register`), and nothing
+else on it. The table drew every entry an account has ever had in one run, oldest first — 46 rows
+per account on this laptop's data, 704 on the live one — so the most recent movement, which is
+what somebody opens a register for, was at the bottom of a long scroll. It now pages at the app's
+`PAGE_SIZE` of twenty and opens on the newest line. Commits: `5777cbe`.
+
+*The reversal is on the screen, not in the query.* Same rule the Bank statement follows, and for
+the same reason: the API orders the register ascending because the Balance column is a window
+function over exactly that order, and turning the query round changes every figure in it. So
+`register-screen.tsx` reverses a **copy** of the rows after each already carries its balance
+(`register.rows.reverse()` in place would flip the props array and un-flip the table on the next
+render). `transactions.service.ts` is untouched, which leaves the exported statement PDF and
+every other consumer of `/accounts/:id/register` reading exactly as they did.
+
+*The serial counts across the register rather than within a page.* This is the one thing that
+needed a shared file — see below.
+
+**Watch out.**
+
+- **`components/ledger/transaction-table.tsx` gained one optional prop.** `TransactionTable`
+  numbered its rows `index + 1`, which is the second row 1 twenty lines later once a screen
+  pages, and the serial is not rendered anywhere the screen could reach. It now takes
+  `page?: number`, **defaults to 1**, and numbers with `serial(page, index)` from
+  `lib/pagination`. At the default that is `index + 1` exactly, so the other two callers —
+  `ledger/transactions-screen.tsx` and `expenses/category-detail-screen.tsx` — render
+  byte-identically; only the register passes a page. Nothing under `components/ui/`,
+  `components/money/`, `lib/` or `packages/shared` was edited.
+- **The page number lives in React state, not in the URL** — the same as the ten other paged
+  screens. `setRange` puts it back to 1 on a date change, because the route does not change
+  there, only its query, so React keeps this component and its page number across the
+  navigation. `Math.min(page, totalPages)` clamps what a filter change cannot reach: a page
+  number that outlives its rows after a void or a `router.refresh()`.
+- **The "cannot be right" warning on cash and wallet accounts was reworded**, because the change
+  made it wrong. It told the reader to "work down the list" to find the day the balance first
+  went under; down the list is now backwards in time. It says to read the Balance column upwards
+  from the oldest entry instead.
+- **The four figures above the table are the period's, not the page's**, and they were left as
+  they are — they sit above the date filter that decides them, in the stat-card row every screen
+  in this app carries, and the Closing card already says "Should equal the bank statement". The
+  qualifier the Bank statement's foot needed does not apply to a row of cards above the table.
+
+**Measured, not read off the diff.** `.regpage.mjs` (untracked, at the root, adapted from
+`.stmtpage.mjs`) drives the real page in a browser: it walks **every** account that has rows,
+clicks through to the last page and checks what a diff cannot show — that the serials run 1..N
+unbroken **across** the page breaks, that no entry is duplicated or dropped, that the dates never
+rise between rows or over a break, that each page holds twenty and the last the remainder, that
+the four figures do not change as pages turn, and that the top row's running balance equals the
+Closing card. Nine accounts, all green: 46 rows in [20, 20, 6], 43 in [20, 20, 3], 41 in
+[20, 20, 1], 40 in [20, 20], 37, 33, then 14, 3 and 2 with no pager at all. It also drives the
+two states a pager gets wrong when nobody clicks it: on page 3 of City Bank, setting a From date
+lands on **page 1** of the shorter list with serial 1 at the top, and a range with nothing in it
+draws the empty message with **no pager** to strand anybody on.
+
+**Open.**
+
+- **All transactions still restarts its serial on page 2.** It pages from the API and passes no
+  `page` to `TransactionTable`, so its twenty-first entry is a second "1". The prop it needs now
+  exists and the fix is one line, but that is its own page and its own session.
+- The owner wants twenty to a page on **every** table. Already paged: All transactions, Cash in,
+  Other expenses, Payroll runs, Audit, FX rates, Users, Subscriptions, Team, member tools, Bank
+  statement — and now the account register. Still unpaged, one page per session: `/import`
+  (three tables), `/payroll/[runId]` salary sheet, `/tax/withholding`, `/team/[id]`, and the
+  email panel in Settings.
+
 ## 2026-08-21 — Twenty movements to a page on the bank statement, newest first
 
 **Done.** The owner's ask on **Bank statement**, and nothing else on it. The table drew every
