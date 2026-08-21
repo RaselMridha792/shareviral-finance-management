@@ -92,6 +92,11 @@ const ROUTE_PERMISSIONS: Array<[string, Permission]> = [
   // The bank statement is the ledger line for line, not a figure derived from
   // it — so it is gated like the ledger and not like a report.
   ["/statement", "transactions.read"],
+  ["/data", "imports.run"],
+  // The old path still answers, with a permanent redirect, so it is still
+  // gated: an unlisted route is not denied by anything here — `deniedBy`
+  // returns null when nothing matches — and letting the refusal happen after
+  // the redirect rather than before it is a worse answer to the same question.
   ["/import", "imports.run"],
   ["/assistant", "ai.use"],
   ["/settings", "settings.read"],

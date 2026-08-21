@@ -226,9 +226,11 @@ export const NAV_GROUPS: NavGroup[] = [
 /** Pinned to the bottom of the rail. */
 export const SECONDARY_NAV: NavItem[] = [
   {
-    key: "import",
-    href: "/import",
-    label: "Imports",
+    key: "data",
+    // Renamed from `/import` when the screen gained an export tab. `/import`
+    // still answers, with a permanent redirect, for anything that bookmarked it.
+    href: "/data",
+    label: "Import and Export",
     icon: "upload_file",
     hue: 100,
     permission: "imports.run",

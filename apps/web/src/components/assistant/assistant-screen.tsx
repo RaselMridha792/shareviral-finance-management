@@ -211,7 +211,7 @@ export function AssistantScreen({
         reply?.importPlan ?? null,
       );
       setAttachment({ ...attachment, importBatchId: batchId });
-      router.push(`/import?batch=${batchId}`);
+      router.push(`/data?batch=${batchId}`);
     } catch (caught) {
       setError(explain(caught, "Those rows could not be staged for import."));
     } finally {

@@ -1,44 +1,28 @@
-import { ImportScreen } from "@/components/imports/import-screen";
-import { importsApi } from "@/lib/imports";
-import { accountsApi, categoriesApi } from "@/lib/masters";
+import { permanentRedirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = { title: "Import · SFM" };
-
-export default async function ImportPage({
+/**
+ * The screen moved to `/data` when it stopped being only about importing.
+ *
+ * Left behind because a URL somebody bookmarked, or a link in an old note, is
+ * not the sort of thing that announces itself before it breaks. `permanentRedirect`
+ * rather than `redirect`: the move is not coming back, and a 308 lets a browser
+ * stop asking.
+ *
+ * The query string travels: the assistant sends people here with `?batch=`,
+ * and dropping it would land them on an empty file picker with their rows
+ * already staged and invisible.
+ */
+export default async function ImportRedirect({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const search = await searchParams;
-  const batchId = typeof search.batch === "string" ? search.batch : null;
-
-  const [batches, accounts, categories] = await Promise.all([
-    importsApi.list(),
-    accountsApi.list(),
-    categoriesApi.tree(),
-  ]);
-
-  /**
-   * `?batch=` is how a file staged somewhere else gets picked up here.
-   *
-   * The assistant stages an attachment and sends the person over; without
-   * this they landed on an empty file picker with the rows sitting in the
-   * database, visible to nobody. A batch that has gone missing or was already
-   * imported is not an error worth a page for — the screen just opens at the
-   * usual first step.
-   */
-  const resume = batchId
-    ? await importsApi.resume(batchId).catch(() => null)
-    : null;
-
-  return (
-    <ImportScreen
-      initialBatches={batches}
-      accounts={accounts}
-      categories={categories}
-      resume={resume}
-    />
-  );
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (typeof value === "string") query.set(key, value);
+    else if (Array.isArray(value) && value[0]) query.set(key, value[0]);
+  }
+  const suffix = query.toString();
+  permanentRedirect(suffix ? `/data?${suffix}` : "/data");
 }

@@ -109,7 +109,7 @@ export function AttachmentCard({
               These rows are waiting on the import screen.
             </p>
             <Link
-              href={`/import?batch=${attachment.importBatchId}`}
+              href={`/data?batch=${attachment.importBatchId}`}
               className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
               Open Import
