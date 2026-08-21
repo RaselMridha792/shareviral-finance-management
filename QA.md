@@ -258,3 +258,96 @@ form is the same one on five screens, and whether its fields reach the endpoint
 correctly is a separate question from whether the endpoint is right. Payroll
 finalise and pay, which move money for a whole run. Creating an account, a team
 member or a subscription.
+
+---
+
+## Writing through the form, payroll totals, Settings panels, the statement's tables
+
+### The drawer, not the endpoint
+
+`.writeqa.mjs` proved the API moves the ledger. That says nothing about whether
+the drawer reaches it with what was typed — a field bound to the wrong key, a
+number sent as text, a default quietly overriding an entry, all leave the
+endpoint blameless and the row wrong. So: typed into the drawer the way a
+person does, pressed the button it offers, then asked the database what arrived.
+
+| | |
+|---|---|
+| description | as typed |
+| amount | ৳3,141.59, as typed |
+| direction | `out` — correct for an expense screen |
+| date | today |
+| category, account | both set from the screen's own context |
+| the ledger | moved −3,141.59, exactly the amount |
+| the page | shows the new row after a reload |
+
+This is the most-used write path in the app: the same drawer serves five
+screens. **Findings: none.** The probe row was removed.
+
+Worth recording: `/transactions` has no add button, by design — the form is
+mounted there only to edit a row. Creating happens on the category pages and
+Other expenses.
+
+### Payroll run totals
+
+Every run's stored `total_gross`, `total_tds` and `total_net` compared with the
+sum of its own lines. **All six runs in this database store 0.00 against lines
+that add to real money**, and the salary sheet shows it: eighteen people with
+real salaries, and `GROSS ৳0.00 · TAX WITHHELD ৳0.00 · NET TO PAY ৳0.00` above
+them with a Finalise button beside.
+
+**This is stale local data, not a fault in the app.** These runs were written at
+00:22 on 20 August by the seeder that has since been replaced; the current one
+writes the totals, and the service recomputes them from the lines at all three
+places that can change a line. Nothing that a person does through the app leaves
+them wrong.
+
+**But it is worth one look on the live site**, because the failure mode is
+unpleasant: the totals are stored rather than derived, so anything that writes
+lines without calling `recalculate` produces a sheet whose footer contradicts
+its own rows. Open any salary sheet on live and check the four figures at the
+top are not zero.
+
+### Settings — all ten tabs
+
+Each opened in turn and watched for its own fetches. **Ten render, none logs an
+error, none returns 4xx or 5xx.** Company & formatting, Categories, Exchange
+rate, Salary TDS, Your sign-in, People who can sign in, What changed, Assistant,
+Email, Notifications.
+
+### The period statement's twelve tables
+
+All twelve render. Ten of them show an empty-state row — which is not a
+separate fault: it is the Reports finding above, the page opening on August
+2025, a month with nothing in it.
+
+**One more false alarm.** "What changed" was reported as failing because the
+audit log lists an action called **"Failed sign-in"**, and the check matched the
+bare word. A screen's content is not a diagnosis of the screen. Both detectors
+now match the app's own error sentences.
+
+---
+
+## Where the pass ended
+
+**Nineteen screens, ten settings panels, twelve statement tables, five roles,
+and the write path both through the API and through the form.**
+
+Three findings in the application:
+
+1. **Reports opens on a period a year old and empty** — the month is computed
+   from today, the fiscal year is taken from the wrong end of a list.
+2. **The Tax warning triangle is on every row** — asked to be removed in
+   section 7.1, still there, and drawn on every line because none has a stored
+   basis.
+3. **The salary sheet's Net column sits ~16px left of its heading** — cosmetic.
+
+Nothing else disagreed: not a balance, not a total, not a permission, not a
+write. Eight false alarms were raised and chased down, every one of them in the
+checking rather than in the app — the wrong figure read from a block, a Unicode
+minus, a blank heading, a fan-out join, a sidebar link, a `colSpan` row, a date
+shifted by a timezone, and the word "Failed" in a row of the audit log.
+
+That ratio is the honest summary of this pass. The application was right almost
+everywhere it was asked; the instruments were not, and each one had to be taken
+apart before anything could be reported. The harness knows all eight traps now.
