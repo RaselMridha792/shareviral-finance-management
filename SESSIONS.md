@@ -64,7 +64,7 @@ that fits. Other expenses, 82 rows: 20/20/20/20/2, serials 1..82, the card's hea
 agreeing at 82, and the "Spent in July" headline equal to the sum of every row across all five
 pages rather than the page's — ৳12,68,41,084.00 both ways. Both scripts also check the dropdown:
 four real months, none disabled, and picking one re-scopes the screen. Four CI steps run
-separately, all green (315 tests).
+separately, all green (315 tests). Commits: `605e562`.
 
 **Open.** Nothing half-done. The account register got the same twenty-row treatment in another
 session this morning; the two arrived independently and both use `@/lib/pagination`, so there is
