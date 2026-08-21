@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { formatMoney } from "@finance/shared";
 
@@ -14,6 +14,7 @@ import {
   FilterSelect,
 } from "@/components/ui/filters";
 import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import type { RegisterResult, TransactionDto } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
+import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,6 +55,36 @@ export function BankStatementScreen({
 }) {
   const router = useRouter();
   const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  const [page, setPage] = useState(1);
+
+  /**
+   * Newest first on screen, oldest first in the arithmetic.
+   *
+   * The API orders this account's rows by date ascending because the balance
+   * column is a window function over exactly that order — turn the query round
+   * and every figure in it changes. So the reversal happens here, after each
+   * row already carries the balance it left behind, and the Balance column is
+   * untouched: the top row is the most recent movement and the number beside it
+   * is the account's closing balance, which is what somebody opening this page
+   * has come to see. It cost a scroll to the foot of 704 rows before.
+   *
+   * A copy, not `register.rows.reverse()` — that reverses the array the props
+   * hold, so a re-render on the same data would turn the statement back round.
+   */
+  const ordered = useMemo(() => [...register.rows].reverse(), [register.rows]);
+
+  const totalPages = pageCount(ordered.length);
+  /*
+   * Clamped rather than reset.
+   *
+   * The account and the two dates are the only things that shorten this list,
+   * and each of them already sends the reader back to page 1 through `go`. The
+   * clamp is for what a filter change cannot do anything about — a page number
+   * that outlives the rows it pointed at, which draws an empty table on a
+   * statement that plainly has movements in it.
+   */
+  const current = Math.min(page, totalPages);
+  const visible = ordered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   /**
    * Every control writes the whole query rather than a patch of it.
@@ -74,6 +106,13 @@ export function BankStatementScreen({
     params.set("account", next.account);
     if (next.from) params.set("from", next.from);
     if (next.to) params.set("to", next.to);
+    /*
+     * Another account, or a narrower month, is a different and usually shorter
+     * statement — and page 6 of it may not exist. The route does not change
+     * here, only its query, so React keeps this component and its page number
+     * alive across the navigation unless it is put back.
+     */
+    setPage(1);
     router.push(`/statement?${params}`);
   }
 
@@ -82,7 +121,7 @@ export function BankStatementScreen({
       <PageHeader
         title="Bank statement"
         icon="description"
-        description="One account's movements, in date order, with the balance after each."
+        description="One account's movements, newest first, with the balance after each."
       />
 
       {/*
@@ -196,22 +235,25 @@ export function BankStatementScreen({
               </tr>
             </thead>
             <tbody>
-              {register.rows.length === 0 ? (
+              {visible.length === 0 ? (
                 // 9: SL, Date, Description, Debit, Credit, Balance, Txn ID,
                 // Invoice, actions.
                 <TableMessageRow colSpan={9}>
                   Nothing on this account in that period.
                 </TableMessageRow>
               ) : (
-                register.rows.map((row, index) => (
+                visible.map((row, index) => (
                   <tr
                     key={row.id}
                     className={cn("row-finance", row.voidedAt && "opacity-60")}
                   >
-                    {/* Oldest first, and the serial counts with them: the
-                        running balance is a window function over this order,
-                        so neither the rows nor their numbering turn around. */}
-                    <SerialCell n={index + 1} />
+                    {/* Counted across the statement rather than within the
+                        page: `index + 1` restarts at 1 on page two, so the
+                        twenty-first movement and the first would answer to the
+                        same number — on the screen whose numbers get read down
+                        a phone to a bank. Number 1 is the newest line, and
+                        every page continues where the last one stopped. */}
+                    <SerialCell n={serial(current, index)} />
                     <td className="num whitespace-nowrap">{row.txnDate}</td>
                     <td className="cell-prose">
                       <span className={cn(row.voidedAt && "line-through")}>
@@ -285,6 +327,13 @@ export function BankStatementScreen({
                 <td colSpan={3}>
                   <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                     Closing balance
+                  </span>{" "}
+                  {/* Said out loud now that the table pages: this line is the
+                      whole period, and it sits under whichever twenty rows are
+                      on screen. Without the qualifier a reader on page 3 has
+                      every reason to read it as page 3's total. */}
+                  <span className="text-xs text-muted-foreground">
+                    · whole period, not this page
                   </span>
                 </td>
                 <td className="text-right">
@@ -320,6 +369,19 @@ export function BankStatementScreen({
           </table>
         </TableScroll>
       </Card>
+
+      {/* A sibling of the card, never inside the empty branch above — the page
+          somebody most needs this control on is the one that came up empty, and
+          a pager written in the table's branch is the one that is not there.
+          It draws nothing at all while a statement fits on one page. */}
+      <Pagination
+        page={current}
+        totalPages={totalPages}
+        total={ordered.length}
+        noun="entry"
+        nounPlural="entries"
+        onPage={setPage}
+      />
 
       <p className="text-xs text-muted-foreground">
         Voided entries are shown struck through and left out of every total — a

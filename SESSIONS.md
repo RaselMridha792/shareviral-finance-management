@@ -20,6 +20,67 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — Twenty movements to a page on the bank statement, newest first
+
+**Done.** The owner's ask on **Bank statement**, and nothing else on it. The table drew every
+movement an account has ever had in one run — 41 to 46 rows per account here, far more on the
+live data — so the most recent one, which is what somebody opens this page for, was at the
+bottom of a long scroll. It now pages at the app's `PAGE_SIZE` of twenty and opens on the newest
+line.
+
+*The reversal is on the screen, not in the query.* The API orders the register by date ascending
+because the Balance column is a window function over exactly that order — turn the query round
+and every figure in it changes. So `bank-statement-screen.tsx` reverses a **copy** of the rows
+after each already carries the balance it left behind (`register.rows.reverse()` in place would
+flip the props array and un-flip the table on the next render). `transactions.service.ts` is
+untouched, which is what leaves the account register at `/accounts/[id]/register` and the
+exported statement PDF reading exactly as they did.
+
+*The serial counts across the statement rather than within a page* — `serial(current, index)`
+from `lib/pagination`, so the twenty-first movement is 21 and not a second 1. Number 1 is the
+newest line, the same way every other paged table in this app numbers from its first row.
+
+*The closing line now says what it totals.* It is the whole period's, and it sits under whichever
+twenty rows are on screen — on page 3 a reader has every reason to read it as page 3's total. It
+reads "Closing balance · whole period, not this page".
+
+**Watch out.**
+
+- **No shared component changed.** `Pagination`, `PAGE_SIZE` and `serial` already existed; this
+  screen only started consuming them. Nothing under `components/ui/`, `components/money/`,
+  `lib/` or `packages/shared` was edited, so no other screen moved.
+- **The page number lives in React state, not in the URL** — the same as the eight other paged
+  screens. `go()` puts it back to 1 on an account or date change, because the route does not
+  change there, only its query, so React keeps this component and its page number across the
+  navigation. A statement link still opens on page 1 for whoever receives it.
+- **The "Brought forward" line still sits above the rows** and is now above the *newest* one,
+  which is how a bank prints its header — but it is the opening figure of a list that now runs
+  the other way. Left as it was, since it names its own date. The owner may want it paired with
+  the closing figure; that is a decision, not a bug.
+
+**Measured, not read off the diff.** `.stmtpage.mjs` (untracked, at the root) drives the real
+page in a browser: it walks every account with rows, clicks through to the last page and checks
+what a diff cannot show — that the serials run 1..N unbroken **across** the page breaks, that no
+movement is duplicated or dropped, that the dates never rise between rows or over a break, that
+each page holds twenty and the last the remainder, that the foot does not change as pages turn,
+and that the top row's running balance equals the closing balance under the table. Six accounts,
+all green: 46 rows in [20, 20, 6], 43 in [20, 20, 3], 41 in [20, 20, 1], 40, 37, 33. It also
+drives the two states a pager gets wrong when nobody clicks it: on page 3 of City Bank, switching
+account lands on **page 1** of the new one, and a range with nothing in it draws the empty message
+with **no pager** to strand anybody on. Cross-checked against the database: the closing balance on
+screen, −BDT 14,28,47,700.00, is the account's opening balance plus its live movements exactly.
+
+**Open.** The owner wants twenty to a page on **every** table in the app. Already paged: All
+transactions, Cash in, Other expenses, Payroll runs, Audit, FX rates, Users, Subscriptions, Team,
+member tools — and now Bank statement. Still unpaged, one page per session:
+
+- `/accounts/[id]/register` — the account register, the same table shape as this one and the
+  obvious next session.
+- `/import` (three tables), `/payroll/[runId]` salary sheet, `/tax/withholding`, `/team/[id]`,
+  and the email panel in Settings.
+- The Reports statement view (`statement-view.tsx`, three tables) is a printed document rather
+  than a screen to page through — worth a decision before anybody paginates it.
+
 ## 2026-08-21 — The statement's signature block gets the signature
 
 **Done.** The owner's ask on **Reports**, and nothing else on it. "Signed by" held a name and a
