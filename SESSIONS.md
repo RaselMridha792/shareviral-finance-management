@@ -20,6 +20,41 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — three revisions on the subscriptions page and the mail it sends
+
+**Done.** Three things the owner asked for after using the app.
+
+**Newest plan at the top.** The subscriptions list led with the next renewal date, on the
+reasoning that "what is about to bill" is the commonest question. It is not the commonest
+*action* — adding a plan is, and a new row landing mid-page, sorted by a date nobody has thought
+about yet, reads as not having saved. `created_at desc, id desc`; the id makes the order total, so
+two plans added in the same second cannot swap places between page loads and show twice in a
+pager. The profile's Paid tools follows, since the point of the two sharing a component is that
+they cannot disagree.
+
+**The renewal mail has a shape.** It went out as a paragraph and a bare table. There is a header
+that identifies the sender, the figures on their own panel, and one button doing the one thing
+the message asks for. `email-layout.ts` holds it, and the test message uses the same wrapper — a
+test that looks different from the real thing tests the sending and not the message.
+
+**The FX chip is off the top bar**, on instruction.
+
+**Watch out.**
+
+- **Nothing on any screen now states the exchange rate.** The dashboard's rate caption was removed
+  earlier on the stated understanding that the top bar chip still named it everywhere — that was
+  the argument for the caption going. Both are gone now. The rate lives in Settings → Exchange
+  rate, which is not somewhere a reader passes by accident. Every dollar figure is still a
+  translation of a taka one; only the label saying so has gone.
+- Email is not a browser: `email-layout.ts` is nested tables and inline styles on purpose, and the
+  button is a table cell because a styled `<a>` loses its padding in Outlook. The mark is drawn
+  from a coloured cell and a character rather than an `<img>`, which is blocked by default in
+  about half of inboxes. Do not "tidy" any of that into CSS.
+
+**Open.** Nothing from this piece. The mail was rendered and looked at rather than reasoned about,
+but only in Chrome — Outlook and Gmail's own renderers are the ones that would surprise us, and
+the honest test for those is sending one.
+
 ## 2026-08-21 — Import and Export, and the em-dash that broke a download
 
 **Done.** `/import` is `/data` and the screen has two tabs. Import is what was already there,
