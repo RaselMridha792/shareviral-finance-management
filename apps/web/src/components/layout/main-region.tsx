@@ -3,8 +3,6 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { RateCaption } from "@/components/money/rate-caption";
-
 /**
  * Every screen is a document in a padded column — except the assistant, which
  * is a room.
@@ -15,19 +13,6 @@ import { RateCaption } from "@/components/money/rate-caption";
  * route that needs the whole viewport says so here.
  */
 const FULL_BLEED = ["/assistant"];
-
-/**
- * Screens that do not carry the rate caption at their foot.
- *
- * The caption is this app's promise that a translated figure says what rate
- * produced it, so taking it off a screen is not a cosmetic decision. It comes
- * off the dashboard on the owner's instruction, and the promise still holds:
- * the top bar states the same rate — "FX locked ৳118.75 / $1" — on every
- * screen. If that chip ever goes, this list has to be emptied.
- *
- * Matched by equality, not prefix. "/" is a prefix of every route in the app.
- */
-const NO_RATE_CAPTION = ["/"];
 
 export function MainRegion({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -54,19 +39,19 @@ export function MainRegion({ children }: { children: ReactNode }) {
         padding: "clamp(22px, 3vw, 34px) clamp(16px, 3vw, 32px) 32px",
       }}
     >
-      {/* 20px, not 24. The handoff stacks its blocks at 16–20, and at 24 the
-          three sections of the dashboard read as three pages. */}
-      <div className="flex flex-col gap-5">
-        {children}
-        {/*
-          Under nearly every screen, because a screen shows dollar figures
-          translated from taka and a translated figure that does not say what
-          rate produced it is a number nobody can check. Here rather than on
-          each page: one rate governs the whole app, so the sentence belongs in
-          one place — including the decision about which screens skip it.
-        */}
-        {NO_RATE_CAPTION.includes(pathname) ? null : <RateCaption />}
-      </div>
+      {/*
+        20px, not 24. The handoff stacks its blocks at 16–20, and at 24 the
+        three sections of the dashboard read as three pages.
+
+        Nothing follows the last block any more. A rate caption used to close
+        every screen but the dashboard — "Dollar figures are approximate,
+        translated from BDT at 121.50 per USD…" — so that a translated figure
+        said what rate produced it. The owner had it removed app-wide, and the
+        promise it carried is kept by the top bar, which states the same rate
+        as "FX locked ৳121.50 / $1" on every screen including this one. If that
+        chip ever goes, the sentence has to come back somewhere.
+      */}
+      <div className="flex flex-col gap-5">{children}</div>
     </main>
   );
 }
