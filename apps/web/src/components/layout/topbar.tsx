@@ -12,7 +12,6 @@ import {
   useSidebarCollapsed,
 } from "@/components/layout/sidebar-state";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { useUsdRateContext } from "@/components/money/rate-provider";
 import { Icon } from "@/components/ui/icon";
 import { useState } from "react";
 
@@ -50,17 +49,6 @@ export function Topbar() {
   const leaf = useLeafCrumb();
   const crumbs = leaf ? [...trail, { label: leaf }] : trail;
   const collapsed = useSidebarCollapsed();
-
-  /**
-   * The rate the dollar figures on screen were actually worked out at — the
-   * same one the footnote names, not the fixed setting.
-   *
-   * Those two are allowed to differ: the setting is what somebody typed, and
-   * this is what the period resolved to. Showing one at the top of the page and
-   * the other at the foot is how a reader ends up with two rates and no way to
-   * tell which the numbers used.
-   */
-  const usd = useUsdRateContext();
 
   return (
     <>
@@ -135,19 +123,14 @@ export function Topbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {usd ? (
-            <span
-              className="hidden items-center gap-1.5 rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs text-muted-foreground sm:inline-flex"
-              title="Every dollar figure in this app is a translation of a taka one, at this rate."
-            >
-              <Icon name="lock" size={15} className="text-faint" />
-              <span>FX locked</span>
-              <span className="num text-foreground">
-                ৳{usd.rate.toFixed(2)} / $1
-              </span>
-            </span>
-          ) : null}
+          {/* The "FX locked ৳x / $1" chip stood here on every screen. Off on
+              the owner's instruction.
 
+              Worth knowing what went with it: the dashboard's rate caption was
+              removed earlier on the understanding that this chip still stated
+              the rate everywhere. With both gone, no screen says what rate the
+              dollar figures were translated at — it is in Settings → Exchange
+              rate, and nowhere a reader passes by accident. */}
           {/* Before the theme toggle: the bell is the one control up here
               that can be asking for something, and it should be the last thing
               a reader passes rather than the first thing after it. */}
