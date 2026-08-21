@@ -149,3 +149,55 @@ from six columns flagged to the one that is genuinely out.
 
 **Not checked.** Creating a payroll run, editing a line, finalising or paying;
 the TDS working drawer; the challan panel.
+
+---
+
+## Subscriptions, category detail, Reports, Bank statement, Assistant, Import and Export, Settings
+
+**Checked.** Seven screens through the harness, the bank statement measured
+against the account it is for, and the Reports page's opening period traced back
+to the code that chooses it.
+
+| | |
+|---|---|
+| Loading | All seven render. Subscriptions and the statement page at 20 with a pager. |
+| Layout | No sideways scroll on any of the seven. |
+| Console / network | Nothing. |
+| Bank statement columns | `SL · Date · Description · Debit · Credit · Balance · Transaction ID · Invoice` — the order asked for. |
+| Brought-forward line | Date and figure both equal the account's own opening balance. The first row of the table is a real movement, not the blank placeholder it used to be. |
+
+### Finding: Reports opens on a period a year old, and empty
+
+`/reports` asks the API for `fiscalYear=2025&index=2` — August 2025 — on a day
+in August 2026. The page shows **0 line items**, which is what that month
+contains.
+
+The month is worked out correctly and the year is not:
+
+```ts
+const current = periods.periods.findIndex((p) => today >= p.start && today <= p.end);
+const index = current >= 0 ? current + 1 : 1;      // right: August is index 2
+…
+fiscalYear: periods.years[1],                      // wrong: years is [2026, 2025]
+```
+
+`periods.years` arrives newest first, so `years[1]` is the fiscal year *before*
+the one the periods belong to. The index is computed against 2026's months and
+then applied to 2025.
+
+The comment two lines above says what was meant: *"Open on the period we are
+actually in. Landing on July every August is the kind of small wrongness that
+makes people stop trusting a document."* The intent is stated and the code does
+the opposite of it for the year — the fourth time today a comment and its line
+have disagreed.
+
+`apps/web/src/app/(dashboard)/reports/page.tsx`. Not fixed; reported.
+
+**One more false alarm, mine.** The statement's brought-forward date was read
+through `new Date(...).toISOString()`, which shifts a day back at UTC+6, and
+reported a mismatch the page did not have. Dates are read as text from SQL now.
+
+**Not checked.** The twelve tables inside the period statement — their internal
+arithmetic was not verified, only that the page renders and the period it opens
+on is wrong. The assistant's chat, the export downloads from the Export tab
+(those were checked when the tab was built), and every settings panel.
