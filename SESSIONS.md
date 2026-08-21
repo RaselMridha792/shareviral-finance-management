@@ -26,7 +26,7 @@ must run, an assumption that is no longer true.
 movement an account has ever had in one run — 41 to 46 rows per account here, far more on the
 live data — so the most recent one, which is what somebody opens this page for, was at the
 bottom of a long scroll. It now pages at the app's `PAGE_SIZE` of twenty and opens on the newest
-line.
+line. Commits: `14fa2cd`.
 
 *The reversal is on the screen, not in the query.* The API orders the register by date ascending
 because the Balance column is a window function over exactly that order — turn the query round
