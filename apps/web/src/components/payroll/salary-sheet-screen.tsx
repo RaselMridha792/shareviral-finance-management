@@ -663,12 +663,29 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
+      {/*
+        Built like the Tax cell beside it, not like a bare Amount.
+
+        Every other money column on this sheet places its figure through
+        something with its own width and padding — the editable cells through
+        an `<input class="col-amount w-full px-2">`, Tax through a full-width
+        button that ends its contents with `justify-end`. Net was the one
+        exception, an Amount dropped straight into the cell, and it measured
+        out of line with its own heading.
+
+        Whether that gap was 24px or nothing depended on which script did the
+        measuring, which is its own answer: a column whose alignment two
+        instruments disagree about is one to build the same way as its
+        neighbours rather than one to keep arguing about.
+      */}
       <td>
-        <Amount
-          value={line.netAmount}
-          tone="neutral"
-          className="block font-semibold"
-        />
+        <div className="flex w-full items-center justify-end px-1">
+          <Amount
+            value={line.netAmount}
+            tone="neutral"
+            className="font-semibold"
+          />
+        </div>
       </td>
       <td>
         <div className="flex items-center justify-end gap-3">
@@ -748,9 +765,19 @@ function TdsCell({
         }
         className="flex w-full cursor-pointer items-center justify-end gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted"
       >
-        {line.tdsBasis ? null : (
-          <TriangleAlert className="size-3 shrink-0 text-warning" />
-        )}
+        {/*
+          The warning triangle is gone, on the owner's instruction.
+
+          It drew whenever a line had no stored `tdsBasis`, which was meant to
+          mark the exception — a figure somebody typed rather than one the app
+          worked out. In practice no line on this system carries a basis, so it
+          drew on every row, and a mark that is on everything marks nothing.
+
+          What goes with it is worth knowing: the sheet no longer distinguishes
+          a computed tax from a typed one at a glance. The cell is still a
+          button, its title still says which this line is, and the drawer
+          behind it still shows the working when there is one.
+        */}
         <Amount value={line.tdsAmount} tone="neutral" />
       </button>
     </td>
