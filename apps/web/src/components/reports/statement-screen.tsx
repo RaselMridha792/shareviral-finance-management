@@ -90,7 +90,16 @@ export function StatementScreen({
         // fetch returned.
         initialStatement={granularity === "month" ? initialStatement : null}
         initialPeriods={initialPeriods}
-        initialFiscalYear={initialPeriods.years[1]}
+        /*
+         * The year the periods belong to, and the same one the server asked
+         * for. This was `years[1]` — one behind — so whatever the page had
+         * fetched, the view immediately re-fetched last year's month and every
+         * visit opened on an empty statement.
+         *
+         * `Math.max`, not an index: the order of that list is not this file's
+         * to know, and an index is only right while the order is.
+         */
+        initialFiscalYear={Math.max(...initialPeriods.years)}
         initialIndex={initialIndex}
       />
     </>

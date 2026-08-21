@@ -27,7 +27,25 @@ export default async function StatementPage() {
    * period lengths are still reachable from their tabs.
    */
   const statement = await reportsApi
-    .statement({ granularity: "month", fiscalYear: periods.years[1], index })
+    .statement({
+      granularity: "month",
+      /*
+       * The year the periods above belong to, which is the newest one.
+       *
+       * This read `years[1]`, and `availablePeriods` returns its years newest
+       * first while listing the periods of `currentFiscalYear` — so the index
+       * was counted against this year's months and then applied to last
+       * year's. Every visit opened on the same month a year ago, which holds
+       * nothing, and the page greeted everybody with "0 line items".
+       *
+       * `Math.max` rather than `years[0]`: an index is only right while the
+       * order is, and the order is not this file's to know. If the list is
+       * ever returned the other way round, this still asks for the year the
+       * months were counted in.
+       */
+      fiscalYear: Math.max(...periods.years),
+      index,
+    })
     .catch((caught: unknown): FinancialStatement | null => {
       // Only an API refusal is swallowed. `redirect()` throws a control-flow
       // signal Next unwinds, and catching that would strand an expired session
