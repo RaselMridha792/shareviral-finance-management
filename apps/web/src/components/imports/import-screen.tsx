@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Select } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api-client";
 import {
   importsApi,
@@ -217,12 +216,9 @@ export function ImportScreen({
 
   return (
     <>
-      <PageHeader
-        title="Import from Excel"
-        icon="upload_file"
-        description="Bring in past transactions from a spreadsheet or bank export."
-      />
-
+      {/* The page heading belongs to `DataScreen`, which owns both tabs. Two
+          tabs each drawing their own title redraws the heading on every
+          switch, and the heading is the one thing that does not change. */}
       <ol className="flex flex-wrap gap-2">
         {STEPS.map((label, index) => (
           <li
