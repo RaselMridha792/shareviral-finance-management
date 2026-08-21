@@ -20,6 +20,45 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-21 — Import and Export, and the em-dash that broke a download
+
+**Done.** `/import` is `/data` and the screen has two tabs. Import is what was already there,
+four steps and untouched. Export is where every button removed from the other screens went — nine
+datasets, each pointed at the endpoint its old button used, so the sheet is still the list
+endpoint's own output and "the file matches what the screen would have shown" stays a property of
+the code. No column picker, for the same reason. Commits: `<this push>`.
+
+The controls a dataset offers are exactly the ones its endpoint reads. The query schemas are
+`strictObject`, so a stray key is a 400 — but the quieter reason is that a date range on a dataset
+with no dates narrows nothing and says nothing, and somebody takes the whole file for a filtered
+one. The dataset list is cut to what the reader may already see; that is a courtesy, and every
+endpoint keeps its own `@RequirePermission` behind it.
+
+**A pre-existing bug came out of testing it.** `Content-Disposition` carried the filename raw, and
+a header value may only hold Latin-1. Three accounts here are named like "BRAC Bank — payroll", so
+the register export threw `ERR_INVALID_CHAR` and came back a 500 with nothing on screen to say
+why. The same helper serves every sheet and every PDF, so this was one non-ASCII vendor or person
+away on any of them — and this is a Bangladesh company. Both RFC 5987 forms now.
+
+**Watch out.**
+
+- **`proxy.ts` needed `/data` adding, and that is not cosmetic.** `deniedBy` returns null when no
+  prefix matches, so a route absent from `ROUTE_PERMISSIONS` is gated by nothing. Renaming the
+  path without it would have taken a screen out from behind `imports.run` and opened it to every
+  signed-in role. `/import` keeps its entry so the refusal happens at the old URL.
+- `/import` permanently redirects and carries its query string — the assistant's "Send to Import"
+  arrives as `?batch=`, and losing it lands somebody on an empty file picker with their rows
+  already staged and invisible. The assistant's two links point at `/data` directly now.
+- `ImportScreen` no longer draws a `PageHeader`; `DataScreen` owns it.
+
+**Open.**
+
+- Payroll per-run and the period report are not in the export list. Both need a record chosen
+  rather than a date range, and Reports keeps its own export by the owner's rule.
+- Verified by calling all nine endpoints and reading the rendered page. Not verified against a
+  non-super-admin role: the dataset list should shorten, and the endpoints refuse regardless, but
+  that is a `.rolecheck.mjs` run somebody should do.
+
 ## 2026-08-21 — a reminder that only fired on one exact day
 
 **Done.** The owner set a plan to renew in two days, waited, got no mail and no bell, pressed
