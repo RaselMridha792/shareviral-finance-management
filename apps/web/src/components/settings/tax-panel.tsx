@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_TDS_POLICY,
   TDS_EXEMPTION_MODES,
   TDS_EXEMPTION_MODE_LABELS,
   type TdsExemptionMode,
@@ -41,6 +42,8 @@ export function TaxPanel() {
   const [exact, setExact] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** True while the form holds a default nobody has saved yet. */
+  const [unsaved, setUnsaved] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -71,6 +74,27 @@ export function TaxPanel() {
       })
       .catch((caught) => {
         if (!live) return;
+        /*
+         * No rule at all is a first day, not a failure.
+         *
+         * A database with no `tax_policies` row made this panel print the
+         * API's message and nothing else — and the message pointed at
+         * "Settings → Tax", a tab that does not exist. So the one screen that
+         * can create the first rule refused to draw the form that creates it,
+         * and every new installation arrived unable to deduct any tax at all.
+         *
+         * The form opens on the app's own default instead. The figures are
+         * not authority — they are a starting shape, and the notice above them
+         * says so: nothing is saved until somebody has checked them against
+         * this year's circular and pressed the button.
+         */
+        if (caught instanceof ApiError && caught.status === 404) {
+          setPolicy({ ...DEFAULT_TDS_POLICY, fiscalYear: year });
+          setExact(true);
+          setUnsaved(true);
+          setError(null);
+          return;
+        }
         setError(
           caught instanceof ApiError
             ? caught.message
@@ -103,6 +127,7 @@ export function TaxPanel() {
       toast.show(`TDS rule saved for ${label(year)}.`);
       const fresh = await taxPolicyApi.forYear(year);
       setPolicy(fresh.policy);
+      setUnsaved(false);
       setExact(fresh.exact);
       setYears((list) => (list.includes(year) ? list : [year, ...list]));
     } catch (caught) {
@@ -139,6 +164,24 @@ export function TaxPanel() {
 
   return (
     <div className="flex flex-col gap-4">
+      {unsaved ? (
+        <Card className="border-warning/40 bg-warning/5 px-5 py-4">
+          <p className="flex items-start gap-2 text-sm">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+            <span>
+              <strong>No rule is saved yet — nothing is deducted.</strong> The
+              figures below are this app&apos;s defaults, not this year&apos;s
+              circular. Check every band, the exemption and the minimum tax
+              against the NBR&apos;s own document, then save.
+              <span className="mt-1 block text-muted-foreground">
+                Until it is saved, payroll cannot work out a single deduction —
+                a salary paid now is a salary paid without tax withheld.
+              </span>
+            </span>
+          </p>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader
           title="Salary TDS"

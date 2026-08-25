@@ -54,7 +54,10 @@ export class TaxPolicyService {
 
     if (rows.length === 0) {
       throw new NotFoundException(
-        "No TDS rule has been set up yet. Settings → Tax has the form.",
+        // The tab is called Salary TDS. This said "Settings → Tax", which was
+        // its name once and is not a tab anybody can find now — so the one
+        // message a fresh installation ever sees pointed at nothing.
+        "No TDS rule has been set up yet. Settings → Salary TDS has the form.",
       );
     }
 
