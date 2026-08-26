@@ -61,11 +61,22 @@ const TREE: Group[] = [
     kind: "out",
     color: "#0ea5e9",
     children: [
+      // "Salary" is looked up by name when payroll posts a run. Renaming it
+      // is allowed and safe — the lookup falls back to the first money-out
+      // heading — but the fallback is a guess, and a guess is how a month of
+      // salary ends up under Office rent. Rename with that in mind.
       "Salary",
       "Bonus",
+      // Two Eid bonuses a year is the norm here and is a separate line in
+      // every set of books this company will be asked for.
+      "Festival bonus",
+      "Overtime",
+      "Provident fund",
+      "Leave encashment",
       "Contractor payment",
       "Recruitment",
       "Training",
+      "Staff welfare",
     ],
   },
   {
@@ -74,16 +85,27 @@ const TREE: Group[] = [
     color: "#0d9488",
     children: [
       "Software & subscriptions",
+      // Its own line rather than part of software: this company runs a whole
+      // screen for AI tools, and a spend it tracks per seat deserves to be
+      // readable on its own in the reports.
+      "AI tools",
       "Hosting & servers",
       "Domains",
       "Hardware & equipment",
+      "Development & maintenance",
     ],
   },
   {
     name: "Marketing",
     kind: "out",
     color: "#d97706",
-    children: ["Advertising", "Content & design", "Events"],
+    children: [
+      "Advertising",
+      "Content & design",
+      "Agency & freelancers",
+      "Sponsorship",
+      "Events",
+    ],
   },
   {
     name: "Administrative",
@@ -91,9 +113,13 @@ const TREE: Group[] = [
     color: "#db2777",
     children: [
       "Professional fees",
+      "Legal & compliance",
       "Government fees & licences",
       "Bank charges",
+      "Insurance",
       "Office supplies",
+      "Courier & postage",
+      "Repairs & servicing",
       "Travel & transport",
       "Food & hospitality",
     ],
@@ -102,7 +128,24 @@ const TREE: Group[] = [
     name: "Tax",
     kind: "out",
     color: "#7c3aed",
-    children: ["TDS deposit", "Advance tax", "Income tax"],
+    children: [
+      // Looked up by name when a challan is recorded, the same way "Salary"
+      // is. Same caution applies.
+      "TDS deposit",
+      "VAT",
+      "Withholding VAT",
+      "Advance tax",
+      "Income tax",
+      "Customs & duty",
+    ],
+  },
+  {
+    // Borrowing costs are not an administrative expense and reading them as
+    // one hides what the company actually pays to be financed.
+    name: "Finance",
+    kind: "out",
+    color: "#b45309",
+    children: ["Loan repayment", "Interest paid", "Exchange loss"],
   },
   {
     name: "Other expenses",
@@ -114,7 +157,16 @@ const TREE: Group[] = [
     name: "Money in",
     kind: "in",
     color: "#047857",
-    children: ["CEO funding", "Client receipts", "Refunds", "Other income"],
+    children: [
+      "CEO funding",
+      "Client receipts",
+      "Loan received",
+      "Investment received",
+      "Interest income",
+      "Exchange gain",
+      "Refunds",
+      "Other income",
+    ],
   },
 ];
 
