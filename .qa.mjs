@@ -103,10 +103,32 @@ for (const person of chosen) {
       }
     });
 
-    await page
-      .goto(WEB + route, { waitUntil: "networkidle0", timeout: 120000 })
-      .catch((e) => note(route, person.role, "load", e.message.slice(0, 80)));
-    await new Promise((r) => setTimeout(r, 2200));
+    /*
+     * One retry, because a dev server restarting looks exactly like a broken
+     * page.
+     *
+     * `nest start --watch` and Next's own recompile both answer 500 for a few
+     * seconds after any rebuild, and a sweep that lands in that window reports
+     * every screen in the app as failing. Two runs of this have done exactly
+     * that. A page that is still showing the error boundary six seconds later
+     * is a finding; one that recovers was never one.
+     */
+    const load = async () => {
+      await page
+        .goto(WEB + route, { waitUntil: "networkidle0", timeout: 120000 })
+        .catch((e) => note(route, person.role, "load", e.message.slice(0, 80)));
+      await new Promise((r) => setTimeout(r, 2200));
+      return page.evaluate(() =>
+        /couldn.t load|Internal Server Error/i.test(document.body.innerText),
+      );
+    };
+
+    if (await load()) {
+      consoleErrors.length = 0;
+      failedRequests.length = 0;
+      await new Promise((r) => setTimeout(r, 4000));
+      await load();
+    }
 
     const landed = new URL(page.url()).pathname;
     const report = await page.evaluate(() => {
@@ -185,9 +207,12 @@ for (const person of chosen) {
           const h = a.getAttribute("href");
           return !h || h === "#" || h === "";
         }).length,
-        emptyish: /couldn.t load|failed|error|no rows|nothing yet|none found/i.test(
-          text,
-        ),
+        // The app's own sentences. "Failed sign-in" is a row in the audit
+        // log, and matching the bare word called that page broken.
+        emptyish:
+          /this page couldn.t load|could not load|could not read|something went wrong/i.test(
+            text,
+          ),
         pager: /of \d+|\d+ of \d+/i.test(text),
       };
     });

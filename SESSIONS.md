@@ -20,6 +20,57 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-26 — the database is empty, and the four foundations are proven
+
+**Done.** The sample data is out and the system is ready for real figures.
+`deploy/clean-for-production.sh` emptied 28 tables and kept five — the five
+sign-ins with their second factor and recovery codes, the `app_settings` row
+with every credential cleared, and `schema_migrations`, because emptying that
+would make the next deploy replay a directory that is not order-independent.
+
+**Two faults that only exist in an empty database, both fixed.** They are worth
+naming because every new installation starts in exactly that state and nothing
+before today had ever looked at it.
+
+- `/statement` called `notFound()` when there were no accounts, so a company on
+  its first day followed the link in its own sidebar and was told the page does
+  not exist. It says which thing is missing now. The app's other two
+  `notFound()` calls are the honest kind and stay.
+- **Settings → Salary TDS could not create the first tax rule.** The panel drew
+  the editor only when a rule already existed, so a fresh install could not
+  deduct tax at all — and the one message it showed pointed at "Settings →
+  Tax", a tab that has not existed since it was renamed. The form opens on
+  `DEFAULT_TDS_POLICY` now, under a notice saying plainly that nothing is
+  saved, nothing is being deducted, and the figures are a starting shape rather
+  than this year's circular.
+
+**Proven, not assumed, before going live.**
+
+| | |
+|---|---|
+| Backups | Nightly at 02:00, gzip checked, table and row counts asserted, copied to Google Drive and **verified byte-for-byte on the far side**. Fifteen copies off the server, plus the uploads. |
+| Restore | The 25 August dump restored into a scratch database: 33 tables, 705 transactions, 120 team members, 5 users — the pre-wipe state exactly. Dropped afterwards; `sfm` never touched. |
+| Certificates | 79 days, all three hostnames, `certbot.timer` active and running. |
+| Application | Nineteen screens, the ledger arithmetic in SQL, 65 role-and-route combinations, HR blind to salary, and create/edit/void moving the balance by exactly the right amount. |
+
+**Watch out.**
+
+- **The pre-wipe data is recoverable until about 25 September** — thirty days of
+  dumps sit in Drive. After that the sample ledger is gone for good.
+- `db.hellonizam.com` is Adminer, reachable from the internet behind basic auth
+  and a rate limit. A database console on the open web is a standing decision,
+  not an oversight — but it is a decision.
+- Nothing monitors the site. If it stops at three in the morning, nobody knows
+  until somebody opens it.
+
+**Open.**
+
+- **Payroll finalise and pay have never been run.** That is the path that moves a
+  whole month's salary, and the first real run should have its totals checked by
+  hand.
+- Writes were exercised through the API, not through the forms. The forms open
+  and carry their fields; nothing has submitted one.
+
 ## 2026-08-21 — three revisions on the subscriptions page and the mail it sends
 
 **Done.** Three things the owner asked for after using the app.
