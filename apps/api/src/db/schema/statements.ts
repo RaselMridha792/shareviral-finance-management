@@ -13,7 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 /**
  * Who signs the page off. Stored as written, not resolved against `users`.
@@ -95,6 +95,7 @@ export const statements = pgTable(
       .notNull()
       .defaultNow(),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     // entity_id is inside the constraint from day one, as everywhere else —

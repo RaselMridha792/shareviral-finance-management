@@ -457,6 +457,22 @@ export class StatementService {
       .from(statements)
       .where(period)
       .limit(1);
+    if (existing?.deletedAt) {
+      /*
+       * The period's row is in the trash, and somebody is writing to the
+       * period again. The unique key means a second row cannot be created, so
+       * the choice is between failing the upload and reviving the row — and
+       * the revival is the honest reading: uploading a signature for March is
+       * as clear a statement as a restore button that the March record should
+       * exist.
+       */
+      const [revived] = await this.db.client
+        .update(statements)
+        .set({ deletedAt: null, deletedBy: null, deleteReason: null })
+        .where(eq(statements.id, existing.id))
+        .returning();
+      return revived;
+    }
     if (existing) return existing;
 
     const [created] = await this.db.client
@@ -485,6 +501,9 @@ export class StatementService {
       .from(statements)
       .where(
         and(
+          // Deleted reads as absent: the period falls back to the plain draft
+          // `build` reports for a period with no row at all.
+          isNull(statements.deletedAt),
           eq(statements.periodStart, range.start),
           eq(statements.periodEnd, range.end),
         ),

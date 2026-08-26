@@ -255,7 +255,12 @@ export class TeamMembersService {
     return this.db.client
       .select()
       .from(compensationHistory)
-      .where(eq(compensationHistory.teamMemberId, teamMemberId))
+      .where(
+        and(
+          isNull(compensationHistory.deletedAt),
+          eq(compensationHistory.teamMemberId, teamMemberId),
+        ),
+      )
       .orderBy(desc(compensationHistory.effectiveFrom));
   }
 
@@ -266,6 +271,8 @@ export class TeamMembersService {
       .from(compensationHistory)
       .where(
         and(
+          // A deleted salary row must not decide anybody's pay.
+          isNull(compensationHistory.deletedAt),
           eq(compensationHistory.teamMemberId, teamMemberId),
           sql`${compensationHistory.effectiveFrom} <= ${date}`,
         ),
@@ -391,7 +398,12 @@ export class TeamMembersService {
         effectiveFrom: compensationHistory.effectiveFrom,
       })
       .from(compensationHistory)
-      .where(sql`${compensationHistory.effectiveFrom} <= ${todayInDhaka()}`)
+      .where(
+        and(
+          isNull(compensationHistory.deletedAt),
+          sql`${compensationHistory.effectiveFrom} <= ${todayInDhaka()}`,
+        ),
+      )
       .orderBy(
         compensationHistory.teamMemberId,
         desc(compensationHistory.effectiveFrom),

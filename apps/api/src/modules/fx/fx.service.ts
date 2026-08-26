@@ -49,7 +49,7 @@ export class FxService {
    * how many there are and offer the rest.
    */
   async list(query: ListFxRatesQuery) {
-    const where: SQL[] = [];
+    const where: SQL[] = [isNull(fxRates.deletedAt)];
     if (query.from) where.push(gte(fxRates.rateDate, query.from));
     if (query.to) where.push(lte(fxRates.rateDate, query.to));
     const filter = where.length ? and(...where) : undefined;
@@ -361,6 +361,8 @@ export class FxService {
         .from(fxRates)
         .where(
           and(
+            // A deleted rate must not steer a single taka of conversion.
+            isNull(fxRates.deletedAt),
             gte(fxRates.rateDate, period.start),
             lte(fxRates.rateDate, period.end),
           ),
@@ -384,7 +386,7 @@ export class FxService {
     const [row] = await this.db.client
       .select()
       .from(fxRates)
-      .where(lte(fxRates.rateDate, target))
+      .where(and(isNull(fxRates.deletedAt), lte(fxRates.rateDate, target)))
       .orderBy(desc(fxRates.rateDate))
       .limit(1);
 

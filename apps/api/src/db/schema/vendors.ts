@@ -13,7 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { psrStatusEnum, vendorTypeEnum } from "./enums";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 /**
  * Anyone money is paid to or received from.
@@ -81,7 +81,7 @@ export const vendors = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("vendors_name_idx").on(

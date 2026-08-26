@@ -21,7 +21,7 @@ import type { PayslipBreakdown } from "@finance/shared";
 import { accounts } from "./accounts";
 import { paymentMethodEnum, psrStatusEnum } from "./enums";
 import { transactions } from "./transactions";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 export const engagementTypeEnum = pgEnum("engagement_type", [
   "employee",
@@ -222,7 +222,7 @@ export const teamMembers = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
   },
   (t) => [
     /**
@@ -276,6 +276,7 @@ export const compensationHistory = pgTable(
       .notNull()
       .defaultNow(),
     createdBy: uuid("created_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("compensation_effective_idx").on(
@@ -339,6 +340,7 @@ export const payrollRuns = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("payroll_runs_period_idx").on(

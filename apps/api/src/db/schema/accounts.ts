@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { accountTypeEnum } from "./enums";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 /**
  * Where money sits: bank accounts, petty cash, mobile wallets.
@@ -59,7 +59,7 @@ export const accounts = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
   },
   (t) => [
     // entity_id is in the constraint from day one; adding it later to a

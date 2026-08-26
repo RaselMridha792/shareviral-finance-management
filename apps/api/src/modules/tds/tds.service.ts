@@ -612,7 +612,11 @@ export class TdsService {
         )`,
       })
       .from(tdsDeposits)
-      .where(year ? eq(tdsDeposits.periodYear, year) : undefined)
+      .where(
+        year
+          ? and(isNull(tdsDeposits.deletedAt), eq(tdsDeposits.periodYear, year))
+          : isNull(tdsDeposits.deletedAt),
+      )
       .orderBy(desc(tdsDeposits.depositDate), desc(tdsDeposits.createdAt));
 
     return {
@@ -1152,7 +1156,12 @@ export class TdsService {
     return this.db.client
       .select()
       .from(withholdingReturns)
-      .where(eq(withholdingReturns.fiscalYear, fiscalYear))
+      .where(
+        and(
+          isNull(withholdingReturns.deletedAt),
+          eq(withholdingReturns.fiscalYear, fiscalYear),
+        ),
+      )
       .orderBy(asc(withholdingReturns.quarter));
   }
 

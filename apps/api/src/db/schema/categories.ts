@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { categoryKindEnum } from "./enums";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 /**
  * Two levels: a parent category and its sub-categories.
@@ -59,6 +59,7 @@ export const categories = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     // Unique among siblings: "Rent" may exist under both Office and Equipment.

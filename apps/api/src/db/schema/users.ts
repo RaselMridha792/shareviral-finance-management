@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { userRoleEnum, userStatusEnum } from "./enums";
+import { deletion } from "./shared-columns";
 
 export const users = pgTable(
   "users",
@@ -56,7 +57,7 @@ export const users = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
   },
   (t) => [
     // Case-insensitive: "Mirza@x.com" and "mirza@x.com" are one account.

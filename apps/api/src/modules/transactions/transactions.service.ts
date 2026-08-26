@@ -135,6 +135,17 @@ export class TransactionsService {
   private async buildFilters(filter: TransactionFilter): Promise<SQL[]> {
     const clauses: SQL[] = [];
 
+    /*
+     * Deleted rows never come back, whatever is asked for.
+     *
+     * `includeVoided` is a real choice — a voided entry stays on the ledger
+     * struck through, and somebody reconciling wants to see it. A deleted one
+     * is different: it is in the trash, waiting to be restored or purged, and
+     * showing it here would put a row on the screen that no total counts and no
+     * action on this page can reach. So this clause is unconditional where the
+     * one below it is not.
+     */
+    clauses.push(isNull(transactions.deletedAt));
     if (!filter.includeVoided) clauses.push(isNull(transactions.voidedAt));
     // The same predicate the AI tools screen counts *with*, negated — so
     // "other expenses" is exactly the complement of "tooling" rather than an
@@ -361,7 +372,12 @@ export class TransactionsService {
       Number(account.openingBalance) + Number(carriedForward)
     ).toFixed(2);
 
-    const clauses: SQL[] = [eq(transactions.accountId, accountId)];
+    const clauses: SQL[] = [
+      eq(transactions.accountId, accountId),
+      // Unconditional, for the reason given in `buildFilters`: the register can
+      // be asked to show voided rows, and must never show deleted ones.
+      isNull(transactions.deletedAt),
+    ];
     // A voided row stays visible and struck through, but it is not money.
     if (!range.includeVoided) clauses.push(isNull(transactions.voidedAt));
     if (range.from) clauses.push(gte(transactions.txnDate, range.from));

@@ -580,7 +580,8 @@ export class ReportsService {
                 select round(avg(${fxRates.rate}), 6)::text as rate,
                        count(*)::int as days
                   from ${fxRates}
-                 where ${fxRates.rateDate} >= wanted.day
+                 where ${fxRates.deletedAt} is null
+                   and ${fxRates.rateDate} >= wanted.day
                    and ${fxRates.rateDate} <= wanted.day
               ) same_day on true`
             : sql``
@@ -588,7 +589,8 @@ export class ReportsService {
         left join lateral (
           select ${fxRates.rate} as rate
             from ${fxRates}
-           where ${fxRates.rateDate} <= wanted.as_of
+           where ${fxRates.deletedAt} is null
+             and ${fxRates.rateDate} <= wanted.as_of
            order by ${fxRates.rateDate} desc
            limit 1
         ) latest on true

@@ -80,7 +80,7 @@ export class PayrollService {
   async listRuns(
     query: ListPayrollRunsQuery,
   ): Promise<Paginated<typeof payrollRuns.$inferSelect>> {
-    const filters: SQL[] = [];
+    const filters: SQL[] = [isNull(payrollRuns.deletedAt)];
     if (query.status) filters.push(eq(payrollRuns.status, query.status));
     if (query.year) filters.push(eq(payrollRuns.periodYear, query.year));
     const where = filters.length ? and(...filters) : undefined;

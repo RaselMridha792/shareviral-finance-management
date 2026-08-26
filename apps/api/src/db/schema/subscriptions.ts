@@ -19,6 +19,7 @@ import {
 } from "./enums";
 import { teamMembers } from "./team";
 import { vendors } from "./vendors";
+import { deletion } from "./shared-columns";
 
 /**
  * A paid seat: one plan, one price, one lifecycle.
@@ -158,7 +159,7 @@ export const subscriptions = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
   },
   (t) => [
     index("subscriptions_vendor_idx").on(t.vendorId),
@@ -202,6 +203,7 @@ export const subscriptionUsers = pgTable(
       .notNull()
       .defaultNow(),
     createdBy: uuid("created_by"),
+    ...deletion(),
   },
   (t) => [
     primaryKey({ columns: [t.subscriptionId, t.teamMemberId] }),

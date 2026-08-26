@@ -17,7 +17,7 @@ import {
 import { accounts } from "./accounts";
 import { payrollLines } from "./team";
 import { transactions } from "./transactions";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 export const tdsDepositTypeEnum = pgEnum("tds_deposit_type", [
   "salary",
@@ -88,6 +88,7 @@ export const tdsDeposits = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("tds_challan_idx").on(t.challanNumber, t.challanDate),
@@ -163,6 +164,7 @@ export const withholdingReturns = pgTable(
       .notNull()
       .defaultNow(),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("withholding_period_idx").on(
@@ -225,6 +227,7 @@ export const incomeTaxRecords = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     index("income_tax_year_idx").on(t.assessmentYear),

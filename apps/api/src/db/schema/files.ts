@@ -21,6 +21,7 @@ import { tdsDeposits } from "./tax";
 import { payrollLines, teamMembers } from "./team";
 import { transactions } from "./transactions";
 import { users } from "./users";
+import { deletion } from "./shared-columns";
 
 /** Kind names come from the shared package, so the database cannot drift. */
 export const fileKindEnum = pgEnum("file_kind", FILE_KINDS);
@@ -153,7 +154,7 @@ export const files = pgTable(
      * the audit trail can still say a document existed, who removed it, and
      * when.
      */
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...deletion(),
     deletedBy: uuid("deleted_by"),
   },
   (t) => [

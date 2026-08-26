@@ -25,7 +25,10 @@ import {
 } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 
-export type AccountDto = Omit<Account, "deletedAt" | "entityId">;
+export type AccountDto = Omit<
+  Account,
+  "deletedAt" | "deletedBy" | "deleteReason" | "entityId"
+>;
 
 /**
  * What is hanging off an account, counted before anyone is asked to confirm

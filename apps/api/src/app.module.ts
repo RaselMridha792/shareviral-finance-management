@@ -15,6 +15,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { AiIntakeModule } from "./modules/ai-intake/ai-intake.module";
 import { EmailModule } from "./modules/email/email.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { TrashModule } from "./modules/trash/trash.module";
 import { AuditLogModule } from "./modules/audit/audit-log.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
@@ -73,6 +74,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     AiIntakeModule,
     EmailModule,
     NotificationsModule,
+    TrashModule,
   ],
   providers: [
     // Order matters: reject cross-site writes, then authenticate, then check

@@ -13,7 +13,7 @@ import {
   type PendingQuery,
   type UpdateIncomeTaxInput,
 } from "@finance/shared";
-import { and, asc, desc, eq, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, ne, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -146,6 +146,7 @@ export class IncomeTaxService {
       : await this.db.client
           .select()
           .from(incomeTaxRecords)
+          .where(isNull(incomeTaxRecords.deletedAt))
           .orderBy(
             desc(incomeTaxRecords.assessmentYear),
             asc(incomeTaxRecords.dueDate),

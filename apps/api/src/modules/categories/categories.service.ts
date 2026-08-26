@@ -16,7 +16,10 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import { DbService } from "../../db/db.service";
 import { categories, type Category } from "../../db/schema";
 
-export type CategoryDto = Omit<Category, "entityId">;
+export type CategoryDto = Omit<
+  Category,
+  "deletedAt" | "deletedBy" | "deleteReason" | "entityId"
+>;
 export type CategoryNode = CategoryDto & { children: CategoryDto[] };
 
 @Injectable()
@@ -29,7 +32,8 @@ export class CategoriesService {
   /** Flat list, parents before their own children. */
   async list(query: ListCategoriesQuery): Promise<CategoryDto[]> {
     // Annotated because an empty literal infers never[].
-    const filters: SQL[] = [];
+    // A deleted heading is in the trash, not in any picker.
+    const filters: SQL[] = [isNull(categories.deletedAt)];
     if (query.kind) filters.push(eq(categories.kind, query.kind));
     if (!query.includeInactive) filters.push(eq(categories.isActive, true));
 

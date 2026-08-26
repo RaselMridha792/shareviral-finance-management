@@ -51,7 +51,7 @@ import { isToolSpend, isToolVendor } from "./tool-spend";
  */
 export type VendorDto = Omit<
   Vendor,
-  "deletedAt" | "entityId" | "nextRenewalOn"
+  "deletedAt" | "deletedBy" | "deleteReason" | "entityId" | "nextRenewalOn"
 >;
 
 @Injectable()

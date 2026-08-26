@@ -22,6 +22,7 @@ import {
   txnOriginEnum,
 } from "./enums";
 import { vendors } from "./vendors";
+import { deletion } from "./shared-columns";
 
 /**
  * The ledger. Every movement of money lives here.
@@ -199,6 +200,7 @@ export const transactions = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("transactions_ref_idx").on(t.refNo),

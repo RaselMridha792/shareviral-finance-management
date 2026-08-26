@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { fxSourceEnum } from "./enums";
-import { entityKey } from "./shared-columns";
+import { deletion, entityKey } from "./shared-columns";
 
 /**
  * One USD/BDT rate per day.
@@ -60,6 +60,7 @@ export const fxRates = pgTable(
       .defaultNow(),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
+    ...deletion(),
   },
   (t) => [
     uniqueIndex("fx_rate_day_idx").on(

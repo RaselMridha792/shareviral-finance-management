@@ -9,6 +9,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { deletion } from "./shared-columns";
 
 export const importTargetEnum = pgEnum("import_target", [
   "transactions",
@@ -64,6 +65,7 @@ export const importBatches = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    ...deletion(),
   },
   (t) => [index("import_batches_status_idx").on(t.status, t.createdAt)],
 );

@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -525,6 +525,7 @@ export class ImportsService {
     return this.db.client
       .select()
       .from(importBatches)
+      .where(isNull(importBatches.deletedAt))
       .orderBy(sql`${importBatches.createdAt} desc`)
       .limit(25);
   }
