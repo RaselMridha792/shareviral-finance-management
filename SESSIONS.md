@@ -20,6 +20,74 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — deleting exists, and deleted rows count for nothing
+
+**Done.** Every table that holds a row somebody typed can now delete it, the row
+goes to a trash in `Settings → Trashed`, and nothing deleted enters a total.
+Commits: `3c77fe8` (migration), `1880772` (API), `baaec88` (UI), `46bf9a6` (the
+category lookups), `4aa0faa` (the chart of accounts).
+
+The design decision worth knowing, because everything else follows from it:
+**deleting a money row also voids it.** Twenty-nine query sites across nine
+services already exclude voided rows, so a deleted transaction left every sum in
+the application without one of those queries being edited. The list filters added
+on top only decide visibility — and if one were ever missed, the failure is a
+row visible where it should not be, not a total quietly wrong. The dangerous
+failure was made impossible; the harmless one was left possible and obvious.
+
+Fifteen kinds are deletable, listed in `apps/api/src/modules/trash/trash.registry.ts`
+with the permission each needs and, where one applies, the reason it may be
+refused: the last super admin, an account or category or vendor or person with
+entries against it, a paid payroll run, a committed import. `audit_logs` is not
+deletable and must not become so — a delete that can erase its own trace makes
+the trash worthless. Payslips, TDS allocations and import rows are not deletable
+either: they are derived from a parent, and removing one alone leaves that
+parent's total no longer adding up.
+
+Ten screens carry the button: all transactions, register, cash in, other
+expenses, category detail, team, subscriptions, sign-ins, payroll runs, rate
+history. `RowActions` gained an **optional** third button, so the eleven screens
+not yet wired are byte-for-byte unchanged.
+
+**Watch out.**
+
+- **`RowActions` and `TableScroll`'s neighbours changed.** `RowActionsHead` now
+  takes `deletable` and renders `w-32` instead of `w-24` when it is true. If a
+  table looks narrow in the last column, that is why.
+- **Rate history behaves differently.** It held the app's only irreversible
+  delete; a rate now goes to the trash like everything else and can be restored.
+- **Two migrations must run**: `2026-08-26-trash.sql` and
+  `2026-08-26-categories.sql`. Both are idempotent and both were applied locally
+  with `node .sql.mjs`. The categories one was run three times: still sixty-three
+  rows, no duplicates, and a heading renamed by hand stayed renamed.
+- **The category name lookups were wrong and are fixed.** Payroll resolves
+  "Salary" and a challan resolves "TDS deposit" by name, and both checked
+  `is_active` without checking `deleted_at`. Anything else that resolves a
+  category by name needs the same clause.
+
+**Open.**
+
+- **Eleven screens have no delete button yet**, and `node .delwired.mjs` names
+  them. Most are correct as they are — audit, payslips, TDS deductions, the
+  report tables, tool seats are all either immutable or derived. The ones a
+  future session might genuinely want are the imports list and a team member's
+  salary history.
+- **Only the nine wired screens were driven in a browser** (`node .delsweep.mjs`).
+  The API was exercised for every kind (`node .trashqa.mjs`, `node .trashroles.mjs`),
+  but restoring a payroll run or an import batch has not been watched on screen.
+- **The trash has no age limit.** Nothing empties it on a schedule; somebody has
+  to press the button. That is deliberate for now — an automatic purge is a
+  delete nobody witnessed — but it means the trash grows.
+
+The scripts: `.trashqa.mjs` (21 API checks), `.trashroles.mjs` (every role,
+allowed and refused), `.trashui.mjs` (17 checks driving the dialog as a person
+does), `.delsweep.mjs` (opens each wired screen and presses the button),
+`.delwired.mjs` (names any screen with a button and no dialog — it caught one),
+`.delfilter.mjs` (reads of a deletable table with no deleted filter),
+`.gencats.mjs` (regenerates the categories migration from the seeder's tree).
+
+---
+
 ## 2026-08-26 — the database is empty, and the four foundations are proven
 
 **Done.** The sample data is out and the system is ready for real figures.
