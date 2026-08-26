@@ -86,11 +86,24 @@ export class UsersService {
 
   async create(input: CreateUserInput, actor: AuthenticatedUser) {
     const [clash] = await this.db.client
-      .select({ id: users.id })
+      .select({ id: users.id, deletedAt: users.deletedAt })
       .from(users)
       .where(sql`lower(${users.email}) = ${input.email}`)
       .limit(1);
 
+    // The email is unique whether its owner is live or in the trash, so the
+    // message has to say which — "already uses" about an account somebody
+    // just deleted reads as a lie, and the way out is different.
+    if (clash?.deletedAt) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: {
+          email: [
+            "A deleted sign-in still holds that email. Restore it from Settings → Trashed, or delete it there permanently, before creating a new one.",
+          ],
+        },
+      });
+    }
     if (clash) {
       throw new BadRequestException({
         message: "Validation failed",

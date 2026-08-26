@@ -228,7 +228,7 @@ export class CategoriesService {
     exceptId?: string,
   ) {
     const [clash] = await this.db.client
-      .select({ id: categories.id })
+      .select({ id: categories.id, deletedAt: categories.deletedAt })
       .from(categories)
       .where(
         and(
@@ -245,9 +245,13 @@ export class CategoriesService {
         message: "Validation failed",
         errors: {
           name: [
-            parentId
-              ? "That name is already used under this category"
-              : "A category with that name already exists",
+            // The slug is unique across live and trashed alike, so which of
+            // the two is in the way decides what the reader should do next.
+            clash.deletedAt
+              ? "A deleted category still uses that name. Restore it from Settings → Trashed, or delete it there permanently, first."
+              : parentId
+                ? "That name is already used under this category"
+                : "A category with that name already exists",
           ],
         },
       });

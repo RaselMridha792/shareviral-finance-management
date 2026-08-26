@@ -87,11 +87,28 @@ async function toError(response: Response): Promise<ApiError> {
     message?: string;
     errors?: Record<string, string[]>;
   } | null;
-  return new ApiError(
-    body?.message ?? `Request failed (${response.status})`,
-    response.status,
-    body?.errors,
-  );
+
+  /*
+   * "Validation failed" is the envelope, not the answer.
+   *
+   * The API's validation pipe wraps every field problem in that one sentence
+   * and puts the real ones in `errors` — and any screen that prints only
+   * `message` shows the envelope. Screens that render field-level errors keep
+   * doing so through `fieldErrors`; this only rescues the message for the
+   * screens that do not, so "Validation failed" with the reason a click away
+   * becomes the reason itself.
+   */
+  const firstFieldError = body?.errors
+    ? Object.values(body.errors).flat()[0]
+    : undefined;
+  const message =
+    body?.message && body.message !== "Validation failed"
+      ? body.message
+      : (firstFieldError ??
+        body?.message ??
+        `Request failed (${response.status})`);
+
+  return new ApiError(message, response.status, body?.errors);
 }
 
 /**

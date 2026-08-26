@@ -129,6 +129,17 @@ export class FxService {
             rate: input.rate,
             source: "manual",
             notes: input.notes,
+            /*
+             * Writing a rate for a day whose row sits in the trash brings the
+             * row back. Without this the new figure landed on the deleted row
+             * and stayed deleted with it — saved, invisible, and steering
+             * nothing — which is the worst of the three possible outcomes.
+             * Typing a rate for a day is as clear a statement as a restore
+             * button that the day should have one.
+             */
+            deletedAt: null,
+            deletedBy: null,
+            deleteReason: null,
             updatedAt: new Date(),
             updatedBy: actor.id,
           })
