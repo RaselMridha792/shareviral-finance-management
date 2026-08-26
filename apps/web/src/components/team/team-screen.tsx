@@ -529,7 +529,7 @@ function Section({
                 <Link
                   href={`/team/${member.id}`}
                   prefetch={false}
-                  className="font-medium hover:text-primary hover:underline"
+                  className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                 >
                   {member.fullName}
                 </Link>

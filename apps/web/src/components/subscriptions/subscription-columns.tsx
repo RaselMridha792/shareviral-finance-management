@@ -108,7 +108,7 @@ export function SubscriptionBodyCells({
               // `noopener` is worth ruling out once rather than per link.
               rel="noreferrer noopener"
               title={`Open ${row.toolName}`}
-              className="font-medium underline-offset-2 transition hover:text-primary hover:underline"
+              className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
             >
               {row.toolName}
             </a>
@@ -159,7 +159,7 @@ export function SubscriptionBodyCells({
           row.accountId ? (
             <Link
               href={`/accounts/${row.accountId}`}
-              className="transition hover:text-primary hover:underline"
+              className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
             >
               {row.accountName}
             </Link>
@@ -178,7 +178,7 @@ export function SubscriptionBodyCells({
               type="button"
               onClick={() => handlers.onInvoice?.(row)}
               title="Show the invoice"
-              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+              className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
               {row.invoiceNo}
             </button>
@@ -197,7 +197,7 @@ export function SubscriptionBodyCells({
               type="button"
               onClick={() => handlers.onReference?.(row)}
               title="Show the bank's record of this charge"
-              className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+              className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
               {row.reference}
             </button>
@@ -276,7 +276,7 @@ function SeatNames({ row }: { row: SubscriptionDto }) {
           {index > 0 ? ", " : null}
           <Link
             href={`/team/${seat.teamMemberId}`}
-            className="underline-offset-2 transition hover:text-primary hover:underline"
+            className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
           >
             {seat.fullName}
           </Link>

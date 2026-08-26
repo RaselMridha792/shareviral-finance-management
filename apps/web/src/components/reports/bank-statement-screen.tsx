@@ -293,7 +293,7 @@ export function BankStatementScreen({
                       <button
                         type="button"
                         onClick={() => setDocumentsFor(row)}
-                        className="num cursor-pointer rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
+                        className="num cursor-pointer rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                       >
                         {row.reference ?? row.refNo}
                       </button>
@@ -303,7 +303,7 @@ export function BankStatementScreen({
                         <button
                           type="button"
                           onClick={() => setDocumentsFor(row)}
-                          className="num cursor-pointer rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
+                          className="num cursor-pointer rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                         >
                           {row.invoiceNo}
                         </button>

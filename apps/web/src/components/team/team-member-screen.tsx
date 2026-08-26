@@ -543,7 +543,7 @@ export function TeamMemberScreen({
                             <Link
                               href={`/payroll/${slip.runId}`}
                               prefetch={false}
-                              className="font-medium hover:text-primary hover:underline"
+                              className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                             >
                               {slip.runLabel}
                             </Link>
@@ -590,7 +590,7 @@ export function TeamMemberScreen({
                             <Link
                               href={`/payroll/${slip.id}/payslip`}
                               prefetch={false}
-                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                              className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                             >
                               <Printer className="size-3" />
                               Payslip

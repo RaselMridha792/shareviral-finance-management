@@ -348,7 +348,7 @@ export function TransactionTable({
                       {row.accountName ? (
                         <Link
                           href={`/accounts/${row.accountId}`}
-                          className="transition hover:text-primary hover:underline"
+                          className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                         >
                           {row.accountName}
                         </Link>
@@ -393,7 +393,7 @@ export function TransactionTable({
                           })
                         }
                         title="Show the invoice"
-                        className="num cursor-pointer text-primary underline-offset-2 hover:underline"
+                        className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                       >
                         {row.invoiceNo}
                       </button>
@@ -438,10 +438,17 @@ export function TransactionTable({
                       */}
                       <span
                         className={cn(
-                          "num flex items-center gap-1 text-xs font-medium group-hover:underline",
-                          row.documentCount > 0
-                            ? "text-primary"
-                            : "text-warning",
+                          /*
+                            Underlined either way — it opens the documents
+                            drawer either way — but the colour keeps saying
+                            what it always said: link-blue when paperwork is
+                            attached, amber when the entry has nothing behind
+                            it. Making both blue would have bought consistency
+                            with the cost of the one warning this column
+                            carries.
+                          */
+                          "num flex items-center gap-1 text-xs font-medium underline decoration-current/40 underline-offset-2 group-hover:decoration-current",
+                          row.documentCount > 0 ? "text-link" : "text-warning",
                         )}
                         title={
                           row.documentCount > 0

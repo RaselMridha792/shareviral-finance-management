@@ -229,7 +229,7 @@ export function LineChallanForm({
                   href={`${fileHref(scan.id)}?inline=1`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-primary-text underline-offset-2 hover:underline"
+                  className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                 >
                   {scan.originalName}
                 </a>

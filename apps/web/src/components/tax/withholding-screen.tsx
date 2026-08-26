@@ -196,7 +196,9 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
         await tdsApi.salaryRegister({ granularity, fiscalYear, index }),
       );
     } catch {
-      setError("Saved, but the table could not be read again. Reload the page.");
+      setError(
+        "Saved, but the table could not be read again. Reload the page.",
+      );
     }
   }
 
@@ -439,7 +441,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                           <Link
                             href={`/team/${row.teamMemberId}`}
                             prefetch={false}
-                            className="font-medium hover:text-primary hover:underline"
+                            className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                           >
                             {row.fullName}
                           </Link>
@@ -488,7 +490,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                                       challanNumber: row.challanNumber!,
                                     })
                                   }
-                                  className="num inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-primary-text underline-offset-2 hover:underline"
+                                  className="num inline-flex cursor-pointer items-center gap-1.5 rounded-sm text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                                 >
                                   <Paperclip className="size-3.5" />
                                   {row.challanNumber}
@@ -531,7 +533,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                             <Link
                               href={`/payroll/${row.payrollLineId}/payslip`}
                               prefetch={false}
-                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                              className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                             >
                               <Printer className="size-3" />
                               Payslip

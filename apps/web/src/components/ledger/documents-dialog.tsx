@@ -286,7 +286,7 @@ export function DocumentsDialog({
                     <a
                       href={fileHref(file.id)}
                       download={file.originalName}
-                      className="inline-flex shrink-0 items-center gap-1 font-medium text-primary hover:underline"
+                      className="inline-flex shrink-0 items-center gap-1 font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                     >
                       <Download className="size-3.5" />
                       Download

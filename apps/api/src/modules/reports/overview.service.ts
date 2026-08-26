@@ -434,6 +434,8 @@ export class OverviewService {
         id: accounts.id,
         name: accounts.name,
         type: accounts.type,
+        bankName: accounts.bankName,
+        accountNumber: accounts.accountNumber,
         currency: accounts.currency,
         opening: accounts.openingBalance,
       })
@@ -474,7 +476,7 @@ export class OverviewService {
       ]),
     );
 
-    return rows.map((account) => {
+    const groups = rows.map((account) => {
       const opening = Number(account.opening) + (before.get(account.id) ?? 0);
       const movement = during.get(account.id);
       const moneyIn = movement?.in ?? 0;
@@ -484,6 +486,8 @@ export class OverviewService {
         key: account.id,
         label: account.name,
         type: account.type,
+        bankName: account.bankName,
+        accountNumber: account.accountNumber,
         currency: account.currency,
         opening: opening.toFixed(2),
         moneyIn: moneyIn.toFixed(2),
@@ -491,6 +495,25 @@ export class OverviewService {
         closing: (opening + moneyIn - moneyOut).toFixed(2),
       };
     });
+
+    /*
+     * An account the month never touched, standing at zero, says nothing —
+     * it is a card kept for later or a bank switched away from, and four
+     * cells of ৳0.00 under its name only push the accounts that did move
+     * further down the page. The owner's rule: zero balance and no movement,
+     * off the dashboard. The Accounts screen still lists every account, so
+     * nothing is hidden — only unreported here.
+     *
+     * The test is all four figures at once, not the balance alone: an account
+     * that moved during the month and happens to land back on zero was used,
+     * and hiding it would hide the month's own story.
+     */
+    return groups.filter(
+      (group) =>
+        Number(group.opening) !== 0 ||
+        Number(group.moneyIn) !== 0 ||
+        Number(group.moneyOut) !== 0,
+    );
   }
 
   /**

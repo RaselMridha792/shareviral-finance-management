@@ -61,28 +61,6 @@ export function PayrollListScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("payroll.write");
-  const del = useRowDelete<PayrollRunDto>({
-    kind: "payroll-run",
-    subject: "payroll run",
-    describe: (run) => (
-      <div className="flex flex-col">
-        <span className="font-medium">{run.label}</span>
-        <span className="text-xs text-muted-foreground">
-          {run.status} · net {run.totalNet}
-        </span>
-      </div>
-    ),
-    consequences: (
-      <p>
-        The sheet and every payslip in it go with the run. A run that has been{" "}
-        <span className="font-medium text-foreground">paid cannot be
-        deleted</span> at all — the money left the account, so the run is a
-        record of something that happened. Delete a draft that was started by
-        mistake; for anything further along, void the payment entries instead.
-      </p>
-    ),
-    onDone: () => router.refresh(),
-  });
   const [creating, setCreating] = useState(false);
 
   /**
@@ -123,6 +101,50 @@ export function PayrollListScreen({
       if (token === request.current) setLoading(false);
     }
   }
+
+  const del = useRowDelete<PayrollRunDto>({
+    kind: "payroll-run",
+    subject: "payroll run",
+    describe: (run) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{run.label}</span>
+        <span className="text-xs text-muted-foreground">
+          {run.status} · net {run.totalNet}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        The sheet and every payslip in it go with the run. A run that has been{" "}
+        <span className="font-medium text-foreground">
+          paid cannot be deleted
+        </span>{" "}
+        at all — the money left the account, so the run is a record of something
+        that happened. Delete a draft that was started by mistake; for anything
+        further along, void the payment entries instead.
+      </p>
+    ),
+    /*
+     * Re-fetch the page the reader is on, not `router.refresh()`.
+     *
+     * The rows live in `useState(initialPage)`, which reads its prop exactly
+     * once — a refresh hands this component a new prop it never looks at, so
+     * a deleted run sat in the table until a hard reload, answering every
+     * further attempt with "already deleted". The state has to be written by
+     * the same hand that writes it for the pager.
+     */
+    /*
+     * The page to land on after the row is gone. Deleting the only row of
+     * page two would refetch an empty page two — and the pager, which
+     * rightly draws nothing for one page, would leave no way back. Stepping
+     * back one page when the last row of a later page goes is the behaviour
+     * every mail client settled on.
+     */
+    onDone: () =>
+      void goToPage(
+        data.items.length === 1 && data.page > 1 ? data.page - 1 : data.page,
+      ),
+  });
 
   return (
     <>
@@ -228,7 +250,7 @@ export function PayrollListScreen({
                         <Link
                           href={`/payroll/${run.id}`}
                           prefetch={false}
-                          className="font-medium hover:text-primary hover:underline"
+                          className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                         >
                           {run.label}
                         </Link>

@@ -389,27 +389,37 @@ export function SectionHeading({
   icon,
   iconTone,
   qualifier,
+  subtitle,
   aside,
 }: {
   title: string;
   icon?: string;
   iconTone?: string;
   qualifier?: ReactNode;
+  /** A small line under the title — a bank's name under an account's. */
+  subtitle?: ReactNode;
   aside?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="flex flex-wrap items-center gap-x-[9px] gap-y-1 text-[17px] font-semibold text-foreground">
-        {icon ? (
-          <Icon name={icon} size={21} className={iconTone ?? "text-faint"} />
+      <div className="min-w-0">
+        <h2 className="flex flex-wrap items-center gap-x-[9px] gap-y-1 text-[17px] font-semibold text-foreground">
+          {icon ? (
+            <Icon name={icon} size={21} className={iconTone ?? "text-faint"} />
+          ) : null}
+          {title}
+          {qualifier ? (
+            <span className="ml-0.5 text-[13.5px] font-normal text-muted-foreground">
+              {qualifier}
+            </span>
+          ) : null}
+        </h2>
+        {subtitle ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {subtitle}
+          </p>
         ) : null}
-        {title}
-        {qualifier ? (
-          <span className="ml-0.5 text-[13.5px] font-normal text-muted-foreground">
-            {qualifier}
-          </span>
-        ) : null}
-      </h2>
+      </div>
       {aside}
     </div>
   );

@@ -44,6 +44,13 @@
   --primary-text: oklch(0.45 0.1 122);
   --accent: oklch(0.45 0.1 122);
 
+  /* A link is blue and underlined, the convention older than the web being
+     styled at all — the owner's rule after watching a table where nothing
+     said which words could be clicked. Not the brand colour on purpose: lime
+     is what this app uses for emphasis, and a link has to read as an *exit*,
+     not a highlight. */
+  --link: oklch(0.5 0.19 259);
+
   /* Money semantics are deliberately not brand-coloured: in is green and out
      is red, whatever the brand is doing. */
   --positive: oklch(0.46 0.1 158);
@@ -110,6 +117,10 @@
   --primary-foreground: #08090a;
   --primary-text: #bfff00;
   --accent: #bfff00;
+
+  /* Softened for dark ground; saturation down so it does not vibrate
+     against the lime. */
+  --link: oklch(0.74 0.12 254);
 
   --positive: oklch(0.78 0.13 158);
   --negative: oklch(0.74 0.14 27);
@@ -210,6 +221,7 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-warning: var(--warning);
+  --color-link: var(--link);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

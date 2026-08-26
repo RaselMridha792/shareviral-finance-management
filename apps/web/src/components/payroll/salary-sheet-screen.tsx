@@ -696,7 +696,7 @@ function LineRow({
             <button
               type="button"
               onClick={() => setBreakdown(true)}
-              className="cursor-pointer text-xs text-muted-foreground transition hover:text-foreground"
+              className="cursor-pointer text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
               <ListTree className="mr-1 inline size-3" />
               Breakdown
@@ -706,7 +706,7 @@ function LineRow({
             <Link
               href={`/payroll/${line.id}/payslip`}
               prefetch={false}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
               <Printer className="size-3" />
               Payslip

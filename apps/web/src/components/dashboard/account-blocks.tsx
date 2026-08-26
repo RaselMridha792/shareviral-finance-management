@@ -207,6 +207,22 @@ export function AccountBlocks({
   const shown = applyOrder(groups, editing && draft ? draft : saved);
   const ids = shown.map((group) => group.key);
 
+  /*
+   * Every account can be off the dashboard at once now — the server keeps
+   * back any account at zero that the month never touched. Without this, a
+   * dormant month rendered nothing but the right-aligned Edit button,
+   * floating over empty space with blocks to arrange that were not there.
+   */
+  if (shown.length === 0) {
+    return (
+      <p className="py-2 text-sm text-muted-foreground">
+        No account held or moved money this month. Accounts standing at zero
+        with nothing recorded stay off the dashboard — they are all still on
+        the Accounts screen.
+      </p>
+    );
+  }
+
   function move(from: number, to: number, persist: boolean) {
     if (from === to || to < 0 || to >= ids.length) return;
     const next = ids.slice();
@@ -386,7 +402,23 @@ function AccountBlock({
         title={group.label}
         icon={ICONS[group.type] ?? "account_balance"}
         iconTone="text-primary-text"
-        qualifier={ACCOUNT_TYPE_LABELS[group.type] ?? group.type}
+        /*
+          The bank's own name, small, under the account's — the same sub-line
+          the Accounts screen draws, so the two pages describe an account in
+          the same words. The type label only appears when there is no bank
+          detail to show; "Bank account" beside a name that already says which
+          bank was the label saying less than the sub-line does.
+        */
+        subtitle={
+          [
+            // An account named after its bank would print the same words
+            // twice, one under the other. Say it once.
+            group.bankName !== group.label ? group.bankName : null,
+            group.accountNumber,
+          ]
+            .filter(Boolean)
+            .join(" · ") || (ACCOUNT_TYPE_LABELS[group.type] ?? group.type)
+        }
         aside={
           editing ? (
             <span className="flex items-center gap-1">

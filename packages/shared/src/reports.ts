@@ -151,6 +151,9 @@ export type AccountGroup = {
   label: string;
   /** Bank, card, wallet or cash — what the block's icon and sub-line say. */
   type: AccountType;
+  /** The bank's own name, under the heading. Null for cash and wallets. */
+  bankName: string | null;
+  accountNumber: string | null;
   currency: string;
   opening: string;
   moneyIn: string;

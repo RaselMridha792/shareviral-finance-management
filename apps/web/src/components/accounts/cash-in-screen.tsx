@@ -490,7 +490,7 @@ export function CashInScreen({
                         {row.accountName ? (
                           <Link
                             href={`/accounts/${row.accountId}`}
-                            className="transition hover:text-primary hover:underline"
+                            className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                           >
                             {row.accountName}
                           </Link>
@@ -674,7 +674,7 @@ function DocumentCell({
             ? `${row.documentCount} attached`
             : "Nothing attached to this entry"
         }
-        className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted hover:text-primary"
+        className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
       >
         {row.documentCount === 0 ? (
           <TriangleAlert className="size-3 shrink-0 text-warning" />

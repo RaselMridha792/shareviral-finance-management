@@ -121,7 +121,10 @@ export function MemberTools({
     return (
       <p className="py-4 text-sm text-muted-foreground">
         Not on any paid tool. Seats are added from the subscription itself —{" "}
-        <Link href="/subscriptions" className="text-primary hover:underline">
+        <Link
+          href="/subscriptions"
+          className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+        >
           AI tools and subscriptions
         </Link>
         .
@@ -223,7 +226,7 @@ export function MemberTools({
                   <td className="text-right">
                     <Link
                       href="/subscriptions"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                     >
                       Open
                       <ExternalLink className="size-3" />
