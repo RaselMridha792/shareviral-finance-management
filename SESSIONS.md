@@ -20,6 +20,66 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — the five fixes: no minus, the bank under the heading, blue links, delete that leaves, errors that explain
+
+**Done.** The owner's five items from live use, plus what checking them turned
+up. Commits: `f0059f6` (the balance rule), `6d54f5a` (honest errors),
+`d36e7c8` (dashboard, links, payroll's stale delete).
+
+**The balance rule is the one to know about.** An account can never go below
+zero — enforced in `apps/api/src/common/money/overdraft.ts` and asserted inside
+the same database transaction at every door money moves through: create, edit,
+void, transfer, import commit, import revert, payroll pay, company-tax pay, TDS
+challan, trash delete, trash restore, and the account's own opening balance.
+Two conditions: the account's lowest historical day (catches backdated entries)
+and its present balance. An account already negative still accepts deposits and
+is only refused what makes it worse. **Anything new that writes transactions
+must call `overdraftWatch` before its mutate and `watch.assert(tx)` after the
+write** — `.overdraftqa.mjs` (25 checks) is the harness that will catch a
+missed one.
+
+**Deleted twins now explain themselves.** Creating a payroll month, a sign-in
+email or a category name that clashes with a trashed row says it is in the
+trash and how to free it; writing a deleted day's FX rate revives the day —
+before this the new figure landed on the deleted row and vanished with it.
+And `toError` in `api-client.ts` lifts the first field error into the message
+when the API says only "Validation failed", so every screen names the actual
+problem.
+
+**Watch out.**
+
+- **`--link` token** (globals.css, both themes, mapped as `--color-link`): every
+  clickable text in a table is now `text-link underline decoration-link/40
+  underline-offset-2 hover:decoration-link`. New table links should use it.
+- **`SectionHeading` gained an optional `subtitle`** (ui/patterns.tsx) — the
+  title is now wrapped in a div; callers without subtitle render as before.
+- **`AccountGroup` gained `bankName`/`accountNumber`** (packages/shared —
+  rebuild dist before typechecking).
+- The dashboard hides accounts with zero opening, zero in, zero out for the
+  viewed month; all hidden at once renders a sentence, not a bare Edit button.
+- Payroll list: rows are `useState(initialPage)` — its delete refetches via
+  `goToPage`, **never `router.refresh()`**; the same trap holds for any screen
+  that copies a server prop into state.
+
+**Open.**
+
+- The overdraft guard's known hole: two concurrent writers on one account can
+  jointly overdraw at read-committed isolation — documented in the file head,
+  accepted for a team this size.
+- Drawer forms that render field errors under fields now repeat that sentence
+  in the banner (the banner used to say "Validation failed"). Cosmetic;
+  suppressing the banner when field errors exist would be a 14-file sweep.
+- The TDS amount cell on the salary sheet opens a drawer but keeps its plain
+  money styling — underlining a figure would fight the money-column semantics.
+  Decided, not missed.
+- `seed-demo.ts` writes transactions unguarded (dev seeder, reaches Neon).
+
+Harnesses: `.overdraftqa.mjs` (25 API checks, every door), `.fivefixui.mjs`
+(12 browser checks: computed link colour+underline, dashboard subtitle, hidden
+sleeper, delete-without-reload), `.delsweep.mjs` now counts only real rows.
+
+---
+
 ## 2026-08-27 — deleting exists, and deleted rows count for nothing
 
 **Done.** Every table that holds a row somebody typed can now delete it, the row
