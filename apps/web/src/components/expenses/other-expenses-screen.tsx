@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { SummaryBar } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
@@ -171,6 +172,8 @@ export function OtherExpensesScreen({
       setLoading(false);
     }
   }, [range]);
+
+  const del = useTransactionDelete(() => void load());
 
   useEffect(() => {
     // Fetching from the API when the period changes — the rule's own
@@ -356,7 +359,7 @@ export function OtherExpensesScreen({
                         the pair sits in the same place on every table in the
                         app, and riding inside Description made the widest
                         prose cell the narrowest one. */}
-                    <RowActionsHead />
+                    <RowActionsHead deletable />
                   </tr>
                 </thead>
                 <tbody>
@@ -558,6 +561,7 @@ export function OtherExpensesScreen({
                               ? () => setVoiding(row)
                               : undefined
                           }
+                          onDelete={canWrite ? () => del.ask(row) : undefined}
                         />
                       </tr>
                     );
@@ -618,6 +622,7 @@ export function OtherExpensesScreen({
         onClose={() => setVoiding(null)}
         onVoided={load}
       />
+      {del.dialog}
     </>
   );
 }

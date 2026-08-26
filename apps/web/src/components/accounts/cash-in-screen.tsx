@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
@@ -195,6 +196,8 @@ export function CashInScreen({
   const refresh = useCallback(async () => {
     await Promise.all([load(), loadRate()]);
   }, [load, loadRate]);
+
+  const del = useTransactionDelete(() => refresh());
 
   useEffect(() => {
     // Fetching from the API when the month changes — the rule's own "subscribe
@@ -426,7 +429,7 @@ export function CashInScreen({
                   <Th>Invoice No.</Th>
                   <Th>Transaction ID</Th>
                   <Th>Note</Th>
-                  <RowActionsHead />
+                  <RowActionsHead deletable />
                 </tr>
               </thead>
               <tbody>
@@ -554,6 +557,7 @@ export function CashInScreen({
                         onSecond={
                           canVoid && !voided ? () => setVoiding(row) : undefined
                         }
+                        onDelete={canWrite ? () => del.ask(row) : undefined}
                       />
                     </tr>
                   );
@@ -624,6 +628,7 @@ export function CashInScreen({
         onClose={() => setVoiding(null)}
         onVoided={refresh}
       />
+      {del.dialog}
     </>
   );
 }

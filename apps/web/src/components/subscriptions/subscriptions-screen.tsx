@@ -11,6 +11,7 @@ import { Image as Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { useSettings } from "@/components/settings-provider";
 import {
   SubscriptionBodyCells,
@@ -150,6 +151,30 @@ export function SubscriptionsScreen({
       setLoading(false);
     }
   }, [tab, category, query, page]);
+
+  const del = useRowDelete<SubscriptionDto>({
+    kind: "subscription",
+    subject: "subscription",
+    describe: (row) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{row.toolName ?? row.planName}</span>
+        <span className="text-xs text-muted-foreground">
+          {row.planName} · {row.status} · renews {row.nextRenewalOn ?? "—"}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        The plan and its seats leave this screen, and nobody is reminded about
+        its renewal again. The payments already recorded for it stay in the
+        ledger — they are movements of money, and this row is only the
+        arrangement behind them. If the plan is merely finished,{" "}
+        <span className="font-medium text-foreground">cancel it instead</span>,
+        which keeps its cost in this year&rsquo;s figures.
+      </p>
+    ),
+    onDone: () => void load(),
+  });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -311,7 +336,7 @@ export function SubscriptionsScreen({
                 <tr>
                   <SerialHead />
                   <SubscriptionHeadCells />
-                  <RowActionsHead />
+                  <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>
               <tbody>
@@ -347,6 +372,7 @@ export function SubscriptionsScreen({
                               ? () => void cycleStatus(row)
                               : undefined
                           }
+                          onDelete={canWrite ? () => del.ask(row) : undefined}
                         />
                       </tr>
                     ))
@@ -433,6 +459,7 @@ export function SubscriptionsScreen({
           onClose={() => setDocumentsFor(null)}
         />
       ) : null}
+      {del.dialog}
     </>
   );
 }

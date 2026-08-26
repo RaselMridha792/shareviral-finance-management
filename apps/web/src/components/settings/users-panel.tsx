@@ -32,6 +32,7 @@ import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
@@ -81,6 +82,32 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
   const [resetting, setResetting] = useState<UserDto | null>(null);
   const [deactivating, setDeactivating] = useState<UserDto | null>(null);
   const [deactivatePending, setDeactivatePending] = useState(false);
+  const del = useRowDelete<UserDto>({
+    kind: "user",
+    subject: "sign-in",
+    describe: (user) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{user.fullName}</span>
+        <span className="text-xs text-muted-foreground">
+          {user.email} · {user.role}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        They are signed out everywhere and the account leaves this list. What
+        they did stays in{" "}
+        <span className="font-medium text-foreground">
+          Settings &rarr; What changed
+        </span>{" "}
+        — an audit trail that forgets who did something is not one. For
+        somebody who has merely left,{" "}
+        <span className="font-medium text-foreground">deactivate instead</span>:
+        it closes the door just as firmly and is one click to undo.
+      </p>
+    ),
+    onDone: () => void refresh(),
+  });
 
   // Click Next twice quickly and two requests are in flight; the slower one
   // can answer last. Only the newest request is allowed to set the rows, so
@@ -187,7 +214,7 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                 <Th>Status</Th>
                 <Th>Last signed in</Th>
                 <Th>Email</Th>
-                <RowActionsHead />
+                <RowActionsHead deletable />
               </tr>
             </thead>
             <tbody>
@@ -265,6 +292,11 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                           ? undefined
                           : () => setDeactivating(user)
                       }
+                      // Not your own account. Deleting the sign-in you are
+                      // using is a locked door with the key inside, and the
+                      // server refusing it afterwards is a worse way to find
+                      // that out than the button never being live.
+                      onDelete={user.id === me.id ? undefined : () => del.ask(user)}
                       extra={
                         <Button
                           size="sm"
@@ -336,6 +368,7 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
         onConfirm={deactivate}
         onCancel={() => setDeactivating(null)}
       />
+      {del.dialog}
     </div>
   );
 }

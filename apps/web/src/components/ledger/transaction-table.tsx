@@ -42,6 +42,7 @@ export function TransactionTable({
   page = 1,
   onEdit,
   onVoid,
+  onDelete,
   showAccount = true,
   showBalance = false,
   showType = false,
@@ -61,6 +62,16 @@ export function TransactionTable({
   page?: number;
   onEdit?: (row: TransactionDto) => void;
   onVoid?: (row: TransactionDto) => void;
+  /**
+   * Opens the confirmation that sends the row to the trash.
+   *
+   * Passed by the screens that own a list they can reload; the bank statement
+   * and the register read from elsewhere and leave it off, so their rows keep
+   * the pair they had. A voided row can still be deleted — voiding says the
+   * movement was reversed, deleting says it should never have been typed, and
+   * the second is a fair thing to conclude about a row already struck through.
+   */
+  onDelete?: (row: TransactionDto) => void;
   /**
    * The account as its own column. Off, because the sheet this table is read
    * from lists nine columns and the account is not one of them. With it off a
@@ -182,7 +193,7 @@ export function TransactionTable({
                   Balance
                 </Th>
               ) : null}
-              <RowActionsHead />
+              <RowActionsHead deletable={Boolean(onDelete)} />
             </tr>
           </thead>
           <tbody>
@@ -489,6 +500,9 @@ export function TransactionTable({
                       canVoid && onVoid && !voided
                         ? () => onVoid(row)
                         : undefined
+                    }
+                    onDelete={
+                      canWrite && onDelete ? () => onDelete(row) : undefined
                     }
                     extra={
                       row.receiptUrl ? (

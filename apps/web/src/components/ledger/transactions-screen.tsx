@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { SearchField } from "@/components/ui/search-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useTransactionDelete } from "./use-transaction-delete";
 import { ApiError } from "@/lib/api-client";
 import {
   ledgerApi,
@@ -101,6 +102,8 @@ export function TransactionsScreen({
     }
   }, [filters, page]);
 
+  const del = useTransactionDelete(() => void load());
+
   useEffect(() => {
     // Fetching from the API when the filters or page change — the rule's own
     // "subscribe to an external system" case. The setState calls happen in the
@@ -184,6 +187,7 @@ export function TransactionsScreen({
           rows={rows}
           onEdit={setEditing}
           onVoid={setVoiding}
+          onDelete={del.ask}
           // Both directions appear here, so which one a row is has to be
           // readable rather than inferred from a colour.
           showType
@@ -239,6 +243,7 @@ export function TransactionsScreen({
         onClose={() => setVoiding(null)}
         onVoided={load}
       />
+      {del.dialog}
     </>
   );
 }

@@ -16,6 +16,7 @@ import { EmailPanel } from "./email-panel";
 import { NotificationsPanel } from "./notifications-panel";
 import { SecurityPanel } from "./security-panel";
 import { TaxPanel } from "./tax-panel";
+import { TrashPanel } from "./trash-panel";
 import { UsersPanel } from "./users-panel";
 import { useCan } from "@/components/auth/session-provider";
 
@@ -35,6 +36,14 @@ const TABS = [
   // this tab is Super Admin only — and the API refuses everyone else anyway.
   { id: "users", label: "People who can sign in", permission: "users.manage" },
   { id: "audit", label: "What changed", permission: "audit.read" },
+  /*
+   * Everything anybody deleted, waiting to be restored or purged. Gated the
+   * way the screen itself is — reachable with settings.read — because the API
+   * already narrows what it lists to the kinds this role could have deleted,
+   * and a person who deleted a row on some other screen must be able to reach
+   * the place it went without a permission they never needed to delete it.
+   */
+  { id: "trashed", label: "Trashed" },
   { id: "assistant", label: "Assistant", permission: "settings.write" },
   { id: "email", label: "Email", permission: "settings.write" },
   {
@@ -119,6 +128,7 @@ export function SettingsScreen({
         <UsersPanel initialUsers={initialUsers} />
       ) : null}
       {tab === "audit" && canReadAudit ? <AuditPanel /> : null}
+      {tab === "trashed" ? <TrashPanel /> : null}
       {tab === "assistant" && canWriteSettings ? <AssistantPanel /> : null}
       {tab === "email" && canWriteSettings ? <EmailPanel /> : null}
       {tab === "notifications" && canWriteSettings ? (

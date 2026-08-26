@@ -501,3 +501,59 @@ export const notificationsApi = {
       method: "POST",
     }),
 };
+
+/* -------------------------------------------------------------------------- */
+/*  The trash                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export type TrashKindSummary = {
+  kind: string;
+  label: string;
+  plural: string;
+  count: number;
+};
+
+export type TrashItem = {
+  kind: string;
+  kindLabel: string;
+  id: string;
+  title: string;
+  detail: string | null;
+  occurredAt: string | null;
+  deletedAt: string;
+  deletedBy: string | null;
+  deletedByName: string | null;
+  deleteReason: string | null;
+};
+
+export const trashApi = {
+  summary: () =>
+    apiFetch<TrashKindSummary[]>("/trash/summary", { cache: "no-store" }),
+  list: (query: { kind?: string; page?: number; pageSize?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (query.kind) params.set("kind", query.kind);
+    if (query.page) params.set("page", String(query.page));
+    if (query.pageSize) params.set("pageSize", String(query.pageSize));
+    const qs = params.toString();
+    return apiFetch<{
+      items: TrashItem[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>(`/trash${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+  },
+  /** Move a row to the trash. The row survives; its visibility does not. */
+  remove: (kind: string, id: string, reason: string) =>
+    apiFetch<{ deleted: number }>(`/trash/${kind}/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || null }),
+    }),
+  restore: (kind: string, id: string) =>
+    apiFetch<{ restored: number }>(`/trash/${kind}/${id}/restore`, {
+      method: "POST",
+    }),
+  /** Gone for good. Only answers for a row already in the trash. */
+  purge: (kind: string, id: string) =>
+    apiFetch<{ purged: number }>(`/trash/${kind}/${id}`, { method: "DELETE" }),
+  empty: () => apiFetch<{ purged: number }>("/trash", { method: "DELETE" }),
+};

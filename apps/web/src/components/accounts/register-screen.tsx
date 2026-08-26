@@ -10,6 +10,7 @@ import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
+import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,8 @@ export function RegisterScreen({
   useNameThisPage(`${account.name} — register`);
 
   const refresh = () => router.refresh();
+
+  const del = useTransactionDelete(() => refresh());
 
   function setRange(next: { from?: string; to?: string }) {
     const params = new URLSearchParams();
@@ -222,6 +225,7 @@ export function RegisterScreen({
         page={current}
         onEdit={setEditing}
         onVoid={setVoiding}
+        onDelete={del.ask}
         showAccount={false}
         showBalance
         emptyMessage="No entries for this account in the chosen period."
@@ -262,6 +266,7 @@ export function RegisterScreen({
         onClose={() => setVoiding(null)}
         onVoided={refresh}
       />
+      {del.dialog}
     </>
   );
 }

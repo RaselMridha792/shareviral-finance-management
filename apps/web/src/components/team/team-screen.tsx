@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,32 @@ export function TeamScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("team.write");
+  const del = useRowDelete<TeamMemberDto>({
+    kind: "team-member",
+    subject: "team member",
+    describe: (member) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{member.fullName}</span>
+        <span className="text-xs text-muted-foreground">
+          {member.designation ?? member.engagementType} · joined{" "}
+          {member.joinedOn}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        Their profile, salary history and paid-tool seats go with them. If they
+        have simply left,{" "}
+        <span className="font-medium text-foreground">
+          change their status to ended
+        </span>{" "}
+        instead — that keeps the payslips and the tax record their leaving does
+        not undo. Anyone with money recorded against them cannot be deleted at
+        all, and the app will say so.
+      </p>
+    ),
+    onDone: () => void reload(),
+  });
   const canSeePay = useCan("team.compensation.read");
 
   /**
@@ -324,6 +351,7 @@ export function TeamScreen({
               salaries={salaries}
               onEdit={canWrite ? setEditing : undefined}
               onStatus={canWrite ? goToProfile : undefined}
+              onDelete={canWrite ? del.ask : undefined}
             />
           )}
         </>
@@ -367,6 +395,7 @@ export function TeamScreen({
           onSaved={() => reload()}
         />
       ) : null}
+      {del.dialog}
     </>
   );
 }
@@ -381,6 +410,7 @@ function Section({
   salaries,
   onEdit,
   onStatus,
+  onDelete,
 }: {
   /** Which page these rows came from — the SL column counts from it. */
   page: number;
@@ -399,6 +429,7 @@ function Section({
    */
   onEdit?: (member: TeamMemberDto) => void;
   onStatus?: (member: TeamMemberDto) => void;
+  onDelete?: (member: TeamMemberDto) => void;
 }) {
   if (members.length === 0) return null;
 
@@ -472,7 +503,7 @@ function Section({
               to the profile, and nothing took its place — so editing somebody
               meant opening their page first.
             */}
-            <RowActionsHead />
+            <RowActionsHead deletable={Boolean(onDelete)} />
           </tr>
         </thead>
         <tbody>
@@ -580,6 +611,7 @@ function Section({
                 onEdit={onEdit ? () => onEdit(member) : undefined}
                 second="status"
                 onSecond={onStatus ? () => onStatus(member) : undefined}
+                onDelete={onDelete ? () => onDelete(member) : undefined}
               />
             </tr>
           ))}

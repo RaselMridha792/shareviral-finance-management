@@ -28,6 +28,15 @@ import { cn } from "@/lib/utils";
  * row or for a read-only reader, which leaves a blank cell where every other
  * row has controls — and a blank cell reads as a rendering fault, not as "you
  * cannot do this".
+ *
+ * `onDelete` adds a third button, and is separate from `second: "delete"` on
+ * purpose. The second slot holds whatever that table's rows support — void,
+ * archive, change status — and deleting is none of those: it is the same act
+ * on every table, it goes to the same trash, and it is the only one that can
+ * be undone from somewhere other than the screen it happened on. A row where
+ * both make sense shows both. Omitting the prop leaves the pair exactly as it
+ * was, which is what keeps a screen that has not been wired for deleting yet
+ * unchanged rather than half-changed.
  */
 
 export type SecondAction =
@@ -80,12 +89,15 @@ export function RowActions({
   onEdit,
   second,
   onSecond,
+  onDelete,
   /** Anything the row carries in addition — a receipt link, a payslip link. */
   extra,
 }: {
   onEdit?: () => void;
   second: SecondAction;
   onSecond?: () => void;
+  /** Opens the confirmation. Omit on a table not yet wired for deleting. */
+  onDelete?: () => void;
   extra?: ReactNode;
 }) {
   const { label, icon, danger } = SECOND[second];
@@ -101,12 +113,26 @@ export function RowActions({
           onClick={onSecond}
           danger={danger}
         />
+        {onDelete ? (
+          <IconButton
+            label="Delete"
+            icon={Trash2}
+            onClick={onDelete}
+            danger
+          />
+        ) : null}
       </div>
     </td>
   );
 }
 
-/** The unlabelled heading above the pair. */
-export function RowActionsHead() {
-  return <Th width="w-24" align="right" />;
+/**
+ * The unlabelled heading above the buttons.
+ *
+ * Wider when a third one is there, because two icons under a `w-24` heading
+ * fit and three do not — the column squeezes the one before it instead, which
+ * is how a description column loses six characters on eight screens at once.
+ */
+export function RowActionsHead({ deletable = false }: { deletable?: boolean }) {
+  return <Th width={deletable ? "w-32" : "w-24"} align="right" />;
 }

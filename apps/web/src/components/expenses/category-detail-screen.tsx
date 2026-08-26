@@ -9,6 +9,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { TransactionTable } from "@/components/ledger/transaction-table";
+import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -85,6 +86,8 @@ export function CategoryDetailScreen({
   }
 
   const refresh = () => router.refresh();
+
+  const del = useTransactionDelete(() => refresh());
 
   /*
    * The count on the total card has to be counted over the same rows the
@@ -166,6 +169,7 @@ export function CategoryDetailScreen({
         page={current}
         onEdit={setEditing}
         onVoid={setVoiding}
+        onDelete={del.ask}
         emptyMessage={
           scopeName
             ? `Nothing filed under ${scopeName} in ${range.label}.`
@@ -205,6 +209,7 @@ export function CategoryDetailScreen({
         onClose={() => setVoiding(null)}
         onVoided={refresh}
       />
+      {del.dialog}
     </>
   );
 }

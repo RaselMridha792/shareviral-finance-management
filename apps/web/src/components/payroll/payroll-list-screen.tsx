@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,7 +52,7 @@ const MONTHS = [
 ];
 
 /** SL, Paid on, Month, Gross, Tax withheld, Net paid, Status. */
-const COLUMNS = 7;
+const COLUMNS = 8;
 
 export function PayrollListScreen({
   initialPage,
@@ -59,6 +61,28 @@ export function PayrollListScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("payroll.write");
+  const del = useRowDelete<PayrollRunDto>({
+    kind: "payroll-run",
+    subject: "payroll run",
+    describe: (run) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{run.label}</span>
+        <span className="text-xs text-muted-foreground">
+          {run.status} · net {run.totalNet}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        The sheet and every payslip in it go with the run. A run that has been{" "}
+        <span className="font-medium text-foreground">paid cannot be
+        deleted</span> at all — the money left the account, so the run is a
+        record of something that happened. Delete a draft that was started by
+        mistake; for anything further along, void the payment entries instead.
+      </p>
+    ),
+    onDone: () => router.refresh(),
+  });
   const [creating, setCreating] = useState(false);
 
   /**
@@ -179,6 +203,7 @@ export function PayrollListScreen({
                     Net paid
                   </Th>
                   <Th width="w-28">Status</Th>
+                  <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>
               <tbody>
@@ -242,6 +267,15 @@ export function PayrollListScreen({
                           {PAYROLL_STATUS_LABELS[run.status]}
                         </Badge>
                       </td>
+                      <RowActions
+                        onEdit={() => router.push(`/payroll/${run.id}`)}
+                        second="status"
+                        // The status of a run is changed on the sheet itself,
+                        // where the figures being finalised are in front of
+                        // whoever is finalising them.
+                        onSecond={() => router.push(`/payroll/${run.id}`)}
+                        onDelete={canWrite ? () => del.ask(run) : undefined}
+                      />
                     </tr>
                   ))
                 )}
@@ -269,6 +303,7 @@ export function PayrollListScreen({
         onClose={() => setCreating(false)}
         onCreated={(id) => router.push(`/payroll/${id}`)}
       />
+      {del.dialog}
     </>
   );
 }

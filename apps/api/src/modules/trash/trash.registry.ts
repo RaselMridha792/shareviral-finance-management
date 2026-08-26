@@ -228,7 +228,10 @@ const REGISTRY: TrashEntry[] = [
     table: "fx_rates",
     permission: "settings.write",
     module: "settings",
-    title: "r.base_currency || '/' || r.quote_currency || ' ' || r.rate",
+    // Trimmed to two places for reading. The stored rate keeps its six —
+    // this is a label in a list, not a figure anything is computed from.
+    title:
+      "r.base_currency || '/' || r.quote_currency || ' ' || round(r.rate, 2)",
     detail: "r.source::text",
     occurredAt: "r.rate_date::text",
   },

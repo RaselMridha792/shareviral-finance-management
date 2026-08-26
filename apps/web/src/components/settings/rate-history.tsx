@@ -8,7 +8,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { DateInput, Field, Input } from "@/components/ui/field";
-import { ConfirmDialog } from "@/components/ui/overlay";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
@@ -40,9 +40,7 @@ export function RateHistory() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** The row being asked about, not a boolean — the dialog names the day. */
-  const [deleting, setDeleting] = useState<FxRateDto | null>(null);
-  const [deletePending, setDeletePending] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+
 
   async function load(target = page) {
     try {
@@ -102,31 +100,38 @@ export function RateHistory() {
     }
   }
 
-  /**
-   * A refusal keeps the dialog open and says why inside it. Closing on failure
-   * would look like the rate had gone, and the next report to translate that
-   * period would disagree with the screen.
+  /*
+   * The rate goes to the trash like everything else now, rather than out of
+   * the database on one click.
+   *
+   * This screen had the app's only real delete, and it was the reason: a rate
+   * is a claim about a day, so there is nothing to void. But irreversible was
+   * never part of that argument — it was simply the only kind of delete that
+   * existed. A wrong rate typed for the wrong day is now recoverable like any
+   * other mistake, and the warning below is the one this screen already had,
+   * because it says the thing worth saying.
    */
-  async function onDelete() {
-    const rate = deleting;
-    if (!rate) return;
-
-    setDeletePending(true);
-    setDeleteError(null);
-    try {
-      await fxApi.remove(rate.id);
-      setDeleting(null);
-      await load();
-    } catch (caught) {
-      setDeleteError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not delete that rate.",
-      );
-    } finally {
-      setDeletePending(false);
-    }
-  }
+  const del = useRowDelete<FxRateDto>({
+    kind: "fx-rate",
+    subject: "rate",
+    describe: (rate) => (
+      <div className="flex flex-col">
+        <span className="font-medium">
+          <span className="num">{Number(rate.rate).toFixed(2)}</span> per USD
+        </span>
+        <span className="text-xs text-muted-foreground">{rate.rateDate}</span>
+      </div>
+    ),
+    consequences: (
+      <p>
+        Every USD figure for that day is translated at this rate. Without it,
+        the period falls back to the nearest earlier rate, or shows taka if
+        there is none — so a report you have already sent somebody may read
+        differently the next time it is opened.
+      </p>
+    ),
+    onDone: () => void load(),
+  });
 
   return (
     <>
@@ -248,7 +253,7 @@ export function RateHistory() {
                     */}
                     <RowActions
                       second="delete"
-                      onSecond={canWrite ? () => setDeleting(rate) : undefined}
+                      onSecond={canWrite ? () => del.ask(rate) : undefined}
                     />
                   </tr>
                 ))
@@ -274,37 +279,7 @@ export function RateHistory() {
         numbers on reports nobody happens to be looking at, so it is asked for
         first, with the day and the number in the question.
       */}
-      <ConfirmDialog
-        open={deleting !== null}
-        title="Delete this rate?"
-        destructive
-        confirmLabel={deletePending ? "Deleting…" : "Delete it"}
-        pending={deletePending}
-        body={
-          <>
-            Every USD figure for{" "}
-            <span className="font-medium text-foreground">
-              {deleting?.rateDate}
-            </span>{" "}
-            is translated at{" "}
-            <span className="num font-medium text-foreground">
-              {deleting ? Number(deleting.rate).toFixed(2) : ""}
-            </span>
-            . Without it, that period falls back to the nearest earlier rate, or
-            shows taka if there is none.
-            {deleteError ? (
-              <span role="alert" className="mt-2 block text-negative">
-                {deleteError}
-              </span>
-            ) : null}
-          </>
-        }
-        onConfirm={() => void onDelete()}
-        onCancel={() => {
-          setDeleting(null);
-          setDeleteError(null);
-        }}
-      />
+      {del.dialog}
     </>
   );
 }
