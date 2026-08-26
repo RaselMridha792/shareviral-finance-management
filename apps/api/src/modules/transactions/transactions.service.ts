@@ -42,6 +42,7 @@ import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { VendorsService } from "../vendors/vendors.service";
 import { isToolSpend } from "../vendors/tool-spend";
+import { overdraftWatch } from "../../common/money/overdraft";
 import { nextRefNo } from "./ref-no";
 
 /**
@@ -572,6 +573,9 @@ export class TransactionsService {
     );
 
     const year = Number(input.txnDate.slice(0, 4));
+    // The rule of the house: an account can never go below zero. Checked
+    // after the insert, inside the same transaction, so a refusal undoes it.
+    const watch = await overdraftWatch(this.db.client, [input.accountId]);
 
     return this.audit
       .mutate({
@@ -632,6 +636,7 @@ export class TransactionsService {
             })
             .returning({ id: transactions.id, refNo: transactions.refNo });
 
+          await watch.assert(tx);
           return created;
         },
       })
@@ -719,6 +724,10 @@ export class TransactionsService {
       );
     }
 
+    // An amount or date change can overdraw the account just as a new entry
+    // can; same rule, same rollback.
+    const watch = await overdraftWatch(this.db.client, [existing.accountId]);
+
     await this.audit.mutate({
       action: "update",
       entityTable: "transactions",
@@ -792,6 +801,7 @@ export class TransactionsService {
             updatedBy: actor.id,
           })
           .where(eq(transactions.id, id));
+        await watch.assert(tx);
       },
     });
 
@@ -825,6 +835,20 @@ export class TransactionsService {
         ).map((r) => r.id)
       : [id];
 
+    /*
+     * Voiding an "in" row removes money the account thought it had, which can
+     * leave later spending under water — the same overdraft as typing an
+     * expense too large, reached from the other side. A transfer group spans
+     * two accounts, so both are watched.
+     */
+    const accountIds = (
+      await this.db.client
+        .select({ accountId: transactions.accountId })
+        .from(transactions)
+        .where(inArray(transactions.id, ids))
+    ).map((r) => r.accountId);
+    const watch = await overdraftWatch(this.db.client, accountIds);
+
     await this.audit.mutate({
       action: "void",
       entityTable: "transactions",
@@ -853,6 +877,7 @@ export class TransactionsService {
             updatedBy: actor.id,
           })
           .where(inArray(transactions.id, ids));
+        await watch.assert(tx);
       },
     });
 
@@ -868,6 +893,8 @@ export class TransactionsService {
 
     const year = Number(input.txnDate.slice(0, 4));
     const groupId = crypto.randomUUID();
+    // Only the paying side can go under; the receiving side only gains.
+    const watch = await overdraftWatch(this.db.client, [input.fromAccountId]);
 
     const created = await this.audit.mutate({
       action: "create",
@@ -911,6 +938,7 @@ export class TransactionsService {
           updatedBy: actor.id,
         });
 
+        await watch.assert(tx);
         return outRow;
       },
     });

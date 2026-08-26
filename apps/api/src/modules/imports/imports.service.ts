@@ -28,6 +28,7 @@ import type {
 } from "./imports.schemas";
 import { parseRow, type RawRow } from "./row-parser";
 import { readSpreadsheet } from "./spreadsheet";
+import { overdraftWatch } from "../../common/money/overdraft";
 import { nextRefNos } from "../transactions/ref-no";
 
 const MAX_ROWS = 10_000;
@@ -363,6 +364,10 @@ export class ImportsService {
       (candidates[0].mapped as { txnDate: string }).txnDate.slice(0, 4),
     );
 
+    // A whole file of expenses can overdraw an account exactly as one typed
+    // entry can, and it must fail the same way: whole, and with a reason.
+    const watch = await overdraftWatch(this.db.client, [defaults.accountId]);
+
     const imported = await this.audit.mutate({
       action: "import",
       entityTable: "transactions",
@@ -447,6 +452,7 @@ export class ImportsService {
           })
           .where(eq(importBatches.id, batchId));
 
+        await watch.assert(tx);
         return created;
       },
     });
@@ -474,6 +480,7 @@ export class ImportsService {
         id: transactions.id,
         refNo: transactions.refNo,
         txnDate: transactions.txnDate,
+        accountId: transactions.accountId,
         updatedAt: transactions.updatedAt,
         createdAt: transactions.createdAt,
       })
@@ -496,6 +503,12 @@ export class ImportsService {
       await this.settings.assertPeriodOpen(row.txnDate);
     }
 
+    // Reverting removes "in" rows as readily as "out" ones, and taking money
+    // back out of the story can leave later spending under water.
+    const revertWatch = await overdraftWatch(this.db.client, [
+      ...new Set(rows.map((r) => r.accountId)),
+    ]);
+
     await this.audit.mutate({
       action: "delete",
       entityTable: "transactions",
@@ -515,6 +528,7 @@ export class ImportsService {
           .update(importBatches)
           .set({ status: "reverted", revertedAt: new Date(), importedRows: 0 })
           .where(eq(importBatches.id, batchId));
+        await revertWatch.assert(tx);
       },
     });
 

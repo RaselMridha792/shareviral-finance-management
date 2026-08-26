@@ -41,6 +41,7 @@ import {
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { overdraftWatch } from "../../common/money/overdraft";
 import type { DbTransaction } from "../../db";
 import {
   categories,
@@ -704,6 +705,11 @@ export class TdsService {
       input.periodMonth,
     ).periodLabel;
 
+    // Only when the challan also writes a ledger row does money move.
+    const watch = input.accountId
+      ? await overdraftWatch(this.db.client, [input.accountId])
+      : null;
+
     return this.audit.mutate({
       action: "create",
       entityTable: "tds_deposits",
@@ -761,6 +767,7 @@ export class TdsService {
           })
           .returning();
 
+        if (watch) await watch.assert(tx);
         return deposit;
       },
     });

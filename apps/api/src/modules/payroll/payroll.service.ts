@@ -39,6 +39,7 @@ import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
+import { overdraftWatch } from "../../common/money/overdraft";
 import {
   accounts,
   appSettings,
@@ -162,8 +163,10 @@ export class PayrollService {
   }
 
   async createRun(input: CreatePayrollRunInput, actor: AuthenticatedUser) {
+    const label = `${MONTHS[input.periodMonth - 1]} ${input.periodYear}`;
+
     const [clash] = await this.db.client
-      .select({ id: payrollRuns.id })
+      .select({ id: payrollRuns.id, deletedAt: payrollRuns.deletedAt })
       .from(payrollRuns)
       .where(
         and(
@@ -173,16 +176,32 @@ export class PayrollService {
       )
       .limit(1);
 
+    /*
+     * A month is unique whether its run is live or in the trash — the database
+     * says so, and it should: two August sheets, one deleted and one not, is a
+     * question with two answers. What the reader needs is which of the two
+     * situations they are in, because the way out is different. "Already
+     * exists" about a run they had just deleted read as a lie, and the screen
+     * only ever showed the generic half of it.
+     */
+    if (clash?.deletedAt) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: {
+          periodMonth: [
+            `The ${label} run is in the trash. Restore it from Settings → Trashed, or delete it there permanently, and then start the month again.`,
+          ],
+        },
+      });
+    }
     if (clash) {
       throw new BadRequestException({
         message: "Validation failed",
         errors: {
-          periodMonth: ["A payroll run already exists for that month"],
+          periodMonth: [`A payroll run for ${label} already exists`],
         },
       });
     }
-
-    const label = `${MONTHS[input.periodMonth - 1]} ${input.periodYear}`;
 
     return this.audit.mutate({
       action: "create",
@@ -628,6 +647,8 @@ export class PayrollService {
       .toFixed(2);
 
     const year = Number(input.paymentDate.slice(0, 4));
+    // Salary leaves the paying account like any other money: not past zero.
+    const watch = await overdraftWatch(this.db.client, [input.accountId]);
 
     await this.audit.mutate({
       action: "pay",
@@ -730,6 +751,7 @@ export class PayrollService {
             updatedBy: actor.id,
           })
           .where(eq(payrollRuns.id, runId));
+        await watch.assert(tx);
       },
     });
 

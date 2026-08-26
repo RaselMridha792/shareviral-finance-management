@@ -18,6 +18,7 @@ import { and, asc, desc, eq, isNull, lte, ne, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { overdraftWatch } from "../../common/money/overdraft";
 import {
   accounts,
   categories,
@@ -283,6 +284,9 @@ export class IncomeTaxService {
       });
     }
 
+    // Tax leaves the account like any other money: not past zero.
+    const watch = await overdraftWatch(this.db.client, [input.accountId]);
+
     await this.audit.mutate({
       action: "pay",
       entityTable: "income_tax_records",
@@ -365,6 +369,7 @@ export class IncomeTaxService {
             updatedBy: actor.id,
           })
           .where(eq(incomeTaxRecords.id, id));
+        await watch.assert(tx);
       },
     });
 

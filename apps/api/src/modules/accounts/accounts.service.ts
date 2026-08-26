@@ -15,6 +15,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { overdraftWatch } from "../../common/money/overdraft";
 import {
   accounts,
   incomeTaxRecords,
@@ -207,6 +208,7 @@ export class AccountsService {
 
   async create(input: CreateAccountInput, actor: AuthenticatedUser) {
     await this.assertNameFree(input.name);
+    assertOpeningNotNegative(input.openingBalance);
 
     return this.audit.mutate({
       action: "create",
@@ -263,6 +265,19 @@ export class AccountsService {
       await this.settings.assertPeriodOpen(existing.openingBalanceOn);
     }
 
+    if (input.openingBalance !== undefined) {
+      assertOpeningNotNegative(input.openingBalance);
+    }
+    // Snapshot only when the opening balance is actually changing — the
+    // check below is gated the same way, and a rename should not pay for a
+    // balance query it will never read.
+    const openingChanging =
+      input.openingBalance !== undefined &&
+      input.openingBalance !== existing.openingBalance;
+    const watch = openingChanging
+      ? await overdraftWatch(this.db.client, [id])
+      : null;
+
     return this.audit.mutate({
       action: "update",
       entityTable: "accounts",
@@ -283,6 +298,15 @@ export class AccountsService {
           .set({ ...input, updatedAt: new Date(), updatedBy: actor.id })
           .where(eq(accounts.id, id))
           .returning(projection);
+        /*
+         * Lowering the opening balance rewrites the account's whole history
+         * downward, and can push a month that was fine below zero. Checked
+         * only when the opening actually changed — an edit to the name must
+         * not start failing because of entries typed since.
+         */
+        if (watch) {
+          await watch.assert(tx);
+        }
         return row;
       },
     });
@@ -606,4 +630,24 @@ function describeWhyItStays(name: string, held: AccountAttachments): string {
     `because every entry has to belong to an account — the register's balance is built from that link, ` +
     `and this application voids money rather than deleting it. Archived is already out of every picker and every total.`
   );
+}
+
+/**
+ * An account cannot open below zero, because it can never *be* below zero.
+ *
+ * The opening balance is the floor everything else stands on — a negative one
+ * would make the account born overdrawn, and the rule the rest of the app
+ * enforces on every entry would be broken before the first entry existed.
+ */
+function assertOpeningNotNegative(openingBalance: string) {
+  if (Number(openingBalance) < 0) {
+    throw new BadRequestException({
+      message: "Validation failed",
+      errors: {
+        openingBalance: [
+          "An opening balance cannot be negative — an account never goes below zero.",
+        ],
+      },
+    });
+  }
 }

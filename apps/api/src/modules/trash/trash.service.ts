@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { overdraftWatch } from "../../common/money/overdraft";
 
 import {
   trashEntries,
@@ -256,6 +257,17 @@ export class TrashService {
      */
     const ids = await this.siblingIds(entry, id, row);
 
+    /*
+     * Deleting an "in" row takes money back out of the account's story, and
+     * spending recorded after it may then never have been possible. The
+     * account rule — never below zero — holds here exactly as it does at the
+     * moment of typing an expense, and the refusal names the account.
+     */
+    const watch =
+      entry.kind === "transaction"
+        ? await overdraftWatch(this.db.client, await this.accountIdsOf(ids))
+        : null;
+
     await this.audit.mutate({
       action: "delete",
       entityTable: entry.table,
@@ -290,10 +302,22 @@ export class TrashService {
                 sql`, `,
               )})`,
         );
+        if (watch) await watch.assert(tx);
       },
     });
 
     return { deleted: ids.length };
+  }
+
+  /** The accounts a set of transaction rows sits on. */
+  private async accountIdsOf(ids: string[]): Promise<string[]> {
+    const found = await this.db.client.execute(
+      sql`select distinct account_id::text as id from transactions where id in (${sql.join(
+        ids.map((one) => sql`${one}::uuid`),
+        sql`, `,
+      )})`,
+    );
+    return (found.rows as unknown as { id: string }[]).map((r) => r.id);
   }
 
   /** Both halves of a transfer, or just the one row. */
@@ -321,6 +345,13 @@ export class TrashService {
     }
 
     const ids = await this.siblingIdsInTrash(entry, id, row);
+
+    // Restoring an "out" row spends the money again. The account rule holds
+    // on the way out of the trash exactly as it does everywhere else.
+    const watch =
+      entry.kind === "transaction"
+        ? await overdraftWatch(this.db.client, await this.accountIdsOf(ids))
+        : null;
 
     await this.audit.mutate({
       // There is no "restore" in the audit action enum, and adding one means
@@ -354,6 +385,7 @@ export class TrashService {
             sql`, `,
           )})`,
         );
+        if (watch) await watch.assert(tx);
       },
     });
 
@@ -391,22 +423,36 @@ export class TrashService {
       );
     }
 
+    /*
+     * A transfer purges as the pair it is, for the same reason it deletes as
+     * one: removing half for ever leaves the other half in the trash pointing
+     * at a movement that no longer has a far side, and restoring it later
+     * would un-balance two accounts at once.
+     */
+    const ids = await this.siblingIdsInTrash(entry, id, row);
+
     await this.audit.mutate({
       action: "delete",
       entityTable: entry.table,
       entityId: id,
       module: entry.module,
       isSensitive: true,
-      summary: `Permanently removed ${entry.label} "${row.__title ?? id}" from the trash`,
+      summary:
+        `Permanently removed ${entry.label} "${row.__title ?? id}"` +
+        (ids.length > 1 ? " and its matching transfer row" : "") +
+        ` from the trash`,
       read: () => Promise.resolve(row),
       run: async (tx) => {
         await tx.execute(
-          sql`${sql.raw(`delete from ${entry.table} where id`)} = ${id}::uuid and deleted_at is not null`,
+          sql`${sql.raw(`delete from ${entry.table} where deleted_at is not null and id`)} in (${sql.join(
+            ids.map((one) => sql`${one}::uuid`),
+            sql`, `,
+          )})`,
         );
       },
     });
 
-    return { purged: 1 };
+    return { purged: ids.length };
   }
 
   /**
