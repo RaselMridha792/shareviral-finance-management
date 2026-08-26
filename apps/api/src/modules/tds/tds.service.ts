@@ -1394,15 +1394,24 @@ async function findCategory(
       and(
         sql`lower(${categories.name}) = ${name}`,
         eq(categories.isActive, true),
+        isNull(categories.deletedAt),
       ),
     )
     .limit(1);
   if (exact) return exact.id;
 
+  // Same reason as payroll's: a fallback that may pick anything must not
+  // pick something out of the trash.
   const [fallback] = await tx
     .select({ id: categories.id })
     .from(categories)
-    .where(and(eq(categories.kind, "out"), eq(categories.isActive, true)))
+    .where(
+      and(
+        eq(categories.kind, "out"),
+        eq(categories.isActive, true),
+        isNull(categories.deletedAt),
+      ),
+    )
     .orderBy(asc(categories.sortOrder))
     .limit(1);
 

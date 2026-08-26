@@ -220,7 +220,11 @@ export class TransactionsService {
         .select({ id: categories.id })
         .from(categories)
         .where(
-          and(eq(categories.slug, parentSlug), isNull(categories.parentId)),
+          and(
+            eq(categories.slug, parentSlug),
+            isNull(categories.parentId),
+            isNull(categories.deletedAt),
+          ),
         )
         .limit(1);
       if (!parent) return [];
@@ -229,7 +233,11 @@ export class TransactionsService {
         .select({ id: categories.id })
         .from(categories)
         .where(
-          and(eq(categories.slug, slug), eq(categories.parentId, parent.id)),
+          and(
+            eq(categories.slug, slug),
+            eq(categories.parentId, parent.id),
+            isNull(categories.deletedAt),
+          ),
         )
         .limit(1);
       return child ? [child.id] : [];
@@ -238,14 +246,22 @@ export class TransactionsService {
     const [heading] = await this.db.client
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.slug, slug), isNull(categories.parentId)))
+      .where(
+        and(
+          eq(categories.slug, slug),
+          isNull(categories.parentId),
+          isNull(categories.deletedAt),
+        ),
+      )
       .limit(1);
     if (!heading) return [];
 
     const children = await this.db.client
       .select({ id: categories.id })
       .from(categories)
-      .where(eq(categories.parentId, heading.id));
+      .where(
+        and(eq(categories.parentId, heading.id), isNull(categories.deletedAt)),
+      );
 
     return [heading.id, ...children.map((c) => c.id)];
   }
@@ -934,10 +950,15 @@ export class TransactionsService {
     categoryId: string,
     direction: "in" | "out",
   ) {
+    /*
+     * Validating the category an entry is being filed under. A deleted one
+     * reads as no such category, which is the message somebody needs — not a
+     * silent posting into a heading that no screen will ever show them again.
+     */
     const [category] = await this.db.client
       .select({ kind: categories.kind, name: categories.name })
       .from(categories)
-      .where(eq(categories.id, categoryId))
+      .where(and(eq(categories.id, categoryId), isNull(categories.deletedAt)))
       .limit(1);
 
     if (!category) {

@@ -996,16 +996,29 @@ export class PayrollService {
         and(
           sql`lower(${categories.name}) = 'salary'`,
           eq(categories.isActive, true),
+          isNull(categories.deletedAt),
         ),
       )
       .limit(1);
 
     if (salary) return salary.id;
 
+    /*
+     * The fallback files salary under whichever OUT category sorts first,
+     * which is a guess — and a guess must not land on something somebody
+     * deleted. A deleted heading still satisfied `isActive`, so without this
+     * line payroll could post a month's salary into the trash.
+     */
     const [fallback] = await this.db.client
       .select({ id: categories.id })
       .from(categories)
-      .where(and(eq(categories.kind, "out"), eq(categories.isActive, true)))
+      .where(
+        and(
+          eq(categories.kind, "out"),
+          eq(categories.isActive, true),
+          isNull(categories.deletedAt),
+        ),
+      )
       .orderBy(asc(categories.sortOrder))
       .limit(1);
 
