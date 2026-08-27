@@ -88,6 +88,29 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — a transaction id, or just the slip
+
+**Done.** All four entry drawers (expense, cash in, transfer, subscription)
+offer a choice above the reference field: **Transaction ID** (box + paperclip,
+unchanged) or **Reference only** (paperclip alone — the paper *is* the
+reference). The tables answer in one cell: number → clickable as before,
+no number but paperwork → an **eye** that opens the same drawer, neither →
+a dash. Commit: `06a45d7`.
+
+**Nothing is stored to say which kind an entry is.** A row with a number is
+the first case, one without is the second — so the flag cannot drift from the
+data, no migration was needed, and every pre-existing entry reads correctly.
+The shared piece is `components/ledger/reference-kind.tsx`
+(`ReferenceKindToggle`, `ReferenceCell`, `ReferenceInput`).
+
+**Watch out.** The subscriptions listing gained `documentCount` (API
+projection + web DTO), counting invoice/bank files but **not** the plan's own
+screenshot — the number cells do not open that one. A table using
+`ReferenceCell` must pass a real count; an eye over an empty drawer is worse
+than the dash it replaces.
+
+---
+
 ## 2026-08-27 — an account chooses its primary currency
 
 **Done.** The account form's currency choice (now labelled **Primary
