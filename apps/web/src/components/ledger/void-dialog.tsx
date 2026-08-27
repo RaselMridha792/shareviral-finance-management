@@ -15,12 +15,30 @@ import { ledgerApi, type TransactionDto } from "@/lib/ledger";
  * total — because a deleted entry cannot answer the question someone asks
  * about it six months later.
  */
+/**
+ * What the dialog actually reads off a row — a structural slice rather than
+ * the whole DTO, so the transfers screen can void a pair through the same
+ * door without inventing the thirty fields it never shows.
+ */
+export type VoidableTransaction = Pick<
+  TransactionDto,
+  | "id"
+  | "refNo"
+  | "description"
+  | "txnDate"
+  | "accountName"
+  | "signedAmount"
+  | "currency"
+  | "direction"
+  | "transferGroupId"
+>;
+
 export function VoidDialog({
   transaction,
   onClose,
   onVoided,
 }: {
-  transaction: TransactionDto | null;
+  transaction: VoidableTransaction | null;
   onClose: () => void;
   onVoided: () => Promise<void> | void;
 }) {

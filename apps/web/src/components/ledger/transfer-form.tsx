@@ -17,9 +17,11 @@ import {
   MoneyInput,
   Select,
 } from "@/components/ui/field";
+import { formatMoney } from "@finance/shared";
+
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
-import type { AccountDto } from "@/lib/masters";
+import type { AccountWithBalance } from "@/lib/masters";
 
 /**
  * Moving money between our own accounts. Creates two linked rows — one out,
@@ -32,7 +34,12 @@ export function TransferForm({
   onSaved,
 }: {
   open: boolean;
-  accounts: AccountDto[];
+  /**
+   * With balances, because the account rule refuses a transfer past what the
+   * account holds — the picker saying "৳48,750.00" beside the name is the
+   * warning that arrives before the refusal has to.
+   */
+  accounts: AccountWithBalance[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
@@ -112,7 +119,7 @@ export function TransferForm({
             >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name}
+                  {account.name} — {formatMoney(account.balance)}
                 </option>
               ))}
             </Select>
@@ -127,7 +134,7 @@ export function TransferForm({
             <Select name="toAccountId" required defaultValue={accounts[1]?.id}>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name}
+                  {account.name} — {formatMoney(account.balance)}
                 </option>
               ))}
             </Select>

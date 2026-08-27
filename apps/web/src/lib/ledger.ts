@@ -12,6 +12,7 @@ import type {
 } from "@finance/shared";
 
 import { API_BASE_URL, apiFetch } from "./api-client";
+import { PAGE_SIZE } from "./pagination";
 
 export type TransactionDto = {
   id: string;
@@ -58,6 +59,25 @@ export type TransactionDto = {
   senderAccountName: string | null;
   senderAccountNumber: string | null;
   senderSwiftCode: string | null;
+  createdAt: string;
+};
+
+/** One transfer, the pair read as the single event it is. */
+export type TransferRowDto = {
+  outId: string;
+  inId: string;
+  groupId: string | null;
+  refNo: string;
+  txnDate: string;
+  amount: string;
+  description: string;
+  reference: string | null;
+  paymentMethod: string | null;
+  voidedAt: string | null;
+  fromAccountId: string;
+  fromAccountName: string;
+  toAccountId: string;
+  toAccountName: string;
   createdAt: string;
 };
 
@@ -173,6 +193,11 @@ export const ledgerApi = {
       ...json(input),
     }),
 
+  listTransfers: (page = 1) =>
+    apiFetch<Paginated<TransferRowDto>>(
+      `/transactions/transfers?page=${page}&pageSize=${PAGE_SIZE}`,
+      { cache: "no-store" },
+    ),
   transfer: (input: TransferInput) =>
     apiFetch<TransactionDto>("/transactions/transfer", {
       method: "POST",

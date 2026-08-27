@@ -360,7 +360,11 @@ export const transferSchema = z
     txnDate: isoDateSchema,
     fromAccountId: z.string().uuid("Choose the account money leaves"),
     toAccountId: z.string().uuid("Choose the account money arrives in"),
-    amount: amountSchema,
+    // The same rule the create and cash-in schemas carry: zero passes the
+    // format regex and moves nothing, so it is refused by name.
+    amount: amountSchema.refine((v) => Number(v) > 0, {
+      message: "The amount must be more than zero",
+    }),
     description: z.string().trim().min(2).max(300),
     reference: optionalText(120),
     paymentMethod: paymentMethodSchema.default("bank_transfer"),

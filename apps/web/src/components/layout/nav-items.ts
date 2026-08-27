@@ -127,6 +127,16 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
+        key: "transfers",
+        href: "/transfers",
+        label: "Money Transfer",
+        // Horizontal, against All transactions' vertical: money moving
+        // *across* between our own accounts, not in or out of the company.
+        icon: "swap_horiz",
+        hue: 190,
+        permission: "transactions.read",
+      },
+      {
         key: "transactions",
         href: "/transactions",
         label: "All transactions",

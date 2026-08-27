@@ -10,6 +10,7 @@ import {
   type CreateTransactionInput,
   type ListTransactionsQuery,
   type Paginated,
+  type PaginationQuery,
   type RecordCashInInput,
   type TransactionFilter,
   type TransferInput,
@@ -33,6 +34,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -117,6 +119,25 @@ export type TransactionDto = {
   senderAccountName: string | null;
   senderAccountNumber: string | null;
   senderSwiftCode: string | null;
+  createdAt: Date;
+};
+
+/** One transfer, read as the single event it is. */
+export type TransferRow = {
+  outId: string;
+  inId: string;
+  groupId: string | null;
+  refNo: string;
+  txnDate: string;
+  amount: string;
+  description: string;
+  reference: string | null;
+  paymentMethod: string | null;
+  voidedAt: Date | null;
+  fromAccountId: string;
+  fromAccountName: string;
+  toAccountId: string;
+  toAccountName: string;
   createdAt: Date;
 };
 
@@ -882,6 +903,84 @@ export class TransactionsService {
     });
 
     return this.findOne(id);
+  }
+
+  /**
+   * The transfers, one row per pair.
+   *
+   * A transfer is stored as two transactions sharing a `transferGroupId`, and
+   * every screen that reads the ledger sees both halves — which is right for
+   * an account's register and wrong for a page about transfers, where "moved
+   * ৳50,000 from the bank to petty cash" is one event, not two. The out half
+   * anchors the row (it is where the money left), and its twin is joined on
+   * for where the money arrived.
+   *
+   * Voided pairs are listed struck through, the same rule as every ledger
+   * screen; deleted ones are in the trash and not here.
+   */
+  async listTransfers(query: PaginationQuery): Promise<Paginated<TransferRow>> {
+    const inRow = alias(transactions, "in_row");
+    const fromAccount = alias(accounts, "from_account");
+    const toAccount = alias(accounts, "to_account");
+
+    const pairFilter = and(
+      isNotNull(transactions.transferGroupId),
+      eq(transactions.direction, "out"),
+      isNull(transactions.deletedAt),
+      isNull(inRow.deletedAt),
+    );
+    const joinedIn = and(
+      eq(inRow.transferGroupId, transactions.transferGroupId),
+      eq(inRow.direction, "in"),
+    );
+
+    const [items, [{ total }]] = await Promise.all([
+      this.db.client
+        .select({
+          outId: transactions.id,
+          inId: inRow.id,
+          groupId: transactions.transferGroupId,
+          refNo: transactions.refNo,
+          txnDate: transactions.txnDate,
+          amount: transactions.amount,
+          description: transactions.description,
+          reference: transactions.reference,
+          paymentMethod: transactions.paymentMethod,
+          voidedAt: transactions.voidedAt,
+          fromAccountId: fromAccount.id,
+          fromAccountName: fromAccount.name,
+          toAccountId: toAccount.id,
+          toAccountName: toAccount.name,
+          createdAt: transactions.createdAt,
+        })
+        .from(transactions)
+        .innerJoin(inRow, joinedIn)
+        .innerJoin(fromAccount, eq(fromAccount.id, transactions.accountId))
+        .innerJoin(toAccount, eq(toAccount.id, inRow.accountId))
+        .where(pairFilter)
+        .orderBy(
+          desc(transactions.txnDate),
+          desc(transactions.createdAt),
+          desc(transactions.id),
+        )
+        .limit(query.pageSize)
+        .offset((query.page - 1) * query.pageSize),
+      // Counted over the same joins and filter — a pair that lost a half to a
+      // bug would drop out of both queries together rather than skewing one.
+      this.db.client
+        .select({ total: count() })
+        .from(transactions)
+        .innerJoin(inRow, joinedIn)
+        .where(pairFilter),
+    ]);
+
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      total: Number(total),
+      totalPages: Math.max(1, Math.ceil(Number(total) / query.pageSize)),
+    };
   }
 
   /** Moving money between our own accounts: one out row and one in row. */

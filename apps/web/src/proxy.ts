@@ -83,6 +83,7 @@ export async function proxy(request: NextRequest) {
 const ROUTE_PERMISSIONS: Array<[string, Permission]> = [
   ["/accounts", "accounts.read"],
   ["/transactions", "transactions.read"],
+  ["/transfers", "transactions.read"],
   ["/expenses", "transactions.read"],
   ["/subscriptions", "vendors.read"],
   ["/team", "team.read"],

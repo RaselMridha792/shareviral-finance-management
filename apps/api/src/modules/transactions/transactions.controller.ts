@@ -18,6 +18,8 @@ import {
   type TransferInput,
   type UpdateTransactionInput,
   type VoidTransactionInput,
+  paginationQuerySchema,
+  type PaginationQuery,
 } from "@finance/shared";
 import { z } from "zod";
 
@@ -39,6 +41,17 @@ export class TransactionsController {
   @RequirePermission("transactions.read")
   list(@ZodQuery(listTransactionsQuerySchema) query: ListTransactionsQuery) {
     return this.transactions.list(query);
+  }
+
+  /**
+   * The transfers, one row per pair. Declared above "transactions/:id" —
+   * routes match in order, and the word "transfers" must not be read as an
+   * id.
+   */
+  @Get("transactions/transfers")
+  @RequirePermission("transactions.read")
+  listTransfers(@ZodQuery(paginationQuerySchema) query: PaginationQuery) {
+    return this.transactions.listTransfers(query);
   }
 
   /** The in / out / net figures shown above the table. */
