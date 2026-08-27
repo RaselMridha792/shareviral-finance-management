@@ -20,6 +20,41 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — Money Transfer has a page
+
+**Done.** `/transfers`, "Money Transfer" under Money in the rail. Commit:
+`fab219f`. The machinery all pre-existed — the paired-row endpoint, the
+never-mounted `TransferForm`, pair-aware void and trash, the overdraft guard on
+the paying side — and none of it had a door. The page lists one row per pair
+(from → to, one amount), records through the existing form, voids and deletes
+the pair from the row.
+
+Three deliberate choices worth knowing:
+
+- **No edit button on a transfer, and it is not a gap.** The update endpoint
+  touches one row; editing half a pair would leave the two accounts
+  disagreeing, which is the fault the pair exists to prevent. Void and record
+  again.
+- **`transferSchema` now refuses a zero amount** (packages/shared — rebuild
+  dist), the refusal its sibling create/cash-in schemas always had.
+- **`VoidDialog`'s prop narrowed** to `VoidableTransaction` (a `Pick` of the
+  nine fields it reads). Every existing caller still passes a full
+  `TransactionDto`; the change is structural only.
+
+Also: the form's account pickers now say each account's balance beside its
+name, and the new `GET /transactions/transfers` route sits **above**
+`transactions/:id` in the controller — routes match in order.
+
+**Watch out.** `ledgerApi.listTransfers` / `TransferRowDto` in `lib/ledger.ts`;
+the nav item and the `/transfers` proxy gate ride `transactions.read`, the
+transfer action `transactions.write`.
+
+**Open.** Nothing on the page itself. The transfers listing has no date filter
+yet — at twenty a page that will want the FilterBar treatment like every other
+list. `.transferqa.mjs` (21 checks, API and browser both) is the harness.
+
+---
+
 ## 2026-08-27 — the five fixes: no minus, the bank under the heading, blue links, delete that leaves, errors that explain
 
 **Done.** The owner's five items from live use, plus what checking them turned
