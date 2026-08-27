@@ -95,11 +95,9 @@ const REGISTRY: TrashEntry[] = [
     title: "r.name",
     detail: "coalesce(r.bank_name || ' · ', '') || r.type",
     occurredAt: "r.created_at::date::text",
-    blockedWhen: {
-      sql: "exists (select 1 from transactions t where t.account_id = r.id and t.deleted_at is null)",
-      message:
-        "This account still has entries against it. Delete or move those first — deleting the account would leave them pointing at nothing.",
-    },
+    // No blockedWhen — the owner wants nothing refusing a delete. An account
+    // with entries deletes; its rows stay on the ledger, pointing at a name
+    // only the trash still knows.
   },
   {
     kind: "category",
@@ -111,11 +109,8 @@ const REGISTRY: TrashEntry[] = [
     title: "r.name",
     detail: "r.kind::text",
     occurredAt: "r.created_at::date::text",
-    blockedWhen: {
-      sql: "exists (select 1 from transactions t where t.category_id = r.id and t.deleted_at is null)",
-      message:
-        "Entries are filed under this category. Move them to another one first, or archive the category instead of deleting it.",
-    },
+    // No blockedWhen, same decision. Entries filed under a deleted heading
+    // read as Uncategorised in every breakdown; the amounts stay counted.
   },
   {
     kind: "vendor",
@@ -127,11 +122,7 @@ const REGISTRY: TrashEntry[] = [
     title: "r.name",
     detail: "r.type::text",
     occurredAt: "r.created_at::date::text",
-    blockedWhen: {
-      sql: "exists (select 1 from transactions t where t.vendor_id = r.id and t.deleted_at is null)",
-      message:
-        "There are entries paid to this vendor. Deleting it would leave them without a payee.",
-    },
+    // No blockedWhen, same decision.
   },
   {
     kind: "team-member",
@@ -143,11 +134,7 @@ const REGISTRY: TrashEntry[] = [
     title: "r.full_name",
     detail: "coalesce(r.designation || ' · ', '') || r.status::text",
     occurredAt: "r.joined_on::text",
-    blockedWhen: {
-      sql: "exists (select 1 from transactions t where t.team_member_id = r.id and t.deleted_at is null)",
-      message:
-        "This person has payments recorded against them. Set them to ended instead — deleting would detach their salary history from the ledger.",
-    },
+    // No blockedWhen, same decision. Their payments stay on the ledger.
   },
   {
     kind: "compensation",
@@ -259,11 +246,8 @@ const REGISTRY: TrashEntry[] = [
     title: "r.filename",
     detail: "r.status::text || ' · ' || r.total_rows || ' rows'",
     occurredAt: "r.created_at::date::text",
-    blockedWhen: {
-      sql: "r.committed_at is not null and r.reverted_at is null",
-      message:
-        "This import is committed — its rows are in the ledger. Revert it first, then the batch can be deleted.",
-    },
+    // No blockedWhen, same decision. Deleting a committed batch hides the
+    // batch; the rows it imported stay on the ledger like any other entry.
   },
   {
     kind: "user",

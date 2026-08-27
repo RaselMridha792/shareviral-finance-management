@@ -431,26 +431,43 @@ export class TrashService {
      */
     const ids = await this.siblingIdsInTrash(entry, id, row);
 
-    await this.audit.mutate({
-      action: "delete",
-      entityTable: entry.table,
-      entityId: id,
-      module: entry.module,
-      isSensitive: true,
-      summary:
-        `Permanently removed ${entry.label} "${row.__title ?? id}"` +
-        (ids.length > 1 ? " and its matching transfer row" : "") +
-        ` from the trash`,
-      read: () => Promise.resolve(row),
-      run: async (tx) => {
-        await tx.execute(
-          sql`${sql.raw(`delete from ${entry.table} where deleted_at is not null and id`)} in (${sql.join(
-            ids.map((one) => sql`${one}::uuid`),
-            sql`, `,
-          )})`,
+    try {
+      await this.audit.mutate({
+        action: "delete",
+        entityTable: entry.table,
+        entityId: id,
+        module: entry.module,
+        isSensitive: true,
+        summary:
+          `Permanently removed ${entry.label} "${row.__title ?? id}"` +
+          (ids.length > 1 ? " and its matching transfer row" : "") +
+          ` from the trash`,
+        read: () => Promise.resolve(row),
+        run: async (tx) => {
+          await tx.execute(
+            sql`${sql.raw(`delete from ${entry.table} where deleted_at is not null and id`)} in (${sql.join(
+              ids.map((one) => sql`${one}::uuid`),
+              sql`, `,
+            )})`,
+          );
+        },
+      });
+    } catch (caught) {
+      /*
+       * The database refuses to orphan what still points here — ledger rows
+       * at an account, payroll lines at a person. Soft delete has no such
+       * wall (the row survives, hidden), but a permanent delete would leave
+       * references to a row that does not exist, and Postgres will not.
+       * Turned into a sentence, because a 500 says none of that.
+       */
+      if (isForeignKeyViolation(caught)) {
+        throw new BadRequestException(
+          `This ${entry.label} still has records pointing at it — ledger entries, payroll lines or files. ` +
+            `It can stay in the trash, but it can only be removed for good once those are gone too.`,
         );
-      },
-    });
+      }
+      throw caught;
+    }
 
     return { purged: ids.length };
   }
@@ -466,6 +483,7 @@ export class TrashService {
   async empty(actor: AuthenticatedUser) {
     const entries = this.allowed(actor);
     let purged = 0;
+    const kept: string[] = [];
 
     for (const entry of entries) {
       const rows = await this.db.client.execute(
@@ -476,26 +494,53 @@ export class TrashService {
       const found = rows.rows as unknown as { id: string; title: string }[];
       if (found.length === 0) continue;
 
-      await this.audit.mutate({
-        action: "delete",
-        entityTable: entry.table,
-        entityId: null,
-        module: entry.module,
-        isSensitive: true,
-        summary: `Emptied ${found.length} ${entry.plural.toLowerCase()} from the trash: ${found
-          .map((r) => r.title)
-          .slice(0, 10)
-          .join(", ")}${found.length > 10 ? ", and more" : ""}`,
-        read: () => Promise.resolve(found),
-        run: async (tx) => {
-          await tx.execute(
-            sql.raw(`delete from ${entry.table} where deleted_at is not null`),
-          );
-        },
-      });
-      purged += found.length;
+      try {
+        await this.audit.mutate({
+          action: "delete",
+          entityTable: entry.table,
+          entityId: null,
+          module: entry.module,
+          isSensitive: true,
+          summary: `Emptied ${found.length} ${entry.plural.toLowerCase()} from the trash: ${found
+            .map((r) => r.title)
+            .slice(0, 10)
+            .join(", ")}${found.length > 10 ? ", and more" : ""}`,
+          read: () => Promise.resolve(found),
+          run: async (tx) => {
+            await tx.execute(
+              sql.raw(
+                `delete from ${entry.table} where deleted_at is not null`,
+              ),
+            );
+          },
+        });
+        purged += found.length;
+      } catch (caught) {
+        // Rows still referenced from outside stay in the trash; everything
+        // else empties. Reported by kind rather than failing the sweep.
+        if (isForeignKeyViolation(caught)) {
+          kept.push(entry.plural.toLowerCase());
+          continue;
+        }
+        throw caught;
+      }
     }
 
-    return { purged };
+    return {
+      purged,
+      kept,
+      message: kept.length
+        ? `Some ${kept.join(", ")} stayed: records elsewhere still point at them, so they cannot be removed for good yet.`
+        : undefined,
+    };
   }
+}
+
+/**
+ * Postgres 23503: a FOREIGN KEY held. The driver wraps it, so the code is
+ * read off whichever layer carries it.
+ */
+function isForeignKeyViolation(caught: unknown): boolean {
+  const err = caught as { code?: string; cause?: { code?: string } };
+  return err?.code === "23503" || err?.cause?.code === "23503";
 }
