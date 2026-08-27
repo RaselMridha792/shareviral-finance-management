@@ -41,16 +41,19 @@ import { logout } from "@/lib/api-client";
  */
 
 /**
- * An hour of nothing.
+ * Two hours of nothing — and nothing is the operative word.
  *
- * It was twenty minutes, and the owner's report was that the app "expires very
- * early and signs me out", which is exactly what twenty minutes feels like to
- * somebody reading a report or on a phone call with the screen open. An hour
- * is what they asked for and it is still short enough to matter: the threat
- * here is a colleague sitting down at an unattended desk, and a desk is not
- * unattended for an hour without somebody noticing.
+ * It was twenty minutes, then an hour, and now the owner's rule: the session
+ * does not end while somebody is working, and two hours of no work sends them
+ * back to the sign-in page. So this clock is not a session length. Every
+ * deliberate action below resets it, which means a person who is using the app
+ * is never signed out however long the day runs — the seven-day refresh token
+ * behind it is what makes that true rather than this number.
+ *
+ * What it still catches is the thing it was built for: a laptop open on a desk
+ * in a shared office, showing what everybody is paid, with nobody near it.
  */
-const IDLE_MS = 60 * 60_000;
+const IDLE_MS = 120 * 60_000;
 
 /** The last minute of it, spent asking. */
 const WARN_MS = 60_000;
@@ -66,6 +69,14 @@ const RECORD_EVERY_MS = 10_000;
 
 const KEY = "sfm.last-activity.v1";
 
+/**
+ * What counts as being there.
+ *
+ * Deliberate actions only — a click, a key, a scroll, a touch, the tab being
+ * focused. Mouse *movement* is left out on purpose: a knocked desk or a
+ * drifting trackpad would hold a finance system open all night, which is the
+ * one case this guard exists for.
+ */
 const ACTIVITY_EVENTS = [
   "pointerdown",
   "keydown",
