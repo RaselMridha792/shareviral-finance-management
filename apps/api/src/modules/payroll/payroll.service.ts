@@ -22,6 +22,7 @@ import {
   type TdsBasis,
   type TdsPolicy,
   type UpdatePayrollLineInput,
+  type SyncRunMembersInput,
 } from "@finance/shared";
 import {
   and,
@@ -275,17 +276,7 @@ export class PayrollService {
     const withoutPay: string[] = [];
     let noTaxRule = false;
 
-    // Read once for the whole sheet rather than per person: it is one row, and
-    // the rule cannot change halfway through building a month.
-    const [settingsRow] = await this.db.client
-      .select({ salarySplit: appSettings.salarySplit })
-      .from(appSettings)
-      .limit(1);
-    const parsedSplit = salarySplitSchema.safeParse(settingsRow?.salarySplit);
-    const salarySplit =
-      parsedSplit.success && parsedSplit.data.length
-        ? parsedSplit.data
-        : DEFAULT_SALARY_SPLIT;
+    const salarySplit = await this.readSalarySplit();
 
     const created = await this.audit.mutate({
       action: "update",
@@ -309,60 +300,19 @@ export class PayrollService {
 
         let added = 0;
         for (const employee of employees) {
-          const [pay] = await tx
-            .select({
-              grossAmount: compensationHistory.grossAmount,
-              components: compensationHistory.components,
-            })
-            .from(compensationHistory)
-            .where(
-              and(
-                eq(compensationHistory.teamMemberId, employee.id),
-                sql`${compensationHistory.effectiveFrom} <= ${monthEnd}`,
-              ),
-            )
-            .orderBy(desc(compensationHistory.effectiveFrom))
-            .limit(1);
-
-          if (!pay) {
+          const built = await this.buildLine(
+            tx,
+            run,
+            employee,
+            salarySplit,
+            actor.id,
+          );
+          if (built === "no-pay") {
             // No figure on record: listing them at zero would look deliberate.
             withoutPay.push(employee.fullName);
             continue;
           }
-
-          // Worked out here rather than typed later: the sheet arrives with
-          // the tax already on it, and the figure carries the rule that
-          // produced it.
-          const { tdsAmount, tdsBasis } = await this.computeTds(
-            run.periodYear,
-            run.periodMonth,
-            pay.grossAmount,
-            null,
-          );
-          if (!tdsBasis) noTaxRule = true;
-
-          await tx.insert(payrollLines).values({
-            payrollRunId: runId,
-            teamMemberId: employee.id,
-            grossAmount: pay.grossAmount,
-            tdsAmount,
-            tdsBasis,
-            // Frozen here rather than read at print time: this is what the
-            // split was in this month. When nobody has recorded one, the whole
-            // gross becomes a single Basic Salary line — true, and what
-            // somebody would have typed by hand anyway.
-            earningsBreakdown: seedBreakdown(
-              pay.components,
-              pay.grossAmount,
-              salarySplit,
-            ),
-            snapshotDesignation: employee.designation,
-            snapshotDepartment: employee.department,
-            snapshotBankName: employee.bankName,
-            snapshotBankAccount: employee.bankAccountNumber,
-            snapshotEtin: employee.etin,
-            updatedBy: actor.id,
-          });
+          if (built === "added-without-tax-rule") noTaxRule = true;
           added++;
         }
 
@@ -984,6 +934,305 @@ export class PayrollService {
   }
 
   /** Recomputes a run's totals from its lines. */
+  /** The salary split, read once per operation — one row, one rule. */
+  private async readSalarySplit() {
+    const [settingsRow] = await this.db.client
+      .select({ salarySplit: appSettings.salarySplit })
+      .from(appSettings)
+      .limit(1);
+    const parsedSplit = salarySplitSchema.safeParse(settingsRow?.salarySplit);
+    return parsedSplit.success && parsedSplit.data.length
+      ? parsedSplit.data
+      : DEFAULT_SALARY_SPLIT;
+  }
+
+  /**
+   * One person onto one sheet — the single definition of what a line is.
+   *
+   * Both doors build lines through this: the full rebuild, and the member
+   * sync that adds people one at a time while a run is a draft. Two copies of
+   * this loop body would disagree about the tax or the snapshots within a
+   * month of each other.
+   */
+  private async buildLine(
+    tx: DbTransaction,
+    run: { id: string; periodYear: number; periodMonth: number },
+    employee: {
+      id: string;
+      fullName: string;
+      designation: string | null;
+      department: string | null;
+      bankName: string | null;
+      bankAccountNumber: string | null;
+      etin: string | null;
+    },
+    salarySplit: SalarySplit,
+    actorId: string,
+  ): Promise<"added" | "added-without-tax-rule" | "no-pay"> {
+    const monthEnd = lastDayOf(run.periodYear, run.periodMonth);
+
+    const [pay] = await tx
+      .select({
+        grossAmount: compensationHistory.grossAmount,
+        components: compensationHistory.components,
+      })
+      .from(compensationHistory)
+      .where(
+        and(
+          // A deleted salary row must not decide anybody's pay — the same
+          // clause every other compensation read carries.
+          isNull(compensationHistory.deletedAt),
+          eq(compensationHistory.teamMemberId, employee.id),
+          sql`${compensationHistory.effectiveFrom} <= ${monthEnd}`,
+        ),
+      )
+      .orderBy(desc(compensationHistory.effectiveFrom))
+      .limit(1);
+
+    if (!pay) return "no-pay";
+
+    // Worked out here rather than typed later: the sheet arrives with the tax
+    // already on it, and the figure carries the rule that produced it.
+    const { tdsAmount, tdsBasis } = await this.computeTds(
+      run.periodYear,
+      run.periodMonth,
+      pay.grossAmount,
+      null,
+    );
+
+    await tx.insert(payrollLines).values({
+      payrollRunId: run.id,
+      teamMemberId: employee.id,
+      grossAmount: pay.grossAmount,
+      tdsAmount,
+      tdsBasis,
+      // Frozen here rather than read at print time: this is what the split
+      // was in this month. When nobody has recorded one, the whole gross
+      // becomes a single Basic Salary line — true, and what somebody would
+      // have typed by hand anyway.
+      earningsBreakdown: seedBreakdown(
+        pay.components,
+        pay.grossAmount,
+        salarySplit,
+      ),
+      snapshotDesignation: employee.designation,
+      snapshotDepartment: employee.department,
+      snapshotBankName: employee.bankName,
+      snapshotBankAccount: employee.bankAccountNumber,
+      snapshotEtin: employee.etin,
+      updatedBy: actorId,
+    });
+
+    return tdsBasis ? "added" : "added-without-tax-rule";
+  }
+
+  /**
+   * Who could be on a month's sheet, with what they would be paid.
+   *
+   * The same eligibility the rebuild uses — employees, employed at some point
+   * in the month, not deleted — plus each person's pay as of the month's end,
+   * left null rather than zero when none is recorded so the picker can say
+   * "no pay recorded" instead of listing a wage of nothing.
+   */
+  async eligibleMembers(periodYear: number, periodMonth: number) {
+    const monthEnd = lastDayOf(periodYear, periodMonth);
+    const monthStart = firstDayOf(periodYear, periodMonth);
+
+    return this.db.client
+      .select({
+        id: teamMembers.id,
+        fullName: teamMembers.fullName,
+        designation: teamMembers.designation,
+        department: teamMembers.department,
+        status: teamMembers.status,
+        /*
+         * The correlation is written out as "team_members".id, not
+         * interpolated. Drizzle renders an embedded column as its bare name —
+         * just "id" — and inside this subquery a bare "id" resolves against
+         * compensation_history first, so the correlation quietly became
+         * ch.team_member_id = ch.id: valid SQL, false on every row, and a
+         * picker that said nobody in the company had a wage.
+         */
+        monthlyGross: sql<string | null>`(
+          select ch.gross_amount::text from compensation_history ch
+           where ch.team_member_id = "team_members".id
+             and ch.deleted_at is null
+             and ch.effective_from <= ${monthEnd}
+           order by ch.effective_from desc limit 1
+        )`,
+      })
+      .from(teamMembers)
+      .where(
+        and(
+          isNull(teamMembers.deletedAt),
+          eq(teamMembers.engagementType, "employee"),
+          sql`${teamMembers.joinedOn} <= ${monthEnd}`,
+          sql`(${teamMembers.endedOn} is null or ${teamMembers.endedOn} >= ${monthStart})`,
+        ),
+      )
+      .orderBy(asc(teamMembers.fullName));
+  }
+
+  /**
+   * Makes a draft run hold exactly these people — and nobody's edits are lost.
+   *
+   * The owner's ask: choose who is on a month when it is started, and keep
+   * choosing until it is finalised. The rebuild cannot serve that — it wipes
+   * every line, and with them the bonuses and deductions somebody has already
+   * typed. This one is surgical: people leaving the list lose their line,
+   * people joining it gain one built the standard way, and everyone who stays
+   * is not touched at all.
+   */
+  async syncMembers(
+    runId: string,
+    input: SyncRunMembersInput,
+    actor: AuthenticatedUser,
+  ) {
+    const { run } = await this.getRun(runId);
+
+    if (run.status !== "draft") {
+      throw new BadRequestException(
+        "This run is finalised — reopen it before changing who is on it.",
+      );
+    }
+
+    const wanted = new Set(input.teamMemberIds);
+
+    // Only people who could be on this month's sheet at all. An id outside
+    // the eligible set is a caller error worth naming, not skipping.
+    const eligible = await this.eligibleMembers(
+      run.periodYear,
+      run.periodMonth,
+    );
+    const eligibleById = new Map(eligible.map((e) => [e.id, e]));
+    for (const id of wanted) {
+      if (!eligibleById.has(id)) {
+        throw new BadRequestException(
+          "Somebody on that list was not employed in that month.",
+        );
+      }
+    }
+
+    const existing = await this.db.client
+      .select({
+        id: payrollLines.id,
+        teamMemberId: payrollLines.teamMemberId,
+        isPaid: payrollLines.isPaid,
+      })
+      .from(payrollLines)
+      .where(eq(payrollLines.payrollRunId, runId));
+    const existingByMember = new Map(existing.map((l) => [l.teamMemberId, l]));
+
+    const toRemove = existing.filter((l) => !wanted.has(l.teamMemberId));
+    const toAdd = [...wanted].filter((id) => !existingByMember.has(id));
+
+    // A paid line is money that left the account; it does not quietly drop
+    // off a sheet. (A draft run should hold none, but "should" is not a
+    // guard.)
+    if (toRemove.some((l) => l.isPaid)) {
+      throw new BadRequestException(
+        "Somebody on this run has already been paid — their line cannot be removed.",
+      );
+    }
+
+    if (!toRemove.length && !toAdd.length) {
+      return { added: 0, removed: 0, skipped: [] as string[] };
+    }
+
+    const salarySplit = await this.readSalarySplit();
+    const skipped: string[] = [];
+    let noTaxRule = false;
+
+    const result = await this.audit.mutate({
+      action: "update",
+      entityTable: "payroll_runs",
+      entityId: runId,
+      summary:
+        `Changed who is on ${run.label}: ` +
+        [
+          toAdd.length ? `added ${toAdd.length}` : null,
+          toRemove.length ? `removed ${toRemove.length}` : null,
+        ]
+          .filter(Boolean)
+          .join(", "),
+      module: "payroll",
+      isSensitive: true,
+      read: async (tx) => {
+        const [{ n }] = await tx
+          .select({ n: count() })
+          .from(payrollLines)
+          .where(eq(payrollLines.payrollRunId, runId));
+        return { lines: Number(n) };
+      },
+      run: async (tx) => {
+        let added = 0;
+
+        if (toRemove.length) {
+          await tx.delete(payrollLines).where(
+            inArray(
+              payrollLines.id,
+              toRemove.map((l) => l.id),
+            ),
+          );
+        }
+
+        for (const id of toAdd) {
+          const employee = await this.memberForLine(tx, id);
+          const built = await this.buildLine(
+            tx,
+            run,
+            employee,
+            salarySplit,
+            actor.id,
+          );
+          if (built === "no-pay") {
+            skipped.push(employee.fullName);
+            continue;
+          }
+          if (built === "added-without-tax-rule") noTaxRule = true;
+          added++;
+        }
+
+        await this.recalculate(tx, runId);
+        return { added, removed: toRemove.length };
+      },
+    });
+
+    const notes = [
+      skipped.length
+        ? `${skipped.length} left out because no pay is recorded for them: ${skipped.join(", ")}`
+        : null,
+      noTaxRule
+        ? "No tax rule is set up for that income year, so their tax is zero. Settings \u2192 Salary TDS has the form."
+        : null,
+    ].filter(Boolean);
+
+    return {
+      ...result,
+      skipped,
+      message: notes.length ? notes.join(" ") : undefined,
+    };
+  }
+
+  /** The snapshot fields a line freezes, read for one person. */
+  private async memberForLine(tx: DbTransaction, teamMemberId: string) {
+    const [employee] = await tx
+      .select({
+        id: teamMembers.id,
+        fullName: teamMembers.fullName,
+        designation: teamMembers.designation,
+        department: teamMembers.department,
+        bankName: teamMembers.bankName,
+        bankAccountNumber: teamMembers.bankAccountNumber,
+        etin: teamMembers.etin,
+      })
+      .from(teamMembers)
+      .where(eq(teamMembers.id, teamMemberId))
+      .limit(1);
+    if (!employee) throw new NotFoundException("No such team member");
+    return employee;
+  }
+
   private async recalculate(tx: DbTransaction, runId: string) {
     const [totals] = await tx
       .select({

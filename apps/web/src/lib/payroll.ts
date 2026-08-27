@@ -129,6 +129,17 @@ export type CompensationDto = {
   createdAt: string;
 };
 
+/** One person the month could pay, as the run pickers list them. */
+export type EligibleMemberDto = {
+  id: string;
+  fullName: string;
+  designation: string | null;
+  department: string | null;
+  status: string;
+  /** Their pay as of the month's end — null when none is recorded. */
+  monthlyGross: string | null;
+};
+
 export type PayrollRunDto = {
   id: string;
   periodYear: number;
@@ -319,6 +330,26 @@ export const payrollApi = {
     apiFetch<PayrollRunDto>("/payroll/runs", {
       method: "POST",
       ...json(input),
+    }),
+  /** Who could be on a month's sheet, with what they would be paid. */
+  eligible: (periodYear: number, periodMonth: number) =>
+    apiFetch<EligibleMemberDto[]>(
+      `/payroll/eligible?periodYear=${periodYear}&periodMonth=${periodMonth}`,
+      { cache: "no-store" },
+    ),
+  /**
+   * Makes a draft run hold exactly these people. Kept lines are untouched,
+   * edits and all — the promise generateLines cannot make.
+   */
+  syncMembers: (id: string, teamMemberIds: string[]) =>
+    apiFetch<{
+      added: number;
+      removed: number;
+      skipped: string[];
+      message?: string;
+    }>(`/payroll/runs/${id}/members`, {
+      method: "POST",
+      ...json({ teamMemberIds }),
     }),
   generateLines: (id: string) =>
     apiFetch<{ created: number; skipped: string[]; message?: string }>(

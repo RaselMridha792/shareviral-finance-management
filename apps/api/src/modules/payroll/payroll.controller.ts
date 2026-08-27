@@ -8,6 +8,10 @@ import {
   type ListPayrollRunsQuery,
   type PayPayrollInput,
   type UpdatePayrollLineInput,
+  payrollEligibleQuerySchema,
+  syncRunMembersSchema,
+  type PayrollEligibleQuery,
+  type SyncRunMembersInput,
 } from "@finance/shared";
 import { z } from "zod";
 
@@ -44,6 +48,36 @@ export class PayrollController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.payroll.createRun(body, actor);
+  }
+
+  /**
+   * Who could be on a month's sheet, with what they would be paid.
+   *
+   * `payroll.write` rather than read: this names every employee's salary in
+   * one list, and the only reason to ask is to build or reshape a sheet.
+   */
+  @Get("eligible")
+  @RequirePermission("payroll.write")
+  eligible(@ZodQuery(payrollEligibleQuerySchema) query: PayrollEligibleQuery) {
+    return this.payroll.eligibleMembers(query.periodYear, query.periodMonth);
+  }
+
+  /**
+   * Makes a draft run hold exactly these people.
+   *
+   * The declarative door the run screen's checklist speaks: additions are
+   * built the standard way, removals lose their line, and everyone who stays
+   * keeps every edit — the promise the wipe-and-rebuild below cannot make.
+   */
+  @Post("runs/:id/members")
+  @HttpCode(200)
+  @RequirePermission("payroll.write")
+  syncMembers(
+    @Param("id") id: string,
+    @ZodBody(syncRunMembersSchema) body: SyncRunMembersInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.payroll.syncMembers(uuidSchema.parse(id), body, actor);
   }
 
   @Post("runs/:id/generate-lines")

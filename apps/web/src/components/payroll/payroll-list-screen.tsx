@@ -11,7 +11,7 @@ import {
 import { LoaderCircle, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useEffect, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
@@ -33,7 +33,12 @@ import {
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { serial } from "@/lib/pagination";
-import { payrollApi, type PayrollRunDto } from "@/lib/payroll";
+import {
+  payrollApi,
+  type EligibleMemberDto,
+  type PayrollRunDto,
+} from "@/lib/payroll";
+import { MemberPicker } from "./member-picker";
 import { cn } from "@/lib/utils";
 
 const MONTHS = [
@@ -360,6 +365,42 @@ function NewRunForm({
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
 
+  /*
+   * Who the month could pay, fetched the moment the drawer opens and again
+   * whenever the month moves. Everyone with a recorded pay starts ticked —
+   * the owner's rule is choose-who-not-to-pay, and a list that opens empty
+   * would make the common case twenty clicks.
+   */
+  const [eligible, setEligible] = useState<EligibleMemberDto[] | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open) return;
+    let stale = false;
+    // Reading on open is what an effect is for; the null puts the loading
+    // line up while the month's list is fetched. The same exemption every
+    // read-on-open panel takes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEligible(null);
+    payrollApi
+      .eligible(year, month)
+      .then((people) => {
+        if (stale) return;
+        setEligible(people);
+        setChosen(
+          new Set(
+            people.filter((p) => p.monthlyGross !== null).map((p) => p.id),
+          ),
+        );
+      })
+      .catch(() => {
+        if (!stale) setEligible([]);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [open, year, month]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -372,6 +413,13 @@ function NewRunForm({
         periodMonth: month,
         notes: String(data.get("notes") ?? "") || undefined,
       });
+      /*
+       * The sheet is built here, for the ticked people, before anybody sees
+       * it — the extra "Build" click the owner asked to lose. If this half
+       * fails the run still exists as an empty draft, and the sheet's own
+       * People button offers the same list again.
+       */
+      await payrollApi.syncMembers(run.id, [...chosen]).catch(() => undefined);
       onCreated(run.id);
     } catch (caught) {
       setError(
@@ -427,6 +475,34 @@ function NewRunForm({
             </Select>
           </Field>
         </div>
+        {/*
+          The owner's flow: choose who is on the month while starting it, and
+          keep choosing for as long as it stays a draft. The sheet's People
+          button reopens this same list later.
+        */}
+        <MemberPicker
+          eligible={eligible}
+          selected={chosen}
+          onToggle={(id) =>
+            setChosen((current) => {
+              const next = new Set(current);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
+          onAll={() =>
+            setChosen(
+              new Set(
+                (eligible ?? [])
+                  .filter((p) => p.monthlyGross !== null)
+                  .map((p) => p.id),
+              ),
+            )
+          }
+          onNone={() => setChosen(new Set())}
+        />
+
         <Field label="Notes">
           <Textarea name="notes" />
         </Field>

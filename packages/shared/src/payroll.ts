@@ -423,6 +423,26 @@ export const createPayrollRunSchema = z.strictObject({
 });
 export type CreatePayrollRunInput = z.infer<typeof createPayrollRunSchema>;
 
+/** Who could be on a month's sheet — asked before the run exists. */
+export const payrollEligibleQuerySchema = z.strictObject({
+  periodYear: z.coerce.number().int().min(2000).max(2200),
+  periodMonth: z.coerce.number().int().min(1).max(12),
+});
+export type PayrollEligibleQuery = z.infer<typeof payrollEligibleQuerySchema>;
+
+/**
+ * The people a draft run should hold — the whole list, not a delta.
+ *
+ * Declarative on purpose: the screen shows a checklist, and a checklist's
+ * truth is its final state. The server works out who to add and who to drop,
+ * and — the part a wipe-and-rebuild cannot promise — leaves the lines of
+ * everyone who stays exactly as they are, edits and all.
+ */
+export const syncRunMembersSchema = z.strictObject({
+  teamMemberIds: z.array(z.string().uuid()).max(500),
+});
+export type SyncRunMembersInput = z.infer<typeof syncRunMembersSchema>;
+
 export const updatePayrollLineSchema = z
   .strictObject({
     grossAmount: amountSchema.optional(),

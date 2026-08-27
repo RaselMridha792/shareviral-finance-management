@@ -21,14 +21,16 @@ import {
   Save,
   TriangleAlert,
   Unlock,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
+import { MemberPicker } from "@/components/payroll/member-picker";
 import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
 import { useSettings } from "@/components/settings-provider";
@@ -44,6 +46,7 @@ import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
 import {
   payrollApi,
+  type EligibleMemberDto,
   teamApi,
   type PayrollLineDto,
   type PayrollRunDto,
@@ -79,6 +82,37 @@ export function SalarySheetScreen({
 
   const draft = run.status === "draft";
   const refresh = () => router.refresh();
+
+  /*
+   * The owner's rule: who is on the month stays choosable for as long as the
+   * run is a draft. The drawer holds the same checklist the start-a-month
+   * form shows, seeded with who is on the sheet now; saving makes the run
+   * hold exactly the ticked set, and the lines of everyone kept are not
+   * touched — bonuses, breakdowns and all.
+   */
+  const [choosingPeople, setChoosingPeople] = useState(false);
+  const [eligible, setEligible] = useState<EligibleMemberDto[] | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!choosingPeople) return;
+    let stale = false;
+    // Read-on-open, the same exemption every panel that does this takes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEligible(null);
+    setChosen(new Set(lines.map((line) => line.teamMemberId)));
+    payrollApi
+      .eligible(run.periodYear, run.periodMonth)
+      .then((people) => {
+        if (!stale) setEligible(people);
+      })
+      .catch(() => {
+        if (!stale) setEligible([]);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [choosingPeople, lines, run.periodYear, run.periodMonth]);
 
   /**
    * The parts a gross is divided into, taken from the sheet rather than from
@@ -233,6 +267,17 @@ export function SalarySheetScreen({
         description={`${lines.length} people · ${PAYROLL_STATUS_LABELS[run.status]}`}
         actions={
           <>
+            {canWrite && draft ? (
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={busy}
+                onClick={() => setChoosingPeople(true)}
+              >
+                <Users className="size-4" />
+                People
+              </Button>
+            ) : null}
             {canWrite && draft ? (
               <Button
                 variant="secondary"
@@ -556,6 +601,59 @@ export function SalarySheetScreen({
         }}
         onCancel={() => setReopening(false)}
       />
+
+      <Drawer
+        open={choosingPeople}
+        onClose={() => setChoosingPeople(false)}
+        title="Who is on this month"
+        description="Tick somebody to add them, untick to take them off. People who stay keep every figure typed for them."
+      >
+        <MemberPicker
+          eligible={eligible}
+          selected={chosen}
+          onToggle={(id) =>
+            setChosen((current) => {
+              const next = new Set(current);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
+          onAll={() =>
+            setChosen(
+              new Set(
+                (eligible ?? [])
+                  .filter((p) => p.monthlyGross !== null)
+                  .map((p) => p.id),
+              ),
+            )
+          }
+          onNone={() => setChosen(new Set())}
+        />
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setChoosingPeople(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={busy}
+            onClick={() => {
+              setChoosingPeople(false);
+              void act(
+                () => payrollApi.syncMembers(run.id, [...chosen]),
+                "The list now holds exactly the people you ticked.",
+              );
+            }}
+          >
+            Save the list
+          </Button>
+        </div>
+      </Drawer>
     </>
   );
 }
