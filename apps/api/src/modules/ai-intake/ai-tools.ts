@@ -10,6 +10,7 @@ import { and, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { CHALLAN_COUNTS } from "../tds/challan-counts";
 import {
   accounts,
   categories,
@@ -396,6 +397,9 @@ export class AiToolsService {
           and(
             eq(tdsDeposits.periodYear, year),
             eq(tdsDeposits.periodMonth, month),
+            // The assistant answers questions about tax owed, so it reads the
+            // same rule the screens do rather than its own.
+            CHALLAN_COUNTS,
           ),
         );
 

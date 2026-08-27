@@ -29,6 +29,7 @@ import { FxService } from "../fx/fx.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
+import { CHALLAN_COUNTS } from "../tds/challan-counts";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
@@ -385,6 +386,8 @@ export class OverviewService {
         and(
           gte(tdsDeposits.depositDate, range.start),
           lte(tdsDeposits.depositDate, range.end),
+          // Neither a trashed challan nor one whose payment was voided.
+          CHALLAN_COUNTS,
         ),
       );
 

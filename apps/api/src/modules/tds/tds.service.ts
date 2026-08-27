@@ -42,6 +42,7 @@ import {
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { CHALLAN_COUNTS } from "./challan-counts";
 import { overdraftWatch } from "../../common/money/overdraft";
 import type { DbTransaction } from "../../db";
 import {
@@ -132,15 +133,7 @@ export class TdsService {
         total: sql<string>`coalesce(sum(${tdsDeposits.amount}), 0)::text`,
       })
       .from(tdsDeposits)
-      .where(
-        // A challan whose ledger row was voided did not happen — the same rule
-        // the monthly figures use.
-        sql`not exists (
-          select 1 from ${transactions}
-          where ${transactions.id} = ${tdsDeposits.transactionId}
-            and ${transactions.voidedAt} is not null
-        )`,
-      );
+      .where(CHALLAN_COUNTS);
 
     const owed =
       Number(salary.total) + Number(vendor.total) - Number(deposited.total);
@@ -213,14 +206,7 @@ export class TdsService {
           and(
             eq(tdsDeposits.periodYear, query.year),
             inArray(tdsDeposits.periodMonth, months),
-            // A challan whose ledger row was voided did not happen: voiding the
-            // payment is how a mis-entered deposit is undone, and leaving it in
-            // the total would show the tax as settled when the money came back.
-            sql`not exists (
-            select 1 from ${transactions}
-            where ${transactions.id} = ${tdsDeposits.transactionId}
-              and ${transactions.voidedAt} is not null
-          )`,
+            CHALLAN_COUNTS,
           ),
         )
         .groupBy(tdsDeposits.periodMonth),
@@ -1355,13 +1341,7 @@ export class TdsService {
           total: sql<string>`sum(${tdsDeposits.amount})::text`,
         })
         .from(tdsDeposits)
-        .where(
-          sql`not exists (
-            select 1 from ${transactions}
-            where ${transactions.id} = ${tdsDeposits.transactionId}
-              and ${transactions.voidedAt} is not null
-          )`,
-        )
+        .where(CHALLAN_COUNTS)
         .groupBy(tdsDeposits.periodYear, tdsDeposits.periodMonth),
     ]);
 

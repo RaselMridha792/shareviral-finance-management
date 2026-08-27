@@ -18,6 +18,7 @@ import {
   tdsAllocations,
 } from "../../db/schema";
 import { NotificationsService } from "./notifications.service";
+import { ALLOCATION_COUNTS } from "../tds/challan-counts";
 
 /**
  * The four things worth interrupting somebody for.
@@ -225,9 +226,14 @@ export class NotificationEventsService {
       })
       .from(tdsAllocations)
       .where(
-        inArray(
-          tdsAllocations.payrollLineId,
-          lines.map((line) => line.id),
+        and(
+          inArray(
+            tdsAllocations.payrollLineId,
+            lines.map((line) => line.id),
+          ),
+          // A trashed challan covers nothing. Without this the reminder stayed
+          // quiet about tax that had not been deposited at all.
+          ALLOCATION_COUNTS,
         ),
       );
 
