@@ -20,6 +20,38 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — the whole battery re-run on top of the auth and challan work
+
+**No source changed.** The owner asked whether the earlier fixes still hold after the session and
+challan work went in — `api-client.ts` in particular sits on every request path. So all nineteen
+harnesses were re-run against `6e6fc12`, which is what production is serving.
+
+**Result: nineteen of nineteen clean**, 180-odd checks. Live matches HEAD and both deploys are
+green.
+
+**Two harnesses were lying, and both are fixed.** Worth reading before trusting a red battery:
+
+- **`.trashui.mjs` had no wipe at the start** — it only deleted its own two rows at the end. A run
+  that died before cleanup (the local API stopping mid-run is enough, and it did) left a row
+  wearing the same description. The next run then aimed the dialog by that description, hit the
+  *stranger*, trashed it, and reported its own row as untouched: three failures that read exactly
+  like a broken delete. The delete was never broken — the network log showed `POST 201` against a
+  third id. It now clears `description like 'UI QA:%'` before seeding.
+- **`.trashqa.mjs` picked a category with `limit 1` and no `order by`**, then asserted the id
+  appeared nowhere in `GET /categories`. When the lottery handed it a heading, six children still
+  carried that id in `parentId` and the check failed — while the category itself had left the list
+  exactly as it should. It now picks a leaf in a fixed order and asserts on rows, not on a
+  substring of the payload.
+
+**Watch out.** Both failures cost time because a red harness reads as a broken app. The rule that
+found them: when a harness fails, ask what the app actually did before asking what the app got
+wrong — the network log settled both in one run.
+
+**Open.** Trashing a *heading* category leaves its children pointing at a parent that is in the
+trash — six of them, measured. Nothing counts wrong because of it, so it is not the rule the owner
+set, but what those child rows render as has not been looked at. Nobody's item yet.
+
+
 ## 2026-08-27 — a challan in the trash stops counting as tax paid
 
 **Done.** The register that lists challans filtered `deleted_at` from the day it was written. The
