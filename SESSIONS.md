@@ -20,6 +20,32 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — two hours idle, and never while somebody is working
+
+**Auth only, on its own push.** Commit `ae9989c`.
+
+**Done.** The owner's rule, stated plainly: *the session does not end while anybody is active; two
+hours of inactivity means signing in again.* `IDLE_MS` is `120 * 60_000`.
+
+The first half of that rule was already true and is now tested rather than assumed. The idle clock
+is not a session length — every deliberate action resets it, and the seven-day refresh token behind
+it is what lets a person work all day without being interrupted. `.sessionqa.mjs` proves it from
+the worst starting point it can: ninety idle minutes, one click, and the clock reads two seconds.
+
+**Watch out — one deliberate exception, and it is not a bug.** Once the last-minute dialog is up,
+activity *underneath* it is ignored; only the **Stay signed in** button counts. That is the whole
+point of the guard: a knocked desk, a cat or a drifting trackpad must not answer on behalf of
+somebody who walked away. Mouse movement is not an activity event anywhere for the same reason —
+clicks, keys, scrolls, touches and tab focus are.
+
+A test written the other way round *failed*, correctly: clicking through the overlay from inside
+the final minute does nothing, because the overlay is what receives the click.
+
+**Open.** Nothing half-done. One trap for anyone testing this by hand: activity is written to
+localStorage at most once every ten seconds, so winding the clock back and clicking straight away
+is throttled and reads as no activity at all. Real use never meets it; a test does.
+
+
 ## 2026-08-27 — the whole battery re-run on top of the auth and challan work
 
 **No source changed.** The owner asked whether the earlier fixes still hold after the session and
