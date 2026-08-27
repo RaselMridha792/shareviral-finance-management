@@ -114,8 +114,11 @@ export function RowActions({
           danger={danger}
         />
         {onDelete ? (
+          // "Move to trash", not "Delete" — the owner's catch: the row is
+          // recoverable from Settings → Trashed, and the word should promise
+          // exactly what the click does.
           <IconButton
-            label="Delete"
+            label="Move to trash"
             icon={Trash2}
             onClick={onDelete}
             danger

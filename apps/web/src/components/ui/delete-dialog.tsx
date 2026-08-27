@@ -33,13 +33,40 @@ import { cn } from "@/lib/utils";
  * that was about to make a mistake.
  */
 
-const WORD = "delete";
+/**
+ * Two ceremonies, two words — because they are two different acts.
+ *
+ * Moving a row to the trash says "trash" everywhere, typed word included: the
+ * row is recoverable, and a button that said "Delete" over a recoverable act
+ * was the owner's own catch — the word promised more than the click did.
+ * Deleting for good — from inside the trash — keeps the word "delete",
+ * because there it is finally true.
+ */
+const CEREMONY = {
+  trash: {
+    word: "trash",
+    title: (subject: string) => `Move this ${subject} to the trash?`,
+    confirm: (subject: string) => `Yes, trash this ${subject}`,
+    working: "Moving…",
+    acknowledge: "move that one to the trash",
+  },
+  delete: {
+    word: "delete",
+    title: (subject: string) => `Delete this ${subject} for good?`,
+    confirm: (subject: string) => `Yes, delete this ${subject}`,
+    working: "Deleting…",
+    acknowledge: "delete that one",
+  },
+} as const;
 
 export function DeleteDialog({
   open,
   subject,
   summary,
   consequences,
+  mode = "trash",
+  title,
+  intro,
   askForReason = true,
   pending = false,
   error,
@@ -51,14 +78,21 @@ export function DeleteDialog({
   subject: string;
   /** Which one. A name, a date and an amount — enough to recognise the row. */
   summary: ReactNode;
-  /** What deleting it changes, beyond the row disappearing. */
+  /** What the act changes, beyond the row disappearing. */
   consequences?: ReactNode;
+  /** "trash" moves it (recoverable); "delete" removes it for good. */
+  mode?: keyof typeof CEREMONY;
+  /** Overrides the derived heading — "Empty the trash for good?". */
+  title?: string;
+  /** Overrides the line under the heading. */
+  intro?: ReactNode;
   askForReason?: boolean;
   pending?: boolean;
   error?: string | null;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
 }) {
+  const ceremony = CEREMONY[mode];
   const [acknowledged, setAcknowledged] = useState(false);
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
@@ -90,7 +124,7 @@ export function DeleteDialog({
 
   if (!open) return null;
 
-  const wordMatches = typed.trim().toLowerCase() === WORD;
+  const wordMatches = typed.trim().toLowerCase() === ceremony.word;
   const armed = acknowledged && wordMatches && !pending;
 
   const confirm = () => {
@@ -102,7 +136,7 @@ export function DeleteDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Delete this ${subject}`}
+      aria-label={title ?? ceremony.title(subject)}
       className="fixed inset-0 z-[92] flex items-center justify-center bg-black/60 p-4"
       onClick={onCancel}
     >
@@ -115,10 +149,14 @@ export function DeleteDialog({
             <TriangleAlert className="size-5" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold">Delete this {subject}?</h2>
+            <h2 className="text-base font-semibold">
+              {title ?? ceremony.title(subject)}
+            </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              It moves to the trash. Nothing on this screen — and no total
-              anywhere in the app — will count it any more.
+              {intro ??
+                (mode === "trash"
+                  ? "Nothing on this screen — and no total anywhere in the app — will count it any more, until it is restored."
+                  : "There is no way back from this one.")}
             </p>
           </div>
         </div>
@@ -158,15 +196,19 @@ export function DeleteDialog({
               className="mt-0.5 size-4 shrink-0 accent-[var(--negative)]"
             />
             <span>
-              I have read the row above and I mean to delete{" "}
-              <span className="font-medium text-foreground">that one</span>.
+              I have read the row above and I mean to{" "}
+              <span className="font-medium text-foreground">
+                {ceremony.acknowledge}
+              </span>
+              .
             </span>
           </label>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor={wordId} className="text-sm font-medium">
-              Type <span className="font-mono text-negative">{WORD}</span> to
-              confirm
+              Type{" "}
+              <span className="font-mono text-negative">{ceremony.word}</span>{" "}
+              to confirm
             </label>
             <input
               id={wordId}
@@ -221,7 +263,7 @@ export function DeleteDialog({
             disabled={!armed}
             onClick={confirm}
           >
-            {pending ? "Deleting…" : `Yes, delete this ${subject}`}
+            {pending ? ceremony.working : ceremony.confirm(subject)}
           </Button>
         </div>
       </div>

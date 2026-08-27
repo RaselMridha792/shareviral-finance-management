@@ -179,8 +179,8 @@ export function TrashPanel() {
         </div>
       ) : !anythingAtAll ? (
         <EmptyState icon="delete" title="The trash is empty">
-          When a row is deleted anywhere in the app it comes here first, and
-          can be put back until the trash is emptied.
+          When a row is deleted anywhere in the app it comes here first, and can
+          be put back until the trash is emptied.
         </EmptyState>
       ) : (
         <>
@@ -310,6 +310,7 @@ export function TrashPanel() {
       */}
       <DeleteDialog
         open={purging !== null}
+        mode="delete"
         subject={purging?.kindLabel ?? "row"}
         summary={
           purging ? (
@@ -325,10 +326,8 @@ export function TrashPanel() {
         consequences={
           <p>
             This removes it from the trash{" "}
-            <span className="font-medium text-foreground">
-              permanently
-            </span>
-            . There is no restore after this — not from this screen, not from
+            <span className="font-medium text-foreground">permanently</span>.
+            There is no restore after this — not from this screen, not from
             anywhere in the app.
           </p>
         }
@@ -342,6 +341,8 @@ export function TrashPanel() {
       {/* Emptying everything at once: the same ceremony, in words that say so. */}
       <DeleteDialog
         open={emptying}
+        mode="delete"
+        title="Empty the trash for good?"
         subject="trash"
         summary={
           <div className="flex flex-col gap-0.5">
