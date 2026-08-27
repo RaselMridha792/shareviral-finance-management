@@ -20,6 +20,49 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — a heading names what goes with it, and then takes it
+
+**Done.** The owner's rule: show the heading and the things under it in the warning, with the same
+`›` the screen already draws, and if the person agrees it deletes. Two things had to be built
+before that warning could be true.
+
+**Categories had no delete at all.** The kind has been live on the API since the trash was built
+and reachable from no screen. Headings now carry a trash button beside edit and *Sub-category*, and
+each sub-category chip carries its own.
+
+**A heading now takes its sub-categories with it.** It did not before: the children stayed,
+pointing at a parent in the trash, which means they were drawn nowhere — the panel renders headings
+and their children — while payments carried on being filed against them. Invisible and still in
+use is the worst of the three possible answers.
+
+This reuses the seam that already existed rather than inventing one: `siblingIds` is what takes
+both halves of a transfer, and it now takes a heading's children. Coming back out,
+`siblingIdsInTrash` matches on `deleted_at` equality — the same trick `restore` already uses for
+`voided_at` — so restoring a heading brings back exactly the children that went in with it, and a
+sub-category somebody deleted on its own last week stays where they put it. Measured, not assumed.
+
+The warning is per row, so a heading with nothing under it makes no claim about sub-categories. It
+also says the part people actually worry about: payments already filed keep their amounts and no
+total moves — they read as Uncategorised until it is restored.
+
+Commits: `b3b39a7`.
+
+**Watch out — one shared file changed.** `components/ui/use-row-delete.tsx` now accepts
+`consequences` as a function of the row as well as a plain node. Additive and backward compatible;
+every existing caller still passes a node. The screens that use the hook are transfers, the five
+ledger screens behind `use-transaction-delete`, payroll, rate history, sign-ins, subscriptions,
+team — and now categories. All of them were driven afterwards rather than reasoned about: the full
+battery, twenty harnesses, is clean.
+
+The audit wording moved with it. `alsoWent()` replaces the hardcoded "and its matching transfer
+row", which would otherwise have described three sub-categories as a transfer row in the permanent
+record.
+
+**Open.** `.catdelqa.mjs` (15 checks, API and browser) is the harness. Deleting a heading does not
+touch entries filed under it — that was already the decision recorded in the registry, and it is
+now said out loud in the dialog instead of only in a comment.
+
+
 ## 2026-08-27 — two hours idle, and never while somebody is working
 
 **Auth only, on its own push.** Commit `ae9989c`.
