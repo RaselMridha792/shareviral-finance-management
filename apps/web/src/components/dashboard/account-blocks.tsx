@@ -451,8 +451,7 @@ function AccountBlock({
         <StatCell
           label="Opening balance"
           icon="history"
-          value={money(group.opening)}
-          secondary={usd(group.usd.opening)}
+          {...figures(group.currency, group.opening, group.usd.opening)}
           footnote={`Carried forward from ${previousMonthName}`}
         />
 
@@ -461,8 +460,7 @@ function AccountBlock({
           tone="positive"
           icon="south_west"
           iconTone="text-positive"
-          value={money(group.moneyIn)}
-          secondary={usd(group.usd.moneyIn)}
+          {...figures(group.currency, group.moneyIn, group.usd.moneyIn)}
         >
           {/* How the month split between arriving and leaving. Drawn only when
               something moved: a full-width bar over two zeroes reads as a
@@ -482,8 +480,7 @@ function AccountBlock({
           tone="negative"
           icon="north_east"
           iconTone="text-negative"
-          value={money(group.moneyOut)}
-          secondary={usd(group.usd.moneyOut)}
+          {...figures(group.currency, group.moneyOut, group.usd.moneyOut)}
         >
           {moved > 0 ? (
             <>
@@ -511,8 +508,7 @@ function AccountBlock({
           label={ended ? "Closing balance" : "Current balance"}
           icon="account_balance_wallet"
           iconTone="text-primary-text"
-          value={money(group.closing)}
-          secondary={usd(group.usd.closing)}
+          {...figures(group.currency, group.closing, group.usd.closing)}
           footnote={
             ended
               ? "what the month closed at, and what the next opened with"
@@ -547,6 +543,28 @@ function usd(value: string | null): string | null {
  */
 function money(value: string): string {
   return formatMoney(value, { currency: "BDT" });
+}
+
+/**
+ * Which figure leads, per the account's primary currency.
+ *
+ * The owner's rule: a USD-primary account states its dollars big and its taka
+ * small underneath; a BDT account the reverse. The recorded figure is still
+ * the taka either way — the dollars keep their ≈ marker however large they
+ * are printed, and with no rate for the period there is no dollar figure, so
+ * a USD-primary block falls back to taka-first rather than leading with a
+ * blank. One helper for all four cells, so no cell can disagree with its
+ * neighbours about which way round the block reads.
+ */
+function figures(
+  currency: string,
+  bdt: string,
+  usdValue: string | null,
+): { value: string; secondary: string | null } {
+  if (currency === "USD" && usdValue !== null) {
+    return { value: usd(usdValue) as string, secondary: money(bdt) };
+  }
+  return { value: money(bdt), secondary: usd(usdValue) };
 }
 
 /** One of the two arrows beside a heading while the order is being arranged. */

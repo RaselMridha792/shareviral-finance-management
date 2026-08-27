@@ -415,28 +415,57 @@ function AccountCard({
       */}
       {/* Right-aligned, so a column of cards lines its figures up against one
           edge instead of leaving the eye to find each one. */}
-      <Amount
-        value={account.balance}
-        currency={base}
-        showCounterpart={false}
-        className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
-      />
-
-      {equivalent ? (
-        <Amount
-          value={equivalent.value}
-          currency={equivalent.currency}
-          approximate
-          showCounterpart={false}
-          className="num block text-right text-sm text-faint"
-        />
+      {/*
+        Which figure sits on top follows the account's PRIMARY currency, on
+        the owner's instruction: a USD-primary card leads with the dollars and
+        keeps the taka underneath, a BDT account the reverse. What must not
+        move is the honesty rule above — the dollars are still a translation
+        however large they are printed, so the `~` and the grey second line
+        swap places with the figure rather than being dropped. And with no
+        recorded rate there IS no dollar figure, so a USD-primary card falls
+        back to taka-first rather than promoting a blank.
+      */}
+      {account.currency === "USD" && equivalent ? (
+        <>
+          <Amount
+            value={equivalent.value}
+            currency={equivalent.currency}
+            approximate
+            showCounterpart={false}
+            className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
+          />
+          <Amount
+            value={account.balance}
+            currency={base}
+            showCounterpart={false}
+            className="num block text-right text-sm text-faint"
+          />
+        </>
       ) : (
-        <span
-          className="num block text-right text-sm text-faint"
-          title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
-        >
-          —
-        </span>
+        <>
+          <Amount
+            value={account.balance}
+            currency={base}
+            showCounterpart={false}
+            className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
+          />
+          {equivalent ? (
+            <Amount
+              value={equivalent.value}
+              currency={equivalent.currency}
+              approximate
+              showCounterpart={false}
+              className="num block text-right text-sm text-faint"
+            />
+          ) : (
+            <span
+              className="num block text-right text-sm text-faint"
+              title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
+            >
+              N/A
+            </span>
+          )}
+        </>
       )}
 
       <p className="num mt-3 border-t border-border-soft pt-3 text-xs text-muted-foreground">
