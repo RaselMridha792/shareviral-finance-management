@@ -171,11 +171,14 @@ const REGISTRY: TrashEntry[] = [
     title: "coalesce(r.label, r.period_year || '-' || r.period_month)",
     detail: "r.status::text || ' · net ' || r.total_net",
     occurredAt: "make_date(r.period_year, r.period_month, 1)::text",
-    blockedWhen: {
-      sql: "r.status = 'paid'",
-      message:
-        "This run has been paid. The money left the account, so the run is a record of something that happened — void the payment entries instead.",
-    },
+    /*
+     * No blockedWhen, by the owner's decision — a paid run deletes like any
+     * other. What deleting does NOT touch is the ledger: the salary payment
+     * rows the run posted stay on All transactions, where they can be voided
+     * or deleted in their own right. The run, its sheet and its payslips go
+     * to the trash together (the lines ride the run's FK, ON DELETE CASCADE,
+     * so a permanent delete takes them and their challan links with it).
+     */
   },
   {
     kind: "subscription",

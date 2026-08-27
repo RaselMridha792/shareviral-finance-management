@@ -120,13 +120,17 @@ export function PayrollListScreen({
     ),
     consequences: (
       <p>
-        The sheet and every payslip in it go with the run. A run that has been{" "}
+        The sheet and every payslip in it go with the run, and can be put back
+        from{" "}
         <span className="font-medium text-foreground">
-          paid cannot be deleted
+          Settings &rarr; Trashed
+        </span>
+        . One thing deleting does <em>not</em> touch: if this run was paid, the
+        payment entries it posted{" "}
+        <span className="font-medium text-foreground">
+          stay on All transactions
         </span>{" "}
-        at all — the money left the account, so the run is a record of something
-        that happened. Delete a draft that was started by mistake; for anything
-        further along, void the payment entries instead.
+        — void or delete those there too, or the money still reads as spent.
       </p>
     ),
     /*
