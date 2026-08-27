@@ -88,6 +88,26 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — a paid payroll run deletes like any other
+
+**Done.** The owner reversed the trash's paid-run guard: the `blockedWhen` on
+kind `payroll-run` is removed and the delete dialog's copy rewritten. Commit:
+the one titled "A paid payroll run deletes like any other".
+
+What still holds, and the dialog now says so: **deleting a run never touches
+the ledger.** The salary payment rows a paid run posted stay on All
+transactions — void or delete them there, or the money still reads as spent.
+Restore brings the run back whole (paid status, lines). A permanent delete
+cascades run → lines → challan allocations → payslip-file rows (all FKs are ON
+DELETE CASCADE, verified against the database), while ledger rows survive even
+that.
+
+**Watch out.** If somebody deletes a paid run and forgets the ledger half, the
+month's salary total on the dashboard stays spent with no sheet behind it —
+that is now possible by design. The audit log holds both halves of the story.
+
+---
+
 ## 2026-08-27 — the full battery, run once over everything
 
 **Done.** Every harness this codebase has, run in sequence against the local
