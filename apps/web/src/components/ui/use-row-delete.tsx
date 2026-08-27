@@ -46,8 +46,14 @@ export function useRowDelete<T>({
   subject: string;
   /** Enough of the row to recognise it — a name, a date, an amount. */
   describe: (row: T) => ReactNode;
-  /** What deleting this particular kind changes, if it is worth saying. */
-  consequences?: ReactNode;
+  /**
+   * What deleting this particular kind changes, if it is worth saying.
+   *
+   * A function when the answer depends on the row rather than the kind — a
+   * heading that takes six sub-categories with it has to name them, and a
+   * heading with none must not claim to.
+   */
+  consequences?: ReactNode | ((row: T) => ReactNode);
   /** Reload the list. Called only after the delete has landed. */
   onDone: () => void;
 }) {
@@ -96,7 +102,13 @@ export function useRowDelete<T>({
         open={target !== null}
         subject={subject}
         summary={target ? describe(target) : null}
-        consequences={consequences}
+        consequences={
+          typeof consequences === "function"
+            ? target
+              ? consequences(target)
+              : null
+            : consequences
+        }
         pending={pending}
         error={error}
         onConfirm={(reason) => void confirm(reason)}

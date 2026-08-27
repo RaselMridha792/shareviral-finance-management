@@ -1,7 +1,13 @@
 "use client";
 
 import { CATEGORY_KIND_LABELS } from "@finance/shared";
-import { ChevronRight, LoaderCircle, Plus, SquarePen } from "lucide-react";
+import {
+  ChevronRight,
+  LoaderCircle,
+  Plus,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -11,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
+import { useRowDelete } from "@/components/ui/use-row-delete";
 import { ApiError } from "@/lib/api-client";
 import {
   categoriesApi,
@@ -18,6 +25,9 @@ import {
   type CategoryNode,
 } from "@/lib/masters";
 import { cn } from "@/lib/utils";
+
+/** A heading carries its children; one of the things under it does not. */
+type Deletable = CategoryDto & { children?: CategoryDto[] };
 
 type FormState =
   | { mode: "create-parent" }
@@ -40,6 +50,64 @@ export function CategoriesPanel({
     setTree(await categoriesApi.tree(true));
     router.refresh();
   }
+
+  /*
+   * The heading and the things under it go together, so the confirmation says
+   * so by name before anybody agrees to it. A heading with nothing under it
+   * must not claim otherwise, which is why this is written per row rather than
+   * once for the kind.
+   */
+  const del = useRowDelete<Deletable>({
+    kind: "category",
+    subject: "category",
+    describe: (row) => (
+      <>
+        <span className="font-medium text-foreground">{row.name}</span>
+        <span className="text-muted-foreground">
+          {" · "}
+          {CATEGORY_KIND_LABELS[row.kind as keyof typeof CATEGORY_KIND_LABELS] ??
+            row.kind}
+        </span>
+      </>
+    ),
+    consequences: (row) => {
+      const children = row.children ?? [];
+      return (
+        <>
+          {children.length > 0 ? (
+            <>
+              <p>
+                {children.length === 1
+                  ? "The one thing under this heading goes to the trash with it:"
+                  : `All ${children.length} things under this heading go to the trash with it:`}
+              </p>
+              <ul className="mt-1.5 mb-2 flex flex-col gap-0.5">
+                {children.map((child) => (
+                  <li
+                    key={child.id}
+                    className="flex items-center gap-1 text-foreground"
+                  >
+                    <span className="text-muted-foreground">{row.name}</span>
+                    <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+                    <span className="font-medium">{child.name}</span>
+                  </li>
+                ))}
+              </ul>
+              <p>
+                Restoring the heading brings all of them back with it, exactly
+                as they were.
+              </p>
+            </>
+          ) : null}
+          <p className={children.length > 0 ? "mt-2" : undefined}>
+            Payments already filed here keep their amounts and every total stays
+            the same — they simply read as Uncategorised until it is restored.
+          </p>
+        </>
+      );
+    },
+    onDone: () => void refresh(),
+  });
 
   const inGroups = tree.filter((node) => node.kind === "in");
   const outGroups = tree.filter((node) => node.kind !== "in");
@@ -76,6 +144,7 @@ export function CategoriesPanel({
             canWrite={canWrite}
             onAddChild={(parent) => setForm({ mode: "create-child", parent })}
             onEdit={(category) => setForm({ mode: "edit", category })}
+            onDelete={del.ask}
           />
           <Group
             title="Money in"
@@ -83,6 +152,7 @@ export function CategoriesPanel({
             canWrite={canWrite}
             onAddChild={(parent) => setForm({ mode: "create-child", parent })}
             onEdit={(category) => setForm({ mode: "edit", category })}
+            onDelete={del.ask}
           />
         </CardBody>
       </Card>
@@ -92,6 +162,7 @@ export function CategoriesPanel({
         onClose={() => setForm(null)}
         onSaved={refresh}
       />
+      {del.dialog}
     </>
   );
 }
@@ -102,12 +173,14 @@ function Group({
   canWrite,
   onAddChild,
   onEdit,
+  onDelete,
 }: {
   title: string;
   nodes: CategoryNode[];
   canWrite: boolean;
   onAddChild: (parent: CategoryNode) => void;
   onEdit: (category: CategoryDto) => void;
+  onDelete: (category: Deletable) => void;
 }) {
   if (nodes.length === 0) return null;
 
@@ -150,6 +223,19 @@ function Group({
                       <Plus className="size-3.5" />
                       Sub-category
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Move to trash"
+                      title={
+                        node.children.length > 0
+                          ? `Move to trash with its ${node.children.length} sub-categories`
+                          : "Move to trash"
+                      }
+                      onClick={() => onDelete(node)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </>
                 ) : null}
               </span>
@@ -163,7 +249,7 @@ function Group({
             ) : (
               <ul className="flex flex-wrap gap-x-1 gap-y-1 px-3 py-3">
                 {node.children.map((child) => (
-                  <li key={child.id}>
+                  <li key={child.id} className="group/chip flex items-center">
                     <button
                       type="button"
                       onClick={() => canWrite && onEdit(child)}
@@ -179,6 +265,17 @@ function Group({
                       <ChevronRight className="size-3 text-muted-foreground" />
                       {child.name}
                     </button>
+                    {canWrite ? (
+                      <button
+                        type="button"
+                        aria-label={`Move ${child.name} to trash`}
+                        title={`Move ${child.name} to trash`}
+                        onClick={() => onDelete(child)}
+                        className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-negative focus-visible:opacity-100 group-hover/chip:opacity-100"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    ) : null}
                   </li>
                 ))}
               </ul>

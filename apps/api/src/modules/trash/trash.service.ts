@@ -275,7 +275,7 @@ export class TrashService {
       module: entry.module,
       summary:
         `Deleted ${entry.label} "${row.__title ?? id}"` +
-        (ids.length > 1 ? ` and its matching transfer row` : "") +
+        alsoWent(entry, ids.length) +
         (reason ? `: ${reason}` : ""),
       read: () => Promise.resolve(row),
       run: async (tx) => {
@@ -320,12 +320,32 @@ export class TrashService {
     return (found.rows as unknown as { id: string }[]).map((r) => r.id);
   }
 
-  /** Both halves of a transfer, or just the one row. */
+  /**
+   * What goes with the row: both halves of a transfer, a heading's
+   * sub-categories, or nothing.
+   *
+   * A sub-category is not a separate thing that happens to point at a heading
+   * — it is part of it. Left behind, it belongs to a heading that is in the
+   * trash, which means it renders nowhere (the screen draws headings and their
+   * children) while payments carry on being filed against it. Invisible and
+   * still in use is the worst of the three possible answers, so it travels
+   * with its parent, and `restore` brings back exactly the ones that came.
+   */
   private async siblingIds(
     entry: TrashEntry,
     id: string,
     row: StoredRow,
   ): Promise<string[]> {
+    if (entry.kind === "category") {
+      const found = await this.db.client.execute(
+        sql`select id::text as id from categories
+             where parent_id = ${id}::uuid and deleted_at is null`,
+      );
+      return [
+        id,
+        ...(found.rows as unknown as { id: string }[]).map((r) => r.id),
+      ];
+    }
     if (entry.kind !== "transaction" || !row.transfer_group_id) return [id];
     const found = await this.db.client.execute(
       sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is null`,
@@ -397,6 +417,23 @@ export class TrashService {
     id: string,
     row: StoredRow,
   ): Promise<string[]> {
+    if (entry.kind === "category") {
+      /*
+       * `deleted_at` equality, the same trick `restore` uses on `voided_at`:
+       * the cascade wrote parent and children in one statement, so they share
+       * the transaction's clock to the microsecond. A sub-category deleted on
+       * its own last week does not match, and stays in the trash where its
+       * owner put it.
+       */
+      const found = await this.db.client.execute(
+        sql`select id::text as id from categories
+             where parent_id = ${id}::uuid and deleted_at = ${row.deleted_at}`,
+      );
+      return [
+        id,
+        ...(found.rows as unknown as { id: string }[]).map((r) => r.id),
+      ];
+    }
     if (entry.kind !== "transaction" || !row.transfer_group_id) return [id];
     const found = await this.db.client.execute(
       sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is not null`,
@@ -440,7 +477,7 @@ export class TrashService {
         isSensitive: true,
         summary:
           `Permanently removed ${entry.label} "${row.__title ?? id}"` +
-          (ids.length > 1 ? " and its matching transfer row" : "") +
+          alsoWent(entry, ids.length) +
           ` from the trash`,
         read: () => Promise.resolve(row),
         run: async (tx) => {
@@ -540,6 +577,23 @@ export class TrashService {
  * Postgres 23503: a FOREIGN KEY held. The driver wraps it, so the code is
  * read off whichever layer carries it.
  */
+/**
+ * What the audit line says came along, in words that fit what it was.
+ *
+ * "and its matching transfer row" was written when a transfer pair was the
+ * only thing that travelled. A heading now takes its sub-categories, and an
+ * audit entry that describes those as a transfer row is a record that misleads
+ * whoever reads it back.
+ */
+function alsoWent(entry: TrashEntry, count: number): string {
+  if (count <= 1) return "";
+  if (entry.kind === "category") {
+    const kids = count - 1;
+    return ` and its ${kids} sub-categor${kids === 1 ? "y" : "ies"}`;
+  }
+  return " and its matching transfer row";
+}
+
 function isForeignKeyViolation(caught: unknown): boolean {
   const err = caught as { code?: string; cause?: { code?: string } };
   return err?.code === "23503" || err?.cause?.code === "23503";
