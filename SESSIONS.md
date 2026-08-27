@@ -88,6 +88,40 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — the guards come off, and the pages stop going stale
+
+**Done.** Two owner decisions. Commits: `fbfa436`, `32ea898`.
+
+**Every business-data delete guard is gone.** Accounts, categories, vendors,
+team members and committed imports all delete freely now, entries or no
+entries. What each deletion leaves behind is deliberate and documented in the
+registry: ledger rows keep their money counted, a deleted category's entries
+read as Uncategorised, a deleted person's payments stay. **One guard remains
+— the last super admin —** because deleting it locks every door in the app
+with the key inside; the owner can order that one gone too. Permanent
+deletion still meets the database's own wall (FK) when rows point at the
+thing being purged: that now answers as a sentence, and Empty-the-trash purges
+what it can and names the kinds that stayed.
+
+**The client page cache is off** (`experimental.staleTimes: {dynamic: 0,
+static: 0}` in next.config.ts). The payroll "latest data update hocchena"
+report was Next reusing a whole prefetched page for five minutes —
+per its own docs, and invisible in dev because dev does not prefetch. Every
+navigation now asks the server. The payroll list also syncs its rows when a
+refreshed prop arrives (render-phase sync).
+
+**Watch out.**
+
+- Deleting an account/category/person no longer warns about their entries.
+  The trash restores everything, but a purge of a still-referenced row is
+  refused by the database — with a sentence now, not a 500.
+- `staleTimes 0/0` trades prefetch speed for correctness everywhere. If a
+  screen ever feels slow to open, this is the knob, but turn it knowingly.
+- A production `next build` was run locally to prove the experimental key is
+  valid on this Next version before the deploy met it.
+
+---
+
 ## 2026-08-27 — a paid payroll run deletes like any other
 
 **Done.** The owner reversed the trash's paid-run guard: the `blockedWhen` on
