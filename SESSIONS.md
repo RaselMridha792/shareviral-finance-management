@@ -88,6 +88,41 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — payroll: who is on the month is chosen, not assumed
+
+**Done.** Starting a payroll month now opens with the month's own people —
+each with their wage, ticked by default — and Start builds the sheet for the
+ticked set; the separate Build click is gone. On a draft sheet the **People**
+button reopens the same checklist; finalise locks it, reopen unlocks it.
+Commit: `a9c1766`.
+
+The machinery is `PayrollService.syncMembers` (POST `/payroll/runs/:id/members`,
+declarative: the run comes to hold exactly the given people) plus
+`GET /payroll/eligible?periodYear&periodMonth`. **Sync is not the rebuild**:
+`generateLines` still wipes and rebuilds (use it for raises); sync leaves kept
+lines untouched — typed bonuses and breakdowns survive the list changing. Both
+build lines through one `buildLine` helper now, so they cannot drift.
+
+**Watch out.**
+
+- **Drizzle renders `${table.column}` in a raw `sql` fragment as the BARE
+  column name** — no table qualifier. Inside a correlated subquery that bare
+  name binds to the *inner* table first: the eligible list's correlation
+  silently became `ch.team_member_id = ch.id`, false on every row, and the
+  picker said nobody in the company had a wage. Valid SQL, invisible in the
+  diff. If you embed a column reference into raw SQL that contains its own
+  FROM, write the qualification out by hand (`"team_members".id`).
+- The old build path's compensation lookup never filtered `deleted_at` — a
+  trashed salary row could decide pay. Fixed inside `buildLine`.
+- `member-picker.tsx` is shared by the start-a-month form and the sheet's
+  People drawer — change it once, both doors change.
+
+**Open.** Nothing on the flow itself. `.payrollpickqa.mjs` (17 checks, API +
+browser) is the harness; payroll finalise→pay itself has still never been
+exercised end-to-end with real bank entries — unchanged from before.
+
+---
+
 ## 2026-08-27 — Money Transfer has a page
 
 **Done.** `/transfers`, "Money Transfer" inside the Accounts accordion in the
