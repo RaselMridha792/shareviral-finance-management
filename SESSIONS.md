@@ -88,6 +88,38 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — the full battery, run once over everything
+
+**Done.** Every harness this codebase has, run in sequence against the local
+stack at the day's final state, plus a read-only sweep of the live site. All
+green; no code changed.
+
+| Harness | Covers | Result |
+|---|---|---|
+| four CI steps | build:shared, typecheck, lint, test | all 0 |
+| `.trashqa.mjs` | delete/restore/purge/empty, totals move exactly | 21/21 |
+| `.trashroles.mjs` | every role incl. CFO, allowed and refused | holds |
+| `.overdraftqa.mjs` | never-below-zero through all eleven doors, deleted twins | 25/25 |
+| `.transferqa.mjs` | transfer pair listing, void/trash as one, form refusals | 21/21 |
+| `.payrollpickqa.mjs` | choose-the-people flow, edits survive, all fences | 17/17 |
+| `.fivefixui.mjs` | link colour measured, dashboard subtitle, hidden sleeper | 12/12 |
+| `.trashui.mjs` | the delete dialog's gates, driven as a person | 17/17 |
+| `.delsweep.mjs` | every delete-wired screen, button pressed for real | 9 clean |
+| `.qa.mjs` (15 routes) | headings, tables, alignment, sideways scroll | nothing flagged |
+
+Live, read-only only (no POSTs, no sign-ins): `/api/health` reports exactly
+`origin/main`'s hash; eleven protected API routes answer 401 and a made-up one
+404; `/login` serves the form in ~0.26s; all eight protected pages 307 to
+login with the right `next`; the TLS certificate has 78 days and renews
+itself. 25/25.
+
+**Watch out.** Nothing new. The standing gaps are the ones already on
+record: payroll finalise→pay has never moved real money end-to-end, and the
+Reports inner tables' arithmetic has not been hand-checked against a known
+dataset.
+
+---
+
 ## 2026-08-27 — Cash In carries no category
 
 **Done.** The Category field is out of the Add cash drawer, the cash-in schema
