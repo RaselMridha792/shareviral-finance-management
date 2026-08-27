@@ -23,6 +23,7 @@ import {
   type SetLineChallanInput,
   type TdsLiabilityQuery,
   type UpdateTdsDepositInput,
+  fiscalYearOf,
 } from "@finance/shared";
 import {
   and,
@@ -58,13 +59,22 @@ import { SettingsService } from "../settings/settings.service";
 import { nextRefNo } from "../transactions/ref-no";
 
 /**
- * Tax is deducted when a run is finalised, not while it is being drafted.
+ * A run whose tax this screen may count: finalised, and not in the trash.
  *
- * `generate-lines` deletes and rebuilds a draft's lines, so a draft's tax
- * column is a work in progress — counting it would put a liability on the
- * dashboard that pressing Regenerate makes disappear.
+ * Two conditions in one constant because six queries in this file share it,
+ * and a condition added to five of them is the one that gets missed.
+ *
+ * *Finalised*, because `generate-lines` deletes and rebuilds a draft's lines
+ * — a draft's tax column is a work in progress, and counting it would put a
+ * liability on the dashboard that pressing Regenerate makes disappear.
+ *
+ * *Not deleted*, because this file joins `payroll_runs` nine times and did not
+ * check it once. A run sent to the trash kept its people on the withholding
+ * register and its tax in the period total — the sheet was gone from Payroll
+ * and the deduction still sat here, which is the worst shape a wrong figure
+ * can take: correct-looking, on the screen somebody files from.
  */
-const FINALISED_OR_LATER = sql`${payrollRuns.status} <> 'draft'`;
+const FINALISED_OR_LATER = sql`${payrollRuns.status} <> 'draft' and ${payrollRuns.deletedAt} is null`;
 
 @Injectable()
 export class TdsService {
@@ -296,6 +306,49 @@ export class TdsService {
    * so listing one would put people's names against figures that pressing
    * Regenerate can change.
    */
+  /**
+   * Which period to open on: the newest one holding tax, else the one we are
+   * in.
+   *
+   * One query rather than one per period — the months that hold a finalised,
+   * non-deleted run with tax on it, as a single list, matched against the
+   * period bounds here. Newest first, so a reader lands on the most recent
+   * month that has anything to file.
+   */
+  private async latestPeriodWithTax(
+    all: { start: string; end: string }[],
+    today: string,
+  ): Promise<number> {
+    const containsToday = Math.max(
+      all.findIndex((p) => p.start <= today && today <= p.end),
+      0,
+    );
+
+    const months = await this.db.client
+      .select({
+        year: payrollRuns.periodYear,
+        month: payrollRuns.periodMonth,
+      })
+      .from(payrollLines)
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .where(and(FINALISED_OR_LATER, gt(payrollLines.tdsAmount, "0")))
+      .groupBy(payrollRuns.periodYear, payrollRuns.periodMonth);
+
+    if (!months.length) return containsToday;
+
+    const scale = months.map((m) => m.year * 12 + m.month);
+    for (let i = all.length - 1; i >= 0; i--) {
+      const from = parseIsoDate(all[i].start);
+      const to = parseIsoDate(all[i].end);
+      const low = from.year * 12 + from.month;
+      const high = to.year * 12 + to.month;
+      if (scale.some((point) => point >= low && point <= high)) return i;
+    }
+
+    // Nothing in this fiscal year, though other years have figures.
+    return containsToday;
+  }
+
   async salaryRegister(
     query: SalaryTdsRegisterQuery,
   ): Promise<SalaryTdsRegister> {
@@ -306,15 +359,20 @@ export class TdsService {
 
     const all = periodsInFiscalYear(fiscalYear, mode, query.granularity);
 
-    // Asked for no period in particular, the answer is the one we are in.
-    // Defaulting to the first would open August's register on July's page —
-    // and in BD mode, on a July that is already a year behind by June.
+    /*
+     * Asked for no period in particular, open on the last one that has
+     * something in it — and only fall back to the period we are in.
+     *
+     * The month we are in was the whole answer, and it is the month least
+     * likely to hold anything: this register counts finalised runs, and the
+     * current month's run is a draft until somebody closes it. The page
+     * therefore opened empty for most of every month, over a year that had
+     * figures one screen-click away. "No finalised payroll run in August" is
+     * a true sentence and a useless first impression.
+     */
     const index = query.index
       ? Math.min(query.index, all.length) - 1
-      : Math.max(
-          all.findIndex((p) => p.start <= today && today <= p.end),
-          0,
-        );
+      : await this.latestPeriodWithTax(all, today);
     const range = all[index];
 
     /**
@@ -425,7 +483,18 @@ export class TdsService {
         start: range.start,
         end: range.end,
         granularity: range.granularity,
-        fiscalYear: range.fiscalYear,
+        /*
+         * Worked out from the period's own start, not read off the range.
+         *
+         * `monthRange()` puts the CALENDAR year in that field while every
+         * other granularity puts the fiscal one, and the screen seeds its
+         * filter state from whatever comes back here. Between January and
+         * June that seeded the page a whole fiscal year ahead: the year
+         * select held a value no option had, the period select named a month
+         * twelve months off the table's own heading, and the effect's guard
+         * matched so nothing ever corrected it.
+         */
+        fiscalYear: fiscalYearOf(range.start, mode),
         index: index + 1,
       },
       // Only the people who owe tax — see the query. `linesInPeriod` carries

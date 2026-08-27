@@ -16,7 +16,7 @@ import {
   type SalaryTdsRegister,
   type SalaryTdsRow,
 } from "@finance/shared";
-import { LoaderCircle, Paperclip, Pencil, Printer } from "lucide-react";
+import { LoaderCircle, Paperclip, Printer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,9 +33,14 @@ import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/segmented";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/overlay";
+import {
+  RowActions,
+  RowActionsHead,
+} from "@/components/ui/row-actions";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
-import { tdsApi } from "@/lib/tax";
+import { setLineChallan, tdsApi } from "@/lib/tax";
 
 /**
  * Who was taxed this period, and how much — and nothing else.
@@ -92,14 +97,15 @@ const PERIOD_TABS = GRANULARITIES.map((id) => ({
 }));
 
 /**
- * SL, Month, Employee, Salary, Tax deducted, Challan, and the payslip link.
+ * SL, Month, Employee, Salary, Tax deducted, Challan, the payslip link, and
+ * the actions pair.
  *
  * The month used to be drawn only when the table crossed one, which made the
  * count a variable feeding three separate spans — the empty state, the footer
  * label and the cell padding the footer out to the edge. A date column is not
  * optional, so the count is not either, and the three cannot disagree.
  */
-const COLUMNS = 7;
+const COLUMNS = 8;
 
 /** Everything to the left of the tax column, which the footer label spans. */
 const COLUMNS_BEFORE_TAX = 4;
@@ -130,6 +136,9 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
     lineId: string;
     challanNumber: string;
   } | null>(null);
+  /** The row whose recorded challan is being taken off. */
+  const [clearing, setClearing] = useState<SalaryTdsRow | null>(null);
+  const [clearPending, setClearPending] = useState(false);
 
   const years = useMemo(() => selectableFiscalYears(mode), [mode]);
   const periods = useMemo(
@@ -212,7 +221,27 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
    * than a shrug.
    */
   function chooseGranularity(next: Granularity) {
-    const anchor = periods[index - 1]?.start ?? todayInDhaka();
+    /*
+     * Today when today is inside the period being read, and the period's
+     * start otherwise.
+     *
+     * It used to anchor on the start unconditionally, which is right going
+     * coarse — August lands in Q1 — and wrong coming back: Q1 starts in July,
+     * so Quarterly → Monthly always dropped the reader on July whatever month
+     * they had come from. One round trip through the tabs left all four
+     * anchored on the first month of the year, showing byte-identical rows
+     * and an identical total — the "every tab shows the same thing" this
+     * screen was reported for.
+     *
+     * With today as the anchor whenever it is in range, August → Quarterly →
+     * Monthly returns to August, and a reader looking at a past period still
+     * keeps that period's own start.
+     */
+    const current = periods[index - 1];
+    const today = todayInDhaka();
+    const anchor =
+      current && isWithin(today, current) ? today : (current?.start ?? today);
+
     const list = periodsInFiscalYear(fiscalYear, mode, next);
     const found = list.findIndex((range) => isWithin(anchor, range));
 
@@ -381,6 +410,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                     */}
                     <Th width="w-56">Challan number</Th>
                     <Th align="right" />
+                    <RowActionsHead />
                   </tr>
                 </thead>
                 <tbody>
@@ -515,17 +545,6 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                               </span>
                             )}
 
-                            {canRecordChallans ? (
-                              <button
-                                type="button"
-                                onClick={() => setEditing(row)}
-                                aria-label={`Record the challan for ${row.fullName}, ${row.periodLabel}`}
-                                title="Record the challan"
-                                className="ml-auto cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
-                              >
-                                <Pencil className="size-3.5" />
-                              </button>
-                            ) : null}
                           </div>
                         </td>
                         <td className="text-right">
@@ -540,6 +559,26 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                             </Link>
                           ) : null}
                         </td>
+                        {/*
+                          The pair every table ends with, which this one did
+                          not have: the pencil records the challan, and beside
+                          it the way to take a wrong one off. The salary row
+                          itself is not deletable here and that is not an
+                          oversight — it belongs to a payroll run, and
+                          deleting the run from Payroll takes its deductions
+                          off this page with it.
+                        */}
+                        <RowActions
+                          onEdit={
+                            canRecordChallans ? () => setEditing(row) : undefined
+                          }
+                          second="delete"
+                          onSecond={
+                            canRecordChallans && row.challanNumber
+                              ? () => setClearing(row)
+                              : undefined
+                          }
+                        />
                       </tr>
                     ))
                   )}
@@ -615,6 +654,59 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
               onClose={() => setViewing(null)}
             />
           ) : null}
+
+          {/*
+            One gate rather than the trash's two: taking a challan off is
+            undone by typing it back, and the scan stays attached — the
+            register finds it through the number, so the paper reappears with
+            the number. A ceremony heavier than the act teaches people to
+            click through ceremonies.
+          */}
+          <ConfirmDialog
+            open={clearing !== null}
+            title="Take this challan off the row?"
+            destructive
+            confirmLabel={clearPending ? "Removing…" : "Remove it"}
+            pending={clearPending}
+            body={
+              clearing ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {clearing.challanNumber}
+                  </span>{" "}
+                  comes off {clearing.fullName}&rsquo;s {clearing.periodLabel}{" "}
+                  row, and that month reads as not yet deposited again. The
+                  scan stays where it is — putting the number back shows it
+                  again.
+                </>
+              ) : (
+                ""
+              )
+            }
+            onConfirm={async () => {
+              if (!clearing) return;
+              setClearPending(true);
+              try {
+                await setLineChallan(clearing.payrollLineId, {
+                  challanNumber: "",
+                  applyToMonth: false,
+                });
+                setClearing(null);
+                toast.show("The challan came off that row.", "success");
+                await reload();
+              } catch (caught) {
+                toast.show(
+                  caught instanceof ApiError
+                    ? caught.message
+                    : "That did not go through.",
+                  "error",
+                );
+              } finally {
+                setClearPending(false);
+              }
+            }}
+            onCancel={() => setClearing(null)}
+          />
         </>
       )}
     </>
