@@ -5,6 +5,8 @@ import {
   BILLING_CYCLE_LABELS,
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_CATEGORY_LABELS,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
   SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_STATUS_LABELS,
   costsAgree,
@@ -45,24 +47,21 @@ import {
 } from "@/lib/subscriptions";
 
 /**
- * The payment method the chosen account implies.
+ * What the chosen account's type suggests the method is.
  *
- * The owner merged "Paid by" and "Card or account" — they meant the same thing
- * to them, and the account is the one that carries a name. The enum column did
- * not go away with the control, so it is worked out here instead of being left
- * at a default that would be wrong for every bank account.
- *
- * Falls back to what was already stored when nothing is picked, so editing a
- * plan's name cannot quietly rewrite how it is paid.
+ * The two controls were once merged into one account picker and the method
+ * was derived. The owner unmerged them — "Payment Method" is a method (card,
+ * bank transfer…) and "Account/Card" names which account pays — so the method
+ * is typed rather than inferred. This map remains only as a convenience: when
+ * somebody picks an account without having touched the method, the obvious
+ * answer is pre-filled, and stays fully editable.
  */
-function methodOfAccount(
+function methodSuggestedBy(
   accounts: AccountDto[],
   accountId: string,
-  existing?: SubscriptionDto,
-): PaymentMethod {
+): PaymentMethod | null {
   const account = accounts.find((entry) => entry.id === accountId);
-  if (!account) return (existing?.paymentMethod as PaymentMethod) ?? "card";
-
+  if (!account) return null;
   const byType: Record<AccountType, PaymentMethod> = {
     bank: "bank_transfer",
     cash: "cash",
@@ -225,6 +224,11 @@ export function SubscriptionForm({
   );
 
   const [accountId, setAccountId] = useState(subscription?.accountId ?? "");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
+    (subscription?.paymentMethod as PaymentMethod) ?? "card",
+  );
+  /** Only an untouched method follows the account pick. */
+  const [methodTouched, setMethodTouched] = useState(Boolean(subscription));
   const [boughtFor, setBoughtFor] = useState(subscription?.boughtFor ?? "");
   const [loginEmail, setLoginEmail] = useState(subscription?.loginEmail ?? "");
   const [notes, setNotes] = useState(subscription?.notes ?? "");
@@ -328,14 +332,9 @@ export function SubscriptionForm({
         // form shows. It still has to be sent: the field's `.default("card")`
         // lands in the schema's output type, which is what the client is typed
         // against, so leaving it out is a compile error rather than a default.
-        // Sending back what is stored keeps editing a bank-transfer plan from
-        // quietly turning it into a card one.
-        // There is one control now, and it names an account. The column still
-        // exists, so it is derived from what that account IS rather than
-        // stamped "card" on everything — a bank account paying a plan is a
-        // transfer, and anything grouping by this would otherwise be wrong for
-        // every row created from here on.
-        paymentMethod: methodOfAccount(accounts, accountId, subscription),
+        // The typed method, not a derivation — the two controls are separate
+        // questions again on the owner's instruction.
+        paymentMethod,
         accountId,
         boughtFor,
         loginEmail,
@@ -626,10 +625,32 @@ export function SubscriptionForm({
             />
           </Field>
 
-          <Field label="Payment Method" error={fieldErrors.accountId}>
+          <Field label="Payment Method" error={fieldErrors.paymentMethod}>
+            <Select
+              value={paymentMethod}
+              onChange={(e) => {
+                setPaymentMethod(e.target.value as PaymentMethod);
+                setMethodTouched(true);
+              }}
+            >
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {PAYMENT_METHOD_LABELS[method]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Account/Card" error={fieldErrors.accountId}>
             <SearchableSelect
               value={accountId}
-              onChange={setAccountId}
+              onChange={(next) => {
+                setAccountId(next);
+                if (!methodTouched) {
+                  const suggested = methodSuggestedBy(accounts, next);
+                  if (suggested) setPaymentMethod(suggested);
+                }
+              }}
               placeholder="Which one pays it"
               options={accounts.map((account) => ({
                 value: account.id,
@@ -669,7 +690,6 @@ export function SubscriptionForm({
             hint="The tool's own page — what its name on the register opens"
           >
             <Input
-              type="url"
               value={websiteUrl}
               maxLength={500}
               placeholder="https://claude.ai"

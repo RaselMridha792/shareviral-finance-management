@@ -159,7 +159,7 @@ export function SubscriptionsScreen({
       <div className="flex flex-col">
         <span className="font-medium">{row.toolName ?? row.planName}</span>
         <span className="text-xs text-muted-foreground">
-          {row.planName} · {row.status} · renews {row.nextRenewalOn ?? "—"}
+          {row.planName} · {row.status} · renews {row.nextRenewalOn ?? "N/A"}
         </span>
       </div>
     ),
@@ -341,7 +341,7 @@ export function SubscriptionsScreen({
               </thead>
               <tbody>
                 {loading ? (
-                  <TableMessageRow colSpan={18}>Loading…</TableMessageRow>
+                  <TableMessageRow colSpan={19}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => (
                       <tr key={row.id} className="row-finance">

@@ -10,6 +10,7 @@ import {
   type VendorType,
 } from "./masters.ts";
 import { paginationQuerySchema } from "./pagination.ts";
+import { isNAText } from "./transactions.ts";
 import { patchOf } from "./patch.ts";
 import { paymentMethodSchema } from "./transactions.ts";
 
@@ -268,10 +269,11 @@ const subscriptionFieldsSchema = z.strictObject({
    * link somebody recorded, and refusing to save it because a request failed
    * would block recording a plan on a bad connection.
    */
+  // A typed "N/A" counts as leaving the box empty — see isNAText's note.
   websiteUrl: z
     .string()
     .trim()
-    .transform((v) => (v === "" ? undefined : v))
+    .transform((v) => (v === "" || isNAText(v) ? undefined : v))
     .optional()
     .refine((v) => v === undefined || /^https:\/\/\S+$/.test(v), {
       message: "Paste an https:// link",

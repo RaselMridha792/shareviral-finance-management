@@ -5,6 +5,8 @@ import {
   SUBSCRIPTION_CATEGORY_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
   formatMoney,
+  PAYMENT_METHOD_LABELS,
+  type PaymentMethod,
   type SubscriptionStatus,
 } from "@finance/shared";
 import { ImageIcon } from "lucide-react";
@@ -57,6 +59,7 @@ export function SubscriptionHeadCells() {
       <Th align="right">Cost (USD)</Th>
       <Th align="right">USD Rate</Th>
       <Th>Payment Method</Th>
+      <Th>Account/Card</Th>
       {/* The same pair every other money table carries, in the same place:
           ours, then theirs. */}
       <Th width="w-32">Invoice No.</Th>
@@ -145,11 +148,19 @@ export function SubscriptionBodyCells({
       </td>
 
       <td className="col-amount">
-        {row.costBdt ? money(row.costBdt, "BDT") : "—"}
+        {row.costBdt ? money(row.costBdt, "BDT") : "N/A"}
       </td>
       <td className="col-amount">{money(row.costUsd, "USD")}</td>
       <td className="col-amount text-sm text-muted-foreground">
-        {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
+        {row.usdRate ? Number(row.usdRate).toFixed(2) : "N/A"}
+      </td>
+
+      <td className="text-sm text-muted-foreground">
+        {/* The method as typed — card, bank transfer… The account it names
+            has its own column beside this one; they answer different
+            questions and were once wrongly merged into one control. */}
+        {PAYMENT_METHOD_LABELS[row.paymentMethod as PaymentMethod] ??
+          row.paymentMethod}
       </td>
 
       <td className="text-sm text-muted-foreground">
@@ -168,7 +179,7 @@ export function SubscriptionBodyCells({
             row.accountName
           )
         ) : (
-          "—"
+          "N/A"
         )}
       </td>
 
@@ -187,7 +198,7 @@ export function SubscriptionBodyCells({
             <span className="num">{row.invoiceNo}</span>
           )
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">N/A</span>
         )}
       </td>
 
@@ -204,7 +215,7 @@ export function SubscriptionBodyCells({
         />
       ) : (
         <td className="num text-xs">
-          {row.reference ?? <span className="text-muted-foreground">—</span>}
+          {row.reference ?? <span className="text-muted-foreground">N/A</span>}
         </td>
       )}
 
@@ -214,17 +225,17 @@ export function SubscriptionBodyCells({
             {row.notes}
           </span>
         ) : (
-          "—"
+          "N/A"
         )}
       </td>
 
-      <td className="text-sm text-muted-foreground">{row.loginEmail ?? "—"}</td>
+      <td className="text-sm text-muted-foreground">{row.loginEmail ?? "N/A"}</td>
 
       <td className="text-sm">
         <SeatNames row={row} />
       </td>
 
-      <td className="text-sm text-muted-foreground">{row.boughtFor ?? "—"}</td>
+      <td className="text-sm text-muted-foreground">{row.boughtFor ?? "N/A"}</td>
 
       <td className="text-sm text-muted-foreground">
         {BILLING_CYCLE_LABELS[row.billingCycle]}
@@ -238,7 +249,7 @@ export function SubscriptionBodyCells({
              still carry one, and it is the only thing this column has to say
              about them. */
           <span className="text-muted-foreground">
-            {row.renewalNote ?? "—"}
+            {row.renewalNote ?? "N/A"}
           </span>
         )}
       </td>
@@ -263,7 +274,7 @@ export function SubscriptionBodyCells({
  */
 function SeatNames({ row }: { row: SubscriptionDto }) {
   if (row.users.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground">N/A</span>;
   }
 
   const all = row.users.map((seat) => seat.fullName).join(", ");
