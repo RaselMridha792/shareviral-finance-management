@@ -402,6 +402,18 @@ export class SubscriptionsService {
           and f.deleted_at is null
         limit 1
       )`,
+      /*
+       * The paperwork on the plan, not counting the plan's own screenshot —
+       * the invoice and the bank's record, which are what the two number
+       * cells open. A plan with no transaction id draws an eye instead of a
+       * dash, and the eye must not offer an empty drawer.
+       */
+      documentCount: sql<number>`(
+        select count(*)::int from ${files} f
+        where f.subscription_id = ${subscriptions.id}
+          and f.kind <> 'subscription_screenshot'
+          and f.deleted_at is null
+      )`,
       notes: subscriptions.notes,
     };
   }
@@ -558,5 +570,6 @@ type SubscriptionRow = {
   invoiceNo: string | null;
   reference: string | null;
   screenshotFileId: string | null;
+  documentCount: number;
   notes: string | null;
 };

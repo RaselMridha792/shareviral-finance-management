@@ -28,6 +28,11 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
+import {
+  ReferenceInput,
+  ReferenceKindToggle,
+  type ReferenceKind,
+} from "@/components/ledger/reference-kind";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
@@ -189,6 +194,15 @@ export function SubscriptionForm({
   const invoicePicker = useRef<HTMLInputElement>(null);
   const [reference, setReference] = useState(subscription?.reference ?? "");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  /*
+   * A transaction id, or only the paper. Read back from the plan being
+   * edited rather than stored — see components/ledger/reference-kind.tsx.
+   * The controlled `reference` is cleared when the choice turns to paper, so
+   * a number typed and then abandoned does not get saved behind a hidden box.
+   */
+  const [refKind, setRefKind] = useState<ReferenceKind>(
+    subscription && !subscription.reference ? "paper" : "id",
+  );
   const referencePicker = useRef<HTMLInputElement>(null);
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
   const [category, setCategory] = useState<SubscriptionCategory>(
@@ -685,22 +699,35 @@ export function SubscriptionForm({
           </Field>
 
           <Field
-            label="Transaction ID"
+            label={refKind === "id" ? "Transaction ID" : "Reference"}
             error={fieldErrors.reference}
-            hint="What the bank or the card statement calls it. Theirs."
+            hint={
+              refKind === "id"
+                ? "What the bank or the card statement calls it. Theirs."
+                : "No number on the statement — attach the record and it becomes the reference."
+            }
           >
+            <ReferenceKindToggle
+              value={refKind}
+              onChange={(next) => {
+                setRefKind(next);
+                if (next === "paper") setReference("");
+              }}
+            />
             <Clip
               picker={referencePicker}
               file={referenceFile}
               onPick={setReferenceFile}
               label="Attach the bank's record"
             >
-              <Input
-                className="num min-w-0 flex-1"
-                value={reference}
-                maxLength={120}
-                onChange={(e) => setReference(e.target.value)}
-              />
+              <ReferenceInput kind={refKind}>
+                <Input
+                  className="num min-w-0 flex-1"
+                  value={reference}
+                  maxLength={120}
+                  onChange={(e) => setReference(e.target.value)}
+                />
+              </ReferenceInput>
             </Clip>
           </Field>
         </div>

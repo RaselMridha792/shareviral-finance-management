@@ -22,6 +22,11 @@ import {
 } from "@/components/ui/field";
 import { formatMoney } from "@finance/shared";
 
+import {
+  ReferenceInput,
+  ReferenceKindToggle,
+  type ReferenceKind,
+} from "@/components/ledger/reference-kind";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
@@ -84,6 +89,8 @@ export function TransferForm({
    */
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [bankFile, setBankFile] = useState<File | null>(null);
+  /** A transaction id, or only the paper — see ledger/reference-kind.tsx. */
+  const [refKind, setRefKind] = useState<ReferenceKind>("id");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -294,9 +301,20 @@ export function TransferForm({
               />
             </Attach>
           </Field>
-          <Field label="Transaction ID" error={fieldErrors.reference}>
+          <Field
+            label={refKind === "id" ? "Transaction ID" : "Reference"}
+            error={fieldErrors.reference}
+            hint={
+              refKind === "paper"
+                ? "No number — the slip is the reference."
+                : undefined
+            }
+          >
+            <ReferenceKindToggle value={refKind} onChange={setRefKind} />
             <Attach kind="bank_statement" file={bankFile} onPick={setBankFile}>
-              <Input name="reference" className="num min-w-0 flex-1" />
+              <ReferenceInput kind={refKind}>
+                <Input name="reference" className="num min-w-0 flex-1" />
+              </ReferenceInput>
             </Attach>
           </Field>
         </div>

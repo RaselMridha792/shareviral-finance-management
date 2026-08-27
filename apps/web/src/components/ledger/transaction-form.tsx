@@ -32,6 +32,11 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
+import {
+  ReferenceInput,
+  ReferenceKindToggle,
+  type ReferenceKind,
+} from "@/components/ledger/reference-kind";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { fxApi } from "@/lib/reports";
@@ -145,6 +150,13 @@ export function TransactionForm({
     Boolean(transaction && Number(transaction.withheldTaxAmount) > 0),
   );
   const [showFx, setShowFx] = useState(Boolean(transaction?.originalAmount));
+  /*
+   * A transaction id, or only the paper. Read back from the row being edited
+   * rather than stored — see components/ledger/reference-kind.tsx.
+   */
+  const [refKind, setRefKind] = useState<ReferenceKind>(
+    transaction && !transaction.reference ? "paper" : "id",
+  );
 
   /**
    * The taka, held here rather than left to the DOM, so the dollar figure
@@ -766,21 +778,28 @@ export function TransactionForm({
             </Field>
 
             <Field
-              label="Transaction ID"
+              label={refKind === "id" ? "Transaction ID" : "Reference"}
               error={fieldErrors.reference}
-              hint="Cheque or bank reference — theirs."
+              hint={
+                refKind === "id"
+                  ? "Cheque or bank reference — theirs."
+                  : "No number from the bank — attach the slip and it becomes the reference."
+              }
             >
+              <ReferenceKindToggle value={refKind} onChange={setRefKind} />
               <Attach
                 kind="bank_statement"
                 file={screenshotFile}
                 onPick={setScreenshotFile}
               >
-                <Input
-                  name="reference"
-                  className="num min-w-0 flex-1"
-                  placeholder="FT26081200412"
-                  defaultValue={transaction?.reference ?? ""}
-                />
+                <ReferenceInput kind={refKind}>
+                  <Input
+                    name="reference"
+                    className="num min-w-0 flex-1"
+                    placeholder="FT26081200412"
+                    defaultValue={transaction?.reference ?? ""}
+                  />
+                </ReferenceInput>
               </Attach>
             </Field>
           </div>

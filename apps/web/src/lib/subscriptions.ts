@@ -57,6 +57,8 @@ export type SubscriptionDto = {
   reference: string | null;
   /** Derived from the file that points at this row, not a column here. */
   screenshotFileId: string | null;
+  /** Invoice and bank record on the plan — not its own screenshot. */
+  documentCount: number;
   notes: string | null;
   users: SubscriptionSeatDto[];
 };

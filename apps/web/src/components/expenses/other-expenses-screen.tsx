@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
@@ -523,27 +524,17 @@ export function OtherExpensesScreen({
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td>
-                          {row.reference ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDocumentsFor({
-                                  row,
-                                  kinds: ["bank_statement", "receipt", "other"],
-                                })
-                              }
-                              title="Show the bank's record of this payment"
-                              className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
-                            >
-                              {row.reference}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
+                        {/* Number, eye, or dash — ledger/reference-kind.tsx */}
+                        <ReferenceCell
+                          value={row.reference}
+                          documentCount={row.documentCount}
+                          onOpen={() =>
+                            setDocumentsFor({
+                              row,
+                              kinds: ["bank_statement", "receipt", "other"],
+                            })
+                          }
+                        />
                         {/* Both buttons always render. A voided row, or a
                             reader without the permission, gets the pair
                             disabled rather than an empty cell — a blank where

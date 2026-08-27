@@ -30,6 +30,11 @@ import {
 } from "@/components/ui/field";
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
+import {
+  ReferenceInput,
+  ReferenceKindToggle,
+  type ReferenceKind,
+} from "@/components/ledger/reference-kind";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { type AccountDto } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
@@ -130,6 +135,16 @@ export function CashInForm({
    */
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+
+  /*
+   * A transaction id, or only the paper. Seeded from the row being edited: a
+   * row that has a number was the first kind, one without was the second —
+   * the state is read back rather than stored, so no entry made before this
+   * existed has to be migrated into an opinion.
+   */
+  const [refKind, setRefKind] = useState<ReferenceKind>(
+    transaction && !transaction.reference ? "paper" : "id",
+  );
 
   const money = useMoney();
   const toast = useToast();
@@ -464,22 +479,30 @@ export function CashInForm({
             </Field>
 
             <Field
-              label="Transaction ID"
-              required
+              label={refKind === "id" ? "Transaction ID" : "Reference"}
+              required={refKind === "id"}
               error={fieldErrors.reference}
+              hint={
+                refKind === "paper"
+                  ? "No number from the bank — attach the slip and it becomes the reference."
+                  : undefined
+              }
             >
+              <ReferenceKindToggle value={refKind} onChange={setRefKind} />
               <Attach
                 kind="bank_statement"
                 file={screenshotFile}
                 onPick={setScreenshotFile}
               >
-                <Input
-                  name="reference"
-                  defaultValue={transaction?.reference ?? undefined}
-                  required
-                  className="num min-w-0 flex-1"
-                  placeholder="FT26081200412"
-                />
+                <ReferenceInput kind={refKind}>
+                  <Input
+                    name="reference"
+                    defaultValue={transaction?.reference ?? undefined}
+                    required
+                    className="num min-w-0 flex-1"
+                    placeholder="FT26081200412"
+                  />
+                </ReferenceInput>
               </Attach>
             </Field>
           </div>

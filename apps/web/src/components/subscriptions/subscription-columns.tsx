@@ -8,6 +8,7 @@ import {
   type SubscriptionStatus,
 } from "@finance/shared";
 import { ImageIcon } from "lucide-react";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { Fragment } from "react";
 
@@ -190,24 +191,22 @@ export function SubscriptionBodyCells({
         )}
       </td>
 
-      <td className="num text-xs">
-        {row.reference ? (
-          handlers.onReference ? (
-            <button
-              type="button"
-              onClick={() => handlers.onReference?.(row)}
-              title="Show the bank's record of this charge"
-              className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-            >
-              {row.reference}
-            </button>
-          ) : (
-            <span className="num">{row.reference}</span>
-          )
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
+      {/*
+        Number, eye, or dash — see ledger/reference-kind.tsx. Only where a
+        handler was passed: member-tools renders these same cells read-only,
+        and an eye that opens nothing is worse than a dash.
+      */}
+      {handlers.onReference ? (
+        <ReferenceCell
+          value={row.reference}
+          documentCount={row.documentCount}
+          onOpen={() => handlers.onReference?.(row)}
+        />
+      ) : (
+        <td className="num text-xs">
+          {row.reference ?? <span className="text-muted-foreground">—</span>}
+        </td>
+      )}
 
       <td className="text-sm text-muted-foreground">
         {row.notes ? (

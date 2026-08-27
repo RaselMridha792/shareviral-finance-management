@@ -27,6 +27,7 @@ import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { reportsApi } from "@/lib/reports";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { CashInForm } from "./cash-in-form";
@@ -476,13 +477,19 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                       >
                         {row.invoiceNo}
                       </DocumentCell>
-                      <DocumentCell
-                        row={row}
-                        kind="bank_statement"
-                        onOpen={setDocumentsFor}
-                      >
-                        {row.reference}
-                      </DocumentCell>
+                      {/*
+                        The reference column: the number when the bank gave
+                        one, an eye when all there is is the slip. See
+                        ledger/reference-kind.tsx for why nothing is stored to
+                        say which.
+                      */}
+                      <ReferenceCell
+                        value={row.reference}
+                        documentCount={row.documentCount}
+                        onOpen={() =>
+                          setDocumentsFor({ row, kind: "bank_statement" })
+                        }
+                      />
                       <td className="max-w-[18rem] text-muted-foreground">
                         {/* The only one of the thirteen fields that is not
                             required, and a note nobody sees is a note nobody
