@@ -20,6 +20,58 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — a challan in the trash stops counting as tax paid
+
+**Done.** The register that lists challans filtered `deleted_at` from the day it was written. The
+figures that add challans up did not — they only asked whether the linked payment had been
+voided. So trashing a challan took it off the screen and left its money in every total, and an
+**unpaid tax obligation read as settled**: the month showed `outstanding 0.00`, the Reports
+overview counted it as deposited, and the dashboard's "withheld but not yet deposited" warning
+never fired. Nothing on any screen contradicted it — the row was simply gone and the total was
+simply wrong.
+
+Six places summed challans and **none** of them excluded a trashed one. Three had the voided-
+payment half; three had no filter at all:
+
+| Where | Had | Reaches |
+|---|---|---|
+| `tds.service.ts` `outstandingAllTime` | voided only | Reports overview, bank statement |
+| `tds.service.ts` `liability` | voided only | the TDS screen's month rows |
+| `tds.service.ts` `pending` | voided only | the dashboard's tax card, the Reports export |
+| `overview.service.ts` `taxMoved` | nothing | Reports "tax deposited" |
+| `ai-tools.ts` `taxStatus` | nothing | what the assistant answers about tax |
+| `notification-events.ts` `undepositedTds` | nothing | the nightly reminder |
+
+The rule now lives in one file, `tds/challan-counts.ts`, and all six read it — `CHALLAN_COUNTS`
+for the five that sum deposits, `ALLOCATION_COUNTS` for the reminder, which sums *allocations* and
+needs the deposit brought into scope first. One constant rather than six restatements, for the
+reason this repository keeps re-learning: a condition written out six times is a condition that is
+right in five of them.
+
+Commits: `8019d90`.
+
+**Watch out.** Two places deliberately do **not** take the rule, and both would be wrong if they
+did:
+
+- **`AccountsService.attachments()`** counts what still points at an account so it can say whether
+  the account is deletable. A trashed challan is still a row holding a foreign key and Postgres
+  will still refuse the delete — filtering there would promise a delete the database then rejects.
+- **`listDeposits`** keeps its own `deleted_at`-only filter. The register answers "what challans
+  exist", which is a different question from "what counts as paid": a challan whose payment was
+  voided is still a record somebody entered, and hiding it would leave nothing to correct.
+
+**Open.** `.challanqa.mjs` (17 checks) is the harness; it seeds October 2026 for the figures and
+July 2026 for the reminder, because the nightly sweep only looks at last month and this one. Every
+check was watched failing before the fix, including the reminder — that one was proved by
+switching `ALLOCATION_COUNTS` off for a run rather than by reasoning about it.
+
+**The same defect exists next door and is untouched.** `income-tax.service.ts` `list()` filters
+`deleted_at` on its no-year branch and calls `fetch()` (unfiltered) on its assessment-year branch —
+the five-of-six shape again, in one function — and `pending()` there has no filter and feeds the
+Reports export. There is no web screen for it, so it is API-and-export-only. That was said about
+`tds-deposit` too, right before it turned out to reach four screens. It wants its own session.
+
+
 ## 2026-08-27 — the session lasts an hour, and stops dying at random
 
 **Auth only, on its own push**, per the rule about auth travelling alone.
