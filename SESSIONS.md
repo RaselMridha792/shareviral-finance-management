@@ -20,6 +20,35 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — Invoice No. and Transaction ID stop being compulsory
+
+**Done.** The owner's instruction: none of Invoice No., Transaction ID or Reference may be
+required. Money arrives without an invoice and a bank does not always give a number, and a box
+that refuses the entry is how a real receipt goes unrecorded — or gets recorded with an invented
+number, which is worse than blank, because a blank says "none" and a number says something untrue.
+
+The contract already allowed all three to be empty; `recordCashInSchema` even carried a comment
+saying so and adding that "the screen is where *every field is required* belongs". **Cash In was
+the only screen insisting**, and it did so twice — the `required` attribute on both inputs and the
+red asterisk on both labels. Both are gone, and the schema's comment no longer claims a rule the
+owner has since reversed.
+
+Measured on the way in rather than assumed: the expense drawer, the transfer drawer and the
+subscription drawer never required them.
+
+Commits: `194b3e9`.
+
+**Watch out.** The sweep is the point, not the fix. `.optionalref.mjs` walks **every** drawer that
+asks for these fields and reads the `required` flag off the live inputs, plus the asterisk off the
+labels — so the next screen that quietly adds one is caught. It also records a cash-in through the
+API with neither number and checks both columns land as `null`, not as an empty string dressed up
+as a value.
+
+**Open.** Nothing half-done. Description, date, account and amount stay required on Cash In, which
+is what the harness's last check is careful to allow: it asserts only that neither number is among
+what the form objects to, rather than that the form validates with everything blank.
+
+
 ## 2026-08-27 — a heading names what goes with it, and then takes it
 
 **Done.** The owner's rule: show the heading and the things under it in the warning, with the same
