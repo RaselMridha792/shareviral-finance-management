@@ -88,6 +88,26 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — the word matches the act: trash in, delete out
+
+**Done.** The owner's catch: the row action said "Delete" but moved the row to
+the trash. All row-ceremony language is now trash-language — tooltip "Move to
+trash", dialog "Move this X to the trash?", **typed word `trash`**, button
+"Yes, trash this X". The word **delete** (typed word `delete`) survives only
+where it is true: the trash's permanent removal and Empty-the-trash. Commit:
+"The word matches the act".
+
+Side effect worth knowing: the two ceremonies now take **different typed
+words**, so trained fingers from trashing rows cannot type through a permanent
+delete. `DeleteDialog` gained `mode: "trash" | "delete"` plus `title`/`intro`
+overrides; screens that trash rows change nothing (trash is the default).
+
+**Watch out.** Any new probe or test must ask for
+`button[aria-label="Move to trash"]` and match `/to the trash\?/` — the three
+browser harnesses were retaught in the same commit.
+
+---
+
 ## 2026-08-27 — the transfers table joins the standard
 
 **Done.** Money Transfer now follows the owner's table rule like everything
