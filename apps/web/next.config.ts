@@ -5,9 +5,10 @@ import type { NextConfig } from "next";
  * localhost; in production it is the Render service (and, later, the container
  * behind nginx on the VPS).
  */
-const API_ORIGIN = (
-  process.env.API_URL ?? "http://localhost:4001/api"
-).replace(/\/api\/?$/, "");
+const API_ORIGIN = (process.env.API_URL ?? "http://localhost:4001/api").replace(
+  /\/api\/?$/,
+  "",
+);
 
 /**
  * A wrong `API_URL` does not fail — it forwards. Every request, sign-in
@@ -36,6 +37,28 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const nextConfig: NextConfig = {
+  /**
+   * The client-side page cache is off, on purpose and after being bitten.
+   *
+   * Next prefetches every rail link it can see, and a dynamic page prefetched
+   * whole is reused for `staleTimes.static` — five minutes by default. On a
+   * finance app that reads as a bug report: pay a payroll run, click Payroll
+   * in the rail, and the list still says draft, because the click was served
+   * a page fetched before the payment. Nothing here is worth caching against
+   * that; every screen is somebody checking a figure that may have just
+   * changed. Zero for both means a navigation always asks the server.
+   *
+   * (This is Next's experimental `staleTimes` knob; the per-page fix would be
+   * sprinkling refetch-on-mount into every screen, which is this same
+   * decision made twenty times with twenty chances to forget.)
+   */
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
+  },
+
   /**
    * `/api/*` is served from this same domain and quietly forwarded to the API.
    *

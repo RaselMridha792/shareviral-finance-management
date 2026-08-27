@@ -77,6 +77,18 @@ export function PayrollListScreen({
    * pager and the SL column cannot say "page 3" while page 2 is still drawn.
    */
   const [data, setData] = useState(initialPage);
+  /*
+   * When the server hands a fresh first page — a router.refresh, a
+   * revalidated navigation — the table follows it. `useState` reads its prop
+   * exactly once, and without this the list kept showing the page as it was
+   * when the component first mounted, whatever the server had said since.
+   * Render-phase sync, the same pattern the delete dialog uses.
+   */
+  const [seenInitial, setSeenInitial] = useState(initialPage);
+  if (initialPage !== seenInitial) {
+    setSeenInitial(initialPage);
+    setData(initialPage);
+  }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

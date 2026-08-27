@@ -31,7 +31,7 @@ import {
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
-import { type AccountDto, type CategoryNode } from "@/lib/masters";
+import { type AccountDto } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
 
 /**

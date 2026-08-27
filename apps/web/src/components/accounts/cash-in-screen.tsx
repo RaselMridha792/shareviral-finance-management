@@ -23,7 +23,7 @@ import { useTransactionDelete } from "@/components/ledger/use-transaction-delete
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
-import type { AccountDto, CategoryNode } from "@/lib/masters";
+import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { reportsApi } from "@/lib/reports";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
