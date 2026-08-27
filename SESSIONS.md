@@ -20,6 +20,44 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — TDS: four faults on one screen, and the missing row action
+
+**Done.** The owner reported two things about `/tax/withholding` — no way to delete, and "data
+doesn't come properly, and the same data is in every tab". The second turned out to be four
+separate faults stacked on one screen, each of which alone looked like the whole complaint:
+
+1. **A trashed payroll run stayed on the register.** The soft-delete filter reached the payroll
+   *lists* but not the nine joins behind the TDS register, so a run in the trash kept its people
+   on screen and its tax in the period total. Both are now one shared constant,
+   `FINALISED_OR_LATER` in `tds.service.ts`, so five-of-six coverage is no longer possible.
+   Proved by trashing a seeded run: rows 1 → 0, total 2500.00 → 0.00, and back on restore.
+2. **Switching granularity anchored on the period's start**, so coarse → fine always landed the
+   reader on July. One round trip through the tabs and every tab genuinely did show the same
+   rows — this is the "same data in all tabs" report, and it was real. `chooseGranularity` now
+   anchors on today when today falls inside the period being left.
+3. **The page opened on the month we are in**, which is the month least likely to hold a
+   finalised run, so it opened empty. New `latestPeriodWithTax()` walks the periods newest-first
+   and opens on the newest one that actually has tax.
+4. **`monthRange()` echoed the calendar year as the fiscal one**, putting the screen a whole
+   fiscal year out between January and June. Now `fiscalYearOf(range.start, mode)`.
+
+And the row action: the register's rows now end with the same edit + delete pair every other
+table has. The pencil moved out of the challan cell into `RowActions`; delete asks first ("Take
+this challan off the row?") and then clears the number and its month flag. It removes the
+*challan*, not the deduction — a deduction belongs to a finalised payroll run and is deleted by
+deleting that run, which is what the trash is for.
+
+Commits: `81d365c`.
+
+**Watch out.** `FINALISED_OR_LATER` is the one place the register decides what counts. Anything
+new that reads payroll for tax should use it rather than writing `status <> 'draft'` again — the
+missing `deleted_at is null` is exactly how this bug happened.
+
+**Open.** `.tdsqa.mjs` at the repository root drives all five (11 checks, local only — it writes
+and deletes). Its `wipe()` clears 2026-09 and 2026-11 payroll runs by month as well as by label,
+because a leftover fixture from an earlier probe fails the insert rather than the check.
+
+
 ## 2026-08-27 — "Rate this month" comes off Cash In
 
 **Done.** One page, on the owner's instruction, and only that page. The strip above the table had
