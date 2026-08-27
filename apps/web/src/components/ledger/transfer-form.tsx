@@ -49,6 +49,35 @@ export function TransferForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  /*
+   * Which accounts the movement is between, tracked so the form can follow
+   * their primary currency: a USD-primary account on either side turns the
+   * entry dollars-first, with the taka worked out at the rate beside it —
+   * computed until touched, exactly the Cash In rule. The ledger still
+   * stores taka.
+   */
+  const [fromId, setFromId] = useState(accounts[0]?.id ?? "");
+  const [toId, setToId] = useState(accounts[1]?.id ?? "");
+  const usdPrimary = [fromId, toId].some(
+    (id) =>
+      accounts.find((candidate) => candidate.id === id)?.currency === "USD",
+  );
+  const [usdAmount, setUsdAmount] = useState("");
+  const [usdRate, setUsdRate] = useState("");
+  const [typedBdt, setTypedBdt] = useState("");
+  const [bdtTouched, setBdtTouched] = useState(false);
+
+  const derivedBdt = (() => {
+    const usd = Number(usdAmount.replace(/[,\s$]/g, ""));
+    const rate = Number(usdRate.replace(/[,\s]/g, ""));
+    if (!Number.isFinite(usd) || usd <= 0) return "";
+    if (!Number.isFinite(rate) || rate <= 0) return "";
+    return (usd * rate).toFixed(2);
+  })();
+  // In BDT mode the typed figure is the figure; in USD mode it is computed
+  // until touched, then theirs — the Cash In rule.
+  const shownBdt = usdPrimary && !bdtTouched ? derivedBdt : typedBdt;
   /*
    * The paper, held until the pair exists to hang it on — the same two slots
    * every money form carries: the invoice (ours) and the bank's record.
@@ -72,6 +101,12 @@ export function TransferForm({
         description: String(data.get("description")),
         invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
         reference: String(data.get("reference") ?? "") || undefined,
+        ...(usdPrimary && usdAmount.trim() && usdRate.trim()
+          ? {
+              usdAmount: usdAmount.replace(/[,\s$]/g, ""),
+              usdRate: usdRate.trim(),
+            }
+          : {}),
         paymentMethod: String(data.get("paymentMethod")) as never,
       });
 
@@ -153,7 +188,8 @@ export function TransferForm({
             <Select
               name="fromAccountId"
               required
-              defaultValue={accounts[0]?.id}
+              value={fromId}
+              onChange={(event) => setFromId(event.target.value)}
             >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
@@ -169,7 +205,12 @@ export function TransferForm({
             error={fieldErrors.toAccountId}
             className="flex-1"
           >
-            <Select name="toAccountId" required defaultValue={accounts[1]?.id}>
+            <Select
+              name="toAccountId"
+              required
+              value={toId}
+              onChange={(event) => setToId(event.target.value)}
+            >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name} — {formatMoney(account.balance)}
@@ -179,8 +220,57 @@ export function TransferForm({
           </Field>
         </div>
 
-        <Field label="Amount" required error={fieldErrors.amount}>
-          <MoneyInput name="amount" required placeholder="0.00" />
+        {usdPrimary ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Amount (USD)"
+              required
+              error={fieldErrors.usdAmount}
+              hint="A USD-primary account is on one side — state the dollars that moved."
+            >
+              <MoneyInput
+                required
+                placeholder="0.00"
+                value={usdAmount}
+                onChange={(event) => setUsdAmount(event.target.value)}
+              />
+            </Field>
+            <Field label="Rate" required error={fieldErrors.usdRate}>
+              <Input
+                inputMode="decimal"
+                className="col-amount"
+                placeholder="122.77"
+                value={usdRate}
+                onChange={(event) => setUsdRate(event.target.value)}
+                required
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        <Field
+          label={usdPrimary ? "Amount (BDT)" : "Amount"}
+          required
+          error={fieldErrors.amount}
+          hint={
+            usdPrimary
+              ? "Worked out from the dollars and the rate. Change it to what actually moved — the ledger counts taka."
+              : undefined
+          }
+        >
+          <MoneyInput
+            name="amount"
+            required
+            placeholder="0.00"
+            // Always controlled — flipping a field between uncontrolled and
+            // controlled mid-open (picking a USD account after typing) is a
+            // React warning and a lost value.
+            value={shownBdt}
+            onChange={(event) => {
+              setBdtTouched(true);
+              setTypedBdt(event.target.value);
+            }}
+          />
         </Field>
 
         <Field label="Description" required error={fieldErrors.description}>

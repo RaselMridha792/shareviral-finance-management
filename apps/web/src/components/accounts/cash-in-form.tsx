@@ -220,6 +220,14 @@ export function CashInForm({
   const [accountId, setAccountId] = useState(
     transaction?.accountId ?? accounts[0]?.id ?? "",
   );
+  /*
+   * The landing account's own choice. On a USD-primary account the dollars
+   * are not optional decoration — they are the figure the account thinks in,
+   * so the box turns required and loses its "blank for a local receipt" out.
+   */
+  const usdPrimary =
+    accounts.find((candidate) => candidate.id === accountId)?.currency ===
+    "USD";
 
   /**
    * Closing empties what the drawer would not.
@@ -496,11 +504,17 @@ export function CashInForm({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Amount (USD)"
+              required={usdPrimary}
               error={fieldErrors.usdSent}
-              hint="What the sender sent. Blank for a local receipt."
+              hint={
+                usdPrimary
+                  ? "This account's primary currency — the figure the advice states."
+                  : "What the sender sent. Blank for a local receipt."
+              }
             >
               <MoneyInput
                 name="usdSent"
+                required={usdPrimary}
                 placeholder="0.00"
                 value={usdSent}
                 onChange={(event) => setUsdSent(event.target.value)}

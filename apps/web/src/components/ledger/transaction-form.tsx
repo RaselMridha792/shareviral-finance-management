@@ -235,6 +235,33 @@ export function TransactionForm({
   const [accountId, setAccountId] = useState(
     transaction?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? "",
   );
+
+  /*
+   * The owner's rule: an account chooses its primary currency, and the form
+   * follows the account. On a USD-primary account the dollars are what the
+   * person knows — the card was charged $40 — so the dollars are typed and
+   * the taka is worked out, the exact reverse of the BDT form. The ledger
+   * still stores taka; the typed dollars ride along as the recorded original.
+   */
+  const usdPrimary =
+    accounts.find((candidate) => candidate.id === accountId)?.currency ===
+    "USD";
+  const [usdEntered, setUsdEntered] = useState(
+    transaction?.originalAmount ?? "",
+  );
+  /** On an edit the stored taka is authoritative — nothing recomputes it. */
+  const [bdtTouched, setBdtTouched] = useState(Boolean(transaction));
+  /** The other direction, for a USD-primary account: dollars × rate. */
+  const derivedBdt = (() => {
+    const usd = Number(plainAmount(usdEntered));
+    const rate = Number(plainAmount(usdRate));
+    if (!Number.isFinite(usd) || usd <= 0) return "";
+    if (!Number.isFinite(rate) || rate <= 0) return "";
+    return (usd * rate).toFixed(2);
+  })();
+
+  /** Computed until somebody types in the taka box, then theirs. */
+  const shownAmount = usdPrimary && !bdtTouched ? derivedBdt : amount;
   const [categoryId, setCategoryId] = useState(
     transaction?.categoryId ?? defaultCategoryId ?? "",
   );
@@ -371,9 +398,20 @@ export function TransactionForm({
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
             usdRate: text("usdRate"),
-            originalAmount: showFx ? text("originalAmount") : undefined,
-            originalCurrency: showFx ? "USD" : undefined,
-            fxRate: showFx ? text("fxRate") : undefined,
+            // On a USD-primary account the typed dollars ARE the original —
+            // the money moved as dollars, converted at the rate beside them.
+            originalAmount: usdPrimary
+              ? plainAmount(usdEntered) || undefined
+              : showFx
+                ? text("originalAmount")
+                : undefined,
+            originalCurrency:
+              usdPrimary || showFx ? ("USD" as const) : undefined,
+            fxRate: usdPrimary
+              ? text("usdRate")
+              : showFx
+                ? text("fxRate")
+                : undefined,
           } as never);
 
       const picked = chosen().length;
@@ -565,15 +603,32 @@ export function TransactionForm({
             moment the right rate is known is the moment of the entry — a rate
             looked up at report time is the rate on the day of the lookup. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Amount (BDT)" required error={fieldErrors.amount}>
-              <MoneyInput
-                name="amount"
+            {usdPrimary ? (
+              <Field
+                label="Amount (USD)"
                 required
-                placeholder="0.00"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-            </Field>
+                error={fieldErrors.originalAmount}
+                hint="This account's primary currency — the figure on the card's own statement."
+              >
+                <MoneyInput
+                  name="usdEntered"
+                  required
+                  placeholder="0.00"
+                  value={usdEntered}
+                  onChange={(event) => setUsdEntered(event.target.value)}
+                />
+              </Field>
+            ) : (
+              <Field label="Amount (BDT)" required error={fieldErrors.amount}>
+                <MoneyInput
+                  name="amount"
+                  required
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+              </Field>
+            )}
             <Field
               label="USD Rate"
               error={fieldErrors.usdRate}
@@ -594,6 +649,26 @@ export function TransactionForm({
             </Field>
           </div>
 
+          {usdPrimary ? (
+            <Field
+              label="Amount (BDT)"
+              required
+              error={fieldErrors.amount}
+              hint="Worked out from the dollars and the rate. Change it to what the bank actually took — the ledger counts taka."
+            >
+              <MoneyInput
+                name="amount"
+                required
+                placeholder="0.00"
+                value={shownAmount}
+                onChange={(event) => {
+                  setBdtTouched(true);
+                  setAmount(event.target.value);
+                }}
+              />
+            </Field>
+          ) : null}
+
           {/*
           Read back, never typed — and gone entirely while a transfer's own
           dollars are being entered below, because that figure is what actually
@@ -611,7 +686,7 @@ export function TransactionForm({
           is to change the rate, which is the one of the three genuinely in
           doubt.
         */}
-          {showFx ? null : (
+          {showFx || usdPrimary ? null : (
             <Field
               label="Amount (USD)"
               hint="Worked out from the taka and the rate, the way the sheet does it."
@@ -791,15 +866,17 @@ export function TransactionForm({
 
           {!editing && direction === "in" ? (
             <>
-              <label className="flex items-center gap-2.5 text-sm">
-                <input
-                  type="checkbox"
-                  checked={showFx}
-                  onChange={(event) => setShowFx(event.target.checked)}
-                  className="size-4 accent-primary"
-                />
-                This arrived as a foreign currency transfer
-              </label>
+              {usdPrimary ? null : (
+                <label className="flex items-center gap-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showFx}
+                    onChange={(event) => setShowFx(event.target.checked)}
+                    className="size-4 accent-primary"
+                  />
+                  This arrived as a foreign currency transfer
+                </label>
+              )}
 
               {showFx ? (
                 <div className="grid gap-4 rounded-lg bg-surface-muted p-4 sm:grid-cols-2">

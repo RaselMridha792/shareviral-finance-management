@@ -129,6 +129,8 @@ export type TransferRow = {
   groupId: string | null;
   refNo: string;
   invoiceNo: string | null;
+  usdAmount: string | null;
+  usdRate: string | null;
   documentCount: number;
   txnDate: string;
   amount: string;
@@ -957,6 +959,8 @@ export class TransactionsService {
           groupId: transactions.transferGroupId,
           refNo: transactions.refNo,
           invoiceNo: transactions.invoiceNo,
+          usdAmount: transactions.originalAmount,
+          usdRate: transactions.usdRate,
           txnDate: transactions.txnDate,
           amount: transactions.amount,
           description: transactions.description,
@@ -1035,6 +1039,17 @@ export class TransactionsService {
           .values({
             refNo: outRef,
             invoiceNo: input.invoiceNo,
+            // When the movement was stated in dollars, both halves record it:
+            // what moved, in what currency, at what rate. The taka in
+            // `amount` stays what every total counts.
+            ...(input.usdAmount && input.usdRate
+              ? {
+                  originalAmount: input.usdAmount,
+                  originalCurrency: "USD",
+                  fxRate: input.usdRate,
+                  usdRate: input.usdRate,
+                }
+              : {}),
             accountId: input.fromAccountId,
             direction: "out",
             txnDate: input.txnDate,
@@ -1053,6 +1068,14 @@ export class TransactionsService {
         await tx.insert(transactions).values({
           refNo: inRef,
           invoiceNo: input.invoiceNo,
+          ...(input.usdAmount && input.usdRate
+            ? {
+                originalAmount: input.usdAmount,
+                originalCurrency: "USD",
+                fxRate: input.usdRate,
+                usdRate: input.usdRate,
+              }
+            : {}),
           accountId: input.toAccountId,
           direction: "in",
           txnDate: input.txnDate,

@@ -376,6 +376,17 @@ export const transferSchema = z
     invoiceNo: optionalText(60),
     /** The bank's number for the wire, as on every other money screen. */
     reference: optionalText(120),
+    /**
+     * The dollars, when a USD-primary account is on either side. The taka in
+     * `amount` is what the ledger counts; this pair records what the movement
+     * actually was in the account's own currency, at what rate.
+     */
+    usdAmount: amountSchema.optional(),
+    usdRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+      .optional(),
     paymentMethod: paymentMethodSchema.default("bank_transfer"),
   })
   .refine((v) => v.fromAccountId !== v.toAccountId, {

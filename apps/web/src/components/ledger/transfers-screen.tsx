@@ -175,6 +175,12 @@ export function TransfersScreen({
                   <Th align="right" width="w-36">
                     Amount (BDT)
                   </Th>
+                  <Th align="right" width="w-28">
+                    Amount (USD)
+                  </Th>
+                  <Th align="right" width="w-24">
+                    USD rate
+                  </Th>
                   <Th>Invoice No.</Th>
                   <Th>Transaction ID</Th>
                   <RowActionsHead deletable={canWrite} />
@@ -182,7 +188,7 @@ export function TransfersScreen({
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <TableMessageRow colSpan={10}>
+                  <TableMessageRow colSpan={12}>
                     Nothing on this page.
                   </TableMessageRow>
                 ) : (
@@ -236,6 +242,14 @@ export function TransfersScreen({
                             tone="neutral"
                             className="block font-medium"
                           />
+                        </td>
+                        <td className="num text-right text-muted-foreground">
+                          {row.usdAmount
+                            ? `$${Number(row.usdAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                            : "—"}
+                        </td>
+                        <td className="num text-right text-muted-foreground">
+                          {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
                         </td>
                         <NumberCell
                           value={row.invoiceNo}

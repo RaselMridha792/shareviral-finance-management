@@ -179,7 +179,11 @@ export function AccountForm({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Currency" error={fieldErrors.currency}>
+          <Field
+            label="Primary currency"
+            error={fieldErrors.currency}
+            hint="USD makes this account's forms ask for dollars first, converted at the day's rate. Every report still counts taka."
+          >
             <Select name="currency" defaultValue={account?.currency ?? "BDT"}>
               <option value="BDT">BDT — Taka</option>
               <option value="USD">USD — Dollar</option>

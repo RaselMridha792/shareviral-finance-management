@@ -54,5 +54,13 @@ export function isToolSpend(): SQL {
    * that are not tooling by any reading, missing from the screen that exists
    * to list them.
    */
-  return sql`(${isToolVendor()} or coalesce(${accounts.currency} <> 'BDT', false))`;
+  /*
+   * The card half now also demands the account be a card. It used to read
+   * any non-taka account as tooling, which held while the only non-taka
+   * account WAS the prepaid card — but accounts can now choose USD as their
+   * primary currency, and a USD bank's rent is not tooling by any reading.
+   * The heuristic keeps its original sentence: the prepaid CARD exists to
+   * pay for tooling.
+   */
+  return sql`(${isToolVendor()} or coalesce(${accounts.currency} <> 'BDT' and ${accounts.type} = 'card', false))`;
 }

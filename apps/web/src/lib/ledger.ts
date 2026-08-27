@@ -69,6 +69,9 @@ export type TransferRowDto = {
   groupId: string | null;
   refNo: string;
   invoiceNo: string | null;
+  /** The movement in dollars, when a USD-primary account was involved. */
+  usdAmount: string | null;
+  usdRate: string | null;
   /** How much paper hangs on the pair — colours the number cells. */
   documentCount: number;
   txnDate: string;
