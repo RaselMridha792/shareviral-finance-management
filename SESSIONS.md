@@ -88,6 +88,26 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — Cash In carries no category
+
+**Done.** The Category field is out of the Add cash drawer, the cash-in schema
+(strict — a stale client sending one gets a loud 400) and the service's cash-in
+door. Commit: `c6b64d3`. Only that door: POST /transactions, the AI intake and
+the Excel import still require a category. The seam is `create()`'s signature —
+category optional internally, required in the public schema.
+
+Checked before allowed: every reader of a null category was measured. Lists
+LEFT-join and draw a dash; the dashboard and Reports income breakdowns bucket
+null as "Uncategorised" **keeping the amount**; the statement maps it by hand;
+the export prints an empty cell. `category_id` was nullable in both databases
+all along — no migration. Existing cash-in rows keep their categories.
+
+**Watch out.** `cash-in-form.tsx` no longer takes a `categories` prop and the
+cash-in page no longer fetches the tree. If a future screen reuses the form,
+nothing category-shaped is left in it.
+
+---
+
 ## 2026-08-27 — payroll: who is on the month is chosen, not assumed
 
 **Done.** Starting a payroll month now opens with the month's own people —
