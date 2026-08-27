@@ -20,6 +20,57 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — the session lasts an hour, and stops dying at random
+
+**Auth only, on its own push**, per the rule about auth travelling alone.
+
+**Done.** The owner's report was "the session expires very early and signs me out". It was two
+faults, and only one of them was the twenty minutes anybody would guess at.
+
+1. **The idle timeout was twenty minutes.** It is an hour now — `IDLE_MS` in
+   `auth/idle-timeout.tsx`. The last minute is still spent asking "Still there?", and past the
+   hour it still signs out: the guard is aimed at an unattended desk in a shared office, and that
+   is worth keeping.
+2. **Two refreshes arriving together killed the session outright.** The refresh cookie belongs to
+   the browser, not to a tab, so two requests dispatched before either reply's `Set-Cookie`
+   landed both carried the same token. The first rotated it; the second was read as a stolen
+   token being replayed, and `rotate()` revoked the whole family. Measured before the fix: two
+   concurrent refreshes left `alive = 0` — even the winner's brand-new token was dead, so the
+   next click went to the sign-in screen. A screen left open past the access token's quarter of
+   an hour fires all its fetches at once when touched, and every one of them 401s, so this was
+   reachable in one tab.
+
+The second fix has three parts, and the middle one is the part that matters:
+
+- `rotate()` now reads the row `for update`, so two requests carrying the same token are decided
+  rather than raced. Without the lock both read a clean row and both rotated it, leaving the
+  family with two live heads while the browser could only keep one.
+- Inside a **30-second window**, and only while the family still has a live head, the straggler
+  is answered with a fresh access token and **no new refresh cookie**. That last part is what
+  makes it safe whichever reply arrives last: only the winner ever writes a refresh cookie, so
+  the browser cannot be left holding a token that has already been retired.
+- The browser sends **one refresh at a time** (`refreshOnce()` in `lib/api-client.ts`), so the
+  noise is not made in the first place.
+
+Reuse detection is narrowed, not switched off, and the harness proves it still fires: a replay
+after the window is refused **and takes the family with it**, a straggler whose family has no
+live head is refused, and a token that signed out cannot refresh.
+
+Commits: `a812869`.
+
+**Watch out.** `ROTATION_GRACE_MS` in `token.service.ts` is a deliberate security trade-off: a
+stolen refresh token presented within 30 seconds of the legitimate rotation gets one access token
+without tripping detection. Shorten it and the race returns; lengthen it and the window widens.
+The access token TTL is untouched at 15 minutes — the proxy renews it before each render, and
+that path was checked rather than assumed.
+
+**Open.** `.sessionqa.mjs` at the repository root is the harness — 13 checks, API and browser. It
+creates and deletes one local account and never prints its password. It winds the idle clock back
+**after** the page is up, because the component stamps "now" on mount and a value written before
+the navigation is silently overwritten — the first version of the test failed for exactly that
+reason and would have passed a broken fix.
+
+
 ## 2026-08-27 — TDS: four faults on one screen, and the missing row action
 
 **Done.** The owner reported two things about `/tax/withholding` — no way to delete, and "data
