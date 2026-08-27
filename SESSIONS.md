@@ -88,6 +88,23 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — the transfers table joins the standard
+
+**Done.** Money Transfer now follows the owner's table rule like everything
+else: **Invoice No.** and **Transaction ID** as their own columns, both opening
+the documents drawer (blue over paper, amber over nothing, underlined either
+way); the form carries the same two fields with paperclips, files upload after
+the pair records. The invoice lands on both halves so either register shows
+it; paperwork anchors on the out half. Commit: "The transfers table joins the
+standard". `.transferqa.mjs` is at 23 checks.
+
+**Watch out.** `transferSchema` gained `invoiceNo` (shared — rebuild dist).
+The `Attach` paperclip helper now has a **third** local copy
+(transfer-form.tsx, beside transaction-form and cash-in-form) — the extraction
+into one shared file is the known rough edge, now three copies strong.
+
+---
+
 ## 2026-08-27 — the guards come off, and the pages stop going stale
 
 **Done.** Two owner decisions. Commits: `fbfa436`, `32ea898`.
