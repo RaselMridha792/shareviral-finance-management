@@ -24,10 +24,10 @@ import { logout } from "@/lib/api-client";
  * Three things make it behave under real conditions rather than only in a
  * demo, and each is a bug in the obvious implementation:
  *
- *  1. **A timestamp, not a timer.** `setTimeout(20 minutes)` does not survive a
+ *  1. **A timestamp, not a timer.** `setTimeout(an hour)` does not survive a
  *     closed lid. Browsers throttle and suspend background timers, so a laptop
- *     shut at 6pm and opened at 9am the next morning fires the timeout twenty
- *     minutes *later* — the screen sits signed in for the entire commute. This
+ *     shut at 6pm and opened at 9am the next morning fires the timeout an
+ *     hour *later* — the screen sits signed in for the entire commute. This
  *     compares clock readings instead, so waking after a night is already past
  *     the limit and signs out at once.
  *  2. **Shared between tabs.** The last activity goes to localStorage and every
@@ -40,8 +40,17 @@ import { logout } from "@/lib/api-client";
  *     finance system signed in all night.
  */
 
-/** Twenty minutes of nothing. */
-const IDLE_MS = 20 * 60_000;
+/**
+ * An hour of nothing.
+ *
+ * It was twenty minutes, and the owner's report was that the app "expires very
+ * early and signs me out", which is exactly what twenty minutes feels like to
+ * somebody reading a report or on a phone call with the screen open. An hour
+ * is what they asked for and it is still short enough to matter: the threat
+ * here is a colleague sitting down at an unattended desk, and a desk is not
+ * unattended for an hour without somebody noticing.
+ */
+const IDLE_MS = 60 * 60_000;
 
 /** The last minute of it, spent asking. */
 const WARN_MS = 60_000;

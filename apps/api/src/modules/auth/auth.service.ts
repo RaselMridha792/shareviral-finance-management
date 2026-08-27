@@ -34,6 +34,24 @@ export type LoginResult =
   | { twoFactorRequired: true; challenge: string };
 
 /**
+ * The two ways a refresh can succeed, told apart the same way.
+ *
+ * A refresh that lost a race to another request carries an access token and
+ * deliberately no refresh token — the winner already wrote that cookie, and a
+ * second one would let whichever reply arrives last leave a retired token in
+ * the browser. Naming the two outcomes means the controller cannot reach for a
+ * `tokens` that is not there.
+ */
+export type RefreshResult =
+  | { user: AuthenticatedUser; tokens: IssuedTokens }
+  | {
+      user: AuthenticatedUser;
+      raced: true;
+      accessToken: string;
+      refreshExpiresAt: Date;
+    };
+
+/**
  * Five wrong passwords, then five minutes of nothing.
  *
  * The wait was fifteen minutes and is five on the owner's instruction. Five is
@@ -246,7 +264,7 @@ export class AuthService {
       .where(eq(users.id, userId));
   }
 
-  async refresh(presented: string, client: ClientInfo) {
+  async refresh(presented: string, client: ClientInfo): Promise<RefreshResult> {
     const result = await this.tokens.rotate(presented, client);
 
     if (!result.ok) {
@@ -270,7 +288,22 @@ export class AuthService {
 
     if (!record) throw new UnauthorizedException("Please sign in again");
 
-    return { user: toAuthUser(record), tokens: result.tokens };
+    const user = toAuthUser(record);
+
+    /*
+     * A raced refresh carries an access token and no refresh token — see
+     * `answerTheStraggler`. The caller has to set only the access cookie for
+     * it, so the two outcomes stay distinguishable rather than one pretending
+     * to be the other.
+     */
+    return result.raced === true
+      ? {
+          user,
+          raced: true as const,
+          accessToken: result.accessToken,
+          refreshExpiresAt: result.refreshExpiresAt,
+        }
+      : { user, tokens: result.tokens };
   }
 
   async logout(presented: string | undefined, user?: AuthenticatedUser) {

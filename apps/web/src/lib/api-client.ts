@@ -149,6 +149,29 @@ const SIGNING_IN = new Set([
   "/auth/refresh",
 ]);
 
+/**
+ * One refresh at a time, however many requests 401 together.
+ *
+ * A screen left open past the access token's quarter of an hour fires all of
+ * its fetches at once when it is touched again, and every one of them gets a
+ * 401. Without this each would refresh on its own: the first rotates the
+ * token, the rest arrive holding the one it just replaced, and the API — quite
+ * correctly, from where it stands — reads that as a replay. The server now has
+ * a grace window for exactly this, but the honest fix is not to make the noise
+ * in the first place: whoever asks second waits for the answer the first is
+ * already getting.
+ */
+let refreshInFlight: Promise<Response> | null = null;
+
+function refreshOnce(): Promise<Response> {
+  refreshInFlight ??= request("/auth/refresh", { method: "POST" }).finally(
+    () => {
+      refreshInFlight = null;
+    },
+  );
+  return refreshInFlight;
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & { allow401?: boolean } = {},
@@ -164,7 +187,7 @@ export async function apiFetch<T>(
   const inBrowser = typeof window !== "undefined";
 
   if (inBrowser && response.status === 401 && !SIGNING_IN.has(path)) {
-    const refreshed = await request("/auth/refresh", { method: "POST" });
+    const refreshed = await refreshOnce();
     if (refreshed.ok) {
       response = await request(path, rest);
     }

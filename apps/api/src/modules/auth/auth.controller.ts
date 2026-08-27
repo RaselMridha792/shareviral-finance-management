@@ -112,12 +112,22 @@ export class AuthController {
     }
 
     try {
-      const { user, tokens } = await this.auth.refresh(
-        presented,
-        clientOf(request),
-      );
-      setAuthCookies(response, tokens);
-      return this.auth.describe(user);
+      const outcome = await this.auth.refresh(presented, clientOf(request));
+
+      // A request that lost a refresh race gets the new access token and keeps
+      // the refresh cookie the winner wrote. Writing one here too would let
+      // the reply that happens to arrive last leave a retired token behind.
+      if ("raced" in outcome) {
+        setAccessCookie(
+          response,
+          outcome.accessToken,
+          outcome.refreshExpiresAt,
+        );
+      } else {
+        setAuthCookies(response, outcome.tokens);
+      }
+
+      return this.auth.describe(outcome.user);
     } catch (error) {
       clearAuthCookies(response);
       throw error;
@@ -267,18 +277,27 @@ function cookieOptions(maxAgeMs: number, path: string) {
   };
 }
 
+/**
+ * The access cookie on its own.
+ *
+ * It deliberately outlives the JWT inside it, so `until` is the refresh
+ * token's expiry rather than the JWT's — see the note in `setAuthCookies`.
+ */
+function setAccessCookie(response: Response, accessToken: string, until: Date) {
+  response.cookie(
+    ACCESS_COOKIE,
+    accessToken,
+    cookieOptions(until.getTime() - Date.now(), "/"),
+  );
+}
+
 function setAuthCookies(response: Response, tokens: IssuedTokens) {
   // The cookie deliberately outlives the JWT inside it. The JWT expires in ~15
   // minutes; the cookie lasts as long as the refresh token so the browser still
   // has a "signed in" marker. Otherwise the cookie vanishes at 15 minutes and
   // the app bounces a perfectly valid session back to the login page. An
   // expired JWT is rejected by the guard, and the client refreshes and retries.
-  const carrierMaxAge = tokens.refreshExpiresAt.getTime() - Date.now();
-  response.cookie(
-    ACCESS_COOKIE,
-    tokens.accessToken,
-    cookieOptions(carrierMaxAge, "/"),
-  );
+  setAccessCookie(response, tokens.accessToken, tokens.refreshExpiresAt);
   response.cookie(
     REFRESH_COOKIE,
     tokens.refreshToken,

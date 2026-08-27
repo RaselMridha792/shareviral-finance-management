@@ -18,6 +18,16 @@ export type IssuedTokens = {
 /** Where a refresh token came from, for the audit trail. */
 export type ClientInfo = { ip?: string | null; userAgent?: string | null };
 
+/**
+ * How long a token that was just rotated may still turn up on a request that
+ * was already in the air when the rotation happened.
+ *
+ * Long enough to cover a slow round trip, short enough that a stolen token is
+ * still caught: outside this window a second use of the same token is a replay
+ * and revokes the family, exactly as before.
+ */
+const ROTATION_GRACE_MS = 30_000;
+
 @Injectable()
 export class TokenService {
   constructor(
@@ -86,21 +96,40 @@ export class TokenService {
     presented: string,
     client: ClientInfo,
   ): Promise<
-    | { ok: true; userId: string; tokens: IssuedTokens }
+    | { ok: true; raced?: false; userId: string; tokens: IssuedTokens }
+    | {
+        ok: true;
+        raced: true;
+        userId: string;
+        accessToken: string;
+        refreshExpiresAt: Date;
+      }
     | { ok: false; reason: "invalid" | "expired" | "reused" }
   > {
     const hash = TokenService.hash(presented);
 
     return this.db.transaction(async (tx) => {
+      /*
+       * Locked, so two requests carrying the same token are decided rather
+       * than raced. Without the lock both read a clean row before either
+       * wrote, both rotated it, and the family ended up with two live heads
+       * while the browser could only keep one — a valid token left dangling
+       * for a week. The second transaction now waits, re-reads, sees the
+       * rotation, and is answered as the straggler it is.
+       */
       const [existing] = await tx
         .select()
         .from(refreshTokens)
         .where(eq(refreshTokens.tokenHash, hash))
-        .limit(1);
+        .limit(1)
+        .for("update");
 
       if (!existing) return { ok: false as const, reason: "invalid" as const };
 
       if (existing.revokedAt || existing.replacedById) {
+        const raced = await this.answerTheStraggler(tx, existing);
+        if (raced) return raced;
+
         await tx
           .update(refreshTokens)
           .set({
@@ -145,6 +174,79 @@ export class TokenService {
 
       return { ok: true as const, userId: user.id, tokens };
     });
+  }
+
+  /**
+   * Tells the loser of a refresh race apart from a thief.
+   *
+   * The refresh cookie belongs to the browser, not to a tab, so two requests
+   * dispatched before either reply's `Set-Cookie` landed both carry the same
+   * token. The first rotates it; the second arrives holding one that was
+   * replaced a moment ago — and calling that a replay revoked the whole family
+   * and threw the person back to the sign-in screen in the middle of their
+   * work. That is not a theory: two concurrent refreshes left the family with
+   * `alive = 0`, so even the winner's brand-new token was dead.
+   *
+   * Inside a short window, and only while the family still has a live head,
+   * the straggler is answered with a fresh access token and **no new refresh
+   * cookie**. That second half is what makes it safe whichever reply arrives
+   * last: only the winner ever writes a refresh cookie, so the browser cannot
+   * be left holding one that has already been retired.
+   *
+   * Everything else still condemns the family — a token revoked outright, one
+   * already marked for cause, one presented after the window, one whose
+   * successor is gone. Reuse detection is narrowed to the case it was aimed
+   * at, not switched off.
+   */
+  private async answerTheStraggler(
+    tx: DbTransaction,
+    existing: typeof refreshTokens.$inferSelect,
+  ): Promise<{
+    ok: true;
+    raced: true;
+    userId: string;
+    accessToken: string;
+    refreshExpiresAt: Date;
+  } | null> {
+    // Rotated, rather than revoked by a sign-out or by an earlier detection.
+    if (!existing.replacedById || existing.revokedReason) return null;
+    if (!existing.revokedAt) return null;
+    if (Date.now() - existing.revokedAt.getTime() > ROTATION_GRACE_MS) {
+      return null;
+    }
+
+    const [successor] = await tx
+      .select({
+        revokedAt: refreshTokens.revokedAt,
+        expiresAt: refreshTokens.expiresAt,
+      })
+      .from(refreshTokens)
+      .where(eq(refreshTokens.id, existing.replacedById))
+      .limit(1);
+
+    // No live head means this family is already finished either way.
+    if (!successor || successor.revokedAt) return null;
+
+    const [user] = await tx
+      .select({
+        id: users.id,
+        role: users.role,
+        tokenVersion: users.tokenVersion,
+        status: users.status,
+      })
+      .from(users)
+      .where(eq(users.id, existing.userId))
+      .limit(1);
+
+    if (!user || user.status !== "active") return null;
+
+    return {
+      ok: true as const,
+      raced: true as const,
+      userId: user.id,
+      accessToken: await this.signAccessToken(user),
+      refreshExpiresAt: successor.expiresAt,
+    };
   }
 
   private async persist(
