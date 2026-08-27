@@ -25,6 +25,7 @@ import { ledgerApi, type TransferRowDto } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
 import { cn, formatDate } from "@/lib/utils";
+import { DocumentsDialog } from "./documents-dialog";
 import { TransferForm } from "./transfer-form";
 import { VoidDialog, type VoidableTransaction } from "./void-dialog";
 
@@ -58,6 +59,11 @@ export function TransfersScreen({
 
   const [creating, setCreating] = useState(false);
   const [voiding, setVoiding] = useState<TransferRowDto | null>(null);
+  /** Which pair's paperwork is open, and which number was clicked. */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: TransferRowDto;
+    kinds: ("invoice" | "bank_statement" | "receipt" | "other")[];
+  } | null>(null);
 
   /*
    * Only the newest request may write the rows. Two quick clicks on the pager
@@ -100,8 +106,8 @@ export function TransfersScreen({
       <div className="flex flex-col">
         <span className="font-medium">{row.description}</span>
         <span className="text-xs text-muted-foreground">
-          {row.fromAccountName} → {row.toAccountName} · {formatDate(row.txnDate)}{" "}
-          · {formatMoney(row.amount)}
+          {row.fromAccountName} → {row.toAccountName} ·{" "}
+          {formatDate(row.txnDate)} · {formatMoney(row.amount)}
         </span>
       </div>
     ),
@@ -148,8 +154,8 @@ export function TransfersScreen({
         <Card>
           <EmptyState icon="swap_horiz" title="No transfers yet">
             When money moves between two of the company&rsquo;s accounts — the
-            bank to petty cash, one bank to another — record it here rather
-            than as an expense, and both registers stay right.
+            bank to petty cash, one bank to another — record it here rather than
+            as an expense, and both registers stay right.
           </EmptyState>
         </Card>
       ) : (
@@ -169,13 +175,14 @@ export function TransfersScreen({
                   <Th align="right" width="w-36">
                     Amount (BDT)
                   </Th>
-                  <Th>Reference</Th>
+                  <Th>Invoice No.</Th>
+                  <Th>Transaction ID</Th>
                   <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <TableMessageRow colSpan={9}>
+                  <TableMessageRow colSpan={10}>
                     Nothing on this page.
                   </TableMessageRow>
                 ) : (
@@ -198,10 +205,11 @@ export function TransfersScreen({
                             <span className="font-medium">
                               {row.description}
                             </span>
-                            <span className="num text-xs text-muted-foreground">
-                              {row.refNo}
-                              {voided ? " · voided" : ""}
-                            </span>
+                            {voided ? (
+                              <span className="text-xs text-muted-foreground">
+                                voided
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                         <td>
@@ -229,8 +237,51 @@ export function TransfersScreen({
                             className="block font-medium"
                           />
                         </td>
-                        <td className="num text-xs text-muted-foreground">
-                          {row.reference ?? "—"}
+                        <NumberCell
+                          value={row.invoiceNo}
+                          hasPaper={row.documentCount > 0}
+                          label="Show the invoice"
+                          onOpen={() =>
+                            setDocumentsFor({ row, kinds: ["invoice"] })
+                          }
+                        />
+                        <td>
+                          {/*
+                            The app's own number, with the bank's underneath —
+                            the exact cell the ledger table draws, opening the
+                            same paperwork drawer.
+                          */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDocumentsFor({
+                                row,
+                                kinds: ["bank_statement", "receipt", "other"],
+                              })
+                            }
+                            title={
+                              row.documentCount > 0
+                                ? `${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`
+                                : "Nothing is attached to this transfer"
+                            }
+                            className="group cursor-pointer text-left"
+                          >
+                            <span
+                              className={cn(
+                                "num flex items-center gap-1 text-xs font-medium underline decoration-current/40 underline-offset-2 group-hover:decoration-current",
+                                row.documentCount > 0
+                                  ? "text-link"
+                                  : "text-warning",
+                              )}
+                            >
+                              {row.refNo}
+                            </span>
+                            {row.reference ? (
+                              <span className="num block text-xs text-muted-foreground">
+                                {row.reference}
+                              </span>
+                            ) : null}
+                          </button>
                         </td>
                         <RowActions
                           /*
@@ -286,8 +337,54 @@ export function TransfersScreen({
         onClose={() => setVoiding(null)}
         onVoided={() => load(page)}
       />
+      {documentsFor ? (
+        <DocumentsDialog
+          transactionId={documentsFor.row.outId}
+          refNo={documentsFor.row.refNo}
+          kinds={documentsFor.kinds}
+          onClose={() => {
+            setDocumentsFor(null);
+            // The count colours the number cells; an upload in the drawer
+            // should recolour them without a hand reload.
+            void load(page);
+          }}
+        />
+      ) : null}
       {del.dialog}
     </>
+  );
+}
+
+/**
+ * An invoice number that opens the paperwork drawer — blue over paper, amber
+ * over nothing, underlined either way, exactly as the ledger table draws it.
+ */
+function NumberCell({
+  value,
+  hasPaper,
+  label,
+  onOpen,
+}: {
+  value: string | null;
+  hasPaper: boolean;
+  label: string;
+  onOpen: () => void;
+}) {
+  if (!value) return <td className="text-muted-foreground">—</td>;
+  return (
+    <td>
+      <button
+        type="button"
+        onClick={onOpen}
+        title={label}
+        className={cn(
+          "num cursor-pointer underline decoration-current/40 underline-offset-2 hover:decoration-current",
+          hasPaper ? "text-link" : "text-warning",
+        )}
+      >
+        {value}
+      </button>
+    </td>
   );
 }
 

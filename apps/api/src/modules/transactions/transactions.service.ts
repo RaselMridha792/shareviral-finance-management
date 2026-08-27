@@ -128,6 +128,8 @@ export type TransferRow = {
   inId: string;
   groupId: string | null;
   refNo: string;
+  invoiceNo: string | null;
+  documentCount: number;
   txnDate: string;
   amount: string;
   description: string;
@@ -954,12 +956,24 @@ export class TransactionsService {
           inId: inRow.id,
           groupId: transactions.transferGroupId,
           refNo: transactions.refNo,
+          invoiceNo: transactions.invoiceNo,
           txnDate: transactions.txnDate,
           amount: transactions.amount,
           description: transactions.description,
           reference: transactions.reference,
           paymentMethod: transactions.paymentMethod,
           voidedAt: transactions.voidedAt,
+          /*
+           * Files hang on the out half — the side the dialog anchors to.
+           * Written with the table's own name, not an embedded column: the
+           * bare-name lesson from the payroll picker, applied before it bites
+           * a second time.
+           */
+          documentCount: sql<number>`(
+            select count(*)::int from files df
+             where df.transaction_id = transactions.id
+               and df.deleted_at is null
+          )`,
           fromAccountId: fromAccount.id,
           fromAccountName: fromAccount.name,
           toAccountId: toAccount.id,
@@ -1020,6 +1034,7 @@ export class TransactionsService {
           .insert(transactions)
           .values({
             refNo: outRef,
+            invoiceNo: input.invoiceNo,
             accountId: input.fromAccountId,
             direction: "out",
             txnDate: input.txnDate,
@@ -1037,6 +1052,7 @@ export class TransactionsService {
         const inRef = await this.nextRefNo(tx, year);
         await tx.insert(transactions).values({
           refNo: inRef,
+          invoiceNo: input.invoiceNo,
           accountId: input.toAccountId,
           direction: "in",
           txnDate: input.txnDate,

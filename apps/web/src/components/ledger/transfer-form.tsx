@@ -1,12 +1,15 @@
 "use client";
 
 import {
+  ALLOWED_MIME_TYPES,
+  formatFileSize,
+  MAX_FILE_BYTES,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
   todayInDhaka,
 } from "@finance/shared";
-import { ArrowRight, LoaderCircle } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowRight, LoaderCircle, Paperclip, X } from "lucide-react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -19,7 +22,7 @@ import {
 } from "@/components/ui/field";
 import { formatMoney } from "@finance/shared";
 
-import { ApiError } from "@/lib/api-client";
+import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
 
@@ -46,6 +49,12 @@ export function TransferForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  /*
+   * The paper, held until the pair exists to hang it on — the same two slots
+   * every money form carries: the invoice (ours) and the bank's record.
+   */
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [bankFile, setBankFile] = useState<File | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,16 +64,45 @@ export function TransferForm({
 
     const data = new FormData(event.currentTarget);
     try {
-      await ledgerApi.transfer({
+      const row = await ledgerApi.transfer({
         txnDate: String(data.get("txnDate")),
         fromAccountId: String(data.get("fromAccountId")),
         toAccountId: String(data.get("toAccountId")),
         amount: String(data.get("amount")),
         description: String(data.get("description")),
+        invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
         reference: String(data.get("reference") ?? "") || undefined,
         paymentMethod: String(data.get("paymentMethod")) as never,
       });
+
+      /*
+       * Uploaded one at a time and never thrown: by now the money has moved,
+       * and a failed upload must read as "attach it again", not as the
+       * transfer having failed.
+       */
+      const failed: string[] = [];
+      for (const slot of [
+        { kind: "invoice", file: invoiceFile, name: "invoice" },
+        { kind: "bank_statement", file: bankFile, name: "bank record" },
+      ]) {
+        if (!slot.file) continue;
+        try {
+          await uploadTransactionFile(row.id, slot.file, slot.kind);
+        } catch {
+          failed.push(slot.name);
+        }
+      }
+
       await onSaved();
+      if (failed.length) {
+        setInvoiceFile(null);
+        setBankFile(null);
+        setError(
+          `The transfer is recorded, but the ${failed.join(" and the ")} did not upload — open it from the table's number and attach again.`,
+        );
+        setPending(false);
+        return;
+      }
       onClose();
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -153,20 +191,35 @@ export function TransferForm({
           />
         </Field>
 
+        {/* The pair every money form carries, each with its paper on the
+            clip beside it: the invoice number is ours, the transaction id is
+            the bank's. */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Method">
-            <Select name="paymentMethod" defaultValue="bank_transfer">
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method} value={method}>
-                  {PAYMENT_METHOD_LABELS[method]}
-                </option>
-              ))}
-            </Select>
+          <Field label="Invoice No." error={fieldErrors.invoiceNo}>
+            <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
+              <Input
+                name="invoiceNo"
+                className="num min-w-0 flex-1"
+                placeholder="INV-002"
+              />
+            </Attach>
           </Field>
-          <Field label="Reference" error={fieldErrors.reference}>
-            <Input name="reference" className="num" />
+          <Field label="Transaction ID" error={fieldErrors.reference}>
+            <Attach kind="bank_statement" file={bankFile} onPick={setBankFile}>
+              <Input name="reference" className="num min-w-0 flex-1" />
+            </Attach>
           </Field>
         </div>
+
+        <Field label="Method">
+          <Select name="paymentMethod" defaultValue="bank_transfer">
+            {PAYMENT_METHODS.map((method) => (
+              <option key={method} value={method}>
+                {PAYMENT_METHOD_LABELS[method]}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
         {error ? (
           <p
@@ -193,5 +246,97 @@ export function TransferForm({
         </Button>
       </div>
     </Drawer>
+  );
+}
+
+type DocKind = "invoice" | "bank_statement";
+
+const DOCUMENT_NAMES: Record<DocKind, string> = {
+  invoice: "invoice",
+  bank_statement: "bank record",
+};
+
+/**
+ * The paperclip beside a reference number — the paper is picked in the same
+ * breath as the number and held until the pair exists to hang it on. The
+ * same helper the transaction and cash-in forms carry; the third copy is a
+ * known rough edge, tracked rather than hidden.
+ */
+function Attach({
+  kind,
+  file,
+  onPick,
+  children,
+}: {
+  kind: DocKind;
+  file: File | null;
+  onPick: (file: File | null) => void;
+  children: ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [rejected, setRejected] = useState<string | null>(null);
+
+  function choose(picked: File | undefined) {
+    if (inputRef.current) inputRef.current.value = "";
+    if (!picked) return;
+
+    const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
+    if (picked.type && !allowed.includes(picked.type)) {
+      setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
+      return;
+    }
+    if (picked.size > MAX_FILE_BYTES[kind]) {
+      setRejected(
+        `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
+      );
+      return;
+    }
+
+    setRejected(null);
+    onPick(picked);
+  }
+
+  return (
+    <span className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex items-center gap-2">
+        {children}
+
+        <input
+          ref={inputRef}
+          type="file"
+          className="sr-only"
+          accept="image/*,application/pdf"
+          onChange={(event) => choose(event.target.files?.[0])}
+        />
+
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="size-9 shrink-0 px-0"
+          title={`Attach the ${DOCUMENT_NAMES[kind]}`}
+          aria-label={`Attach the ${DOCUMENT_NAMES[kind]}`}
+          onClick={() => inputRef.current?.click()}
+        >
+          <Paperclip className="size-4" />
+        </Button>
+      </span>
+
+      {rejected ? (
+        <span className="text-xs text-negative">{rejected}</span>
+      ) : file ? (
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate">{file.name}</span>
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            aria-label={`Remove ${file.name}`}
+            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        </span>
+      ) : null}
+    </span>
   );
 }

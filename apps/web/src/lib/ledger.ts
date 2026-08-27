@@ -68,6 +68,9 @@ export type TransferRowDto = {
   inId: string;
   groupId: string | null;
   refNo: string;
+  invoiceNo: string | null;
+  /** How much paper hangs on the pair — colours the number cells. */
+  documentCount: number;
   txnDate: string;
   amount: string;
   description: string;

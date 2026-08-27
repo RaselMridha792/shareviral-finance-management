@@ -372,6 +372,9 @@ export const transferSchema = z
       message: "The amount must be more than zero",
     }),
     description: z.string().trim().min(2).max(300),
+    /** Ours — the paper this movement settles or belongs to. */
+    invoiceNo: optionalText(60),
+    /** The bank's number for the wire, as on every other money screen. */
     reference: optionalText(120),
     paymentMethod: paymentMethodSchema.default("bank_transfer"),
   })
