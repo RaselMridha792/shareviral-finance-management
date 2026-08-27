@@ -12,8 +12,6 @@ import {
   ENGAGEMENT_TYPES,
   GENDERS,
   GENDER_LABELS,
-  PSR_STATUSES,
-  PSR_STATUS_LABELS,
   todayInDhaka,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
@@ -29,6 +27,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
+import { useCan } from "@/components/auth/session-provider";
 import { ApiError } from "@/lib/api-client";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 
@@ -55,6 +54,13 @@ export function TeamMemberForm({
   onSaved: () => Promise<void> | void;
 }) {
   const editing = Boolean(member);
+  /*
+   * Whether this person may set pay at all. HR can open this drawer but does
+   * not hold the compensation permission, so HR never sees the Current salary
+   * field — and the API refuses the key regardless, so hiding it is a
+   * courtesy rather than the guard.
+   */
+  const canSetPay = useCan("team.compensation.write");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -84,13 +90,10 @@ export function TeamMemberForm({
       phone: text("phone"),
       nid: text("nid"),
       etin: text("etin"),
-      psrStatus: text("psrStatus"),
       psrAssessmentYear: text("psrAssessmentYear"),
       bankName: text("bankName"),
       bankAccountNumber: text("bankAccountNumber"),
       bankRouting: text("bankRouting"),
-      walletProvider: text("walletProvider"),
-      walletNumber: text("walletNumber"),
       address: text("address"),
       notes: text("notes"),
       photoUrl: text("photoUrl"),
@@ -99,6 +102,11 @@ export function TeamMemberForm({
       // The offer figure, not payroll. Raises are set on the Pay tab, which
       // this drawer cannot reach and HR cannot open.
       joiningSalary: text("joiningSalary"),
+      // Pay, not paperwork — create only, and only when this person may set
+      // it. Sent blank it would fail the schema, so it is omitted instead.
+      ...(!editing && canSetPay && text("currentSalary")
+        ? { currentSalary: text("currentSalary") }
+        : {}),
       educationMajor: text("educationMajor"),
       cvUrl: text("cvUrl"),
       appointmentLetterUrl: text("appointmentLetterUrl"),
@@ -197,7 +205,6 @@ export function TeamMemberForm({
         >
           <Input
             name="photoUrl"
-            type="url"
             inputMode="url"
             placeholder="https://drive.google.com/…"
             defaultValue={member?.photoUrl ?? ""}
@@ -326,6 +333,16 @@ export function TeamMemberForm({
           </Field>
         </div>
 
+        {!editing && canSetPay ? (
+          <Field
+            label="Current salary"
+            error={fieldErrors.currentSalary}
+            hint="What they are paid now, monthly gross — this is what the directory and payroll read. Changes later go on the Pay tab."
+          >
+            <MoneyInput name="currentSalary" placeholder="45000.00" />
+          </Field>
+        ) : null}
+
         {editing ? (
           <Field label="Status">
             <Select name="status" defaultValue={member?.status}>
@@ -381,7 +398,6 @@ export function TeamMemberForm({
         >
           <Input
             name="cvUrl"
-            type="url"
             inputMode="url"
             placeholder="https://drive.google.com/…"
             defaultValue={member?.cvUrl ?? ""}
@@ -395,7 +411,6 @@ export function TeamMemberForm({
         >
           <Input
             name="appointmentLetterUrl"
-            type="url"
             inputMode="url"
             placeholder="https://drive.google.com/…"
             defaultValue={member?.appointmentLetterUrl ?? ""}
@@ -423,22 +438,11 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <Field
-          label="Return filed (PSR)"
-          hint="Required above ৳16,000 basic a month"
-        >
-          <Select
-            name="psrStatus"
-            defaultValue={member?.psrStatus ?? "unknown"}
-          >
-            {PSR_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {PSR_STATUS_LABELS[status]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
+        {/* PSR and the mobile wallet came off this drawer on the owner's
+          instruction — payment outside a bank is not permitted, so a wallet
+          number is a field for money that must not move, and the PSR line
+          went with it. The columns stay in the database; existing values
+          are simply no longer edited from here. */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Bank" error={fieldErrors.bankName}>
             <Input name="bankName" defaultValue={member?.bankName ?? ""} />
@@ -460,21 +464,7 @@ export function TeamMemberForm({
               defaultValue={member?.bankRouting ?? ""}
             />
           </Field>
-          <Field label="Mobile wallet" error={fieldErrors.walletNumber}>
-            <Input
-              name="walletNumber"
-              className="num"
-              placeholder="bKash / Nagad number"
-              defaultValue={member?.walletNumber ?? ""}
-            />
-          </Field>
         </div>
-
-        <input
-          type="hidden"
-          name="walletProvider"
-          defaultValue={member?.walletProvider ?? ""}
-        />
 
         <Field label="Notes" error={fieldErrors.notes}>
           <Textarea name="notes" defaultValue={member?.notes ?? ""} />

@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import {
   canSeeCompensation,
+  hasPermission,
   DEFAULT_SALARY_SPLIT,
   formatMoney,
   salarySplitSchema,
@@ -197,6 +199,28 @@ export class TeamMembersService {
   }
 
   async create(input: CreateTeamMemberInput, actor: AuthenticatedUser) {
+    /*
+     * `currentSalary` is not a team_members column and must not reach the
+     * insert. It is pay, so it goes to compensation_history — inside the same
+     * transaction, with its own sensitive audit row, exactly as a raise from
+     * the Pay tab would be written.
+     *
+     * The permission check is here and not only in the form: HR holds
+     * team.write and can open this drawer, but does not hold
+     * team.compensation.write and must not gain a pay-write path through it.
+     * A request carrying the field from a role without the permission is
+     * refused loudly rather than quietly dropped — silence would teach the
+     * sender the figure was saved.
+     */
+    const { currentSalary, ...memberInput } = input;
+    if (currentSalary !== undefined) {
+      if (!hasPermission(actor.role, "team.compensation.write")) {
+        throw new ForbiddenException(
+          "Setting pay needs the compensation permission — leave Current salary blank",
+        );
+      }
+    }
+
     return this.audit.mutate({
       action: "create",
       entityTable: "team_members",
@@ -206,8 +230,43 @@ export class TeamMembersService {
       run: async (tx) => {
         const [row] = await tx
           .insert(teamMembers)
-          .values({ ...input, createdBy: actor.id, updatedBy: actor.id })
+          .values({ ...memberInput, createdBy: actor.id, updatedBy: actor.id })
           .returning(projection);
+
+        if (currentSalary !== undefined) {
+          /*
+           * The split, worked out once and frozen with the figure — the same
+           * snapshot setCompensation takes, for the same reason: the rule in
+           * Settings can change, and this figure's breakdown must not.
+           */
+          const [settings] = await tx
+            .select({ salarySplit: appSettings.salarySplit })
+            .from(appSettings)
+            .limit(1);
+          const parsed = salarySplitSchema.safeParse(settings?.salarySplit);
+          await tx.insert(compensationHistory).values({
+            teamMemberId: row.id,
+            grossAmount: currentSalary,
+            components: splitSalary(
+              currentSalary,
+              parsed.success && parsed.data.length
+                ? parsed.data
+                : DEFAULT_SALARY_SPLIT,
+            ),
+            effectiveFrom: memberInput.joinedOn,
+            changeReason: "Set when they were added",
+            createdBy: actor.id,
+          });
+          await this.audit.record(tx, {
+            action: "update",
+            entityTable: "compensation_history",
+            entityId: row.id,
+            module: "team",
+            isSensitive: true,
+            summary: `Set ${memberInput.fullName}'s pay to ${formatMoney(currentSalary)} from ${memberInput.joinedOn}, given when they were added`,
+          });
+        }
+
         return row;
       },
     });

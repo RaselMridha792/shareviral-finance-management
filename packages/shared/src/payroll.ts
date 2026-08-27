@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { patchOf } from "./patch.ts";
+import { isNAText } from "./transactions.ts";
 
 import {
   amountSchema,
@@ -37,14 +38,17 @@ const optionalOf = <T extends z.ZodType<string>>(schema: T) =>
  * refused rather than upgraded, because a link that silently downgrades is a
  * link somebody pastes a password into.
  */
+// A typed "N/A" counts as leaving the box empty — see isNAText's note.
 const optionalLink = () =>
-  optionalOf(
-    z
-      .string()
-      .trim()
-      .max(500)
-      .refine((v) => /^https:\/\/\S+$/.test(v), "Paste an https:// link"),
-  );
+  z
+    .string()
+    .trim()
+    .max(500)
+    .transform((v) => (v === "" || isNAText(v) ? undefined : v))
+    .optional()
+    .refine((v) => v === undefined || /^https:\/\/\S+$/.test(v), {
+      message: "Paste an https:// link",
+    });
 
 /* -------------------------------------------------------------------------- */
 /*  Team members                                                               */
@@ -268,6 +272,20 @@ export const createTeamMemberSchema = z.strictObject({
    */
   joiningSalary: optionalOf(amountSchema),
 
+  /**
+   * What they are paid now, offered at the moment of adding them — so the
+   * directory's Current salary column is not "Not set" for everyone until
+   * somebody remembers the Pay tab.
+   *
+   * Read the comment above before widening this: the boundary it defends is
+   * intact. This field never touches `team_members` — the API strips it,
+   * refuses it outright from a role without `team.compensation.write`, and
+   * writes `compensation_history` through the same audited path a raise
+   * takes. It exists on CREATE only; `updateTeamMemberSchema` omits it, so
+   * later changes still have exactly one door, the Pay tab.
+   */
+  currentSalary: optionalOf(amountSchema),
+
   educationLevel: educationLevelSchema.optional(),
   /**
    * Free text, deliberately. The real answers run from CSE and HRM to Wet
@@ -284,7 +302,10 @@ export const createTeamMemberSchema = z.strictObject({
 });
 export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
 
-export const updateTeamMemberSchema = patchOf(createTeamMemberSchema)
+export const updateTeamMemberSchema = patchOf(
+  // Not on update — see the note on the field. Pay changes have one door.
+  createTeamMemberSchema.omit({ currentSalary: true }),
+)
   .extend({
     status: employmentStatusSchema.optional(),
     /**
