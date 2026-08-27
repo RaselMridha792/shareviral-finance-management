@@ -256,10 +256,11 @@ export const recordCashInSchema = z.strictObject({
   /**
    * The invoice this transfer settles. Ours, not the bank's.
    *
-   * Optional in the contract even though the Cash In screen asks for it,
-   * because the same schema records a local receipt that has no invoice at
-   * all. The screen is where "every field is required" belongs; a schema that
-   * refuses a true record is a schema that loses it.
+   * Optional, and now optional on the screen too. The same schema records a
+   * local receipt that has no invoice at all, and money does arrive without
+   * one. A box that refuses the entry is how a real receipt goes unrecorded,
+   * or gets recorded with an invented number — which is worse than blank,
+   * because a blank says "none" and a number says something untrue.
    */
   invoiceNo: optionalText(60),
 

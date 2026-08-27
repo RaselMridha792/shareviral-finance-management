@@ -464,14 +464,20 @@ export function CashInForm({
             and they answer different questions: the invoice number is ours —
             what the transfer was against — and the transaction id is the
             bank's, what to quote when asking them about it. Each carries the
-            paper it refers to on the clip beside it. */}
+            paper it refers to on the clip beside it.
+
+            Neither is required, on the owner's instruction. Money arrives
+            without an invoice and banks do not always give a number, and a
+            box that refuses the entry is how a real receipt goes unrecorded —
+            or gets recorded with a made-up number, which is worse than blank
+            because it reads as a fact. The contract has always allowed both
+            to be empty; this screen was the only thing insisting. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Invoice No." required error={fieldErrors.invoiceNo}>
+            <Field label="Invoice No." error={fieldErrors.invoiceNo}>
               <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
                 <Input
                   name="invoiceNo"
                   defaultValue={transaction?.invoiceNo ?? undefined}
-                  required
                   className="num min-w-0 flex-1"
                   placeholder="INV-002"
                 />
@@ -480,7 +486,6 @@ export function CashInForm({
 
             <Field
               label={refKind === "id" ? "Transaction ID" : "Reference"}
-              required={refKind === "id"}
               error={fieldErrors.reference}
               hint={
                 refKind === "paper"
@@ -498,7 +503,6 @@ export function CashInForm({
                   <Input
                     name="reference"
                     defaultValue={transaction?.reference ?? undefined}
-                    required
                     className="num min-w-0 flex-1"
                     placeholder="FT26081200412"
                   />
