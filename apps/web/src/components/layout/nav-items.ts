@@ -85,6 +85,16 @@ export const NAV_GROUPS: NavGroup[] = [
             hue: 158,
             permission: "accounts.read",
           },
+          {
+            key: "accounts-transfers",
+            href: "/transfers",
+            label: "Money Transfer",
+            // Horizontal, against All transactions' vertical: money moving
+            // *across* between our own accounts, not in or out of the company.
+            icon: "swap_horiz",
+            hue: 190,
+            permission: "transactions.read",
+          },
         ],
       },
       {
@@ -125,16 +135,6 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: "transactions.read",
           },
         ],
-      },
-      {
-        key: "transfers",
-        href: "/transfers",
-        label: "Money Transfer",
-        // Horizontal, against All transactions' vertical: money moving
-        // *across* between our own accounts, not in or out of the company.
-        icon: "swap_horiz",
-        hue: 190,
-        permission: "transactions.read",
       },
       {
         key: "transactions",

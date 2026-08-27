@@ -90,7 +90,10 @@ left alone.
 
 ## 2026-08-27 — Money Transfer has a page
 
-**Done.** `/transfers`, "Money Transfer" under Money in the rail. Commit:
+**Done.** `/transfers`, "Money Transfer" inside the Accounts accordion in the
+rail (the owner moved it in from the section's top level — it sits with Cash In,
+the other way money moves through our own accounts; the breadcrumb reads
+Finance / Accounts / Money Transfer on its own). Commit:
 `fab219f`. The machinery all pre-existed — the paired-row endpoint, the
 never-mounted `TransferForm`, pair-aware void and trash, the overdraft guard on
 the paying side — and none of it had a door. The page lists one row per pair
