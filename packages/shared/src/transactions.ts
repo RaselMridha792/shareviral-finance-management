@@ -277,7 +277,13 @@ export const recordCashInSchema = z.strictObject({
     message: "The amount must be more than zero",
   }),
 
-  categoryId: z.string().uuid("Choose a category"),
+  /*
+   * No categoryId, by the owner's decision. Money arriving by wire is not an
+   * expense heading's business — it is funding, and calling it "CEO funding"
+   * or "Client receipts" was a choice the form forced on every entry. The
+   * ledger row simply carries no category; every list shows a dash and every
+   * income figure sums by direction, not by heading.
+   */
 
   usdRate: z
     .string()

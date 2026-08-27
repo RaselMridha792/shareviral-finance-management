@@ -585,13 +585,27 @@ export class TransactionsService {
     return nextRefNo(tx, year);
   }
 
-  async create(input: CreateTransactionInput, actor: AuthenticatedUser) {
+  async create(
+    /*
+     * `categoryId` optional here and required in the public schema, on
+     * purpose: POST /transactions still refuses an uncategorised entry, but
+     * the cash-in door hands over no category at all — a wire arriving is
+     * not an expense heading's business. This signature is the one internal
+     * seam where that difference lives.
+     */
+    input: Omit<CreateTransactionInput, "categoryId"> & {
+      categoryId?: string;
+    },
+    actor: AuthenticatedUser,
+  ) {
     await this.settings.assertPeriodOpen(input.txnDate);
     await this.assertAccountExists(input.accountId);
-    await this.assertCategoryMatchesDirection(
-      input.categoryId,
-      input.direction,
-    );
+    if (input.categoryId) {
+      await this.assertCategoryMatchesDirection(
+        input.categoryId,
+        input.direction,
+      );
+    }
 
     const year = Number(input.txnDate.slice(0, 4));
     // The rule of the house: an account can never go below zero. Checked
@@ -681,7 +695,6 @@ export class TransactionsService {
         txnDate: input.txnDate,
         accountId: input.accountId,
         amount: input.amount,
-        categoryId: input.categoryId,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
         invoiceNo: input.invoiceNo,

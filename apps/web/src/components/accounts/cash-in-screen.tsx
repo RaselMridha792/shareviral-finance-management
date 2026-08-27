@@ -46,13 +46,7 @@ import { CashInForm } from "./cash-in-form";
  * `FxService.fundingRateFor` with the Settings rate behind it. One rule, one
  * implementation — this screen can no longer drift away from the reports.
  */
-export function CashInScreen({
-  accounts,
-  categories,
-}: {
-  accounts: AccountDto[];
-  categories: CategoryNode[];
-}) {
+export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
   const canWrite = useCan("transactions.write");
   /**
    * Undoing an entry is its own permission rather than a shade of writing one:
@@ -582,7 +576,6 @@ export function CashInScreen({
         open={recording || Boolean(editing)}
         transaction={editing ?? undefined}
         accounts={accounts}
-        categories={categories}
         onClose={() => {
           setRecording(false);
           setEditing(null);

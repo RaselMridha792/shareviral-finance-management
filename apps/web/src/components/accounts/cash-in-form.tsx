@@ -31,12 +31,7 @@ import {
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
-import { CategorySelect } from "@/components/ledger/category-select";
-import {
-  categoriesApi,
-  type AccountDto,
-  type CategoryNode,
-} from "@/lib/masters";
+import { type AccountDto, type CategoryNode } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
 
 /**
@@ -74,7 +69,7 @@ export function CashInForm({
   open,
   transaction,
   accounts,
-  categories,
+
   onClose,
   onSaved,
 }: {
@@ -90,7 +85,6 @@ export function CashInForm({
    */
   transaction?: TransactionDto;
   accounts: AccountDto[];
-  categories: CategoryNode[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }) {
@@ -227,26 +221,6 @@ export function CashInForm({
     transaction?.accountId ?? accounts[0]?.id ?? "",
   );
 
-  /** Refetched when a heading is added from inside this form. */
-  const [tree, setTree] = useState(categories);
-  const [categoryId, setCategoryId] = useState(
-    () => transaction?.categoryId ?? fundingCategoryId(categories),
-  );
-
-  async function onCategoryCreated() {
-    try {
-      setTree(await categoriesApi.tree());
-    } catch {
-      // The new heading is already selected — its id came back from the
-      // create. Only its label would be missing until the next page load.
-    }
-  }
-
-  // Money in can only be filed under a money-in heading.
-  const usable = tree.filter(
-    (group) => group.kind === "in" || group.kind === "both",
-  );
-
   /**
    * Closing empties what the drawer would not.
    *
@@ -313,19 +287,6 @@ export function CashInForm({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    /**
-     * No money-in heading anywhere in the tree, which happens on a database
-     * the category seed never ran against. Caught here rather than sent,
-     * because the select would be empty and a 400 saying "Choose a category"
-     * over a list with nothing in it reads as the form being broken.
-     */
-    if (!categoryId) {
-      setError(
-        "There is no money-in category to file this under. Add one in Settings → Categories first.",
-      );
-      return;
-    }
-
     setPending(true);
     setError(null);
     setFieldErrors({});
@@ -346,7 +307,6 @@ export function CashInForm({
         description: String(data.get("description")),
         accountId: String(data.get("accountId")),
         amount: String(data.get("amount")),
-        categoryId,
         usdRate: String(data.get("usdRate")).trim(),
         // Blank on a local receipt, and then this row is exactly what it was
         // before: an ordinary money-in with a reference rate on it. Given, the
@@ -379,7 +339,6 @@ export function CashInForm({
             invoiceNo: payload.invoiceNo,
             description: payload.description,
             amount: payload.amount,
-            categoryId: payload.categoryId,
             senderAccountName: payload.senderAccountName,
             notes: payload.notes,
             // No `accountId`: the ledger will not let an edit move money
@@ -474,21 +433,6 @@ export function CashInForm({
                 name="txnDate"
                 required
                 defaultValue={transaction?.txnDate ?? todayInDhaka()}
-              />
-            </Field>
-
-            <Field label="Category" required error={fieldErrors.categoryId}>
-              <CategorySelect
-                name="categoryId"
-                value={categoryId}
-                onChange={setCategoryId}
-                categories={usable}
-                // Money arriving, so a heading added from here belongs on the
-                // money-in side. Getting this wrong would file a heading where
-                // this very form could never offer it again.
-                kind="in"
-                invalid={Boolean(fieldErrors.categoryId?.length)}
-                onCreated={onCategoryCreated}
               />
             </Field>
           </div>
@@ -850,43 +794,6 @@ function realisedRate(
   if (Number(bdt) <= 0 || Number(usd) <= 0) return null;
 
   return { bdt, usd, rate: (Number(bdt) / Number(usd)).toFixed(2) };
-}
-
-/**
- * Where a transfer from abroad belongs.
- *
- * "CEO funding" under "Money in" is what the category seed writes, and it is
- * the answer for every row this form has ever produced. Matched on slug and
- * not on a pasted uuid — the ids are per-database, the slugs are per-seed —
- * and under its parent, because a slug is only unique within one.
- *
- * Then two fallbacks, because the seed is a script somebody has to remember to
- * run and a database that never saw it must still be able to take a transfer:
- * any active money-in heading named like funding, then simply the first one.
- * Empty only when there is no money-in side at all, which `onSubmit` refuses
- * rather than sending — the API would reject it anyway, without saying why in
- * terms anybody could act on.
- */
-function fundingCategoryId(groups: CategoryNode[]): string {
-  const moneyIn = groups.filter(
-    (group) => group.kind === "in" || group.kind === "both",
-  );
-
-  const seeded = moneyIn
-    .find((group) => group.slug === "money-in")
-    ?.children.find((child) => child.slug === "ceo-funding" && child.isActive);
-  if (seeded) return seeded.id;
-
-  for (const group of moneyIn) {
-    const funding = group.children.find(
-      (child) => child.isActive && /funding/i.test(child.name),
-    );
-    if (funding) return funding.id;
-  }
-
-  const first = moneyIn[0];
-  if (!first) return "";
-  return first.children.find((child) => child.isActive)?.id ?? first.id;
 }
 
 /** The stored column is "118.750000"; a person reads "118.75". */
