@@ -34,10 +34,10 @@ import { CashInForm } from "./cash-in-form";
 /**
  * Money arriving from abroad, month by month.
  *
- * The strip above the table carries the number the rest of the app depends on:
- * the rate the month is running at. Every taka figure elsewhere is read back in
- * dollars at the rate the month's first funding landed at, so this is where a
- * reader finds out which rate that was and which transfer set it.
+ * The strip above the table says what the month received, in taka and in
+ * dollars. The month's rate is behind that second figure and behind the USD
+ * column, but it is not shown as a figure of its own any more — it had a cell
+ * in the strip and the owner took it off this screen.
  *
  * That rate is *asked for*, not worked out here. It used to be recomputed on
  * this screen from the rows it had already loaded, a second copy of a rule that
@@ -62,9 +62,10 @@ export function CashInScreen({
   const canVoid = useCan("transactions.void");
   /**
    * The overview needs `dashboard.money`; this screen needs `accounts.read`.
-   * A role can hold the second without the first, and the rate is a detail on
-   * a page whose subject is the receipts — so it is asked for only when it can
-   * be, and its absence takes nothing else down.
+   * A role can hold the second without the first, so the month's rate is asked
+   * for only when it can be. Without it the dollar figure under the total is
+   * simply absent and the taka the page is about is untouched — which is why
+   * the request is allowed to fail quietly.
    */
   const canSeeRate = useCan("dashboard.money");
   const { fiscalYearMode } = useSettings();
@@ -215,17 +216,6 @@ export function CashInScreen({
    */
   const received = rows.filter((row) => !row.transferGroupId);
 
-  /**
-   * Which entry the month's rate came off — for the caption only.
-   *
-   * Found over every money-in row, transfers included, because the server's
-   * rule is written that way. The *rate* shown is still the API's: if this
-   * attribution and that number ever disagree, the number is the one that is
-   * right, and showing it means the screen cannot quietly be wrong about the
-   * figure while being confident about the name.
-   */
-  const setBy = firstFunded(rows);
-
   const totalBdt = received
     .reduce((sum, row) => sum + Number(row.amount), 0)
     .toFixed(2);
@@ -253,11 +243,6 @@ export function CashInScreen({
    * USD column is per-row (`dollarsOf`), not a division of the taka figure.
    * Ask the API for twenty rows and "Received in July" silently becomes
    * "received on this page", which is a wrong number, not a small one.
-   *
-   * The rate caption has the same shape: `firstFunded` wants the *earliest*
-   * funded entry of the month, and the table is sorted newest first, so on a
-   * fetched page it would name whichever late-month transfer happened to land
-   * there.
    *
    * So the month comes down whole and is paged here. What the pager counts is
    * `received` — already free of transfers — so the sentence under the table
@@ -319,8 +304,20 @@ export function CashInScreen({
         }
       />
 
-      {/* One strip rather than two cards. They are two figures about the same
-          month, and a strip is how every other screen here says that. */}
+      {/*
+        One figure, in a strip rather than a card.
+
+        There was a second cell here — "Rate this month", the rate the month's
+        first funding landed at and the entry that set it. The owner took it
+        off this screen: it is a reports detail on a page whose subject is the
+        receipts, and the rate is still on every row of the table below in the
+        USD rate column, which is where a reader checking a particular receipt
+        looks anyway.
+
+        The rate is still *fetched*. It is what turns the taka total into the
+        dollar figure under it and what fills the USD column for a row that
+        carries no rate of its own — it is simply no longer a cell.
+      */}
       <StatStrip min={280}>
         <StatCell
           label={`Received in ${range.label}`}
@@ -341,35 +338,6 @@ export function CashInScreen({
             ) : null
           }
         />
-
-        {/* Not shown to a reader who cannot be told it — and when it is hidden
-            the strip has one cell, which fills the row rather than leaving a
-            gap where the second used to be. */}
-        {rateStatus === "hidden" ? null : (
-          <StatCell
-            label="Rate this month"
-            icon="currency_exchange"
-            iconTone="text-chart-5"
-            value={
-              rateStatus === "loading" ? "…" : rate ? `৳${trimRate(rate)}` : "—"
-            }
-            footnote={
-              rateStatus === "loading" ? (
-                "Asking the API what rate this month is running at."
-              ) : !rate ? (
-                "Nothing funded yet this month, and no rate set in Settings."
-              ) : setBy ? (
-                <>
-                  Set by <span className="num">{setBy.refNo}</span> on{" "}
-                  <span className="num">{setBy.txnDate}</span> — every taka
-                  figure this month is read in dollars at it.
-                </>
-              ) : (
-                "Nothing funded this month — this is the fallback rate reports use."
-              )
-            }
-          />
-        )}
       </StatStrip>
 
       {error ? (
@@ -620,7 +588,7 @@ export function CashInScreen({
           setEditing(null);
         }}
         // Both: a transfer recorded into an empty month is the entry that sets
-        // the rate, so the strip is stale the moment the table is not.
+        // the rate, so the dollar figures are stale the moment the table is.
         onSaved={refresh}
       />
       <VoidDialog
@@ -695,30 +663,6 @@ function DocumentCell({
 function rateOf(row: TransactionDto): string | null {
   const rate = row.fxRate ?? row.usdRate;
   return rate && Number(rate) > 0 ? rate : null;
-}
-
-/**
- * Which entry set the month's rate — the name, never the number.
- *
- * The first funded money-in of the period, earliest date then earliest
- * entered, which is the row `FxService.fundingRateFor` reads the rate off. It
- * is found here only because the API returns the rate without saying where it
- * came from, and the caption is more use naming the transfer than not.
- *
- * This deliberately does not return a rate. That question has one answer and
- * the API gives it; if this attribution and that number ever disagree, the
- * number is the one to trust.
- */
-function firstFunded(rows: TransactionDto[]): TransactionDto | null {
-  const funded = rows
-    .filter((row) => rateOf(row) !== null)
-    .sort((a, b) =>
-      a.txnDate === b.txnDate
-        ? a.createdAt.localeCompare(b.createdAt)
-        : a.txnDate.localeCompare(b.txnDate),
-    );
-
-  return funded[0] ?? null;
 }
 
 /** Taka read in dollars. A translation, never a recorded figure. */

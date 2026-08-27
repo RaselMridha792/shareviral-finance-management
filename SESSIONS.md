@@ -20,6 +20,74 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-27 — "Rate this month" comes off Cash In
+
+**Done.** One page, on the owner's instruction, and only that page. The strip above the table had
+two cells; the second — "Rate this month", the figure plus the "Set by TXN-… on …" caption naming
+the entry that fixed it — is gone. The strip is one cell now, "Received in {month}", and
+`StatStrip` already stretched a lone cell across the row: that path existed for a reader without
+`dashboard.money`, so it is the tested one rather than a new one.
+
+**The rate is still fetched, and must be.** It is behind two things the cell did not own: the ~$
+under the taka total, and the USD column for any row carrying no rate of its own (`dollarsOf`
+falls back to the month's). Deleting `loadRate` to tidy up would blank both. What went with the
+cell is only what nothing else read — `setBy` and the `firstFunded` helper behind it, which
+existed to name the transfer in that caption.
+
+The rate itself is not lost to a reader: the table's own **USD rate** column still carries the
+rate each row was recorded at, which is where somebody checking a particular receipt looks anyway.
+
+**Watch out.** `canSeeRate` (`dashboard.money`) now gates a *figure* rather than a cell —
+without it the dollar line under the total is absent and the taka is untouched, which is why that
+request is still allowed to fail quietly. `trimRate` is still used, by the table column;
+`rateStatus` is still read, for the "No rate on record for this month" line under the total.
+Nothing outside this file changed — the strip on other screens, the dashboard's FX badge and
+Reports are untouched.
+
+Measured on the running page, not read off the diff. `.ratebox.mjs` (untracked) walks all four
+months in the picker and checks each: no "Rate this month" heading, no "Set by TXN-…" caption, no
+`currency_exchange` icon anywhere in the document, while the strip keeps its taka and ~$ pair and
+the table keeps its USD rate column. August's single receipt still reads ~$979.59 off the month's
+rate with no rate of its own, which is the fallback proving the fetch survived. Four CI steps run
+separately, all green (315 tests).
+
+**Open.** Nothing half-done.
+
+## 2026-08-27 — Cash In's month becomes a dropdown, and moves next to Add cash
+
+**Done.** One page, on the owner's instruction. Cash In's month was a native `<input
+type="month">` sitting alone in a `FilterBar` below the title — a field you type "mm/yyyy" into
+or open a calendar popover for, and which says nothing about how far back the books go. It is now
+the same `MonthPicker` dropdown the three expense screens got this morning: every month from
+this one back to `RECORDS_START`, newest first, nothing greyed, growing on its own. Picking a
+month resets to page one, which the old input already did.
+
+It also moved into `PageHeader`'s `actions`, immediately left of "Add cash" — the shape
+Expenses and Other expenses already use. The filter row is gone with it, so the stat strip sits a
+line higher. A read-only user still gets the picker: `actions` is a fragment now rather than
+`canWrite ? button : null`, so the month survives when the button does not.
+
+`MonthPicker` itself is untouched — this is a new consumer, not a change. It still lives at
+`components/expenses/month-picker.tsx` and is now imported from `components/accounts/`, which
+is the first cross-folder use. Nothing about the expense screens changes.
+
+**Watch out.** `MonthPicker` speaks `{from, to, label}` while this screen keeps its month as
+`YYYY-MM`; the header converts both ways (`range.start` out, `next.from.slice(0, 7)` in).
+`controlClass`, `FilterBar` and `cn` are no longer imported here — they had no other use on
+the page. Still months and not the shared date range, deliberately: the totals are a month's and
+the rate is asked for by fiscal year and period index, so a free from/to would name no period.
+
+Measured on the running page, not read off the diff. `.cashin.mjs` (untracked) loads
+`/accounts/cash-in` signed in and reads the DOM: the select is there, the old month input is
+gone, four real options (August back to May 2026) with none disabled, and the box sits 8px left of
+"Add cash" on the header row rather than in a row of its own. Picking July re-scoped the screen —
+select, "Received in July 2026" heading and the table's first row all followed. Four CI steps run
+separately, all green (315 tests).
+
+**Open.** Nothing half-done. If `MonthPicker` picks up a third feature folder it probably wants
+to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
+left alone.
+
 ## 2026-08-27 — Money Transfer has a page
 
 **Done.** `/transfers`, "Money Transfer" under Money in the rail. Commit:
@@ -345,41 +413,6 @@ different constant, used only by exports, and was left alone.
 
 **Open.** Nothing from this piece. The window is three days because that is what was asked for; if
 it should be configurable, that is a column on `app_settings` and its own session.
-
-## 2026-08-21 — Cash In's month becomes a dropdown, and moves next to Add cash
-
-**Done.** One page, on the owner's instruction. Cash In's month was a native `<input
-type="month">` sitting alone in a `FilterBar` below the title — a field you type "mm/yyyy" into
-or open a calendar popover for, and which says nothing about how far back the books go. It is now
-the same `MonthPicker` dropdown the three expense screens got this morning: every month from
-this one back to `RECORDS_START`, newest first, nothing greyed, growing on its own. Picking a
-month resets to page one, which the old input already did.
-
-It also moved into `PageHeader`'s `actions`, immediately left of "Add cash" — the shape
-Expenses and Other expenses already use. The filter row is gone with it, so the stat strip sits a
-line higher. A read-only user still gets the picker: `actions` is a fragment now rather than
-`canWrite ? button : null`, so the month survives when the button does not.
-
-`MonthPicker` itself is untouched — this is a new consumer, not a change. It still lives at
-`components/expenses/month-picker.tsx` and is now imported from `components/accounts/`, which
-is the first cross-folder use. Nothing about the expense screens changes.
-
-**Watch out.** `MonthPicker` speaks `{from, to, label}` while this screen keeps its month as
-`YYYY-MM`; the header converts both ways (`range.start` out, `next.from.slice(0, 7)` in).
-`controlClass`, `FilterBar` and `cn` are no longer imported here — they had no other use on
-the page. Still months and not the shared date range, deliberately: the totals are a month's and
-the rate is asked for by fiscal year and period index, so a free from/to would name no period.
-
-Measured on the running page, not read off the diff. `.cashin.mjs` (untracked) loads
-`/accounts/cash-in` signed in and reads the DOM: the select is there, the old month input is
-gone, four real options (August back to May 2026) with none disabled, and the box sits 8px left of
-"Add cash" on the header row rather than in a row of its own. Picking July re-scoped the screen —
-select, "Received in July 2026" heading and the table's first row all followed. Four CI steps run
-separately, all green (315 tests).
-
-**Open.** Nothing half-done. If `MonthPicker` picks up a third feature folder it probably wants
-to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
-left alone.
 
 ## 2026-08-21 — the month becomes a list, and a heading's month stops ending at row 200
 
