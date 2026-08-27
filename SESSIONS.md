@@ -20,6 +20,48 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-28 — the owner's six items, from one screenshot batch
+
+**Done.** Six requests handed over together, one commit each where the diffs allowed it.
+
+1. **Current salary at add time** (`6160d69`). The directory said "Not set" for everyone because
+   nothing at create ever wrote `compensation_history`. The Add person drawer now offers a
+   create-only Current salary; the API writes it through the raise path — split snapshot,
+   effective from joining, sensitive audit row, one transaction. An EDIT refuses the key: raises
+   keep their one door, the Pay tab. **Found on the way: the schema comment claiming HR lacks
+   `team.compensation.write` is stale — `aa987e9` granted it deliberately.** The gate stays as
+   defence for roles genuinely without it.
+2. **Mobile wallet and PSR off the team drawer** (same commit) — no money moves outside a bank.
+   Columns stay; the profile page still displays old values read-only.
+3. **Subscriptions Payment Method unmerged** (`dbcc66b`). The field labelled Payment Method was an
+   account picker with the method derived from the account's type. Now: a method dropdown (shared
+   enum) + a separate Account/Card field, two table columns to match. **No migration —
+   `payment_method` and `account_id` both already existed.**
+4. **Primary currency leads** (`0f3d6c6`). USD-primary accounts show dollars big, taka small, on
+   the accounts overview and the dashboard blocks; BDT accounts unchanged. The `~`/`≈` markers
+   move with the figure — a translation stays marked as one — and no rate means taka-first, never
+   a promoted blank.
+5. **Receipt link removed, url-types dropped, typed "N/A" is a blank** (`1b49f7b`). Every link
+   schema shares `isNAText`; no input is `type="url"`.
+6. **Empty cells read N/A** (same commit) — 55 sites, 24 files, replaced against an enumerated
+   list. Deliberate keeps: the printed statement's brought-forward row (structurally blank, not
+   missing) and one form placeholder glyph.
+
+**Watch out.**
+
+- **A failed `build:shared` still emits broken JS into `dist/`**, and the dev API keeps serving
+  whatever it loaded at startup — nest only restarts on its own `src`. That combination cost an
+  hour today: a mid-edit build failure left `subscriptions.js` calling an unimported function, and
+  every subscription create with a website 500'd until the API was bounced. If a screen 500s right
+  after shared work, bounce the API before debugging the code.
+- `use-row-delete`'s screens were re-driven after the sweep touched their placeholder cells — the
+  full battery is green.
+
+**Open.** `.sixqa.mjs` (19 checks) covers all six; it is in `.battery.sh`. The subscriptions rows
+created before the account picker existed default to `payment_method='card'` — a bank-paid plan
+among them shows "Card" until edited once. Cosmetic, one edit per row in the new dropdown.
+
+
 ## 2026-08-27 — Invoice No. and Transaction ID stop being compulsory
 
 **Done.** The owner's instruction: none of Invoice No., Transaction ID or Reference may be
