@@ -435,7 +435,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                             className="block"
                           />
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">N/A</span>
                         )}
                       </td>
                       <td className="col-amount text-muted-foreground">
@@ -443,7 +443,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                             unless this row is the one that set it. */}
                         {rateOf(row)
                           ? `৳${trimRate(rateOf(row) as string)}`
-                          : "—"}
+                          : "N/A"}
                       </td>
                       <td>
                         {/* Opens the account itself — its bank, branch, number
@@ -458,7 +458,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                             {row.accountName}
                           </Link>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">N/A</span>
                         )}
                       </td>
                       <td>
@@ -467,7 +467,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                             SWIFT code; those stay on the entry rather than
                             crowd a column the sheet writes as one sender. */}
                         {row.senderAccountName ?? row.senderBankName ?? (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">N/A</span>
                         )}
                       </td>
                       <DocumentCell
@@ -500,7 +500,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                             {row.notes}
                           </span>
                         ) : (
-                          "—"
+                          "N/A"
                         )}
                       </td>
                       {/*
@@ -629,7 +629,7 @@ function DocumentCell({
   }) => void;
 }) {
   if (!children) {
-    return <td className="text-muted-foreground">—</td>;
+    return <td className="text-muted-foreground">N/A</td>;
   }
 
   return (

@@ -411,7 +411,7 @@ export function EmailPanel() {
                     </td>
                     <td>{row.recipient}</td>
                     <td className="num text-xs text-muted-foreground">
-                      {row.subjectDate ?? "—"}
+                      {row.subjectDate ?? "N/A"}
                     </td>
                     <td>
                       {row.outcome === "sent" ? (

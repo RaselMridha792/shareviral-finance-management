@@ -174,7 +174,7 @@ export function PayslipView({
             <p className="slip-role">
               {[payslip.snapshotDesignation, payslip.snapshotDepartment]
                 .filter(Boolean)
-                .join("  ·  ") || "—"}
+                .join("  ·  ") || "N/A"}
             </p>
             <p className="slip-codes">
               {payslip.employeeCode ? (
@@ -204,7 +204,7 @@ export function PayslipView({
               <dd>
                 {[payslip.snapshotBankName, payslip.snapshotBankAccount]
                   .filter(Boolean)
-                  .join("  ·  ") || "—"}
+                  .join("  ·  ") || "N/A"}
               </dd>
             </div>
             {payslip.snapshotEtin ? (
@@ -273,7 +273,7 @@ export function PayslipView({
               <dd>
                 {[payslip.snapshotBankName, payslip.snapshotBankAccount]
                   .filter(Boolean)
-                  .join(", A/C ") || "—"}
+                  .join(", A/C ") || "N/A"}
               </dd>
             </div>
             <div>

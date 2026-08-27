@@ -280,13 +280,13 @@ function OwnDates({
   from: string | null;
   until: string | null;
 }) {
-  if (!from && !until) return <span className="text-muted-foreground">—</span>;
+  if (!from && !until) return <span className="text-muted-foreground">N/A</span>;
   return (
     <span className="inline-flex items-baseline gap-1.5">
       {from ? (
         <span className="num">{from}</span>
       ) : (
-        <span className="text-muted-foreground">—</span>
+        <span className="text-muted-foreground">N/A</span>
       )}
       <span aria-hidden className="text-muted-foreground">
         →
@@ -295,7 +295,7 @@ function OwnDates({
       {until ? (
         <span className="num">{until}</span>
       ) : (
-        <span className="text-muted-foreground">—</span>
+        <span className="text-muted-foreground">N/A</span>
       )}
     </span>
   );

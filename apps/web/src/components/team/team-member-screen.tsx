@@ -535,7 +535,7 @@ export function TeamMemberScreen({
                               !slip.paidOn && "text-muted-foreground",
                             )}
                           >
-                            {slip.paidOn ?? "—"}
+                            {slip.paidOn ?? "N/A"}
                           </td>
                           <td>
                             {/* One link per row — see the note in
@@ -888,7 +888,7 @@ function Row({
           empty && "text-muted-foreground",
         )}
       >
-        {empty ? "—" : content}
+        {empty ? "N/A" : content}
       </span>
     </div>
   );

@@ -385,7 +385,6 @@ export function TransactionForm({
             invoiceNo: text("invoiceNo"),
             description: text("description"),
             notes: text("notes"),
-            receiptUrl: text("receiptUrl"),
             // Sent on an edit too, now that the dollar figure on this form is
             // read off it — a rate box that showed a number and then dropped
             // it would be the form disagreeing with the table over the same
@@ -406,7 +405,6 @@ export function TransactionForm({
             invoiceNo: text("invoiceNo"),
             description: String(data.get("description")),
             notes: text("notes"),
-            receiptUrl: text("receiptUrl"),
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
             usdRate: text("usdRate"),
@@ -804,18 +802,12 @@ export function TransactionForm({
             </Field>
           </div>
 
-          <Field
-            label="Receipt link"
-            error={fieldErrors.receiptUrl}
-            hint="Paste the Google Drive link"
-          >
-            <Input
-              name="receiptUrl"
-              type="url"
-              placeholder="https://drive.google.com/…"
-              defaultValue={transaction?.receiptUrl ?? ""}
-            />
-          </Field>
+          {/* The Receipt link box came off on the owner's instruction — the
+            invoice and transaction-id paperclips above already carry the
+            paper, and a third place to put it was a box people felt obliged
+            to fill. Rows that have a link keep it: the field is simply not
+            sent, so an edit cannot clear it, and the table still shows the
+            open-receipt icon on old rows. */}
 
           {/*
           What is already filed against this row — which is only a question

@@ -702,7 +702,7 @@ function LineRow({
       <td>
         <span className="font-medium">{line.fullName}</span>
         <span className="block text-xs text-muted-foreground">
-          {line.snapshotDesignation ?? "—"}
+          {line.snapshotDesignation ?? "N/A"}
         </span>
         {warning ? (
           <span className="mt-0.5 block text-xs text-warning">{warning}</span>
@@ -736,7 +736,7 @@ function LineRow({
                 className="block"
               />
             ) : (
-              <span className="block text-right text-faint">—</span>
+              <span className="block text-right text-faint">N/A</span>
             )}
           </td>
         );

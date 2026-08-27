@@ -242,7 +242,7 @@ export function RateHistory() {
                       {Number(rate.rate).toFixed(2)}
                     </td>
                     <td className="cell-prose text-muted-foreground">
-                      {rate.notes ?? "—"}
+                      {rate.notes ?? "N/A"}
                     </td>
                     {/*
                       There is no per-row editor to open — a day's number is

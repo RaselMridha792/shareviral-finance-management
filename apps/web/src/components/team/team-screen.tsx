@@ -551,7 +551,7 @@ function Section({
                   */}
               {past ? (
                 <td className="num text-muted-foreground">
-                  {member.endedOn ?? "—"}
+                  {member.endedOn ?? "N/A"}
                 </td>
               ) : null}
               {/*
@@ -579,7 +579,7 @@ function Section({
                 </td>
               ) : null}
               <td className="text-muted-foreground">
-                {member.designation ?? "—"}
+                {member.designation ?? "N/A"}
               </td>
               {/*
                     An em dash, not "Onsite".
@@ -595,10 +595,10 @@ function Section({
               <td className="text-muted-foreground">
                 {member.employmentType
                   ? EMPLOYMENT_TYPE_LABELS[member.employmentType]
-                  : "—"}
+                  : "N/A"}
               </td>
               <td className="text-muted-foreground">
-                {member.department ?? "—"}
+                {member.department ?? "N/A"}
               </td>
               <td>
                 <Badge

@@ -68,11 +68,22 @@ const optionalText = (max: number) =>
     .transform((v) => (v === "" ? undefined : v))
     .optional();
 
+/**
+ * Typed "N/A" is a blank, not a value.
+ *
+ * The owner's habit from years of forms that refused an empty box: no data,
+ * write N/A. This app never requires these fields, but the habit arrives with
+ * the people, and refusing "N/A" with "Paste an https:// link" would be the
+ * box arguing with somebody who just told it there is nothing to paste. The
+ * same rule is applied wherever a link is accepted — grep for isNAText.
+ */
+export const isNAText = (v: string) => /^(n\/?a|-|—)$/i.test(v.trim());
+
 /** Google Drive or any https link. Checked for shape, not reachability. */
 const receiptUrlSchema = z
   .string()
   .trim()
-  .transform((v) => (v === "" ? undefined : v))
+  .transform((v) => (v === "" || isNAText(v) ? undefined : v))
   .optional()
   .refine((v) => v === undefined || /^https:\/\/\S+$/.test(v), {
     message: "Paste an https:// link",

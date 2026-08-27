@@ -308,7 +308,7 @@ export function BankStatementScreen({
                           {row.invoiceNo}
                         </button>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">N/A</span>
                       )}
                     </td>
                     {/* The statement is read-only today — nothing on this

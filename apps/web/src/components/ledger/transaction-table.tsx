@@ -290,7 +290,7 @@ export function TransactionTable({
                         {row.categoryName}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">N/A</span>
                     )}
                   </td>
                   {/*
@@ -335,7 +335,7 @@ export function TransactionTable({
                     )}
                   </td>
                   <td className="num text-right text-xs text-muted-foreground">
-                    {rate ?? "—"}
+                    {rate ?? "N/A"}
                   </td>
                   {showAccount ? (
                     <td className="text-muted-foreground">
@@ -353,7 +353,7 @@ export function TransactionTable({
                           {row.accountName}
                         </Link>
                       ) : (
-                        "—"
+                        "N/A"
                       )}
                     </td>
                   ) : null}
@@ -398,7 +398,7 @@ export function TransactionTable({
                         {row.invoiceNo}
                       </button>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">N/A</span>
                     )}
                   </td>
                   {/*

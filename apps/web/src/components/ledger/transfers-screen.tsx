@@ -246,10 +246,10 @@ export function TransfersScreen({
                         <td className="num text-right text-muted-foreground">
                           {row.usdAmount
                             ? `$${Number(row.usdAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                            : "—"}
+                            : "N/A"}
                         </td>
                         <td className="num text-right text-muted-foreground">
-                          {row.usdRate ? Number(row.usdRate).toFixed(2) : "—"}
+                          {row.usdRate ? Number(row.usdRate).toFixed(2) : "N/A"}
                         </td>
                         <NumberCell
                           value={row.invoiceNo}
@@ -384,7 +384,7 @@ function NumberCell({
   label: string;
   onOpen: () => void;
 }) {
-  if (!value) return <td className="text-muted-foreground">—</td>;
+  if (!value) return <td className="text-muted-foreground">N/A</td>;
   return (
     <td>
       <button

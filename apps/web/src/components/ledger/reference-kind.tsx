@@ -86,7 +86,7 @@ export function ReferenceCell({
   onOpen: () => void;
 }) {
   if (!value && documentCount === 0) {
-    return <td className="text-muted-foreground">—</td>;
+    return <td className="text-muted-foreground">N/A</td>;
   }
 
   if (!value) {

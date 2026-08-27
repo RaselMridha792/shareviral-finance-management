@@ -480,7 +480,7 @@ export function OtherExpensesScreen({
                           )}
                         </td>
                         <td className="col-amount text-xs text-muted-foreground">
-                          {rate ? trimRate(rate) : "—"}
+                          {rate ? trimRate(rate) : "N/A"}
                         </td>
                         <td>
                           {/* Opens the account itself — its bank, its number,
@@ -495,7 +495,7 @@ export function OtherExpensesScreen({
                               {row.accountName}
                             </Link>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </td>
                         <td className="text-xs text-muted-foreground">
@@ -521,7 +521,7 @@ export function OtherExpensesScreen({
                               {row.invoiceNo}
                             </button>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </td>
                         {/* Number, eye, or dash — ledger/reference-kind.tsx */}

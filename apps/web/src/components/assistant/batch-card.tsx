@@ -135,7 +135,7 @@ export function BatchCard({
                       title={String(row[key] ?? "")}
                     >
                       {row[key] === undefined || row[key] === null ? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">N/A</span>
                       ) : (
                         String(row[key])
                       )}
@@ -145,7 +145,7 @@ export function BatchCard({
                   {results ? (
                     <td className="px-3 py-2 align-top">
                       {!result ? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">N/A</span>
                       ) : result.ok ? (
                         <span className="inline-flex items-center gap-1.5 text-positive">
                           <CircleCheck className="size-3.5" />

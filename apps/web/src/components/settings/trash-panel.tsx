@@ -251,13 +251,13 @@ export function TrashPanel() {
                       <td className="whitespace-nowrap">
                         {formatDate(item.deletedAt.slice(0, 10))}
                       </td>
-                      <td>{item.deletedByName ?? "—"}</td>
+                      <td>{item.deletedByName ?? "N/A"}</td>
                       <td className="max-w-56">
                         <span
                           className="block truncate text-muted-foreground"
                           title={item.deleteReason ?? undefined}
                         >
-                          {item.deleteReason ?? "—"}
+                          {item.deleteReason ?? "N/A"}
                         </span>
                       </td>
                       <td>

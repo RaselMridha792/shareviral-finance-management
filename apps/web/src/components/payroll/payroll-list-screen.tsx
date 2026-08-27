@@ -264,7 +264,7 @@ export function PayrollListScreen({
                       */}
                       <SerialCell n={serial(data.page, index)} />
                       <td className="num text-muted-foreground">
-                        {run.paymentDate ?? "—"}
+                        {run.paymentDate ?? "N/A"}
                       </td>
                       <td>
                         {/* One link per row — see the note in team-screen.tsx. */}

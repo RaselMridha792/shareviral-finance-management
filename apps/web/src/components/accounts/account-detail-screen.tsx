@@ -191,7 +191,7 @@ export function AccountDetailScreen({
         ) : null}
       </div>
 
-      {/* Said once, at the bottom, rather than as "—" beside each blank row.
+      {/* Said once, at the bottom, rather than as "N/A" beside each blank row.
           A page of dashes reads as broken; a line naming what is missing reads
           as a thing to go and do. */}
       {missing.length > 0 ? (
@@ -244,7 +244,7 @@ function DetailRow({
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-muted-foreground">{row.label}</span>
       {!row.value ? (
-        <span className="text-muted-foreground">—</span>
+        <span className="text-muted-foreground">N/A</span>
       ) : row.money ? (
         <Amount
           value={row.value}

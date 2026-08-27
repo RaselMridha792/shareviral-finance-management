@@ -105,7 +105,7 @@ export function MemberPicker({
                   {member.fullName}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {member.designation ?? member.department ?? "—"}
+                  {member.designation ?? member.department ?? "N/A"}
                 </span>
               </span>
               {noPay ? (

@@ -311,7 +311,7 @@ export function ImportScreen({
                             .map((row) => row[header])
                             .filter(Boolean)
                             .slice(0, 3)
-                            .join(" · ") || "—"}
+                            .join(" · ") || "N/A"}
                         </td>
                         <td className="cell-prose px-3 py-2">
                           <select
@@ -500,12 +500,12 @@ export function ImportScreen({
                           {row.rowNumber}
                         </td>
                         <td className="num px-3 py-2">
-                          {mapped?.txnDate ?? "—"}
+                          {mapped?.txnDate ?? "N/A"}
                         </td>
                         <td className="cell-prose px-3 py-2">
                           {mapped?.description ??
                             Object.values(row.raw).filter(Boolean)[0] ??
-                            "—"}
+                            "N/A"}
                         </td>
                         <td className="cell-prose px-3 py-2">
                           {mapped?.amount ? (

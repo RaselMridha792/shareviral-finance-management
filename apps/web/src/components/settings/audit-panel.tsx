@@ -464,7 +464,7 @@ function Detail({ row }: { row: AuditEntryDto }) {
 }
 
 function show(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "N/A";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
