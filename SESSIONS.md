@@ -88,6 +88,34 @@ separately, all green (315 tests).
 to move under `components/ui/` — that is a shared move and needs the owner's word, so it was
 left alone.
 
+## 2026-08-27 — an account chooses its primary currency
+
+**Done.** The account form's currency choice (now labelled **Primary
+currency**) governs the drawers. USD-primary account: the expense drawer asks
+dollars-first and derives the taka (computed-until-touched); Cash In makes the
+dollars required; Money Transfer grows a dollars+rate pair when either side is
+USD-primary and writes them on both halves; the transfers table gains
+Amount (USD) and USD rate columns. Commit: `fc167ff`.
+
+**The invariant held, on purpose:** every stored amount is still taka
+(`transactions.amount`, balances, every SQL sum). The dollars land in
+`original_amount`/`fx_rate`/`usd_rate` beside the taka — recorded, never
+counted. `.usdprimaryqa.mjs` (10 checks) proves both sides.
+
+**Watch out.**
+
+- **`isToolSpend()` changed**: the non-BDT-account half now also requires
+  `accounts.type = 'card'`. Behaviour-preserving today (every non-BDT account
+  is a card), but a USD-primary *bank*'s spending no longer auto-counts as AI
+  tooling — which is the point.
+- `transferSchema` gained optional `usdAmount`/`usdRate` (shared — rebuild
+  dist). The transfer service writes originals on both halves when both are
+  present.
+- The three entry forms each derive `usdPrimary` from the accounts prop — an
+  account picker that stops carrying `currency` breaks the flip silently.
+
+---
+
 ## 2026-08-27 — the word matches the act: trash in, delete out
 
 **Done.** The owner's catch: the row action said "Delete" but moved the row to
