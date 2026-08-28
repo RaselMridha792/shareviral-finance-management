@@ -20,6 +20,37 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-28 — the edit drawer sets pay too
+
+**Done.** The owner's follow-up to the morning's Current salary work: the field existed on create
+only, and "make editing flexible — the same drawer either way". Both edit affordances (the pencil
+on the directory row, the Edit button inside the profile) already opened the same `TeamMemberForm`;
+what was missing was the field on edit. Now:
+
+- **Editing shows Current salary, prefilled with the live figure** — fetched when the drawer opens,
+  and the box waits for the fetch rather than mounting empty over a real salary.
+- **A changed figure lands as a raise effective today**, through `setCompensation` and everything
+  it carries — split snapshot, closing of the previous row, sensitive audit line, reason "Changed
+  from the profile drawer".
+- **An unchanged figure writes nothing.** Saving the drawer without touching the box must not
+  manufacture a raise dated today; the API compares against the current figure and skips.
+- **A second change on the same day amends today's row** instead of erroring. `setCompensation`'s
+  "A figure already starts on that date" refusal is gone — it read as a safeguard and was a trap
+  (a typo corrected five minutes later hit a wall). The unique index stays; a collision now means
+  amend, on the Pay tab as well, and each amendment writes its own audit row.
+
+Commits: `024933f`.
+
+**Watch out.** `updateTeamMemberSchema` no longer omits `currentSalary` — the permission gate in
+`TeamMembersService.update()` is what stands between a role without `team.compensation.write` and
+a pay write, same as `create()`. The Pay tab's duplicate-date behaviour changed with this (amend,
+not refuse); `CompensationForm` on the profile needed no edit but its users will notice the error
+is gone.
+
+**Open.** Nothing half-done. `.sixqa.mjs` grew to 22 checks and covers the raise, the skip, the
+same-day amendment and the prefilled edit drawer.
+
+
 ## 2026-08-28 — the owner's six items, from one screenshot batch
 
 **Done.** Six requests handed over together, one commit each where the diffs allowed it.
