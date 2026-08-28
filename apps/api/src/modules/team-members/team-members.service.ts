@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -279,6 +278,35 @@ export class TeamMembersService {
   ) {
     const existing = await this.findOne(id);
 
+    /*
+     * Same rule as `create`: pay never touches `team_members`. On an edit the
+     * figure lands as a raise effective today, through `setCompensation` and
+     * everything it carries — the split snapshot, the closing of the previous
+     * row, the sensitive audit line. A figure equal to what they are already
+     * on is skipped rather than written twice, so saving the drawer without
+     * touching the box does not manufacture a raise dated today.
+     */
+    const { currentSalary, ...memberInput } = input;
+    if (currentSalary !== undefined) {
+      if (!hasPermission(actor.role, "team.compensation.write")) {
+        throw new ForbiddenException(
+          "Setting pay needs the compensation permission — leave Current salary blank",
+        );
+      }
+      const now = await this.currentFigureOf(id);
+      if (now === null || Number(now) !== Number(currentSalary)) {
+        await this.setCompensation(
+          id,
+          {
+            grossAmount: currentSalary,
+            effectiveFrom: todayInDhaka(),
+            changeReason: "Changed from the profile drawer",
+          },
+          actor,
+        );
+      }
+    }
+
     return this.audit.mutate({
       action: "update",
       entityTable: "team_members",
@@ -296,7 +324,7 @@ export class TeamMembersService {
       run: async (tx) => {
         const [row] = await tx
           .update(teamMembers)
-          .set({ ...input, updatedAt: new Date(), updatedBy: actor.id })
+          .set({ ...memberInput, updatedAt: new Date(), updatedBy: actor.id })
           .where(eq(teamMembers.id, id))
           .returning(projection);
         return row;
@@ -492,25 +520,16 @@ export class TeamMembersService {
   ) {
     const member = await this.findOne(teamMemberId);
 
-    const [clash] = await this.db.client
-      .select({ id: compensationHistory.id })
-      .from(compensationHistory)
-      .where(
-        and(
-          eq(compensationHistory.teamMemberId, teamMemberId),
-          eq(compensationHistory.effectiveFrom, input.effectiveFrom),
-        ),
-      )
-      .limit(1);
-
-    if (clash) {
-      throw new BadRequestException({
-        message: "Validation failed",
-        errors: {
-          effectiveFrom: ["A figure already starts on that date"],
-        },
-      });
-    }
+    /*
+     * A figure re-set on a date that already has one AMENDS that row rather
+     * than erroring. It used to refuse with "A figure already starts on that
+     * date" — which read as a safeguard and was actually a trap: correcting a
+     * typo five minutes later, or changing the figure twice in one day from
+     * the edit drawer, hit a wall that told the person nothing useful. The
+     * unique index stays; what changed is what a collision means. Each
+     * amendment still writes its own audit row, so the trail keeps both
+     * figures and who set them.
+     */
 
     /**
      * The split, worked out once and frozen with the figure.
@@ -573,10 +592,42 @@ export class TeamMembersService {
             changeReason: input.changeReason,
             createdBy: actor.id,
           })
+          .onConflictDoUpdate({
+            target: [
+              compensationHistory.teamMemberId,
+              compensationHistory.effectiveFrom,
+            ],
+            set: {
+              grossAmount: input.grossAmount,
+              components,
+              changeReason: input.changeReason,
+              createdBy: actor.id,
+            },
+          })
           .returning();
         return row;
       },
     });
+  }
+
+  /**
+   * The figure a person is on right now, or null when none was ever set.
+   * The same reading `currentCompensation` does for everybody, for one.
+   */
+  private async currentFigureOf(teamMemberId: string): Promise<string | null> {
+    const [row] = await this.db.client
+      .select({ grossAmount: compensationHistory.grossAmount })
+      .from(compensationHistory)
+      .where(
+        and(
+          eq(compensationHistory.teamMemberId, teamMemberId),
+          isNull(compensationHistory.deletedAt),
+          sql`${compensationHistory.effectiveFrom} <= ${todayInDhaka()}`,
+        ),
+      )
+      .orderBy(desc(compensationHistory.effectiveFrom))
+      .limit(1);
+    return row?.grossAmount ?? null;
   }
 
   /** Belt and braces on top of the endpoint guard. */

@@ -15,7 +15,7 @@ import {
   todayInDhaka,
 } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -65,6 +65,35 @@ export function TeamMemberForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
+  /*
+   * The figure they are on right now, fetched when the drawer opens on an
+   * existing person. Null while unknown — the field waits for it, because an
+   * uncontrolled input takes its defaultValue exactly once, and mounting the
+   * box empty and filling it later would show a blank over a real salary.
+   * On create there is nothing to fetch and the box starts empty.
+   */
+  const [salaryNow, setSalaryNow] = useState<string | null>(member ? null : "");
+  useEffect(() => {
+    if (!open || !member || !canSetPay) return;
+    let cancelled = false;
+    teamApi
+      .currentSalaries()
+      .then((rows) => {
+        if (cancelled) return;
+        const mine = rows.find((r) => r.teamMemberId === member.id);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSalaryNow(mine?.grossAmount ?? "");
+      })
+      .catch(() => {
+        // The drawer still opens; the box simply starts empty.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (!cancelled) setSalaryNow("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, member, canSetPay]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -102,9 +131,11 @@ export function TeamMemberForm({
       // The offer figure, not payroll. Raises are set on the Pay tab, which
       // this drawer cannot reach and HR cannot open.
       joiningSalary: text("joiningSalary"),
-      // Pay, not paperwork — create only, and only when this person may set
-      // it. Sent blank it would fail the schema, so it is omitted instead.
-      ...(!editing && canSetPay && text("currentSalary")
+      // Pay, not paperwork — only when this person may set it. On an edit the
+      // API skips a figure equal to the current one, so saving the drawer
+      // untouched manufactures nothing. Sent blank it would fail the schema,
+      // so it is omitted instead — a cleared box means "no change", not zero.
+      ...(canSetPay && text("currentSalary")
         ? { currentSalary: text("currentSalary") }
         : {}),
       educationMajor: text("educationMajor"),
@@ -333,13 +364,21 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        {!editing && canSetPay ? (
+        {canSetPay && salaryNow !== null ? (
           <Field
             label="Current salary"
             error={fieldErrors.currentSalary}
-            hint="What they are paid now, monthly gross — this is what the directory and payroll read. Changes later go on the Pay tab."
+            hint={
+              editing
+                ? "What they are paid now, monthly gross. Changing it writes a raise effective today, with the audit trail a raise gets. The Pay tab still holds the history."
+                : "What they are paid now, monthly gross — this is what the directory and payroll read."
+            }
           >
-            <MoneyInput name="currentSalary" placeholder="45000.00" />
+            <MoneyInput
+              name="currentSalary"
+              placeholder="45000.00"
+              defaultValue={salaryNow}
+            />
           </Field>
         ) : null}
 

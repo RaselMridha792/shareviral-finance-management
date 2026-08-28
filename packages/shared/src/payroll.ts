@@ -273,16 +273,17 @@ export const createTeamMemberSchema = z.strictObject({
   joiningSalary: optionalOf(amountSchema),
 
   /**
-   * What they are paid now, offered at the moment of adding them — so the
-   * directory's Current salary column is not "Not set" for everyone until
-   * somebody remembers the Pay tab.
+   * What they are paid now — offered when adding them, and editable from the
+   * same drawer afterwards, on the owner's instruction that editing be
+   * flexible rather than a one-shot.
    *
-   * Read the comment above before widening this: the boundary it defends is
-   * intact. This field never touches `team_members` — the API strips it,
-   * refuses it outright from a role without `team.compensation.write`, and
-   * writes `compensation_history` through the same audited path a raise
-   * takes. It exists on CREATE only; `updateTeamMemberSchema` omits it, so
-   * later changes still have exactly one door, the Pay tab.
+   * Read the comment above before widening this further: the boundary it
+   * defends is intact. This field never touches `team_members` — the API
+   * strips it, refuses it outright from a role without
+   * `team.compensation.write`, and writes `compensation_history` through the
+   * same audited path a raise takes. On create it is effective from the
+   * joining date; on edit it lands as a raise effective today, and a figure
+   * equal to the current one is quietly skipped rather than written twice.
    */
   currentSalary: optionalOf(amountSchema),
 
@@ -302,10 +303,7 @@ export const createTeamMemberSchema = z.strictObject({
 });
 export type CreateTeamMemberInput = z.infer<typeof createTeamMemberSchema>;
 
-export const updateTeamMemberSchema = patchOf(
-  // Not on update — see the note on the field. Pay changes have one door.
-  createTeamMemberSchema.omit({ currentSalary: true }),
-)
+export const updateTeamMemberSchema = patchOf(createTeamMemberSchema)
   .extend({
     status: employmentStatusSchema.optional(),
     /**
