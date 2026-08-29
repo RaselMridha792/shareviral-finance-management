@@ -13,8 +13,6 @@ import {
 } from "@finance/shared";
 import {
   ArrowLeft,
-  ExternalLink,
-  FileText,
   LoaderCircle,
   Lock,
   Plus,
@@ -349,37 +347,11 @@ export function TeamMemberScreen({
           </CardBody>
         </Card>
 
-        {/*
-          The links that were here before uploads existed.
-
-          Only rendered when a record actually has one. They were the whole
-          answer until 2026-08-16 and eighteen people have values in them, so
-          hiding them would look like the data had been lost — but a row of
-          "Not on file" placeholders beneath a working uploader tells the
-          reader nothing except that there are two systems.
-        */}
-        {member.cvUrl || member.appointmentLetterUrl || member.photoUrl ? (
-          <Card className="lg:col-span-2">
-            <CardHeader
-              title="Linked elsewhere"
-              description="Google Drive links added before this app stored files"
-            />
-            <CardBody className="flex flex-wrap gap-2">
-              {member.cvUrl ? (
-                <DocumentLink href={member.cvUrl} label="CV" />
-              ) : null}
-              {member.appointmentLetterUrl ? (
-                <DocumentLink
-                  href={member.appointmentLetterUrl}
-                  label="Appointment letter"
-                />
-              ) : null}
-              {member.photoUrl ? (
-                <DocumentLink href={member.photoUrl} label="Photo" />
-              ) : null}
-            </CardBody>
-          </Card>
-        ) : null}
+        {/* The "Linked elsewhere" card is gone on the owner's instruction: every
+          paper now lives in the app's own store, uploaded from the drawer or
+          the Documents card above. The three URL columns keep their values in
+          the database — removing a column to satisfy a screen would destroy
+          what somebody typed — they are simply no longer shown or written. */}
 
         {/* `min-w-0` is load-bearing, not tidying. A grid item's default
             `min-width: auto` sizes it to its contents, so the sixteen-column
@@ -788,37 +760,6 @@ function MemberPhoto({
   );
 }
 
-/**
- * A paper somebody pasted a link to.
- *
- * Named by what it is, never by its address — a Drive URL is eighty characters
- * of noise that tells nobody what it opens. Absent is stated rather than left
- * blank: "no signed letter on file" is itself something HR needs to see.
- */
-function DocumentLink({ href, label }: { href: string | null; label: string }) {
-  if (!href) {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-1.5 text-sm">
-        <FileText className="size-4 text-muted-foreground" />
-        {label}
-        <span className="text-muted-foreground">Not on file</span>
-      </span>
-    );
-  }
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition hover:border-primary hover:text-primary"
-    >
-      <FileText className="size-4 text-muted-foreground" />
-      {label}
-      <ExternalLink className="size-3.5 text-muted-foreground" />
-    </a>
-  );
-}
 
 /** Only letters: a name like "HR (test)" must not render as "H(". */
 /**

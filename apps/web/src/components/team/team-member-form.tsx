@@ -27,7 +27,11 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
+import { Paperclip, X } from "lucide-react";
+
 import { useCan } from "@/components/auth/session-provider";
+import { useToast } from "@/components/ui/toast";
+import { uploadTeamMemberFile } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-client";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 
@@ -73,6 +77,17 @@ export function TeamMemberForm({
    * On create there is nothing to fetch and the box starts empty.
    */
   const [salaryNow, setSalaryNow] = useState<string | null>(member ? null : "");
+
+  /*
+   * The papers, held here and uploaded AFTER the save — on create there is no
+   * id to attach them to until the API answers. They land in the app's own
+   * file store under the person, exactly where the profile's Documents card
+   * reads, on the owner's rule that nothing lives on a third-party link.
+   */
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [letterFile, setLetterFile] = useState<File | null>(null);
+  const toast = useToast();
   useEffect(() => {
     if (!open || !member || !canSetPay) return;
     let cancelled = false;
@@ -81,12 +96,10 @@ export function TeamMemberForm({
       .then((rows) => {
         if (cancelled) return;
         const mine = rows.find((r) => r.teamMemberId === member.id);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSalaryNow(mine?.grossAmount ?? "");
       })
       .catch(() => {
         // The drawer still opens; the box simply starts empty.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (!cancelled) setSalaryNow("");
       });
     return () => {
@@ -125,7 +138,6 @@ export function TeamMemberForm({
       bankRouting: text("bankRouting"),
       address: text("address"),
       notes: text("notes"),
-      photoUrl: text("photoUrl"),
       dateOfBirth: text("dateOfBirth"),
       permanentAddress: text("permanentAddress"),
       // The offer figure, not payroll. Raises are set on the Pay tab, which
@@ -139,8 +151,6 @@ export function TeamMemberForm({
         ? { currentSalary: text("currentSalary") }
         : {}),
       educationMajor: text("educationMajor"),
-      cvUrl: text("cvUrl"),
-      appointmentLetterUrl: text("appointmentLetterUrl"),
       ...(editing ? { status: text("status"), endedOn: text("endedOn") } : {}),
     } as Parameters<typeof teamApi.create>[0];
 
@@ -150,8 +160,33 @@ export function TeamMemberForm({
     }
 
     try {
-      if (member) await teamApi.update(member.id, payload);
-      else await teamApi.create(payload);
+      const saved = member
+        ? await teamApi.update(member.id, payload)
+        : await teamApi.create(payload);
+
+      /*
+       * The person is saved either way — a failed upload must not undo that,
+       * and retrying the whole form would create them twice. So each file is
+       * tried once and a failure is a toast naming the paper, which can then
+       * be added from the profile's Documents card.
+       */
+      const papers: Array<[File | null, string, string]> = [
+        [photoFile, "profile_photo", "photo"],
+        [cvFile, "cv", "CV"],
+        [letterFile, "appointment_letter", "appointment letter"],
+      ];
+      for (const [file, kind, name] of papers) {
+        if (!file) continue;
+        try {
+          await uploadTeamMemberFile(saved.id, file, kind);
+        } catch {
+          toast.show(
+            `Saved, but the ${name} did not upload — add it from the profile's Documents card.`,
+            "error",
+          );
+        }
+      }
+
       await onSaved();
       onClose();
     } catch (caught) {
@@ -229,18 +264,13 @@ export function TeamMemberForm({
           <Input name="fullName" required defaultValue={member?.fullName} />
         </Field>
 
-        <Field
+        <PaperPick
           label="Photo"
-          error={fieldErrors.photoUrl}
-          hint="A link, not an upload — a Drive file or any https:// address"
-        >
-          <Input
-            name="photoUrl"
-            inputMode="url"
-            placeholder="https://drive.google.com/…"
-            defaultValue={member?.photoUrl ?? ""}
-          />
-        </Field>
+          hint="Uploads into the app when you save — it appears on the profile"
+          accept="image/*"
+          file={photoFile}
+          onPick={setPhotoFile}
+        />
 
         <SectionHeading>Personal</SectionHeading>
 
@@ -430,36 +460,31 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <Field
-          label="CV"
-          error={fieldErrors.cvUrl}
-          hint="A link, not an upload — a Drive file or any https:// address"
-        >
-          <Input
-            name="cvUrl"
-            inputMode="url"
-            placeholder="https://drive.google.com/…"
-            defaultValue={member?.cvUrl ?? ""}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <PaperPick
+            label="CV"
+            hint="Uploads into the app when you save"
+            accept="application/pdf,image/*"
+            file={cvFile}
+            onPick={setCvFile}
           />
-        </Field>
-
-        <Field
-          label="Signed appointment letter"
-          error={fieldErrors.appointmentLetterUrl}
-          hint="A link, not an upload — a Drive file or any https:// address"
-        >
-          <Input
-            name="appointmentLetterUrl"
-            inputMode="url"
-            placeholder="https://drive.google.com/…"
-            defaultValue={member?.appointmentLetterUrl ?? ""}
+          <PaperPick
+            label="Signed appointment letter"
+            hint="Uploads into the app when you save"
+            accept="application/pdf,image/*"
+            file={letterFile}
+            onPick={setLetterFile}
           />
-        </Field>
+        </div>
 
         <SectionHeading>Tax &amp; bank</SectionHeading>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="e-TIN" error={fieldErrors.etin} hint="12 digits">
+          <Field
+            label="e-TIN"
+            error={fieldErrors.etin}
+            hint="Optional — 12 digits when there is one"
+          >
             <Input
               name="etin"
               className="num"
@@ -543,5 +568,60 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h3 className="mt-2 border-t border-border pt-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
       {children}
     </h3>
+  );
+}
+
+/**
+ * One paper on the drawer: pick it now, it uploads after the save.
+ *
+ * Deliberately not a URL box. These lived as Drive links and the owner's rule
+ * is that every paper lives inside the app — so the drawer takes the file
+ * itself, and the profile's Documents card is where it appears (and where old
+ * files are listed, replaced or removed).
+ */
+function PaperPick({
+  label,
+  hint,
+  accept,
+  file,
+  onPick,
+}: {
+  label: string;
+  hint?: string;
+  accept: string;
+  file: File | null;
+  onPick: (file: File | null) => void;
+}) {
+  return (
+    <Field label={label} hint={file ? undefined : hint}>
+      <div className="flex items-center gap-2">
+        <label className="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition hover:text-foreground">
+          <Paperclip className="size-3.5 shrink-0" />
+          {file ? (
+            <span className="max-w-56 truncate text-foreground">
+              {file.name}
+            </span>
+          ) : (
+            "Choose a file"
+          )}
+          <input
+            type="file"
+            accept={accept}
+            className="hidden"
+            onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {file ? (
+          <button
+            type="button"
+            aria-label={`Remove the chosen ${label.toLowerCase()}`}
+            onClick={() => onPick(null)}
+            className="cursor-pointer rounded p-1 text-muted-foreground transition hover:text-negative"
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+    </Field>
   );
 }
