@@ -20,6 +20,38 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-29 — the salary sheet reads like the owner's Excel
+
+**Done.** The last of the owner's payroll batch. Their sheet (found as today's
+"Untitled spreadsheet - Sheet1.csv" download, 15:52) fixes the column order, and the table now
+follows it exactly: SL · Name · Role · Dept · Basic · House Rent · Medical · Conveyance · Bonus ·
+Other + · Working Days (of the month's real length) · Gross · TDS · Other − · Net Pay · FX Rate ·
+Net Pay (USD) · actions.
+
+What moved and what appeared:
+
+- **Role and Dept are their own columns** (the build-time snapshots), no longer a grey line under
+  the name.
+- **The split columns run in the sheet's order** — Basic, House Rent, Medical, Conveyance — via a
+  preference sort; an unknown label keeps its first-seen place at the end rather than vanishing.
+- **Working Days is a column on the sheet itself**, editable in draft: typing 10 into a 31-day
+  month pro-rates the row through the same server path as the drawer (proven: 31,000 → 10,000.00
+  in the database). The month's own number, or an emptied box, means a full month.
+- **Gross moved after the components**, as the sheet has it.
+- **FX Rate and Net Pay (USD)** — the month's governing rate (the `fx/governing` endpoint from
+  this morning) and the net translated at it, `≈`-marked; N/A when nothing governs. The totals
+  row carries the USD total too.
+
+**One deliberate departure from the sheet: `Other −` stays**, between TDS and Net. It is not in
+the Excel, but it still moves the net — a figure that counts but cannot be seen is the class of
+bug this app exists to hunt. If the owner wants it gone, it is one column and its total.
+
+Commits: `6f78421`.
+
+**Open.** `.sheetqa.mjs` (5 checks) drives the order, the snapshots, the day-typing and the FX
+columns. The payslip PDF still prints its own layout — nobody has asked for it to match the sheet.
+
+
 ## 2026-08-29 — payroll: working days drive the pay
 
 **Done.** The owner's payroll rules, all in `updateLine`:
