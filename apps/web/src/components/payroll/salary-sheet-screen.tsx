@@ -57,10 +57,13 @@ export function SalarySheetScreen({
   run,
   lines,
   accounts,
+  usdRate,
 }: {
   run: PayrollRunDto;
   lines: PayrollLineDto[];
   accounts: AccountDto[];
+  /** This month's governing taka-per-dollar rate, or null when none governs. */
+  usdRate: string | null;
 }) {
   // The rail knows the ancestors; only this page knows the record.
   useNameThisPage(run.label);
@@ -133,8 +136,24 @@ export function SalarySheetScreen({
         if (!seen.includes(part.label)) seen.push(part.label);
       }
     }
-    return seen;
+    /*
+     * The owner's sheet reads Basic, House Rent, Medical, Conveyance — so
+     * that is the order here, whatever order the parts were recorded in.
+     * A label the preference does not know keeps its first-seen place at
+     * the end rather than vanishing.
+     */
+    const preferred = ["Basic", "House Rent", "Medical", "Conveyance"];
+    const rank = (label: string) => {
+      const i = preferred.findIndex((p) => label.startsWith(p));
+      return i === -1 ? preferred.length : i;
+    };
+    return [...seen].sort((a, b) => rank(a) - rank(b));
   }, [lines]);
+
+  /** The month's own calendar length — the Working Days column's "out of". */
+  const daysInMonth = new Date(
+    Date.UTC(run.periodYear, run.periodMonth, 0),
+  ).getUTCDate();
 
   /** Each part summed down the sheet, for the heading's share and the total. */
   const splitTotals = useMemo(() => {
@@ -467,19 +486,20 @@ export function SalarySheetScreen({
           <TableScroll>
             {/* One column wider than it was — the SL somebody reads a row out
                 by — so the money columns keep the width they had. */}
-            <table className="table-data min-w-[1040px] text-sm">
+            <table className="table-data min-w-[1560px] text-sm">
               <thead>
                 <tr>
+                  {/* The owner's own sheet, column for column: name, role,
+                      dept, the four parts, bonus and other additions, the
+                      working days, and only then the gross they add up to,
+                      the tax, the net, and the net said in dollars. Other −
+                      is the one column the sheet does not carry, kept because
+                      it still moves the net — a figure that counts but cannot
+                      be seen is the class of bug this app hunts. */}
                   <SerialHead />
                   <Th>Name</Th>
-                  <Th width="w-28" align="right">
-                    Gross
-                  </Th>
-                  {/* The gross opened up, so it stays beside the gross rather
-                      than after the columns that are added to it. Each heading
-                      carries the share it is of the month's gross, which is the
-                      thing the owner wants to read off the sheet — the amounts
-                      alone do not say whether this month followed the rule. */}
+                  <Th>Role</Th>
+                  <Th>Dept</Th>
                   {splitLabels.map((label) => (
                     <Th key={label} width="w-24" align="right">
                       {label}
@@ -492,22 +512,35 @@ export function SalarySheetScreen({
                       </span>
                     </Th>
                   ))}
-                  {/* Left to right in the order they add up: the gross, what is
-                      added to it, what is taken off, what is left. */}
                   <Th width="w-28" align="right">
                     Bonus
                   </Th>
                   <Th width="w-28" align="right">
                     Other +
                   </Th>
+                  <Th width="w-24" align="right">
+                    Working Days
+                    <span className="num block font-normal normal-case opacity-70">
+                      of {daysInMonth}
+                    </span>
+                  </Th>
                   <Th width="w-28" align="right">
-                    Tax
+                    Gross
+                  </Th>
+                  <Th width="w-28" align="right">
+                    TDS
                   </Th>
                   <Th width="w-28" align="right">
                     Other −
                   </Th>
                   <Th width="w-32" align="right">
-                    Net
+                    Net Pay
+                  </Th>
+                  <Th width="w-24" align="right">
+                    FX Rate
+                  </Th>
+                  <Th width="w-28" align="right">
+                    Net Pay (USD)
                   </Th>
                   <Th width="w-24" />
                 </tr>
@@ -519,6 +552,8 @@ export function SalarySheetScreen({
                     n={index + 1}
                     line={line}
                     splitLabels={splitLabels}
+                    daysInMonth={daysInMonth}
+                    usdRate={usdRate}
                     editable={canWrite && draft}
                     onSaved={refresh}
                   />
@@ -542,18 +577,29 @@ export function SalarySheetScreen({
               */}
               <tfoot>
                 <tr>
-                  <td colSpan={2} className="font-semibold">
+                  {/* Counted by hand against the head, as the note above
+                      demands: 4 (Total, over SL/Name/Role/Dept) + the splits
+                      + bonus + other+ + blank days + gross + tds + other− +
+                      net + blank fx + usd net + blank actions. */}
+                  <td colSpan={4} className="font-semibold">
                     Total
                   </td>
-                  <FootAmount value={run.totalGross} />
                   {splitLabels.map((label) => (
                     <FootAmount key={label} value={splitTotals[label] ?? "0"} />
                   ))}
                   <FootAmount value={totals.bonus} />
                   <FootAmount value={totals.otherAdditions} />
+                  <td />
+                  <FootAmount value={run.totalGross} />
                   <FootAmount value={run.totalTds} />
                   <FootAmount value={totals.otherDeductions} />
                   <FootAmount value={run.totalNet} />
+                  <td />
+                  <td className="col-amount">
+                    {usdRate
+                      ? `≈ $${(Number(run.totalNet) / Number(usdRate)).toFixed(2)}`
+                      : "N/A"}
+                  </td>
                   <td />
                 </tr>
               </tfoot>
@@ -662,6 +708,8 @@ function LineRow({
   n,
   line,
   splitLabels,
+  daysInMonth,
+  usdRate,
   editable,
   onSaved,
 }: {
@@ -670,6 +718,9 @@ function LineRow({
   line: PayrollLineDto;
   /** The sheet's columns, so every row puts its parts under the same ones. */
   splitLabels: string[];
+  /** The month's own calendar length — what Working Days is out of. */
+  daysInMonth: number;
+  usdRate: string | null;
   editable: boolean;
   onSaved: () => void;
 }) {
@@ -679,6 +730,32 @@ function LineRow({
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Days are a number or nothing, not an amount — their own path, because
+   * `save` sends strings and the contract rightly refuses "10" for a day
+   * count. The month's own length typed in means a full month, which is the
+   * same thing as clearing the box, and both are sent as null.
+   */
+  async function saveDays(raw: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const days =
+        raw === "" || Number(raw) === daysInMonth ? null : Number(raw);
+      const result = await payrollApi.updateLine(line.id, {
+        workingDays: days,
+      });
+      setWarning(result.warning ?? null);
+      onSaved();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not save that.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function save(field: string, value: string) {
     setSaving(true);
@@ -701,9 +778,6 @@ function LineRow({
       <SerialCell n={n} />
       <td>
         <span className="font-medium">{line.fullName}</span>
-        <span className="block text-xs text-muted-foreground">
-          {line.snapshotDesignation ?? "N/A"}
-        </span>
         {warning ? (
           <span className="mt-0.5 block text-xs text-warning">{warning}</span>
         ) : null}
@@ -711,12 +785,15 @@ function LineRow({
           <span className="mt-0.5 block text-xs text-negative">{error}</span>
         ) : null}
       </td>
-      <Cell
-        value={line.grossAmount}
-        field="grossAmount"
-        editable={editable}
-        onSave={save}
-      />
+      {/* Role and Dept as their own columns, as the owner's sheet has them —
+          the snapshots taken when the line was built, so the sheet says what
+          was true in its month even after a later transfer. */}
+      <td className="text-sm text-muted-foreground">
+        {line.snapshotDesignation ?? "N/A"}
+      </td>
+      <td className="text-sm text-muted-foreground">
+        {line.snapshotDepartment ?? "N/A"}
+      </td>
 
       {/*
         Read, not typed. The parts follow the gross by the rule the month was
@@ -754,6 +831,36 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
+      {/* Days actually worked — typed straight on the sheet. The gross, its
+          breakdown and the tax re-figure from it against the month's real
+          length; the month's own number (or an emptied box) means a full
+          month. */}
+      {editable ? (
+        <td>
+          <input
+            key={`days-${line.workingDays ?? "full"}`}
+            defaultValue={line.workingDays ?? daysInMonth}
+            inputMode="numeric"
+            onBlur={(event) => {
+              const raw = event.target.value.trim();
+              const now = line.workingDays ?? daysInMonth;
+              if (raw !== String(now)) void saveDays(raw);
+            }}
+            className={cn(
+              "col-amount h-8 w-full rounded border border-transparent bg-transparent px-2 text-sm outline-none transition",
+              "hover:border-border focus-visible:border-primary focus-visible:bg-surface",
+            )}
+          />
+        </td>
+      ) : (
+        <td className="col-amount">{line.workingDays ?? daysInMonth}</td>
+      )}
+      <Cell
+        value={line.grossAmount}
+        field="grossAmount"
+        editable={editable}
+        onSave={save}
+      />
       <TdsCell line={line} onOpen={() => setWorking(true)} />
       <Cell
         value={line.otherDeductions}
@@ -784,6 +891,17 @@ function LineRow({
             className="font-semibold"
           />
         </div>
+      </td>
+      {/* The rate is the month's one governing figure, stated on every row
+          because the sheet states it on every row; the dollars are that rate
+          applied to the net — a translation, marked as one. */}
+      <td className="col-amount text-sm text-muted-foreground">
+        {usdRate ? Number(usdRate).toFixed(2) : "N/A"}
+      </td>
+      <td className="col-amount text-sm text-muted-foreground">
+        {usdRate
+          ? `≈ $${(Number(line.netAmount) / Number(usdRate)).toFixed(2)}`
+          : "N/A"}
       </td>
       <td>
         <div className="flex items-center justify-end gap-3">
