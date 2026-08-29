@@ -20,6 +20,43 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-30 — an uploaded document opens where it was uploaded
+
+**Done.** The owner's bug: every paper on a team member's profile answered
+*"api.hellonizam.com refused to connect"*. Not the upload, not the storage — the viewer.
+
+The app is served from one host and the API from another, and the API sends `X-Frame-Options:
+SAMEORIGIN` and `frame-ancestors 'self'`. `DocumentViewer` pointed an `<iframe>` straight at the
+API, so the browser refused it. Reproduced locally before touching anything, in the browser's own
+words: *Framing 'localhost:4001' violates … "frame-ancestors 'self'". The request has been
+blocked.*
+
+`DocumentViewer` now fetches the bytes through the session it already holds and frames a `blob:`
+URL, whose origin is the page's own. **The header is not relaxed** — the API goes on refusing to
+be framed by anybody, which is what that header is for, and a check asserts it still does.
+
+**This lesson had already been paid for once.** `ledger/documents-dialog.tsx` hit the same wall
+and wrote `PdfFrame` to work around it, with the reason in a comment. The shared viewer never
+learned it. Two copies of one lesson is how the second gets forgotten; the new comment says so,
+and folding them together is a job for whoever is next in both files.
+
+**The rest of the site: swept, and clean.** There are exactly two `<iframe>`s in the whole web
+app — the ledger's (already correct) and this one. Everything else pointing at the API is an
+`<img>` or an `<a href>`, and neither is governed by frame headers; the images were *measured*
+loading rather than assumed (`naturalWidth` from the API host, fine). No `<embed>`, `<object>`,
+`<video>` or `<audio>` anywhere. `.docviewqa.mjs` carries that sweep so a future frame pointed at
+a file URL fails a test rather than a person.
+
+Commits: `6d171a9`. **Not pushed** — the owner asked to hold.
+
+**Watch out.** `components/ui/overlay.tsx` is shared, but only `DocumentViewer` inside it changed,
+and `DocumentViewer` has exactly one caller: the Documents card on a team member's profile. The
+file's other exports — `ConfirmDialog`, `ImageLightbox`, `useDismissable` — are untouched and
+reach every delete dialog in the app; the full battery was run for that reason.
+
+**Open.** Nothing on this. The two copies of the blob technique remain two copies.
+
+
 ## 2026-08-29 — the salary sheet reads like the owner's Excel
 
 **Done.** The last of the owner's payroll batch. Their sheet (found as today's
