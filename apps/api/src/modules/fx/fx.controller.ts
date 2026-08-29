@@ -24,6 +24,19 @@ export class FxController {
     return this.fx.list(query);
   }
 
+  /**
+   * The rate governing this month, resolved the one way the app resolves it.
+   *
+   * Behind accounts.read, not settings.read: this is not the rate REGISTER —
+   * it is one number every reader of the accounts page needs so a USD-primary
+   * card can state its dollars. The register above stays where it was.
+   */
+  @Get("governing")
+  @RequirePermission("accounts.read")
+  governing() {
+    return this.fx.governingRateNow();
+  }
+
   /** The rate drives every USD figure in the app, so this is Super Admin only. */
   @Post("rates")
   @RequirePermission("settings.write")

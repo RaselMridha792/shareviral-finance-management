@@ -272,6 +272,27 @@ export class FxService {
    * happened" is only confusing while the screen refuses to say which of the
    * three won.
    */
+  /**
+   * The rate that governs right now — this month's, by the same resolution
+   * order everything else uses: funded, then the Settings figure, then the
+   * table. The accounts page reads this to state a USD-primary card's
+   * dollars; before it existed that page read the raw rate TABLE, which is
+   * empty on the live site, so the Settings rate every report was already
+   * using never reached the cards and a dollar account sat stated in taka.
+   */
+  async governingRateNow(): Promise<{
+    rate: string;
+    source: GoverningRateSource;
+  } | null> {
+    const today = todayInDhaka();
+    const [y, m] = today.split("-").map(Number);
+    const start = `${y}-${String(m).padStart(2, "0")}-01`;
+    const end = `${y}-${String(m).padStart(2, "0")}-${String(
+      new Date(Date.UTC(y, m, 0)).getUTCDate(),
+    ).padStart(2, "0")}`;
+    return this.governingRateFor({ start, end });
+  }
+
   async governingRateFor(period: {
     start: string;
     end: string;

@@ -180,6 +180,9 @@ export const reportsApi = {
 };
 
 export const fxApi = {
+  /** This month's governing rate — funded, then Settings, then the table. */
+  governing: () =>
+    apiFetch<{ rate: string; source: string } | null>("/fx/governing", fresh),
   rates: (page = 1) =>
     apiFetch<Paginated<FxRateDto>>(
       `/fx/rates?page=${page}&pageSize=${PAGE_SIZE}`,
