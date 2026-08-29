@@ -56,7 +56,6 @@ export function BreakdownDrawer({
   const [deductions, setDeductions] = useState<PayslipLineDto[]>(
     line.deductionsBreakdown ?? [],
   );
-  const [paidDays, setPaidDays] = useState(line.paidDays?.toString() ?? "");
   const [workingDays, setWorkingDays] = useState(
     line.workingDays?.toString() ?? "",
   );
@@ -85,7 +84,6 @@ export function BreakdownDrawer({
         // same as leaving the field out and keeping what is there.
         earningsBreakdown: clean(earnings),
         deductionsBreakdown: clean(deductions),
-        paidDays: paidDays === "" ? null : Number(paidDays),
         workingDays: workingDays === "" ? null : Number(workingDays),
       });
       onSaved();
@@ -111,7 +109,8 @@ export function BreakdownDrawer({
             <p className="text-sm text-negative">{error}</p>
           ) : (
             <span className="text-xs text-muted-foreground">
-              The totals on the salary sheet do not change.
+              Working days re-figure the gross and its tax on the sheet; the
+              breakdown lines print on the slip.
             </span>
           )}
           <div className="flex gap-2">
@@ -131,17 +130,14 @@ export function BreakdownDrawer({
       }
     >
       <div className="flex flex-col gap-6">
-        <section className="grid gap-4 sm:grid-cols-2">
-          <Field label="Paid days" hint="Leave both empty for a full month">
-            <Input
-              className="num"
-              inputMode="numeric"
-              value={paidDays}
-              onChange={(e) => setPaidDays(e.target.value.replace(/\D/g, ""))}
-              placeholder="24"
-            />
-          </Field>
-          <Field label="Working days">
+        <section>
+          {/* One number, on the owner's rule. The month's own length is the
+              divisor — 28 to 31, the API knows which — and the gross, every
+              earnings line and the tax all follow it. */}
+          <Field
+            label="Working days"
+            hint="Days actually worked this month. The gross, its breakdown and the tax are re-figured from this against the month's real length. Leave empty for a full month."
+          >
             <Input
               className="num"
               inputMode="numeric"
@@ -149,7 +145,7 @@ export function BreakdownDrawer({
               onChange={(e) =>
                 setWorkingDays(e.target.value.replace(/\D/g, ""))
               }
-              placeholder="26"
+              placeholder="10"
             />
           </Field>
         </section>

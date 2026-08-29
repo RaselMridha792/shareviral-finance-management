@@ -480,22 +480,18 @@ export const updatePayrollLineSchema = z
     earningsBreakdown: payslipBreakdownSchema.nullable().optional(),
     deductionsBreakdown: payslipBreakdownSchema.nullable().optional(),
 
-    // "24 of 26". Both or neither — a paid-days figure with nothing to be out
-    // of prints as a number nobody can read.
-    paidDays: z.number().int().min(0).max(31).nullable().optional(),
+    /*
+     * Days actually worked this month, out of the month's own calendar length
+     * — 28, 29, 30 or 31, the API knows which. Setting it re-figures the
+     * gross pro-rata, scales every earnings line with it, and the tax is
+     * worked out on the pro-rated figure, not the full month's salary. Null
+     * puts the full month back. The old paidDays column still exists in the
+     * database and is no longer written — one number is the owner's rule,
+     * and two numbers was how a slip printed "14 of 14" that meant nothing.
+     */
     workingDays: z.number().int().min(1).max(31).nullable().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" })
-  .refine(
-    (v) =>
-      v.paidDays == null ||
-      v.workingDays == null ||
-      v.paidDays <= v.workingDays,
-    {
-      message: "Paid days cannot be more than the working days",
-      path: ["paidDays"],
-    },
-  );
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
 
 export const payPayrollSchema = z.strictObject({

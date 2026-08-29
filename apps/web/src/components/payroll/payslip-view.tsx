@@ -192,10 +192,10 @@ export function PayslipView({
               <dd>{shortDate(payslip.joinedOn)}</dd>
             </div>
             <div>
-              <dt>Paid days</dt>
+              <dt>Working days</dt>
               <dd>
-                {payslip.paidDays != null && payslip.workingDays != null
-                  ? `${payslip.paidDays} of ${payslip.workingDays}`
+                {payslip.workingDays != null
+                  ? `${payslip.workingDays} days`
                   : "Full month"}
               </dd>
             </div>

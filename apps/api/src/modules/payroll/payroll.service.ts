@@ -348,6 +348,7 @@ export class PayrollService {
       .select({
         id: payrollLines.id,
         runId: payrollLines.payrollRunId,
+        teamMemberId: payrollLines.teamMemberId,
         grossAmount: payrollLines.grossAmount,
         tdsAmount: payrollLines.tdsAmount,
         tdsDeclaredInvestment: payrollLines.tdsDeclaredInvestment,
@@ -369,9 +370,96 @@ export class PayrollService {
       );
     }
 
-    // The tax is an output now, so it moves whenever either half of its sum
-    // does — the gross, or what the person declared having invested.
+    /*
+     * Working days drive the money — the owner's rule, all of it in one place:
+     *
+     *   - the divisor is the month's own calendar length, 28 to 31, never a
+     *     typed convention like 26 or 30;
+     *   - the gross becomes salary x days / length, and every earnings line
+     *     scales with it so the slip's parts still sum to its total;
+     *   - the tax is then worked out on the PRO-RATED figure. Ten days of a
+     *     30k month is taxed as a ~10k month, not as a 30k one;
+     *   - null puts the full month back, figures and all.
+     *
+     * The base is the person's monthly salary as recorded for this month, not
+     * the line's current gross — the line's gross may itself already be
+     * pro-rated, and 10 days of 10 days is how a second save would silently
+     * halve somebody's pay.
+     */
+    let derived: {
+      grossAmount: string;
+      earningsBreakdown: PayslipBreakdown;
+      workingDays: number | null;
+    } | null = null;
+
+    if (input.workingDays !== undefined) {
+      const monthEnd = lastDayOf(line.periodYear, line.periodMonth);
+      const daysInMonth = Number(monthEnd.slice(8, 10));
+      if (input.workingDays !== null && input.workingDays > daysInMonth) {
+        throw new BadRequestException({
+          message: "Validation failed",
+          errors: {
+            workingDays: [`That month has ${daysInMonth} days`],
+          },
+        });
+      }
+
+      const [pay] = await this.db.client
+        .select({
+          grossAmount: compensationHistory.grossAmount,
+          components: compensationHistory.components,
+        })
+        .from(compensationHistory)
+        .where(
+          and(
+            isNull(compensationHistory.deletedAt),
+            eq(compensationHistory.teamMemberId, line.teamMemberId),
+            sql`${compensationHistory.effectiveFrom} <= ${monthEnd}`,
+          ),
+        )
+        .orderBy(desc(compensationHistory.effectiveFrom))
+        .limit(1);
+
+      if (!pay) {
+        throw new BadRequestException({
+          message: "Validation failed",
+          errors: {
+            workingDays: [
+              "No monthly salary on record to pro-rate from — set their pay first",
+            ],
+          },
+        });
+      }
+
+      const salarySplit = await this.readSalarySplit();
+      const fullMonth = seedBreakdown(
+        pay.components,
+        pay.grossAmount,
+        salarySplit,
+      );
+
+      if (input.workingDays === null) {
+        derived = {
+          grossAmount: pay.grossAmount,
+          earningsBreakdown: fullMonth,
+          workingDays: null,
+        };
+      } else {
+        const factor = input.workingDays / daysInMonth;
+        const grossFor = (Number(pay.grossAmount) * factor).toFixed(2);
+        derived = {
+          grossAmount: grossFor,
+          earningsBreakdown: scaleBreakdown(fullMonth, factor, grossFor),
+          workingDays: input.workingDays,
+        };
+      }
+    }
+
+    // The tax is an output now, so it moves whenever anything under it does —
+    // the gross, the working days that re-figure it, or what the person
+    // declared having invested.
     const recompute =
+      derived !== null ||
       input.grossAmount !== undefined ||
       input.tdsDeclaredInvestment !== undefined;
 
@@ -379,12 +467,14 @@ export class PayrollService {
       ? await this.computeTds(
           line.periodYear,
           line.periodMonth,
-          input.grossAmount ?? line.grossAmount,
+          derived?.grossAmount ?? input.grossAmount ?? line.grossAmount,
           input.tdsDeclaredInvestment ?? line.tdsDeclaredInvestment,
         )
       : null;
 
-    const gross = Number(input.grossAmount ?? line.grossAmount);
+    const gross = Number(
+      derived?.grossAmount ?? input.grossAmount ?? line.grossAmount,
+    );
     const tds = Number(computed?.tdsAmount ?? line.tdsAmount);
 
     await this.audit.mutate({
@@ -407,7 +497,17 @@ export class PayrollService {
           .update(payrollLines)
           .set({
             ...input,
+            ...(derived ?? {}),
             ...(computed ?? {}),
+            /*
+             * A gross typed straight into the sheet is a hand-set figure, and
+             * a day count left standing beside it would claim the figure came
+             * from the days. The explicit act wins; the count clears.
+             */
+            ...(input.grossAmount !== undefined &&
+            input.workingDays === undefined
+              ? { workingDays: null }
+              : {}),
             updatedAt: new Date(),
             updatedBy: actor.id,
           })
@@ -1335,6 +1435,37 @@ function seedBreakdown(
   return derived.length
     ? derived
     : [{ label: "Basic Salary", amount: grossAmount }];
+}
+
+/**
+ * The full month's parts, shrunk to the days actually worked.
+ *
+ * Each line scales by the same factor and is rounded to the paisa; rounding
+ * drift is then pinned on the largest line so the parts still sum to exactly
+ * the pro-rated gross. Without the pin, four rounded lines disagree with
+ * their own total by a paisa or two, and a slip whose arithmetic does not
+ * tie is a slip nobody trusts again.
+ */
+function scaleBreakdown(
+  parts: PayslipBreakdown,
+  factor: number,
+  targetGross: string,
+): PayslipBreakdown {
+  if (!parts.length) return [{ label: "Basic Salary", amount: targetGross }];
+  const scaled = parts.map((part) => ({
+    label: part.label,
+    value: Number((Number(part.amount) * factor).toFixed(2)),
+  }));
+  const sum = scaled.reduce((total, part) => total + part.value, 0);
+  const drift = Number((Number(targetGross) - sum).toFixed(2));
+  if (drift !== 0) {
+    const largest = scaled.reduce((a, b) => (b.value > a.value ? b : a));
+    largest.value = Number((largest.value + drift).toFixed(2));
+  }
+  return scaled.map((part) => ({
+    label: part.label,
+    amount: part.value.toFixed(2),
+  }));
 }
 
 function lastDayOf(year: number, month: number): string {

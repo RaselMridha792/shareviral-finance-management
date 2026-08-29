@@ -9,7 +9,8 @@ import {
 } from "./payroll.ts";
 
 /**
- * The payslip's middle: the labelled lines it prints, and the "24 of 26" beside
+ * The payslip's middle: the labelled lines it prints, and the working-day
+ * count beside
  * them. What these tests guard is the boundary — the API takes whatever the
  * drawer sends, and the drawer is a form somebody types into.
  */
@@ -76,45 +77,27 @@ describe("a payslip breakdown", () => {
   });
 });
 
-describe("paid days on a payroll line", () => {
-  it("takes 24 of 26", () => {
-    const parsed = updatePayrollLineSchema.safeParse({
-      paidDays: 24,
-      workingDays: 26,
-    });
-    assert.equal(parsed.success, true);
-  });
-
-  /**
-   * The pair is what makes the figure readable. Either alone is allowed on the
-   * way to typing the other — the payslip prints "Full month" until both are
-   * there, rather than "24 of null".
+describe("working days on a payroll line", () => {
+  /*
+   * One number now, on the owner's rule. Paid days is gone from the contract
+   * — the pair printed things like "14 of 14" that meant nothing — and the
+   * API measures the number against the month's own calendar length, which
+   * this schema cannot know. What it CAN hold is the shape: a whole day,
+   * at least one, never more than the longest month, and null to put the
+   * full month back.
    */
-  it("takes one without the other", () => {
+  it("takes a day count", () => {
     assert.equal(
-      updatePayrollLineSchema.safeParse({ paidDays: 24 }).success,
-      true,
-    );
-    assert.equal(
-      updatePayrollLineSchema.safeParse({ workingDays: 26 }).success,
+      updatePayrollLineSchema.safeParse({ workingDays: 10 }).success,
       true,
     );
   });
 
-  it("refuses more days paid than worked", () => {
-    const parsed = updatePayrollLineSchema.safeParse({
-      paidDays: 27,
-      workingDays: 26,
-    });
-    assert.equal(parsed.success, false);
-    assert.equal(parsed.error?.issues[0]?.path[0], "paidDays");
-  });
-
-  it("takes zero paid days — somebody on unpaid leave all month", () => {
+  it("refuses paidDays outright — the field is gone", () => {
     assert.equal(
-      updatePayrollLineSchema.safeParse({ paidDays: 0, workingDays: 26 })
+      updatePayrollLineSchema.safeParse({ paidDays: 24, workingDays: 26 })
         .success,
-      true,
+      false,
     );
   });
 
@@ -125,7 +108,7 @@ describe("paid days on a payroll line", () => {
     );
   });
 
-  it("refuses more days than a month has", () => {
+  it("refuses more days than the longest month has", () => {
     assert.equal(
       updatePayrollLineSchema.safeParse({ workingDays: 32 }).success,
       false,
@@ -134,30 +117,14 @@ describe("paid days on a payroll line", () => {
 
   it("refuses a fraction of a day", () => {
     assert.equal(
-      updatePayrollLineSchema.safeParse({ paidDays: 23.5, workingDays: 26 })
-        .success,
+      updatePayrollLineSchema.safeParse({ workingDays: 23.5 }).success,
       false,
     );
   });
 
-  /**
-   * `null` clears the pair back to a full month. Distinct from omitting the
-   * key, which leaves whatever is on the line — and the comparison must not
-   * treat the cleared value as zero and start refusing it against a working
-   * day count.
-   */
-  it("clears both with null", () => {
-    const parsed = updatePayrollLineSchema.safeParse({
-      paidDays: null,
-      workingDays: null,
-    });
-    assert.equal(parsed.success, true);
-  });
-
-  it("clears one while the other stands", () => {
+  it("clears back to a full month with null", () => {
     assert.equal(
-      updatePayrollLineSchema.safeParse({ paidDays: null, workingDays: 26 })
-        .success,
+      updatePayrollLineSchema.safeParse({ workingDays: null }).success,
       true,
     );
   });
