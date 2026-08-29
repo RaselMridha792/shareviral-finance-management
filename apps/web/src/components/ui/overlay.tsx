@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useScrollLock } from "@/components/ui/scroll-lock";
@@ -109,6 +109,25 @@ export function ConfirmDialog({
  * The `?inline=1` is what makes the API send it to be displayed rather than
  * saved. A PDF shown this way runs in the browser's own viewer, which is
  * sandboxed away from the page around it.
+ *
+ * **The bytes are fetched here rather than framed from `src` directly, and
+ * that is the whole reason this works.** The app is served from one host and
+ * the API from another, and the API sends `X-Frame-Options: SAMEORIGIN` and
+ * `frame-ancestors 'self'`, so a frame pointed straight at it is refused:
+ * "api.hellonizam.com refused to connect", measured and reproduced locally as
+ * *Framing 'localhost:4001' violates … "frame-ancestors 'self'"*. Every
+ * uploaded document on a team member's profile was unviewable because of it.
+ *
+ * Fetching the file and framing a `blob:` URL sidesteps it, because the
+ * frame's origin is then this page's own. It is also better than relaxing the
+ * header: the API goes on refusing to be framed by anybody, which is what that
+ * header is for, and the page reads the file through the session it already
+ * holds.
+ *
+ * `ledger/documents-dialog.tsx` has its own copy of this technique, written
+ * when the ledger hit the same wall. Two copies of one lesson is how the
+ * second one gets forgotten — worth folding together when somebody is next in
+ * both files.
  */
 export function DocumentViewer({
   open,
@@ -118,12 +137,55 @@ export function DocumentViewer({
   onClose,
 }: {
   open: boolean;
+  /** Where the bytes live — an API URL, fetched here, never framed directly. */
   src: string | null;
   name: string;
   downloadHref: string;
   onClose: () => void;
 }) {
   useDismissable(open, onClose);
+
+  /*
+   * Each piece of state remembers WHICH file it belongs to, rather than being
+   * cleared at the top of the effect. Two reasons, and the second is the one
+   * that matters: clearing there is a synchronous setState inside an effect,
+   * which the lint rule rightly refuses; and comparing against the current
+   * `src` means a blob fetched for the previous document can never be framed
+   * for this one, however the two requests happen to land.
+   */
+  const [fetched, setFetched] = useState<{ src: string; url: string } | null>(
+    null,
+  );
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !src) return;
+    let url: string | null = null;
+    let live = true;
+
+    fetch(src, { credentials: "include" })
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.blob();
+      })
+      .then((blob) => {
+        url = URL.createObjectURL(blob);
+        if (live) setFetched({ src, url });
+        // Revoked on the way out rather than here: the frame is still reading.
+      })
+      .catch(() => {
+        if (live) setFailedSrc(src);
+      });
+
+    return () => {
+      live = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [open, src]);
+
+  const framed = fetched && fetched.src === src ? fetched.url : null;
+  const failed = failedSrc === src;
+
   if (!open || !src) return null;
 
   return (
@@ -157,7 +219,29 @@ export function DocumentViewer({
           </button>
         </div>
 
-        <iframe src={src} title={name} className="min-h-0 flex-1 bg-white" />
+        {failed ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              This document could not be opened here.
+            </p>
+            <a
+              href={downloadHref}
+              className="text-sm text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+            >
+              Download it instead
+            </a>
+          </div>
+        ) : framed ? (
+          <iframe
+            src={framed}
+            title={name}
+            className="min-h-0 flex-1 bg-white"
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <p className="text-sm text-muted-foreground">Opening…</p>
+          </div>
+        )}
       </div>
     </div>
   );
