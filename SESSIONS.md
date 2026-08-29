@@ -20,6 +20,26 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-29 — the governing rate reaches the accounts cards
+
+**Done.** The owner's item 1: a USD-primary account still sat stated in taka on the live accounts
+page. The swap logic was fine — the rate never arrived. `accounts/page.tsx` read the raw
+`fx_rates` TABLE (empty on the live site) through an endpoint behind `settings.read` (failing
+quietly for most roles on top of being empty), while the Settings rate every report already uses
+— 122.50 — never reached the cards.
+
+New `GET /fx/governing` returns this month's governing rate by the one resolution order the app
+has (funded → Settings → table), behind `accounts.read` because it is one number every reader of
+that page needs, not the rate register. The page reads it; proven under exactly the live
+condition — fx table empty, Settings 122.50 — with the card then leading `~$500.00` over
+`৳61,250.00`.
+
+Commits: `7285b80`.
+
+**Open.** Nothing on this item. The owner has queued payroll work (working-days pro-rata, tax on
+the pro-rated amount, the sheet's column order) — next session's page.
+
+
 ## 2026-08-29 — team papers live in the app
 
 **Done.** Three of the owner's new items, all on the team page.
