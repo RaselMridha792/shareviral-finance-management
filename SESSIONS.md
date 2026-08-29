@@ -20,6 +20,38 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-29 — payroll: working days drive the pay
+
+**Done.** The owner's payroll rules, all in `updateLine`:
+
+- **One number.** Paid days is gone from the contract, the drawer and the slip — the pair printed
+  "14 of 14" and meant nothing. `paid_days` stays in the database, unwritten.
+- **The divisor is the month's own length** — 28/29/30/31, never a typed 26 or 30. Proven on
+  February 2032 (leap, 29), April (30) and May (31); 30 days into that February is refused naming
+  the 29.
+- **Gross = salary × days ÷ length**, and every earnings line scales with it, rounding drift
+  pinned on the largest line so the parts still sum to the gross exactly — 31,000 was chosen for
+  the harness precisely because it divides nothing evenly.
+- **The tax is worked out on the pro-rated figure.** Proven with money in it under the real
+  fiscal-2026 rule: a 150k month owes 9,000; ten days of it owes exactly what a hand-set gross of
+  the same figure owes, and less than the month.
+- **The base is the recorded salary, never the line's own gross** — 10 days then 20 days
+  pro-rates from 31,000 both times; from the shrunk gross a second save would halve pay silently.
+- **Null restores the full month**, and **a hand-typed gross clears the day count** — a figure
+  must not claim to come from days it did not come from.
+
+Commits: `0a892b1`.
+
+**Watch out.** The breakdown drawer's footer used to promise "the totals on the salary sheet do
+not change" — that promise is deliberately dead: working days now re-figure the gross and the tax
+on the sheet. The payslip prints "Working days: N days" or "Full month".
+
+**Open.** The owner also wants the payroll table laid out like their Excel — the file has not
+reached the chat yet, so that half waits for it. `.prorataqa.mjs` (17 checks) is the harness;
+`.payrollpickqa.mjs`'s save-check now polls instead of sleeping 1.5s — it was a stopwatch, and it
+flaked both ways to prove it.
+
+
 ## 2026-08-29 — the governing rate reaches the accounts cards
 
 **Done.** The owner's item 1: a USD-primary account still sat stated in taka on the live accounts
