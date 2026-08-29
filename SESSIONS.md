@@ -20,6 +20,36 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-29 — team papers live in the app
+
+**Done.** Three of the owner's new items, all on the team page.
+
+1. **The drawer takes files, not links.** Photo, CV and appointment letter were URL boxes
+   ("a link, not an upload — a Drive file…"); the owner's rule is that every paper lives in the
+   app's own store. The drawer — add and edit, one component, both doors — now offers three
+   pickers; the files are held in state and uploaded after the save answers with an id, into the
+   same store the profile's Documents card reads (`profile_photo` / `cv` / `appointment_letter`
+   kinds, which already existed). A failed upload after a successful save is a toast naming the
+   paper, never a reason to resubmit the form — resubmitting would create the person twice.
+2. **"Linked elsewhere" is gone from the profile.** The three URL columns keep their values in
+   the database — removing a column to satisfy a screen would destroy what somebody typed — they
+   are simply no longer shown or written from anywhere.
+3. **e-TIN is optional** — it already was in the contract (`optionalOf(etinSchema)`), so the
+   change is the hint now saying so, and a check that proves a blank passes rather than assuming.
+
+Commits: `2c40862`.
+
+**Watch out.** Old Drive links still exist on ~18 people and are now invisible — deliberately,
+per the owner's instruction, but if somebody asks "where did the CV link go", the answer is: the
+column still holds it; upload the file itself to the Documents card. The drawer no longer writes
+`photoUrl`/`cvUrl`/`appointmentLetterUrl`, and since updates are partial, editing a person leaves
+their old stored links untouched.
+
+**Open.** `.teamdocsqa.mjs` (10 checks) drives it, including the drawer's own path — a real file
+picked in the browser, saved, and found in `files` under the new person. Still queued from this
+batch: the accounts-page primary-currency card (item 1 of the owner's list).
+
+
 ## 2026-08-28 — the edit drawer sets pay too
 
 **Done.** The owner's follow-up to the morning's Current salary work: the field existed on create
