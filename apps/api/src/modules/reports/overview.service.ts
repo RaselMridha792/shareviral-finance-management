@@ -358,7 +358,20 @@ export class OverviewService {
     return Number(row.total).toFixed(2);
   }
 
-  /** BDT that landed from a foreign remittance — what the CEO sent, as received. */
+  /**
+   * BDT that landed from a foreign remittance — what the CEO sent, as received.
+   *
+   * `original_currency is not null` is the whole test for "this came from
+   * abroad", and a transfer entered in dollars satisfies it: `transfer()`
+   * stamps originalCurrency, originalAmount and the rate onto BOTH halves, so
+   * loading the USD card from the bank made the card's `in` half read as new
+   * money arriving from the CEO — the company's own funds counted a second
+   * time, on top of the remittance that really did arrive.
+   *
+   * Not visible on the dev database, where every account is BDT and the form
+   * never opens its dollar mode. It is reachable the moment one account is
+   * USD-primary, which on the live site several are.
+   */
   private async funding(range: PeriodRange): Promise<string> {
     const [row] = await this.db.client
       .select({
@@ -368,6 +381,7 @@ export class OverviewService {
       .where(
         and(
           inPeriod(range),
+          notATransfer(),
           eq(transactions.direction, "in"),
           sql`${transactions.originalCurrency} is not null`,
         ),
@@ -813,10 +827,20 @@ export class OverviewService {
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
+      // The same exclusion the period totals use, so the PDF cannot print
+      // "out 1,11,600" in its Position block and "1,76,600" for the same month
+      // in the Twelve months table underneath it.
+      //
+      // `closingBalance` below is rolled forward as `running += in - out`, and
+      // it does not move: both halves of a transfer carry the same txn_date, so
+      // each month loses an equal in and out and every net is unchanged. That
+      // is what makes this safe here and NOT safe in bankStats, where a single
+      // account can be in scope and only one half of the pair with it.
       .where(
         and(
           gte(transactions.txnDate, first.start),
           lte(transactions.txnDate, ranges[ranges.length - 1].end),
+          notATransfer(),
           LIVE,
         ),
       )

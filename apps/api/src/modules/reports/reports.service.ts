@@ -357,11 +357,35 @@ export class ReportsService {
       ? eq(transactions.accountId, query.accountId)
       : undefined;
 
+    /*
+     * Two questions in one query, and they need different rows.
+     *
+     * `moneyIn` / `moneyOut` answer "what came in and went out" — a company
+     * figure, so own-account transfers are excluded, the same as every other
+     * total in this file. Before that exclusion this endpoint reported August
+     * as in 1,85,000 / out 1,76,600 while `period()` reported the same month as
+     * 1,20,000 / 1,11,600.
+     *
+     * `movement` answers "what did this account's balance actually do", and it
+     * must keep every row — a transfer really did take money off the card. The
+     * exclusion CANNOT go in the WHERE clause for that reason: with an
+     * accountId in scope only one half of a transfer pair is visible, so
+     * filtering the rows away would leave the running balance disagreeing with
+     * the account's own register and with the bank's paper. Measured on the dev
+     * data: M/S. EXPROVIA nets -15,000 for August entirely through transfers,
+     * and the Master card +15,000.
+     *
+     * `entries` is left unfiltered on purpose. It counts ledger entries, which
+     * is what "busiest month" means, and it is what the Excel uses to decide a
+     * month is worth a row — filter it and a month whose only activity was a
+     * transfer disappears from the sheet, taking its balance movement with it.
+     */
     const rows = await this.db.client
       .select({
         month: sql<number>`extract(month from ${transactions.txnDate})::int`,
-        moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
-        moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+        moneyIn: sql<string>`coalesce(sum(case when ${notATransfer()} and ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
+        moneyOut: sql<string>`coalesce(sum(case when ${notATransfer()} and ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+        movement: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
@@ -403,7 +427,11 @@ export class ReportsService {
       const moneyIn = row?.moneyIn ?? "0";
       const moneyOut = row?.moneyOut ?? "0";
       const net = Number(moneyIn) - Number(moneyOut);
-      running += net;
+      // Off `movement`, not off `net`: see the note on the query above. For all
+      // accounts the two are identical, because a transfer's halves cancel; for
+      // one account they are not, and the balance is the half that has to match
+      // the bank.
+      running += Number(row?.movement ?? 0);
 
       months.push({
         year: query.year,

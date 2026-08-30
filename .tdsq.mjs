@@ -1,0 +1,11 @@
+import fs from "node:fs"; import path from "node:path"; import pg from "pg";
+const REPO = "d:/codes/Finance-Management-software";
+const env = Object.fromEntries(fs.readFileSync(path.join(REPO,"apps/api/.env"),"utf8").split(/\r?\n/).filter(l=>l&&!l.trim().startsWith("#")&&l.includes("=")).map(l=>{const i=l.indexOf("=");return [l.slice(0,i).trim(),l.slice(i+1).trim().replace(/^["']|["']$/g,"")]}));
+const c = new pg.Client({connectionString: env.DATABASE_URL_UNPOOLED||env.DATABASE_URL, ssl:{rejectUnauthorized:false}});
+await c.connect();
+const q = async (label, sql) => { try { const r = await c.query(sql); console.log("##", label); console.table(r.rows); } catch(e){ console.log("##", label, "ERR", e.message); } };
+await q("one_owner", `select replace(pg_get_constraintdef(oid), E'\n', ' ') as def from pg_constraint where conname='files_one_owner'`);
+await q("new cols", `select table_name, column_name, is_nullable, data_type from information_schema.columns where (table_name='payroll_lines' and column_name='tds_challan_number') or (table_name='files' and column_name='payroll_line_id')`);
+await q("indexes", `select indexname from pg_indexes where indexname in ('files_payroll_line_idx','payroll_lines_challan_idx')`);
+await q("challan-numbered lines", `select count(*)::int as n from payroll_lines where tds_challan_number is not null`);
+await c.end();

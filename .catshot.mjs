@@ -1,0 +1,21 @@
+import fs from "node:fs"; import jwt from "jsonwebtoken"; import pg from "pg"; import puppeteer from "puppeteer-core";
+const env = Object.fromEntries(fs.readFileSync("apps/api/.env","utf8").split(/\r?\n/).filter(l=>l&&!l.trim().startsWith("#")&&l.includes("=")).map(l=>{const i=l.indexOf("=");return [l.slice(0,i).trim(),l.slice(i+1).trim().replace(/^["']|["']$/g,"")];}));
+const db = new pg.Client({connectionString: env.DATABASE_URL_UNPOOLED||env.DATABASE_URL, ssl:{rejectUnauthorized:false}}); await db.connect();
+const p = (await db.query(`select id,role,token_version from users where role='super_admin' and deleted_at is null limit 1`)).rows[0];
+const token = jwt.sign({sub:p.id,role:p.role,tv:p.token_version}, env.JWT_ACCESS_SECRET, {expiresIn:"1h"});
+await db.end();
+const b = await puppeteer.launch({executablePath:"C:/Program Files/Google/Chrome/Application/chrome.exe", headless:"new", args:["--no-sandbox"]});
+await b.setCookie({name:"sfm_access", value:token, domain:"localhost", path:"/"});
+const page = await b.newPage(); await page.setViewport({width:1500, height:1150});
+await page.goto("http://localhost:3000/settings?tab=categories", {waitUntil:"networkidle0", timeout:120000});
+await new Promise(r=>setTimeout(r,3000));
+await page.screenshot({path:"cat-panel.png"});
+const opened = await page.evaluate((name) => {
+  const card = [...document.querySelectorAll("div")].find(d => (d.textContent??"").includes(name) && d.querySelector('button[aria-label="Move to trash"]'));
+  if (!card) return false;
+  card.querySelector('button[aria-label="Move to trash"]').click(); return true;
+}, "Office & premises");
+await new Promise(r=>setTimeout(r,1200));
+console.log("opened:", opened);
+await page.screenshot({path:"cat-warning.png"});
+await b.close();

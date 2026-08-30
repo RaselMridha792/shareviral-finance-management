@@ -11,6 +11,7 @@ import { and, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
 import { CHALLAN_COUNTS } from "../tds/challan-counts";
+import { notATransfer } from "../transactions/own-money";
 import {
   accounts,
   categories,
@@ -301,10 +302,15 @@ export class AiToolsService {
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
+      // Spoken aloud to the owner, so a wrong figure here is not a wrong pixel
+      // — it is an answer. Own-account transfers were counted on both sides:
+      // the assistant said 1,76,600 spent in August while every report said
+      // 1,11,600.
       .where(
         and(
           gte(transactions.txnDate, from),
           lte(transactions.txnDate, to),
+          notATransfer(),
           LIVE,
         ),
       );
@@ -325,6 +331,7 @@ export class AiToolsService {
           gte(transactions.txnDate, from),
           lte(transactions.txnDate, to),
           eq(transactions.direction, "out"),
+          notATransfer(),
           LIVE,
         ),
       )

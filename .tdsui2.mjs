@@ -1,0 +1,40 @@
+import fs from "node:fs"; import path from "node:path"; import jwt from "jsonwebtoken"; import pg from "pg"; import puppeteer from "puppeteer-core";
+const REPO="d:/codes/Finance-Management-software";
+const env=Object.fromEntries(fs.readFileSync(path.join(REPO,"apps/api/.env"),"utf8").split(/\r?\n/).filter(l=>l&&!l.trim().startsWith("#")&&l.includes("=")).map(l=>{const i=l.indexOf("=");return[l.slice(0,i).trim(),l.slice(i+1).trim().replace(/^["']|["']$/g,"")]}));
+const db=new pg.Client({connectionString:env.DATABASE_URL_UNPOOLED||env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
+await db.connect();
+const {rows:u}=await db.query(`select id, role, token_version from users where status='active' and deleted_at is null order by created_at limit 1`);
+const token=jwt.sign({sub:u[0].id, role:u[0].role, tv:u[0].token_version}, env.JWT_ACCESS_SECRET, {expiresIn:"2h"});
+await db.end();
+const chrome="C:/Program Files/Google/Chrome/Application/chrome.exe", edge="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+const browser=await puppeteer.launch({executablePath: fs.existsSync(chrome)?chrome:edge, headless:"new", args:["--no-sandbox"]});
+await browser.setCookie({name:"sfm_access", value:token, domain:"localhost", path:"/"});
+const page=await browser.newPage();
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+const seen=[];
+page.on("request",(r)=>{ if(r.url().includes("salary-deductions")) seen.push(r.url()); });
+page.on("console",(m)=>{ if(m.type()==="error") console.log("  console.error:", m.text().slice(0,160)); });
+page.on("pageerror",(e)=>console.log("  pageerror:", String(e).slice(0,200)));
+await page.setViewport({width:1500,height:1000});
+await page.goto("http://localhost:3000/tax/withholding",{waitUntil:"networkidle0",timeout:120000});
+await wait(900);
+const snap=()=>page.evaluate(()=>{
+  const tabs=[...document.querySelectorAll('[role="tablist"]')].map(tl=>({label:tl.getAttribute("aria-label"),buttons:[...tl.querySelectorAll('[role="tab"]')].map(b=>b.textContent.trim()+(b.getAttribute("aria-selected")==="true"?" *":""))}));
+  const selects=[...document.querySelectorAll("select")].map(s=>({label:s.getAttribute("aria-label")||s.previousElementSibling?.textContent||"", value:s.value, selected:s.options[s.selectedIndex]?.textContent, options:[...s.options].map(o=>o.textContent+(o.disabled?"(x)":"")).join(" | ")}));
+  const head=document.querySelector(".table-data")?.closest("div")?.parentElement;
+  return {tabs, selects, cardHeading:[...document.querySelectorAll("h2,h3")].map(h=>h.textContent.trim()), rows:document.querySelectorAll("tbody tr").length, body:document.body.innerText.slice(0,900)};
+});
+console.log("=== initial ==="); console.dir(await snap(),{depth:null});
+console.log("requests so far:", seen);
+for (const name of ["Quarterly","Half year","Yearly","Monthly"]) {
+  seen.length=0;
+  const ok=await page.evaluate((n)=>{const b=[...document.querySelectorAll('[role="tab"]')].find(x=>x.textContent.trim()===n); if(!b) return false; b.click(); return true;}, name);
+  await wait(1500);
+  const s=await snap();
+  console.log(`\n=== after clicking "${name}" (found=${ok}) ===`);
+  console.log("  requests:", JSON.stringify(seen));
+  console.log("  tabs:", JSON.stringify(s.tabs));
+  console.log("  selects:", JSON.stringify(s.selects));
+  console.log("  headings:", JSON.stringify(s.cardHeading), "rows:", s.rows);
+}
+await browser.close();
