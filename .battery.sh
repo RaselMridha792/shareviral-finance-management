@@ -17,3 +17,6 @@ done
 echo "BATTERY DONE" >> $OUT
 
 node .dataintact.mjs   # replays the pending migrations and proves no figure moved
+
+node .uploadqa.mjs      # the drawer knows what is on file, and a failure does not stick
+node .previewsweep.mjs  # every picker that holds a file offers to show it

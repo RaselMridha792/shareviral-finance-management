@@ -38,6 +38,7 @@ import {
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { type AccountDto } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
+import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 
 /**
  * The two files a receipt comes with.
@@ -723,6 +724,13 @@ function Attach({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [rejected, setRejected] = useState<string | null>(null);
+  /*
+   * Owned here rather than passed in from the form. `Attach` already holds the
+   * file, so keeping the preview beside it means none of the six call sites
+   * across these three forms has to know about it — and none of them can be
+   * the one that forgets.
+   */
+  const preview = useFilePreview();
 
   function choose(picked: File | undefined) {
     // Emptied straight away so picking the same file again — after clearing
@@ -790,6 +798,13 @@ function Attach({
       ) : file ? (
         <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
           <span className="truncate">{file.name}</span>
+          {/*
+            Before it is saved, not after. Until this was here the only way to
+            check the right scan had been attached was to save the entry and
+            then go and open it, which is the wrong order for the one moment
+            the mistake is still cheap.
+          */}
+          <PreviewButton name={file.name} onClick={() => preview.show(file)} />
           <button
             type="button"
             onClick={() => onPick(null)}
@@ -800,6 +815,8 @@ function Attach({
           </button>
         </span>
       ) : null}
+
+      {preview.overlay}
     </span>
   );
 }

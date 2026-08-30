@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
+import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 import { Field, Input } from "@/components/ui/field";
 import { ApiError, fileHref, type StoredFile } from "@/lib/api-client";
 import {
@@ -71,6 +72,7 @@ export function LineChallanForm({
 
   const [scan, setScan] = useState<StoredFile | null>(null);
   const [chosen, setChosen] = useState<File | null>(null);
+  const preview = useFilePreview();
   const fileInput = useRef<HTMLInputElement>(null);
 
   /*
@@ -233,6 +235,16 @@ export function LineChallanForm({
                 >
                   {scan.originalName}
                 </a>
+                <PreviewButton
+                  name={scan.originalName}
+                  onClick={() =>
+                    preview.show({
+                      name: scan.originalName,
+                      href: fileHref(scan.id),
+                      isImage: scan.isImage,
+                    })
+                  }
+                />
                 <span className="text-xs text-muted-foreground">
                   — choosing another replaces it
                 </span>
@@ -243,6 +255,11 @@ export function LineChallanForm({
               <span className="flex items-center gap-2 text-sm">
                 <Paperclip className="size-3.5 text-muted-foreground" />
                 {chosen.name}
+                {/* Checked before it is filed, not after. */}
+                <PreviewButton
+                  name={chosen.name}
+                  onClick={() => preview.show(chosen)}
+                />
                 <button
                   type="button"
                   onClick={() => {
@@ -283,6 +300,8 @@ export function LineChallanForm({
           </Button>
         </div>
       </form>
+
+      {preview.overlay}
     </Drawer>
   );
 }

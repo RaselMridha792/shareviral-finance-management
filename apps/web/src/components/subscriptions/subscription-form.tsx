@@ -39,6 +39,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
+import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 import {
   subscriptionsApi,
   uploadSubscriptionFile,
@@ -103,6 +104,7 @@ function Clip({
   label: string;
   children: React.ReactNode;
 }) {
+  const preview = useFilePreview();
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
@@ -129,10 +131,19 @@ function Clip({
         </button>
       </div>
       {file ? (
-        <span className="truncate text-xs text-muted-foreground">
-          {file.name}
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate">{file.name}</span>
+          {/*
+            The invoice for a subscription is usually a screenshot, and one
+            screenshot looks much like another in a folder. Being able to open
+            it here is the difference between attaching the right month's and
+            finding out later.
+          */}
+          <PreviewButton name={file.name} onClick={() => preview.show(file)} />
         </span>
       ) : null}
+
+      {preview.overlay}
     </div>
   );
 }
@@ -177,6 +188,7 @@ export function SubscriptionForm({
    * the save returns — that is the only reason it is not uploaded here.
    */
   const [screenshot, setScreenshot] = useState<File | null>(null);
+  const planPreview = useFilePreview();
   const screenshotPicker = useRef<HTMLInputElement>(null);
 
   /**
@@ -498,6 +510,17 @@ export function SubscriptionForm({
                 <span className="min-w-0 flex-1 truncate">
                   {screenshot.name}
                 </span>
+                {/*
+                  This picker is written inline rather than through the small
+                  component above it, so it needed its own eye — which is the
+                  argument for the shared hook: one screen out of five had a
+                  second copy, and it was the one that would have shipped
+                  without.
+                */}
+                <PreviewButton
+                  name={screenshot.name}
+                  onClick={() => planPreview.show(screenshot)}
+                />
                 <button
                   type="button"
                   onClick={() => setScreenshot(null)}
@@ -847,6 +870,8 @@ export function SubscriptionForm({
           </p>
         )}
       </div>
+
+      {planPreview.overlay}
     </Drawer>
   );
 }
