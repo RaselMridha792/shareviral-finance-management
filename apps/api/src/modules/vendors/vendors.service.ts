@@ -39,6 +39,7 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import { accounts, transactions, vendors, type Vendor } from "../../db/schema";
+import { notATransfer } from "../transactions/own-money";
 import { isToolSpend, isToolVendor } from "./tool-spend";
 
 /**
@@ -319,6 +320,13 @@ export class VendorsService {
       // the dashboard and this screen cannot show different numbers for the
       // same month. It also picks up card spend nobody attributed to a named
       // tool, which is why it can exceed the sum of the lines.
+      //
+      // `notATransfer()` for the reason written out beside the overview's copy:
+      // isToolSpend() calls any row on the non-taka card tooling, and moving a
+      // top-up back off that card is not a purchase. The per-vendor `paid`
+      // above needs no such clause — it demands a vendor_id, and a transfer has
+      // none. That promise of matching numbers is why this cannot be fixed on
+      // one side only.
       this.db.client
         .select({
           total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
@@ -332,6 +340,7 @@ export class VendorsService {
             lte(transactions.txnDate, period.end),
             isNull(transactions.voidedAt),
             eq(transactions.direction, "out"),
+            notATransfer(),
             isToolSpend(),
           ),
         ),

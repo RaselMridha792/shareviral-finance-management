@@ -215,9 +215,14 @@ export class ReportsService {
         total: sql<string>`sum(${transactions.amount})::text`,
       })
       .from(transactions)
+      // LEFT, so a row with no category is kept and bucketed as
+      // "Uncategorised" — which is exactly why this needs the same exclusion
+      // the totals above use. A transfer carries no category, and the join
+      // being left rather than inner is the whole reason it survives here.
       .leftJoin(categories, eq(transactions.categoryId, categories.id))
       .where(
         and(
+          notATransfer(),
           gte(transactions.txnDate, range.start),
           lte(transactions.txnDate, range.end),
           eq(transactions.direction, direction),

@@ -537,6 +537,23 @@ export class OverviewService {
    * of "what counts as tooling" drift the first time somebody adds a vendor
    * type, and then the dashboard and the screen quietly disagree.
    */
+  /*
+   * A transfer OFF the prepaid card is not a purchase.
+   *
+   * `isToolSpend()` classifies a ROW — "does this look like tooling" — and one of
+   * its two halves is "it was settled on the non-taka card", which is true of any
+   * row sitting on that card, a transfer included. So moving a card top-up back
+   * to the bank arrived here as tooling spend. Measured: a 30,000 transfer off
+   * the card took Tools and subscriptions from 0.00 to 30,000.00, with nothing
+   * bought.
+   *
+   * The exclusion goes HERE and not inside `isToolSpend()`, and that is the whole
+   * reason this comment exists: the predicate is also read NEGATED, at
+   * transactions.service.ts (`not(isToolSpend())`) to build Other expenses. Fold
+   * "and it is not a transfer" into the predicate and the negation becomes "not
+   * tooling OR it is a transfer", which puts every transfer straight back onto
+   * the Other expenses screen — the exact complaint this all started from.
+   */
   private async toolsAndSubscriptions(range: PeriodRange): Promise<string> {
     const [row] = await this.db.client
       .select({
@@ -546,7 +563,12 @@ export class OverviewService {
       .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .where(
-        and(inPeriod(range), eq(transactions.direction, "out"), isToolSpend()),
+        and(
+          inPeriod(range),
+          eq(transactions.direction, "out"),
+          notATransfer(),
+          isToolSpend(),
+        ),
       );
 
     return Number(row.total).toFixed(2);
@@ -567,8 +589,23 @@ export class OverviewService {
         total: sql<string>`sum(${transactions.amount})::text`,
       })
       .from(transactions)
+      // LEFT, so a row matching no category is kept and bucketed as
+      // "Uncategorised". That is right for a genuine expense nobody has filed
+      // yet, and wrong for a transfer, which has no category because it is not
+      // spending at all — hence the same exclusion the totals use at
+      // `periodTotals`. Measured before it was added: the dashboard's
+      // spendByCategory read "Office rent 1,11,600 | Uncategorised 65,000"
+      // beside a totals.moneyOut of 1,11,600, the 65,000 being one transfer
+      // between two of the company's own banks. incomeByCategory carried it
+      // too, so the same 65,000 was reported as both earned and spent.
       .leftJoin(categories, eq(transactions.categoryId, categories.id))
-      .where(and(inPeriod(range), eq(transactions.direction, direction)))
+      .where(
+        and(
+          inPeriod(range),
+          notATransfer(),
+          eq(transactions.direction, direction),
+        ),
+      )
       .groupBy(sql`1`);
 
     if (!rows.length) return [];
