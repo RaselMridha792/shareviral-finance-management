@@ -20,6 +20,71 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-30 — the owner's revision batch: team, and the dollars that would not stay put
+
+**Six items, all with the owner's standing constraint: every piece of existing data survives.**
+Nothing here rewrites a stored figure. Two migrations, both additive, both in their own commit.
+
+**Team (`804a6a5`, `f7d91ac`, migration `5e86cfc`).**
+
+- **Employee ID.** The column, its unique index and the payslip that prints it have been there
+  since 2026-08-19 — nothing could type into it and no screen read it. It is **optional**, which
+  is the whole difference from the version that was removed for being required: the eighteen
+  people on the books keep no ID and nothing demands one. Emptying the box clears it, using the
+  union `endedOn` already uses, because `optionalText` maps `""` to undefined and on a patch that
+  means "leave it alone". A duplicate now names who holds it instead of a bare 500 — which is
+  what the bare unique index would have produced the moment the field became typeable.
+- **Seniority order.** The directory ran A–Z and now runs by joining date, so SL 1 is the first
+  hire. **Three keys**: `joined_on` is a DATE, so people hired the same day have no defined order
+  and OFFSET paging can show one twice and another never. All **seven** places that list people
+  carry the same keys — directory, compensation backfill, salary sheet, payroll picker, TDS
+  register, unallocated TDS lines, subscription seats. One alone and the sheet disagrees with the
+  directory about who row one is, on a document that gets signed.
+- **Resignation letter.** Offered to somebody who has left — *and* whenever a letter is already on
+  file, whatever their status, because hiding a document that exists reads as losing it.
+  `on_leave` counts as still here.
+
+**The dollars (`826a280`, migration `cdb737d`).** The owner's report: $14,000 in, and the card
+said $13,969, then $13,485. Diagnosed before touching anything — the card divided the running
+**taka** balance by **today's** governing rate, while the money went in at the rate of its own
+day. Every row already carried its dollars in `original_amount`; **no balance anywhere read it.**
+
+So a foreign account's balance is now the **sum of its dollars**, from an opening stated in its
+own currency. A BDT account takes the taka expression verbatim — dividing it by a rate nobody
+asked about is how the transfer's stamped `usd_rate` turned a taka account's balance into dollars
+in the first draft. A row with no dollars falls back to its **own** recorded rate before anything
+else; a row with no rate at all contributes nothing and makes the figure **approximate**, marked.
+The taka ledger is untouched, so company totals, payroll and tax read exactly what they read
+before. The transfer picker and the transfer rows follow.
+
+Commits: `5e86cfc`, `804a6a5`, `f7d91ac`, `cdb737d`, `826a280`. **Not pushed** — the owner asked
+to hold.
+
+**Watch out.**
+
+- **Two migrations must reach production before the code**, which the deploy already guarantees —
+  it applies `deploy/sql` before swapping containers. Both are additive and both were applied
+  locally with `node .sql.mjs` and verified by query.
+- **`opening_balance_usd` is null for every existing foreign account** except ones that opened at
+  zero taka, which the migration backfills exactly. Until somebody states it, those accounts read
+  approximate. The owner's Exprovia LLC opened at ৳0.00, so it is covered.
+- The one predicate that decides exact-versus-approximate needs `coalesce(..., false)` around the
+  whole test. Three-valued logic makes an all-null row UNKNOWN rather than false and `bool_and`
+  skips it — so the single row that should have made the answer approximate was the single row
+  silently ignored. It failed exactly that way before the coalesce went in.
+- A comment inside a Drizzle `sql` template literal must carry **no backticks**. One of them ended
+  the string and took the API down with "Missing initializer in const declaration".
+
+**Open.** Harnesses: `.teamorderqa.mjs` (13), `.resignqa.mjs` (7), `.usdstableqa.mjs` (18), all in
+`.battery.sh` — which now runs **27** and was green end to end, though four of them had to be
+re-run: the local API reloads when a file is saved, and a battery started in that window dies on
+`ECONNRESET` and reads exactly like a broken app. `.trashroles.mjs` gained a start-wipe for the
+same reason `.trashui.mjs` did — its `ref_no` is unique, so debris from a crashed run fails the
+next run's INSERT rather than a check. Still queued from the same batch: the Cash In screen has not been re-read since the
+dollars became stable — the figure it shows on a USD-primary landing account should now come from
+the account's own balance rather than a conversion, and nobody has driven it.
+
+
 ## 2026-08-30 — a transfer between our own accounts is not an expense
 
 **Done.** The owner found it: moving money from Exprovia LLC to M/S Exprovia was listed on Other
