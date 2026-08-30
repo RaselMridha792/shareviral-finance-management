@@ -35,6 +35,29 @@ import type { AccountWithBalance } from "@/lib/masters";
  * Moving money between our own accounts. Creates two linked rows — one out,
  * one in — so each account's register matches its own bank statement.
  */
+/**
+ * How an account reads in the picker: in its own currency.
+ *
+ * It read `Exprovia LLC — ৳17,11,220.00` for a dollar account, which is the
+ * ledger's figure rather than the account's. `ownBalance` is what that account
+ * actually holds in the currency it is kept in — dollars added up, not taka
+ * divided — so no rate is needed here at all, and the number cannot drift when
+ * one moves.
+ *
+ * `~` only when the account itself says the figure is approximate, which
+ * happens when some row on it carried neither its dollars nor a rate. An
+ * option cannot hold markup, so the mark is the character.
+ */
+function optionLabel(account: AccountWithBalance): string {
+  if (account.currency === "USD") {
+    return `${account.name} — ${account.ownBalanceExact ? "" : "~"}${formatMoney(
+      account.ownBalance,
+      { currency: "USD" },
+    )}`;
+  }
+  return `${account.name} — ${formatMoney(account.balance)}`;
+}
+
 export function TransferForm({
   open,
   accounts,
@@ -200,7 +223,7 @@ export function TransferForm({
             >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} — {formatMoney(account.balance)}
+                  {optionLabel(account)}
                 </option>
               ))}
             </Select>
@@ -220,7 +243,7 @@ export function TransferForm({
             >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} — {formatMoney(account.balance)}
+                  {optionLabel(account)}
                 </option>
               ))}
             </Select>

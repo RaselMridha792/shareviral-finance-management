@@ -35,6 +35,8 @@ export type AccountDto = {
   currency: string;
   /** The figure the books were opened at. It never changes. */
   openingBalance: string;
+  /** The opening in the account's own currency, when somebody has stated it. */
+  openingBalanceUsd: string | null;
   openingBalanceOn: string;
   sortOrder: number;
   isActive: boolean;
@@ -51,7 +53,13 @@ export type AccountDto = {
  * response without it reached the screen — a money figure that renders as
  * nothing, from code that type-checked.
  */
-export type AccountWithBalance = AccountDto & { balance: string };
+export type AccountWithBalance = AccountDto & {
+  balance: string;
+  /** The balance in the account's own currency — dollars summed, not divided. */
+  ownBalance: string;
+  /** False when some row had no dollars and no rate of its own. */
+  ownBalanceExact: boolean;
+};
 
 export type CategoryDto = {
   id: string;

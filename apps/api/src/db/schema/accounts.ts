@@ -44,6 +44,19 @@ export const accounts = pgTable(
     openingBalance: numeric("opening_balance", { precision: 14, scale: 2 })
       .notNull()
       .default("0"),
+    /**
+     * What it held in its OWN currency on that day.
+     *
+     * Null when nobody has stated it, and only meaningful when `currency` is
+     * not BDT. It exists because a dollar account's dollars cannot be worked
+     * out from its taka: dividing the running taka balance by one rate gives a
+     * figure that moves whenever the rate does, which is how $14,000 read back
+     * as $13,485.
+     */
+    openingBalanceUsd: numeric("opening_balance_usd", {
+      precision: 14,
+      scale: 2,
+    }),
     openingBalanceOn: date("opening_balance_on").notNull(),
 
     /** Order in the sidebar and on the dashboard. */

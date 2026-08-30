@@ -236,12 +236,37 @@ export function TransfersScreen({
                             name={row.toAccountName}
                           />
                         </td>
+                        {/*
+                          A transfer with a dollar account on a side leads with
+                          the dollars that were actually recorded on it — not a
+                          conversion, the figure somebody typed — and keeps the
+                          taka underneath. Without a recorded dollar figure it
+                          is a taka movement and reads as one.
+                        */}
                         <td className="text-right">
-                          <Amount
-                            value={row.amount}
-                            tone="neutral"
-                            className="block font-medium"
-                          />
+                          {row.usdAmount ? (
+                            <>
+                              <Amount
+                                value={row.usdAmount}
+                                currency="USD"
+                                tone="neutral"
+                                showCounterpart={false}
+                                className="block font-medium"
+                              />
+                              <Amount
+                                value={row.amount}
+                                tone="neutral"
+                                showCounterpart={false}
+                                className="num block text-xs text-faint"
+                              />
+                            </>
+                          ) : (
+                            <Amount
+                              value={row.amount}
+                              tone="neutral"
+                              className="block font-medium"
+                            />
+                          )}
                         </td>
                         <td className="num text-right text-muted-foreground">
                           {row.usdAmount

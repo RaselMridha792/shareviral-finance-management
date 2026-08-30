@@ -128,6 +128,18 @@ export const createAccountSchema = z.strictObject({
   ),
   currency: z.string().trim().length(3).default("BDT"),
   openingBalance: amountSchema.default("0"),
+  /**
+   * The opening stated in the account's own currency.
+   *
+   * Only asked for when `currency` is not BDT, and optional even then: an
+   * account whose dollars nobody has stated reports an approximate figure
+   * rather than a wrong one. Blank clears it, so the union rather than
+   * `optionalOf` — on a patch, undefined means "leave it alone".
+   */
+  openingBalanceUsd: z
+    .union([amountSchema, z.literal(""), z.null()])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
   openingBalanceOn: isoDateSchema,
   notes: optionalText(z.string().trim().max(500)),
   sortOrder: z.coerce.number().int().min(0).max(999).default(0),

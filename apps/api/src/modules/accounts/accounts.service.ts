@@ -61,7 +61,17 @@ export type AccountAttachments = {
  * fact — the figure the books were opened at, and the base every later number
  * is computed from — and the screen shows it as the caption under the balance.
  */
-export type AccountWithBalanceDto = AccountDto & { balance: string };
+export type AccountWithBalanceDto = AccountDto & {
+  /** The ledger's figure, always taka. */
+  balance: string;
+  /**
+   * The same balance in the account's own currency — dollars added up rather
+   * than taka divided. Equal to `balance` for a BDT account.
+   */
+  ownBalance: string;
+  /** False when some row had no dollars and no rate of its own. */
+  ownBalanceExact: boolean;
+};
 
 /**
  * Where an account stands: what it opened at, plus everything that has moved
@@ -91,6 +101,89 @@ const currentBalance = sql<string>`(
     ), 0)
 )::text`;
 
+/**
+ * The same balance, in the currency the account is actually kept in.
+ *
+ * The taka expression above is the ledger's own arithmetic and stays exactly
+ * as it is. This one answers a different question, and the owner's rule is
+ * that for a foreign account it is the question that matters: **the account's
+ * figures are in the account's own currency.**
+ *
+ * It is a SUM OF THE DOLLARS, never a division of the taka. That distinction
+ * is the whole bug: $14,000 recorded at 118.00 stores 16,52,000.00, and
+ * dividing that by today's 122.50 reads back $13,485.71. The money never
+ * moved; only the rate did. Every row already carries what it was in dollars —
+ * `original_amount` with `original_currency` — and nothing was reading it.
+ *
+ * A BDT account takes the taka expression verbatim — its own currency IS the
+ * ledger's, and dividing it by a rate nobody asked about is how the transfer's
+ * stamped `usd_rate` turned a taka account's balance into dollars.
+ *
+ * Rows with no dollar figure fall back to their OWN recorded rate before
+ * anything else, so a row that knows what it was worth is never re-valued at
+ * today's price. A row with no rate of any kind contributes nothing here and
+ * makes the answer approximate rather than wrong — `ownCurrencyExact` below is
+ * what says so, and the screen marks it.
+ */
+const ownCurrencyBalance = sql<string>`(
+  case when ${accounts.currency} = 'BDT' then (
+    ${accounts.openingBalance} + coalesce(
+      sum(${transactions.signedAmount}) filter (
+        where ${transactions.voidedAt} is null
+      ), 0)
+  ) else (
+  coalesce(${accounts.openingBalanceUsd}, 0) + coalesce(
+    sum(
+      case
+        when ${transactions.originalCurrency} = 'USD'
+             and ${transactions.originalAmount} is not null
+        then case when ${transactions.direction} = 'in'
+                  then ${transactions.originalAmount}
+                  else -${transactions.originalAmount} end
+        when coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0
+        then ${transactions.signedAmount}
+             / coalesce(${transactions.fxRate}, ${transactions.usdRate})
+        else 0
+      end
+    ) filter (where ${transactions.voidedAt} is null), 0)
+  ) end
+)::numeric(14,2)::text`;
+
+/**
+ * Whether that figure is a record or an estimate.
+ *
+ * True only when the opening was stated in the account's own currency AND
+ * every live row carried either its dollars or its own rate. One row without
+ * either makes the total an estimate, and an estimate that looks recorded is
+ * the failure this app is most careful about.
+ */
+const ownCurrencyExact = sql<boolean>`(
+  ${accounts.currency} = 'BDT' or (
+  ${accounts.openingBalanceUsd} is not null
+  and coalesce(bool_and(
+    /*
+     * coalesce(..., false) around the whole test, and it is the difference
+     * between this working and not.
+     *
+     * A row with no original, no fx_rate and no usd_rate makes both halves
+     * UNKNOWN rather than false -- null = 'USD' is UNKNOWN, null > 0 is
+     * UNKNOWN -- and false OR UNKNOWN is UNKNOWN. bool_and then SKIPS the
+     * row, so the one row that should have made the answer approximate was
+     * the one row silently ignored. The same three-valued trap the tooling
+     * predicate documents.
+     *
+     * (No backticks in here: this comment lives inside a JS template
+     * literal, and one of them ends the string.)
+     */
+    coalesce(
+      (${transactions.originalCurrency} = 'USD'
+        and ${transactions.originalAmount} is not null)
+      or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,
+      false
+    )
+  ) filter (where ${transactions.voidedAt} is null), true))
+)`;
+
 @Injectable()
 export class AccountsService {
   constructor(
@@ -119,7 +212,12 @@ export class AccountsService {
 
     return (
       this.db.client
-        .select({ ...projection, balance: currentBalance })
+        .select({
+          ...projection,
+          balance: currentBalance,
+          ownBalance: ownCurrencyBalance,
+          ownBalanceExact: ownCurrencyExact,
+        })
         .from(accounts)
         .leftJoin(transactions, eq(transactions.accountId, accounts.id))
         .where(and(...filters))
@@ -180,6 +278,8 @@ export class AccountsService {
         currency: accounts.currency,
         isActive: accounts.isActive,
         balance: currentBalance,
+        ownBalance: ownCurrencyBalance,
+        ownBalanceExact: ownCurrencyExact,
       })
       .from(accounts)
       .leftJoin(transactions, eq(transactions.accountId, accounts.id))
@@ -552,6 +652,7 @@ const projection = {
   swiftCode: accounts.swiftCode,
   currency: accounts.currency,
   openingBalance: accounts.openingBalance,
+  openingBalanceUsd: accounts.openingBalanceUsd,
   openingBalanceOn: accounts.openingBalanceOn,
   sortOrder: accounts.sortOrder,
   isActive: accounts.isActive,

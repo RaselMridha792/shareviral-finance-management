@@ -425,12 +425,20 @@ function AccountCard({
         recorded rate there IS no dollar figure, so a USD-primary card falls
         back to taka-first rather than promoting a blank.
       */}
-      {account.currency === "USD" && equivalent ? (
+      {/*
+        The dollars are the account's OWN figure now, not a division of its
+        taka. That is the whole of the owner's complaint: $14,000 put in at
+        118.00 and read back at 122.50 became $13,485, because the card divided
+        a taka balance instead of adding up the dollars each row already
+        carried. `ownBalance` sums them; `ownBalanceExact` says whether every
+        row had one, and only an inexact figure wears the `~`.
+      */}
+      {account.currency === "USD" ? (
         <>
           <Amount
-            value={equivalent.value}
-            currency={equivalent.currency}
-            approximate
+            value={account.ownBalance}
+            currency="USD"
+            approximate={!account.ownBalanceExact}
             showCounterpart={false}
             className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
           />
