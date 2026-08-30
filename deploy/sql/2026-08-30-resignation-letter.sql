@@ -1,0 +1,31 @@
+-- A resignation letter, for the people who have left.
+--
+--   docker compose exec -T db psql -U sfm -d sfm < sql/2026-08-30-resignation-letter.sql
+--
+-- RUN THIS BEFORE THE CODE. `file_kind` is a TYPE rather than a column, so a
+-- deploy that arrives first does not break reading — every existing screen goes
+-- on working. What breaks is the one act the change exists for: uploading a
+-- resignation letter fails at the INSERT, as a bare 500, because Drizzle does
+-- no client-side enum checking and the exception filter has no branch for a
+-- driver error. The deploy applies this directory before swapping containers,
+-- so shipping the two together is correct — but the local Neon database needs
+-- `node .sql.mjs` run by hand, or local uploads 500 the same way.
+--
+-- `ALTER TYPE ... ADD VALUE` cannot run inside the transaction that created the
+-- type, and older Postgres refuses it inside any transaction block at all — so
+-- this file is deliberately one statement with no BEGIN around it, exactly as
+-- 2026-08-20-cfo-role.sql is.
+--
+-- `IF NOT EXISTS` so re-running is free: this has to reach the local database
+-- and the VPS separately, and a migration that fails the second time is one
+-- somebody learns to skip.
+--
+-- Order matters and cannot be chosen. A value added to a Postgres enum goes on
+-- the end unless the whole type is rewritten, so `resignation_letter` is last
+-- here and last in FILE_KINDS in packages/shared/src/files.ts. The two must
+-- agree, and the array's own comment says why.
+--
+-- Nothing else changes. `files` already carries `team_member_id`, so the
+-- one-owner constraint is untouched, no column is added, and no stored row is
+-- rewritten — every paper already uploaded stays exactly where it is.
+ALTER TYPE file_kind ADD VALUE IF NOT EXISTS 'resignation_letter';
