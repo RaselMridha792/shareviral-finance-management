@@ -189,19 +189,38 @@ export const EDUCATION_LEVEL_LABELS: Record<EducationLevel, string> = {
  * "we removed that" true rather than a claim about the form.
  */
 /**
- * No employee code.
+ * The employee ID — back, and optional this time.
  *
- * There was one, required and unique, and the company does not have such a
- * thing: the staff sheet has nineteen columns and none of them is a code. So
- * every import and every new joiner needed a code invented on the spot —
- * SV-001, SV-002 — which is a made-up identifier that then looks official on a
- * payslip and in an export, and which nobody could reconcile against anything.
+ * It was here once as a REQUIRED, unique code, and that was the mistake: the
+ * company's staff sheet has nineteen columns and none of them is a code, so
+ * every import and every new joiner needed one invented on the spot — SV-001,
+ * SV-002 — a made-up identifier that then looked official on a payslip. A
+ * required field nobody has an answer for is a field people invent an answer
+ * for, so it was removed.
  *
- * A required field nobody has an answer for is a field people invent an answer
- * for. People are identified here by name, and by the row itself.
+ * The owner has now asked for the column, and the difference is the whole
+ * point: **optional**. Somebody who has an ID gets it recorded and printed;
+ * the eighteen people already on the books keep no ID at all and nothing
+ * demands one. The database column and its unique index have been there since
+ * 2026-08-19 and the payslip already prints it — this only gives it a way in
+ * and a way to be read.
+ *
+ * Unique per company still holds, enforced by the index rather than here, and
+ * a clash comes back naming the person who has it rather than as a 500.
  */
 export const createTeamMemberSchema = z.strictObject({
   fullName: z.string().trim().min(2, "Enter their full name").max(120),
+  /**
+   * Blank clears it, rather than meaning "leave what is there".
+   *
+   * `optionalText` maps "" to undefined, and on a PATCH undefined means "do
+   * not touch" — so an emptied box would silently keep the old ID. `endedOn`
+   * solved this first; the same union is used here.
+   */
+  employeeCode: z
+    .union([z.string().trim().min(1).max(40), z.literal(""), z.null()])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
   engagementType: engagementTypeSchema.default("employee"),
   /**
    * No default. Every other enum here either has an obvious starting answer

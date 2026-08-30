@@ -123,6 +123,10 @@ export function TeamMemberForm({
     // where it is rather than being blanked on the next save.
     const payload = {
       fullName: text("fullName"),
+      // Sent as "" when the box is emptied, which the schema maps to null —
+      // clearing an ID has to be possible, and an omitted key would mean
+      // "leave it alone" on a patch.
+      employeeCode: String(data.get("employeeCode") ?? ""),
       engagementType: text("engagementType"),
       department: text("department"),
       designation: text("designation"),
@@ -260,9 +264,24 @@ export function TeamMemberForm({
           </Field>
         </div>
 
-        <Field label="Full name" required error={fieldErrors.fullName}>
-          <Input name="fullName" required defaultValue={member?.fullName} />
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Full name" required error={fieldErrors.fullName}>
+            <Input name="fullName" required defaultValue={member?.fullName} />
+          </Field>
+          <Field
+            label="Employee ID"
+            error={fieldErrors.employeeCode}
+            hint="The company's own — leave empty if there is none"
+          >
+            <Input
+              name="employeeCode"
+              className="num"
+              maxLength={40}
+              placeholder="SVF-0012"
+              defaultValue={member?.employeeCode ?? ""}
+            />
+          </Field>
+        </div>
 
         <PaperPick
           label="Photo"

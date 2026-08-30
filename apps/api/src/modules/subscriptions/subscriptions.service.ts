@@ -454,7 +454,11 @@ export class SubscriptionsService {
           rows.map((r) => r.id),
         ),
       )
-      .orderBy(asc(teamMembers.fullName));
+      .orderBy(
+        asc(teamMembers.joinedOn),
+        asc(teamMembers.fullName),
+        asc(teamMembers.id),
+      );
 
     const byId = new Map<string, typeof seats>();
     for (const seat of seats) {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -163,7 +164,25 @@ export class TeamMembersService {
         .select(projection)
         .from(teamMembers)
         .where(where)
-        .orderBy(asc(teamMembers.fullName))
+        /*
+         * Seniority, not the alphabet — the owner's rule: the list is ordered by
+         * joining date, so SL 1 is the company's first hire.
+         *
+         * Three keys, and the third is not decoration. `joined_on` is a DATE, so
+         * two people hired the same day have no defined order between them, and
+         * this list is paged with OFFSET: without a unique final key one of them
+         * can appear on two pages and the other on none. Name then id gives a
+         * total order that offset paging can rely on.
+         *
+         * Every place that lists people carries the same three keys. Change one
+         * alone and the salary sheet disagrees with the directory about who row
+         * one is — on a document that gets printed and signed.
+         */
+        .orderBy(
+          asc(teamMembers.joinedOn),
+          asc(teamMembers.fullName),
+          asc(teamMembers.id),
+        )
         .limit(query.pageSize)
         .offset(offset),
       this.db.client.select({ total: count() }).from(teamMembers).where(where),
@@ -197,6 +216,47 @@ export class TeamMembersService {
     return row;
   }
 
+  /**
+   * An employee ID belongs to one person.
+   *
+   * The unique index has been on this column since it was added, but nothing
+   * could type into the column, so nothing ever hit it. Now that the drawer
+   * can, a clash would surface as a bare "Internal server error" — the
+   * exception filter turns any non-HTTP error into that — which tells whoever
+   * typed it nothing at all. Checked here so the refusal can name the person
+   * already holding it.
+   *
+   * Not a replacement for the index: two people saving the same ID in the same
+   * second would both pass this and one would still be refused by the
+   * database. This is for the case that actually happens.
+   */
+  private async assertEmployeeCodeFree(
+    code: string | null | undefined,
+    exceptId?: string,
+  ) {
+    if (!code) return;
+    const [clash] = await this.db.client
+      .select({ id: teamMembers.id, fullName: teamMembers.fullName })
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.employeeCode, code),
+          isNull(teamMembers.deletedAt),
+          exceptId ? sql`${teamMembers.id} <> ${exceptId}::uuid` : undefined,
+        ),
+      )
+      .limit(1);
+
+    if (clash) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: {
+          employeeCode: [`${clash.fullName} already has that employee ID`],
+        },
+      });
+    }
+  }
+
   async create(input: CreateTeamMemberInput, actor: AuthenticatedUser) {
     /*
      * `currentSalary` is not a team_members column and must not reach the
@@ -219,6 +279,7 @@ export class TeamMembersService {
         );
       }
     }
+    await this.assertEmployeeCodeFree(memberInput.employeeCode);
 
     return this.audit.mutate({
       action: "create",
@@ -287,6 +348,7 @@ export class TeamMembersService {
      * touching the box does not manufacture a raise dated today.
      */
     const { currentSalary, ...memberInput } = input;
+    await this.assertEmployeeCodeFree(memberInput.employeeCode, id);
     if (currentSalary !== undefined) {
       if (!hasPermission(actor.role, "team.compensation.write")) {
         throw new ForbiddenException(
@@ -414,7 +476,13 @@ export class TeamMembersService {
           )`,
         ),
       )
-      .orderBy(asc(teamMembers.fullName));
+      // The same order the directory shows, so the confirmation list and
+      // the audit rows read in the order somebody is looking at.
+      .orderBy(
+        asc(teamMembers.joinedOn),
+        asc(teamMembers.fullName),
+        asc(teamMembers.id),
+      );
 
     const ready = candidates.filter(
       (c) => c.joiningSalary != null && Number(c.joiningSalary) > 0,
@@ -640,6 +708,9 @@ export class TeamMembersService {
 
 const projection = {
   id: teamMembers.id,
+  // The company's own identifier for somebody, when they have one. Optional —
+  // most of the people already on the books have none.
+  employeeCode: teamMembers.employeeCode,
   fullName: teamMembers.fullName,
   engagementType: teamMembers.engagementType,
   employmentType: teamMembers.employmentType,

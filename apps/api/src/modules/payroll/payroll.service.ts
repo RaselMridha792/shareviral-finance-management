@@ -158,7 +158,13 @@ export class PayrollService {
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
       .where(eq(payrollLines.payrollRunId, id))
-      .orderBy(asc(teamMembers.fullName));
+      // Seniority, as the directory shows it — the sheet, its Excel and
+      // every payslip trace to this one order.
+      .orderBy(
+        asc(teamMembers.joinedOn),
+        asc(teamMembers.fullName),
+        asc(teamMembers.id),
+      );
 
     return { run, lines };
   }
@@ -1138,39 +1144,46 @@ export class PayrollService {
     const monthEnd = lastDayOf(periodYear, periodMonth);
     const monthStart = firstDayOf(periodYear, periodMonth);
 
-    return this.db.client
-      .select({
-        id: teamMembers.id,
-        fullName: teamMembers.fullName,
-        designation: teamMembers.designation,
-        department: teamMembers.department,
-        status: teamMembers.status,
-        /*
-         * The correlation is written out as "team_members".id, not
-         * interpolated. Drizzle renders an embedded column as its bare name —
-         * just "id" — and inside this subquery a bare "id" resolves against
-         * compensation_history first, so the correlation quietly became
-         * ch.team_member_id = ch.id: valid SQL, false on every row, and a
-         * picker that said nobody in the company had a wage.
-         */
-        monthlyGross: sql<string | null>`(
+    return (
+      this.db.client
+        .select({
+          id: teamMembers.id,
+          fullName: teamMembers.fullName,
+          designation: teamMembers.designation,
+          department: teamMembers.department,
+          status: teamMembers.status,
+          /*
+           * The correlation is written out as "team_members".id, not
+           * interpolated. Drizzle renders an embedded column as its bare name —
+           * just "id" — and inside this subquery a bare "id" resolves against
+           * compensation_history first, so the correlation quietly became
+           * ch.team_member_id = ch.id: valid SQL, false on every row, and a
+           * picker that said nobody in the company had a wage.
+           */
+          monthlyGross: sql<string | null>`(
           select ch.gross_amount::text from compensation_history ch
            where ch.team_member_id = "team_members".id
              and ch.deleted_at is null
              and ch.effective_from <= ${monthEnd}
            order by ch.effective_from desc limit 1
         )`,
-      })
-      .from(teamMembers)
-      .where(
-        and(
-          isNull(teamMembers.deletedAt),
-          eq(teamMembers.engagementType, "employee"),
-          sql`${teamMembers.joinedOn} <= ${monthEnd}`,
-          sql`(${teamMembers.endedOn} is null or ${teamMembers.endedOn} >= ${monthStart})`,
-        ),
-      )
-      .orderBy(asc(teamMembers.fullName));
+        })
+        .from(teamMembers)
+        .where(
+          and(
+            isNull(teamMembers.deletedAt),
+            eq(teamMembers.engagementType, "employee"),
+            sql`${teamMembers.joinedOn} <= ${monthEnd}`,
+            sql`(${teamMembers.endedOn} is null or ${teamMembers.endedOn} >= ${monthStart})`,
+          ),
+        )
+        // The picker reads in the same order as the sheet it feeds.
+        .orderBy(
+          asc(teamMembers.joinedOn),
+          asc(teamMembers.fullName),
+          asc(teamMembers.id),
+        )
+    );
   }
 
   /**

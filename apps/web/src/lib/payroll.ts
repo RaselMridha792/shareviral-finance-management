@@ -33,6 +33,8 @@ import { apiFetch } from "./api-client";
  */
 export type TeamMemberDto = {
   id: string;
+  /** The company's own identifier, when they have one. */
+  employeeCode: string | null;
   fullName: string;
   engagementType: EngagementType;
   /**

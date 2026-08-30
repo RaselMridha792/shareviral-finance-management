@@ -422,7 +422,9 @@ export class TdsService {
         .orderBy(
           asc(payrollRuns.periodYear),
           asc(payrollRuns.periodMonth),
+          asc(teamMembers.joinedOn),
           asc(teamMembers.fullName),
+          asc(teamMembers.id),
         ),
 
       this.db.client
@@ -1086,7 +1088,11 @@ export class TdsService {
           )`,
         ),
       )
-      .orderBy(asc(teamMembers.fullName));
+      .orderBy(
+        asc(teamMembers.joinedOn),
+        asc(teamMembers.fullName),
+        asc(teamMembers.id),
+      );
 
     const vendorPayments = await this.db.client
       .select({

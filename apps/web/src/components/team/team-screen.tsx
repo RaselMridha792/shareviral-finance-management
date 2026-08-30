@@ -472,6 +472,10 @@ function Section({
               would not be.
             */}
             <SerialHead />
+            {/* The company's own identifier, beside the serial the app made
+                up. Most people have none, and the column says so rather than
+                sitting blank. */}
+            <Th width="w-28">Employee ID</Th>
             <Th width="w-28">Date of Joining</Th>
             <Th>Name</Th>
             {past ? <Th width="w-28">Last day</Th> : null}
@@ -510,6 +514,9 @@ function Section({
           {members.map((member, index) => (
             <tr key={member.id} className="row-finance">
               <SerialCell n={serial(page, index)} />
+              <td className="num text-muted-foreground">
+                {member.employeeCode ?? "N/A"}
+              </td>
               <td className="num text-muted-foreground">{member.joinedOn}</td>
               <td>
                 {/*
