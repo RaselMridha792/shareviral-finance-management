@@ -25,6 +25,7 @@ import { DbService } from "../../db/db.service";
 import { accounts, categories, fxRates, transactions } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
+import { notATransfer } from "../transactions/own-money";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
@@ -170,6 +171,7 @@ export class ReportsService {
   }
 
   private async totalsFor(range: PeriodRange) {
+    // The company's own money — transfers between our accounts are not it.
     const [row] = await this.db.client
       .select({
         moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
@@ -179,6 +181,7 @@ export class ReportsService {
       .from(transactions)
       .where(
         and(
+          notATransfer(),
           gte(transactions.txnDate, range.start),
           lte(transactions.txnDate, range.end),
           LIVE,

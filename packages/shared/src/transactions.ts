@@ -446,6 +446,16 @@ export const transactionFilterSchema = z.object({
    * `isToolSpend()` — rather than one of them approximating it client-side.
    */
   excludeToolSpend: boolish.optional(),
+
+  /**
+   * Leave out movements between our own accounts.
+   *
+   * A transfer is two ledger rows, and both are real — but the company spent
+   * nothing, so any screen asking "what did we spend" wants them gone. The
+   * register, the statement and All transactions do not set this: there a
+   * transfer is exactly what the reader is looking for.
+   */
+  excludeTransfers: boolish.optional(),
 });
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>;
 

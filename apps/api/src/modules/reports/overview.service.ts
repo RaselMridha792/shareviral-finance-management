@@ -30,6 +30,7 @@ import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { CHALLAN_COUNTS } from "../tds/challan-counts";
+import { notATransfer } from "../transactions/own-money";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
@@ -284,6 +285,12 @@ export class OverviewService {
   /* ---------------------------------------------------------------------- */
 
   private async totalsFor(range: PeriodRange) {
+    /*
+     * The company's own money, so transfers between our accounts are left
+     * out — both halves, which is why the net is unchanged and both figures
+     * become honest rather than one of them. The per-account blocks below
+     * deliberately keep them: money did leave that card.
+     */
     const [row] = await this.db.client
       .select({
         moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
@@ -291,7 +298,7 @@ export class OverviewService {
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
-      .where(inPeriod(range));
+      .where(and(inPeriod(range), notATransfer()));
 
     return {
       moneyIn: row.moneyIn,

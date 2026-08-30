@@ -44,6 +44,7 @@ import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { VendorsService } from "../vendors/vendors.service";
 import { isToolSpend } from "../vendors/tool-spend";
+import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
 import { nextRefNo } from "./ref-no";
 
@@ -177,6 +178,9 @@ export class TransactionsService {
     // "other expenses" is exactly the complement of "tooling" rather than an
     // approximation of it.
     if (filter.excludeToolSpend) clauses.push(not(isToolSpend()));
+    // Money moved between our own accounts is not money spent — see
+    // `own-money.ts` for where this must and must not be applied.
+    if (filter.excludeTransfers) clauses.push(notATransfer());
     if (filter.from) clauses.push(gte(transactions.txnDate, filter.from));
     if (filter.to) clauses.push(lte(transactions.txnDate, filter.to));
     if (filter.accountId)

@@ -55,7 +55,18 @@ const REQUEST_MAX = 200;
  * be asked for together rather than one after another.
  */
 async function everyRow({ from, to }: { from: string; to: string }) {
-  const query = { from, to, direction: "out" as const, excludeToolSpend: true };
+  /*
+   * `excludeTransfers` because moving money from the bank to the card is not
+   * an expense — the company holds the same total afterwards. It used to be
+   * listed here, under no category, beside the electricity bill.
+   */
+  const query = {
+    from,
+    to,
+    direction: "out" as const,
+    excludeToolSpend: true,
+    excludeTransfers: true,
+  };
 
   const first = await ledgerApi.list({
     ...query,
@@ -153,6 +164,8 @@ export function OtherExpensesScreen({
           from: range.from,
           to: range.to,
           direction: "out",
+          // Both calls, or the subtraction below counts transfers as tooling.
+          excludeTransfers: true,
           page: 1,
           pageSize: 1,
         }),
