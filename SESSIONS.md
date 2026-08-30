@@ -20,6 +20,41 @@ must run, an assumption that is no longer true.
 
 ---
 
+## 2026-08-30 — a transfer between our own accounts is not an expense
+
+**Done.** The owner found it: moving money from Exprovia LLC to M/S Exprovia was listed on Other
+expenses, under no category, beside the electricity bill. A transfer is stored as two rows sharing
+a `transfer_group_id`, and the `out` half is a `direction='out'` transaction like any other — so
+every query asking "what went out" counted it.
+
+Measured before touching anything. A ৳50,000 transfer between two of our own accounts moved:
+
+| Surface | Before the fix | Right answer |
+|---|---|---|
+| Other expenses list | +1 row | must not appear |
+| company `moneyOut` (Reports overview) | +50,000 | must not move |
+| the statement's `moneyOut` | +50,000 | must not move |
+| the sending account's own `moneyOut` | +50,000 | **must** move |
+| All transactions | +2 rows | **must** list both |
+| the category breakdown | unchanged | already immune — a transfer has no category |
+
+So the rule is not "hide transfers", it is **"a transfer is not spending, but it is a movement"**.
+`transactions/own-money.ts` holds it once — `notATransfer()` — with the list of places it must NOT
+be applied written into the file: the register, the statement, the per-account dashboard blocks,
+All transactions, the balances and the overdraft rule. A new `excludeTransfers` filter carries it
+to the screens that ask for it; the Other expenses screen sets it on **both** of its calls, or the
+subtraction that works out the tooling count would count transfers as tools.
+
+Both halves are excluded from the company totals, not just the outgoing one — that is why the net
+still ties and both figures become honest rather than one of them.
+
+Commits: `4c52971`. **Not pushed** — the owner asked to hold.
+
+**Open.** `.notspend.mjs` (9 checks) proves both directions, including that a query which does not
+ask to exclude transfers still gets them — the register depends on that. The battery was
+interrupted mid-run by the session ending and wants a clean pass before this goes out.
+
+
 ## 2026-08-30 — an uploaded document opens where it was uploaded
 
 **Done.** The owner's bug: every paper on a team member's profile answered
