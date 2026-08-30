@@ -72,6 +72,15 @@ export const FILE_KINDS = [
   "statement_signature",
   "import_source",
   "other",
+  /**
+   * The letter somebody left with. Last in the list, deliberately.
+   *
+   * `ALTER TYPE ... ADD VALUE` with no `AFTER` appends to the end of the
+   * Postgres enum, so end-of-array is the position that matches what the
+   * database actually did. Inserting it mid-array would make this list a
+   * second, disagreeing claim about the enum's order.
+   */
+  "resignation_letter",
 ] as const;
 
 export const fileKindSchema = z.enum(FILE_KINDS);
@@ -127,6 +136,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   challan: "Challan",
   import_source: "Imported file",
   other: "Document",
+  resignation_letter: "Resignation letter",
 };
 
 /**
@@ -151,6 +161,7 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
     "salary_certificate",
     "nid",
     "etin_certificate",
+    "resignation_letter",
     "other",
   ],
   transaction: ["receipt", "invoice", "bank_statement", "other"],
@@ -237,6 +248,9 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // forms an A-Challan actually arrives in.
   challan: DOCUMENT_MIME_TYPES,
   import_source: SPREADSHEET_MIME_TYPES,
+  // Images too: a resignation is regularly a photo of a signed page rather
+  // than a scan.
+  resignation_letter: DOCUMENT_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
 
@@ -279,6 +293,7 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   challan: 10 * MB,
   import_source: 15 * MB,
   other: 15 * MB,
+  resignation_letter: 15 * MB,
 };
 
 /** The largest any single upload may be, for the multipart limit. */

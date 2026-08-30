@@ -343,7 +343,13 @@ export function TeamMemberScreen({
             description="Every paper this record should hold, and which are missing"
           />
           <CardBody>
-            <DocumentSlots memberId={member.id} canWrite={canWrite} />
+            <DocumentSlots
+              memberId={member.id}
+              canWrite={canWrite}
+              /* `working` counts on_leave as still here, which is right: a
+                 person on leave has not resigned. */
+              hasLeft={!working}
+            />
           </CardBody>
         </Card>
 
@@ -759,7 +765,6 @@ function MemberPhoto({
     />
   );
 }
-
 
 /** Only letters: a name like "HR (test)" must not render as "H(". */
 /**

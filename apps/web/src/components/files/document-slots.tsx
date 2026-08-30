@@ -51,9 +51,17 @@ const SLOTS: readonly FileKind[] = [
 export function DocumentSlots({
   memberId,
   canWrite,
+  hasLeft = false,
 }: {
   memberId: string;
   canWrite: boolean;
+  /**
+   * Whether this person has left. A resignation letter is a paper that only
+   * exists once somebody has gone, so the row is not offered to everybody —
+   * a slot saying "Not on file" against every working employee reads as
+   * eighteen missing documents rather than eighteen people still here.
+   */
+  hasLeft?: boolean;
 }) {
   const [files, setFiles] = useState<StoredFile[] | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -137,10 +145,23 @@ export function DocumentSlots({
     );
   }
 
+  /*
+   * The leaver's row appears when they have left — OR when a letter is already
+   * on file. The second half is not optional: without it, moving somebody back
+   * to Working would hide a document that is still in the database, which
+   * reads as data lost rather than a row tidied away.
+   */
+  const slots: FileKind[] = [
+    ...SLOTS.filter((kind) => kind !== "other"),
+    ...(hasLeft || (files ?? []).some((f) => f.kind === "resignation_letter")
+      ? (["resignation_letter"] as FileKind[])
+      : []),
+    "other" as FileKind,
+  ];
   return (
     <>
       <ul className="flex flex-col divide-y divide-border">
-        {SLOTS.map((kind) => {
+        {slots.map((kind) => {
           const held = files.filter((f) => f.kind === kind);
           return (
             <li key={kind} className="flex flex-col gap-2 py-3 first:pt-0">
