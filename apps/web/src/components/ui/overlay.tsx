@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useScrollLock } from "@/components/ui/scroll-lock";
@@ -146,21 +146,59 @@ export function DocumentViewer({
   useDismissable(open, onClose);
 
   /*
-   * Each piece of state remembers WHICH file it belongs to, rather than being
-   * cleared at the top of the effect. Two reasons, and the second is the one
-   * that matters: clearing there is a synchronous setState inside an effect,
-   * which the lint rule rightly refuses; and comparing against the current
-   * `src` means a blob fetched for the previous document can never be framed
-   * for this one, however the two requests happen to land.
+   * The fetching lives in a child that only exists while the viewer is open,
+   * and that is the whole fix rather than a tidy-up.
+   *
+   * It used to keep `failedSrc` in this component and never clear it. So one
+   * failed fetch — a dropped connection, a token that expired between loading
+   * the page and clicking, an API restart — marked that document unopenable
+   * for the rest of the session: closing and clicking again showed the same
+   * "could not be opened" without retrying, and only a page reload cured it.
+   * That is the "majhe majhe view korle error dekhay" the owner has reported
+   * more than once. Not sometimes-broken files — permanently broken state
+   * after one bad moment.
+   *
+   * It also revoked the object URL in the effect cleanup while state still
+   * named it, so reopening framed a dead blob for a beat, which the browser
+   * console reported as `requestfailed blob:…`.
+   *
+   * Unmounting on close fixes both at once and needs no clearing logic to get
+   * right: there is no state left to be stale, so opening again is a genuine
+   * second attempt.
    */
-  const [fetched, setFetched] = useState<{ src: string; url: string } | null>(
-    null,
+  if (!open || !src) return null;
+
+  return (
+    <ViewerShell
+      key={src}
+      src={src}
+      name={name}
+      downloadHref={downloadHref}
+      onClose={onClose}
+    />
   );
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+}
+
+function ViewerShell({
+  src,
+  name,
+  downloadHref,
+  onClose,
+}: {
+  src: string;
+  name: string;
+  downloadHref: string;
+  onClose: () => void;
+}) {
+  const [attempt, setAttempt] = useState<{ url: string | null } | null>(null);
+  /*
+   * Mirrors the url so unmount can release it. State cannot be read from a
+   * cleanup that runs after the component is gone, and the frame is still
+   * reading the blob right up until then.
+   */
+  const held = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open || !src) return;
-    let url: string | null = null;
     let live = true;
 
     fetch(src, { credentials: "include" })
@@ -169,24 +207,31 @@ export function DocumentViewer({
         return response.blob();
       })
       .then((blob) => {
-        url = URL.createObjectURL(blob);
-        if (live) setFetched({ src, url });
-        // Revoked on the way out rather than here: the frame is still reading.
+        if (!live) return;
+        const url = URL.createObjectURL(blob);
+        held.current = url;
+        setAttempt({ url });
       })
       .catch(() => {
-        if (live) setFailedSrc(src);
+        if (live) setAttempt({ url: null });
       });
 
     return () => {
       live = false;
-      if (url) URL.revokeObjectURL(url);
     };
-  }, [open, src]);
+  }, [src]);
 
-  const framed = fetched && fetched.src === src ? fetched.url : null;
-  const failed = failedSrc === src;
+  useEffect(
+    () => () => {
+      if (held.current) URL.revokeObjectURL(held.current);
+      held.current = null;
+    },
+    [],
+  );
 
-  if (!open || !src) return null;
+  const framed = attempt?.url ?? null;
+  const failed = attempt !== null && attempt.url === null;
+
 
   return (
     <div

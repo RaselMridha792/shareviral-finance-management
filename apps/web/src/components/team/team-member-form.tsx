@@ -30,9 +30,18 @@ import {
 import { Paperclip, X } from "lucide-react";
 
 import { useCan } from "@/components/auth/session-provider";
+import {
+  PreviewButton,
+  useFilePreview,
+  type Stored,
+} from "@/components/files/file-preview";
 import { useToast } from "@/components/ui/toast";
-import { uploadTeamMemberFile } from "@/lib/api-client";
-import { ApiError } from "@/lib/api-client";
+import {
+  ApiError,
+  fileHref,
+  listTeamMemberFiles,
+  uploadTeamMemberFile,
+} from "@/lib/api-client";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 
 /**
@@ -87,6 +96,80 @@ export function TeamMemberForm({
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [letterFile, setLetterFile] = useState<File | null>(null);
+
+  /*
+   * What this person ALREADY has on file.
+   *
+   * Without it the drawer opened saying "Photo — Choose a file" at somebody
+   * whose photograph was on the screen behind it, and the owner read that,
+   * reasonably, as the app having lost the file. The text boxes have always
+   * carried their saved values; the three file rows were the only fields that
+   * opened blank whatever was stored.
+   *
+   * Fetched here rather than passed in, because both call sites — the profile
+   * and the team list — would otherwise have to fetch it and hand it over, and
+   * one of them would eventually not.
+   */
+  /*
+   * Keyed by whose papers these are, rather than cleared when the drawer
+   * shuts. Clearing meant a synchronous setState in the effect body — the
+   * cascading-render rule refuses it, rightly — and comparing the id does the
+   * same job better: one person's documents can never be shown against
+   * another's, however the two requests happen to land.
+   */
+  const [loadedFor, setLoadedFor] = useState<{
+    id: string;
+    files: Record<string, Stored>;
+  } | null>(null);
+  const onFile =
+    member && loadedFor?.id === member.id ? loadedFor.files : null;
+  const preview = useFilePreview();
+
+  useEffect(() => {
+    if (!open || !member) return;
+    let live = true;
+    void listTeamMemberFiles(member.id)
+      .then((files) => {
+        if (!live) return;
+        /*
+         * The newest of each kind. A slot can hold several — "Add another" is
+         * on the profile's Documents card — and the one worth naming here is
+         * the one that would be shown as current.
+         */
+        const newest: Record<string, Stored> = {};
+        for (const file of files) {
+          if (!newest[file.kind]) {
+            newest[file.kind] = {
+              name: file.originalName,
+              href: fileHref(file.id),
+              isImage: file.isImage,
+            };
+          }
+        }
+        /*
+         * The photograph is NOT in that list, and deliberately: the API
+         * excludes `profile_photo` from a person's documents because the
+         * picture has its own control beside the face it belongs to, and
+         * listing it twice makes the delete button look like it removes a
+         * duplicate. The record carries its id, so it comes from there.
+         */
+        if (member.photoFileId) {
+          newest.profile_photo = {
+            name: "Current photo",
+            href: fileHref(member.photoFileId),
+            isImage: true,
+          };
+        }
+        setLoadedFor({ id: member.id, files: newest });
+      })
+      .catch(() => {
+        // A drawer that cannot list the papers still has to open and save.
+        if (live) setLoadedFor({ id: member.id, files: {} });
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, member]);
   const toast = useToast();
   useEffect(() => {
     if (!open || !member || !canSetPay) return;
@@ -288,7 +371,9 @@ export function TeamMemberForm({
           hint="Uploads into the app when you save — it appears on the profile"
           accept="image/*"
           file={photoFile}
+          stored={onFile?.profile_photo}
           onPick={setPhotoFile}
+          onPreview={preview.show}
         />
 
         <SectionHeading>Personal</SectionHeading>
@@ -485,14 +570,18 @@ export function TeamMemberForm({
             hint="Uploads into the app when you save"
             accept="application/pdf,image/*"
             file={cvFile}
+            stored={onFile?.cv}
             onPick={setCvFile}
+            onPreview={preview.show}
           />
           <PaperPick
             label="Signed appointment letter"
             hint="Uploads into the app when you save"
             accept="application/pdf,image/*"
             file={letterFile}
+            stored={onFile?.appointment_letter}
             onPick={setLetterFile}
+            onPreview={preview.show}
           />
         </div>
 
@@ -577,6 +666,13 @@ export function TeamMemberForm({
           {editing ? "Save changes" : "Add"}
         </Button>
       </div>
+
+      {/*
+        Inside the drawer, and above it: the viewer sets its own z-index, so a
+        document opened from a picker lands over the drawer rather than behind
+        it — which is what "click korlei okhanei" has to mean to be any use.
+      */}
+      {preview.overlay}
     </Drawer>
   );
 }
@@ -603,23 +699,41 @@ function PaperPick({
   hint,
   accept,
   file,
+  stored,
   onPick,
+  onPreview,
 }: {
   label: string;
   hint?: string;
   accept: string;
+  /** Chosen in the browser, not yet uploaded. */
   file: File | null;
+  /** Already saved against this person, if anything is. */
+  stored?: Stored;
   onPick: (file: File | null) => void;
+  onPreview: (item: File | Stored) => void;
 }) {
+  /*
+   * Three states, and the middle one is the one that was missing:
+   *
+   *   nothing on file              "Choose a file"
+   *   something on file            its name, openable, and choosing replaces it
+   *   something chosen just now    its name, openable, and clearable
+   *
+   * Both of the last two get the same eye, because "can I check this is the
+   * right scan" is the same question whether the file arrived a second ago or
+   * last year, and answering it should never require saving first.
+   */
+  const showing = file ?? stored ?? null;
+  const name = file ? file.name : (stored?.name ?? null);
+
   return (
-    <Field label={label} hint={file ? undefined : hint}>
+    <Field label={label} hint={showing ? undefined : hint}>
       <div className="flex items-center gap-2">
-        <label className="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition hover:text-foreground">
+        <label className="flex h-10 min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition hover:text-foreground">
           <Paperclip className="size-3.5 shrink-0" />
-          {file ? (
-            <span className="max-w-56 truncate text-foreground">
-              {file.name}
-            </span>
+          {name ? (
+            <span className="max-w-48 truncate text-foreground">{name}</span>
           ) : (
             "Choose a file"
           )}
@@ -630,17 +744,57 @@ function PaperPick({
             onChange={(e) => onPick(e.target.files?.[0] ?? null)}
           />
         </label>
+
+        {/*
+          A stored photograph shows itself. "Current photo" as words answers
+          "is there one" and not "is it the right one", and the second is the
+          question somebody opening this drawer is actually asking.
+        */}
+        {!file && stored?.isImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={stored.href}
+            alt={stored.name}
+            className="size-9 shrink-0 rounded object-cover"
+          />
+        ) : null}
+
+        {showing ? (
+          <PreviewButton
+            name={name ?? label}
+            onClick={() => onPreview(showing)}
+          />
+        ) : null}
+
         {file ? (
           <button
             type="button"
             aria-label={`Remove the chosen ${label.toLowerCase()}`}
             onClick={() => onPick(null)}
-            className="cursor-pointer rounded p-1 text-muted-foreground transition hover:text-negative"
+            className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground transition hover:text-negative"
           >
             <X className="size-3.5" />
           </button>
         ) : null}
       </div>
+
+      {/*
+        Said plainly rather than implied by the file name alone: a name in the
+        box could be either the stored paper or the one about to replace it,
+        and uploading the wrong thing over somebody's appointment letter is not
+        a mistake that undoes itself.
+      */}
+      {stored && !file ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          On file. Choosing another adds a new one — the old stays on the
+          profile.
+        </p>
+      ) : null}
+      {stored && file ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Replaces nothing: {stored.name} stays on the profile too.
+        </p>
+      ) : null}
     </Field>
   );
 }
