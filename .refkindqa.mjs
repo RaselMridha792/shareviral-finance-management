@@ -1,9 +1,23 @@
 /**
- * Transaction ID, or only the paper — the choice, and what the table draws.
+ * The three states a reference cell can be in — and the toggle that is gone.
  *
- * The owner's rule: a bank does not always give a number. The drawer offers
- * both, and the table shows the number when there is one, an eye when there
- * is only paperwork, and a dash when there is neither.
+ * This file used to drive a "Transaction ID / Reference only" toggle in four
+ * drawers. #34 removed it: on the owner's word a reference is now something you
+ * ATTACH, never something you type, so there is nothing left to choose between
+ * and no box for the choice to hide. Testing for the toggle would be testing a
+ * rule that has been replaced.
+ *
+ * What survives is the half that still matters, because the DATA still has all
+ * three shapes and always will — rows recorded before the change carry a typed
+ * number, rows recorded after carry only paper, and some rows carry neither:
+ *
+ *   a number and paper   the number shows, clickable
+ *   paper only           an eye, which opens the same drawer
+ *   neither              no eye, no number
+ *
+ * And one guard added in place of what was removed: the toggle must stay gone.
+ * A control that came back would put a typed box beside an attach-only one
+ * again, which is exactly what the owner asked to be rid of.
  *
  *     node .refkindqa.mjs      (local only — writes and deletes)
  */
@@ -62,13 +76,25 @@ const cat = (
   await db.query("select id from categories where kind='out' and deleted_at is null limit 1")
 ).rows[0];
 
+/*
+ * Dated TODAY, not a date written down when this file was created.
+ *
+ * The fixtures used to say '2026-08-19'. Other expenses opens on the current
+ * month, so on the first of September every one of them fell off the screen and
+ * three checks reported the reference column as drawing nothing — a harness
+ * rotting with the calendar and blaming the product for it.
+ */
+const TODAY = (
+  await db.query("select (now() at time zone 'Asia/Dhaka')::date::text d")
+).rows[0].d;
+
 const mk = async (desc, reference) =>
   (
     await db.query(
       `insert into transactions (ref_no, account_id, direction, txn_date, amount, currency, category_id, description, reference, created_by, updated_by)
-       values ('TXN-RK-' || floor(random()*100000)::int, $1, 'out', '2026-08-19', '150.00', 'BDT', $2, $3, $4, $5, $5)
+       values ('TXN-RK-' || floor(random()*100000)::int, $1, 'out', $6::date, '150.00', 'BDT', $2, $3, $4, $5, $5)
        returning id`,
-      [account.id, cat.id, desc, reference, person.id],
+      [account.id, cat.id, desc, reference, person.id, TODAY],
     )
   ).rows[0].id;
 const attach = (txnId, name) =>
@@ -190,9 +216,16 @@ check("the eye opens the paperwork drawer", opened.hasFile, "");
 await page.keyboard.press("Escape");
 await settle(500);
 
-/* ---------------------------------------------- the toggle in all four drawers */
+/* ------------------------------- the toggle, which must stay gone --------- */
 
-const drawerHas = async (url, openLabel) => {
+/*
+ * Four drawers, one question: is there anything to type a reference into?
+ *
+ * The toggle went with the box. This checks the absence rather than deleting
+ * the section, because "the control is gone" is a fact worth keeping true — the
+ * next person to touch these forms should find out here, not from the owner.
+ */
+const drawerRef = async (url, openLabel) => {
   await page.goto(`${WEB}${url}`, { waitUntil: "networkidle0", timeout: 120000 });
   await settle(2500);
   const clicked = await page.evaluate((label) => {
@@ -203,81 +236,53 @@ const drawerHas = async (url, openLabel) => {
     button.click();
     return true;
   }, openLabel);
-  await settle(1400);
+  await settle(1500);
   const state = await page.evaluate(() => {
-    const idBtn = [...document.querySelectorAll("button")].find(
-      (b) => (b.textContent ?? "").trim() === "Transaction ID",
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].pop();
+    if (!dialog) return { field: false };
+    const toggle = [...dialog.querySelectorAll("button")].some((b) =>
+      /^(Transaction ID|Reference only)$/.test((b.textContent ?? "").trim()),
     );
-    const paperBtn = [...document.querySelectorAll("button")].find(
-      (b) => (b.textContent ?? "").trim() === "Reference only",
+    const field = [...dialog.querySelectorAll("label")].find((l) =>
+      /^Reference/.test((l.textContent ?? "").trim()),
     );
     return {
-      hasToggle: Boolean(idBtn && paperBtn),
-      inputBefore: Boolean(document.querySelector('input[name="reference"]')),
+      field: Boolean(field),
+      toggle,
+      typeable: field
+        ? [...field.querySelectorAll("input")].filter(
+            (el) => el.type !== "file" && el.type !== "checkbox",
+          ).length
+        : null,
+      clips: field
+        ? field.querySelectorAll(
+            'button[aria-label*="ttach" i], button[title*="ttach" i]',
+          ).length
+        : null,
     };
   });
-  if (!state.hasToggle) return { clicked, ...state, inputAfter: null };
-  await page.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((b) => (b.textContent ?? "").trim() === "Reference only")
-      .click();
-  });
-  await settle(500);
-  const inputAfter = await page.evaluate(() =>
-    Boolean(document.querySelector('input[name="reference"]')),
-  );
   await page.keyboard.press("Escape");
   await settle(400);
-  return { clicked, ...state, inputAfter };
+  return { clicked, ...state };
 };
 
 for (const [url, label, name] of [
   ["/expenses/other", "Add expense", "the expense drawer"],
   ["/accounts/cash-in", "Add cash", "the cash-in drawer"],
-  ["/transfers", "New transfer", "the transfer drawer"],
+  ["/transfers", "New transfer|Move money|Add a transfer", "the transfer drawer"],
+  ["/subscriptions", "Add a subscription", "the subscription drawer"],
 ]) {
-  const seen = await drawerHas(url, label);
+  const seen = await drawerRef(url, label);
   check(
-    `${name} offers the choice, and picking paper takes the box away`,
-    seen.hasToggle && seen.inputBefore === true && seen.inputAfter === false,
+    `${name}: Reference is attach-only, and the old toggle is gone`,
+    seen.clicked === true &&
+      seen.field === true &&
+      seen.toggle === false &&
+      seen.typeable === 0 &&
+      seen.clips >= 1,
     JSON.stringify(seen),
   );
 }
-
-// Subscriptions holds its reference in state rather than a named input, so it
-// is checked by its label instead.
-await page.goto(`${WEB}/subscriptions`, { waitUntil: "networkidle0", timeout: 120000 });
-await settle(2500);
-await page.evaluate(() => {
-  [...document.querySelectorAll("button")]
-    .find((b) => /Add|New plan|Record/.test(b.textContent ?? ""))
-    ?.click();
-});
-await settle(1500);
-const subs = await page.evaluate(() => {
-  const paperBtn = [...document.querySelectorAll("button")].find(
-    (b) => (b.textContent ?? "").trim() === "Reference only",
-  );
-  if (!paperBtn) return { hasToggle: false };
-  const labelled = [...document.querySelectorAll("label")].find((l) =>
-    (l.textContent ?? "").startsWith("Transaction ID"),
-  );
-  const before = Boolean(labelled?.querySelector("input"));
-  paperBtn.click();
-  return { hasToggle: true, before };
-});
-await settle(500);
-const subsAfter = await page.evaluate(() => {
-  const labelled = [...document.querySelectorAll("label")].find((l) =>
-    (l.textContent ?? "").startsWith("Reference"),
-  );
-  return Boolean(labelled?.querySelector('input[type="text"], input:not([type])'));
-});
-check(
-  "the subscription drawer offers the choice too",
-  subs.hasToggle && subs.before === true && subsAfter === false,
-  JSON.stringify({ ...subs, after: subsAfter }),
-);
 
 await browser.close();
 

@@ -139,13 +139,40 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 /** What a drawer asks of the three fields, once it is open. */
 const inspect = () =>
   page.evaluate(() => {
-    const named = (n) => document.querySelector(`input[name="${n}"]`);
-    const labelFor = (input) => {
-      const field = input?.closest("label");
-      return (field?.textContent ?? "").split("\n")[0].trim();
-    };
-    const invoice = named("invoiceNo");
-    const reference = named("reference");
+    /*
+     * Found by their LABEL, not by an input name.
+     *
+     * Both fields used to hold a text box — `invoiceNo` and `reference` — and
+     * this file looked them up with `input[name=...]`. Neither box exists now:
+     * #6 made Invoice attach-only and #34 did the same to Reference, on the
+     * owner's word that both are things you attach rather than things you type.
+     * The lookup found nothing and reported all three drawers as missing both
+     * fields — this file testing a rule that had been replaced.
+     *
+     * What it checks now is what still matters and what the change could
+     * genuinely have broken: both fields are STILL THERE, both are attach-only,
+     * and neither is required.
+     */
+    const fieldNamed = (re) =>
+      [...document.querySelectorAll("label")].find((l) =>
+        re.test((l.textContent ?? "").trim()),
+      );
+    const typeableIn = (field) =>
+      field
+        ? [...field.querySelectorAll("input")].filter(
+            (el) => el.type !== "file" && el.type !== "checkbox",
+          ).length
+        : 0;
+    const clipsIn = (field) =>
+      field
+        ? field.querySelectorAll(
+            'button[aria-label*="ttach" i], button[title*="ttach" i]',
+          ).length
+        : 0;
+    const invoice = fieldNamed(/^Invoice/);
+    const reference = fieldNamed(/^Reference/);
+    const labelFor = (field) =>
+      (field?.textContent ?? "").split("\n")[0].trim().slice(0, 40);
     /*
      * The asterisk `Field` draws beside a required label, and only that: it is
      * the FIRST span inside the label's caption span, aria-hidden, reading "*".
@@ -166,10 +193,12 @@ const inspect = () =>
       .map((l) => (l.textContent ?? "").slice(0, 24).trim());
     return {
       invoicePresent: Boolean(invoice),
-      invoiceRequired: invoice?.required ?? null,
+      invoiceTypeable: typeableIn(invoice),
+      invoiceClips: clipsIn(invoice),
       invoiceLabel: labelFor(invoice),
       referencePresent: Boolean(reference),
-      referenceRequired: reference?.required ?? null,
+      referenceTypeable: typeableIn(reference),
+      referenceClips: clipsIn(reference),
       referenceLabel: labelFor(reference),
       starredLabels: starred,
     };
@@ -198,12 +227,14 @@ for (const [url, opener, name] of [
   const opened = await openDrawer(url, opener);
   const seen = opened ? await inspect() : null;
   check(
-    `${name} asks for both numbers and requires neither`,
+    `${name} offers both papers, asks for neither number, requires neither`,
     Boolean(opened) &&
       seen?.invoicePresent === true &&
-      seen?.invoiceRequired === false &&
+      seen?.invoiceTypeable === 0 &&
+      seen?.invoiceClips >= 1 &&
       seen?.referencePresent === true &&
-      seen?.referenceRequired === false &&
+      seen?.referenceTypeable === 0 &&
+      seen?.referenceClips >= 1 &&
       (seen?.starredLabels.length ?? 0) === 0,
     JSON.stringify({ opened, ...seen }),
   );
