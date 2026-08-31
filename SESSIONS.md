@@ -42,7 +42,7 @@ below is started unless it says so.
 | 36 | Salary changes: pagination, tick column, move to trash | **done** — and it closed two traps |
 | 37 | The Payslips table still prints `2026-06-29` — #1 missed it | **done** — and Reports had four more |
 | 33 | **Paying for a subscription 404s** — it looks a `subscriptions` id up in `vendors` | **fixed** — unpushed |
-| 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
+| 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done** — Reports was the last of it |
 
 ## 36. Salary changes - a pager, a tick column, and two traps it opened
 
@@ -282,6 +282,44 @@ reaches every form that attaches a document — cash in, transactions, other
 expenses, subscriptions, team member, TDS challans. That is the ask-first list.
 
 Not started.
+
+## 8. The last place a report read a rate nobody typed
+
+The owner's rule: *"report ta calculate hobe kono fx rate theke na, karon
+prottekta transaction a manual dollar type er option ache."* The dashboard and
+Settings were done earlier; the statement was the last holdout, and it was the
+worst one.
+
+`moneyForEntry` took `fxRate ?? usdRate ?? THE PERIOD'S GOVERNING RATE`, and
+marked the third case "estimated". So every entry recorded without a rate, and
+every BALANCE — the opening carried forward, the withheld-tax figure — was
+valued at a rate resolved from Settings. That figure moved. Editing the fixed
+rate in Settings silently restated the dollar column of every month already
+filed, including months that had been signed off.
+
+Gone, all three: the entry fallback, the opening balance's, and the withheld
+tax's. An entry or a balance with no recorded rate now has no dollar figure and
+the page prints a dash, whose title already said the right thing —
+*"A blank is honest; a number produced from whatever rate was lying around is
+not."*
+
+With it went `fxForPeriod`, the `FxService` injection, and the note that used to
+promise figures were *"translated at 118.75"*. That sentence had become a claim
+about arithmetic the statement no longer does. It now says which entries carry
+their own rate and that everything else is in taka alone.
+
+**What the owner will SEE change**, and it is worth him knowing: the headline
+"Closing bank balance" and "Free cash" lose their dollar equivalents, because a
+balance in taka has no recorded dollar value and the only way to print one was
+to pick a rate. If he wants them back, the honest way is a rate typed on the
+statement itself — the same shape #29 gave the payroll sheet — not a return to
+one that changes under him.
+
+`.reportsfxqa.mjs` — 10 checks, and one of them is the whole point: it reads
+every dollar figure off the page, moves the fallback rate to 250, reads them
+again, and requires all of them to be identical. A statement that passes every
+other check and fails that one is exactly the bug — it looks right until
+somebody opens Settings.
 
 ## 34. Reference stops being typed, and stops sharing a name
 

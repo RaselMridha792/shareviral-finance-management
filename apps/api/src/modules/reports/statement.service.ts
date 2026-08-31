@@ -16,7 +16,6 @@ import {
   type StatementLine,
   type StatementQuery,
   type WaterfallStep,
-  GOVERNING_RATE_LABELS,
 } from "@finance/shared";
 import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
@@ -33,7 +32,6 @@ import {
   type Statement,
 } from "../../db/schema";
 import { FilesService } from "../files/files.service";
-import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { TransactionsService } from "../transactions/transactions.service";
@@ -95,7 +93,6 @@ export class StatementService {
   constructor(
     private readonly db: DbService,
     private readonly settings: SettingsService,
-    private readonly fx: FxService,
     private readonly transactionsService: TransactionsService,
     private readonly audit: AuditService,
     private readonly tds: TdsService,
@@ -131,10 +128,10 @@ export class StatementService {
     const range = all[index];
     const previous = index > 0 ? all[index - 1] : null;
 
-    const [saved, fx, groups, accountIds, restrictedBdt, payrollDetail] =
+    /* No FX call. The statement reads only the rate each entry carries. */
+    const [saved, groups, accountIds, restrictedBdt, payrollDetail] =
       await Promise.all([
         this.savedFor(range),
-        this.fxForPeriod(range),
         this.categoryGroups(),
         this.liveAccountIds(),
         this.taxOutstanding(),
@@ -147,16 +144,19 @@ export class StatementService {
      * Null rather than a guess when the period has no rate at all: a blank
      * dollar column is honest, a taka figure behind a dollar sign is not.
      */
-    /**
-     * The month's own rate, then the one set in Settings, then the table.
+    /*
+     * No period rate. The statement no longer has one.
      *
-     * The same resolver the dashboard uses, deliberately: a statement and the
-     * overview covering the same month must not disagree about what a dollar
-     * was worth, and they will the moment this order is written down twice.
-     * This used to fall back to `fx.rate` directly, which skipped the Settings
-     * rate entirely in `live` mode.
+     * The owner, on the reports: "report ta calculate hobe kono fx rate theke
+     * na, karon prottekta transaction a manual dollar type er option ache."
+     *
+     * Every entry can carry the rate it was actually converted at, so a
+     * statement that fell back to a month-wide figure was answering a question
+     * with a number nobody had typed — and worse, one that MOVED: editing the
+     * Settings rate silently restated every dollar figure on every filed month.
+     * An entry with no rate of its own now has no dollar figure, and the page
+     * prints an honest dash.
      */
-    const periodRate = (await this.fx.governingRateFor(range))?.rate ?? null;
 
     // One register per account — the same call the account screen makes, so a
     // ledger page here and the register behind it cannot disagree.
@@ -175,12 +175,12 @@ export class StatementService {
         accountId: register.account.id,
         isBank: register.account.currency === base,
         group: groupOf(groups, row.categoryId),
-        money: moneyForEntry(row, periodRate),
+        money: moneyForEntry(row),
       })),
     );
 
     const ledgers = registers.map((register) =>
-      ledgerFor(register, entries, periodRate, base, range),
+      ledgerFor(register, entries, base, range),
     );
 
     const bankLedgers = ledgers.filter((ledger) => ledger.currency === base);
@@ -219,7 +219,6 @@ export class StatementService {
       composition: compositionFor({
         closingBank,
         restrictedBdt,
-        periodRate,
         committed,
         format,
       }),
@@ -232,8 +231,6 @@ export class StatementService {
             entries,
             openingBank,
             previousLabel: previous?.label ?? null,
-            fxCaption: fx.caption,
-            fxUnavailable: fx.unavailable,
             restrictedBdt,
             counterparty,
             payroll: payrollDetail,
@@ -547,29 +544,14 @@ export class StatementService {
     return groups;
   }
 
-  /**
-   * The period's FX context under the app's one rule.
+  /*
+   * `fxForPeriod` is gone.
    *
-   * The statement's own note used to read "translated at 118.75, as of
-   * 2026-08-12 (the period-end rate)" while the dashboard said 118.30 for the
-   * same month — the caption came straight from the rate table while the
-   * figures came from `governingRateFor`. The document now says the rate it
-   * actually used, and where it came from.
+   * It resolved the month's governing rate and wrote a caption saying figures
+   * were "translated at 118.75". Nothing is translated any more — an entry
+   * with no rate of its own gets no dollar figure — so a caption naming a rate
+   * would have been the statement claiming an arithmetic it does not do.
    */
-  private async fxForPeriod(period: { start: string; end: string }) {
-    const context = await this.fx.contextFor(period);
-    const governing = await this.fx.governingRateFor(period);
-
-    if (!governing) return context;
-    if (!context.unavailable && context.rate === governing.rate) return context;
-
-    return {
-      ...context,
-      rate: governing.rate,
-      unavailable: false,
-      caption: `translated at ${trimRate(governing.rate)} — ${GOVERNING_RATE_LABELS[governing.source]}`,
-    };
-  }
 
   /**
    * Withheld and not yet handed to the treasury, all time.
@@ -706,14 +688,20 @@ function negate(value: Money2): Money2 {
  * Everything else falls back to the period's rate and is marked estimated, so
  * the page can say which figures are recorded and which are translated.
  */
-function moneyForEntry(row: RegisterRow, periodRate: string | null): Money2 {
+function moneyForEntry(row: RegisterRow): Money2 {
   if (row.fxRate && Number(row.fxRate) > 0) {
     return money(row.amount, row.fxRate, false);
   }
   if (row.usdRate && Number(row.usdRate) > 0) {
     return money(row.amount, row.usdRate, false);
   }
-  return money(row.amount, periodRate, true);
+  /*
+   * Nothing was recorded, so nothing is reported. The third branch used to
+   * apply the period's governing rate and mark the result estimated; it is
+   * gone, and with it the last place in this app where a figure was produced
+   * from a rate that could be edited afterwards.
+   */
+  return money(row.amount, null, false);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -796,11 +784,19 @@ function summaryFor(input: {
 function compositionFor(input: {
   closingBank: Money2;
   restrictedBdt: string;
-  periodRate: string | null;
   committed: Entry[];
   format: NumberFormat;
 }): CashComposition {
-  const restricted = money(input.restrictedBdt, input.periodRate, true);
+  /*
+   * A balance in taka, with no dollar figure.
+   *
+   * Withheld tax is a STOCK — no entry carries its rate — so the only way to
+   * put a dollar figure on it was to pick one, and the one it picked could be
+   * edited in Settings afterwards. Under the owner's rule for the reports there
+   * is no rate to pick, so the dollar column reads a dash: honest, and it does
+   * not change when somebody opens Settings.
+   */
+  const restricted = money(input.restrictedBdt, null, false);
 
   // free + restricted is the closing balance by construction, rather than by a
   // second subtraction that could round the other way.
@@ -964,7 +960,6 @@ function outflowFor(entries: Entry[]): {
 function ledgerFor(
   register: Register,
   entries: Entry[],
-  periodRate: string | null,
   base: string,
   range: PeriodRange,
 ): AccountLedger {
@@ -972,9 +967,13 @@ function ledgerFor(
     (entry) => entry.accountId === register.account.id,
   );
 
-  // An opening balance is a stock, not a movement: no entry carries its rate,
-  // so it can only be read at the period's.
-  const opening = money(register.openingBalance, periodRate, true);
+  /*
+   * An opening balance is a stock, not a movement — no entry carries its rate —
+   * so it used to be read at the period's governing rate. That rate is gone,
+   * and with it the dollar figure: a balance has no recorded dollar value, and
+   * inventing one is the thing this whole change is for.
+   */
+  const opening = money(register.openingBalance, null, false);
 
   const running: Money2[] = [opening];
   const rows: AccountLedger["rows"] = [
@@ -1030,8 +1029,6 @@ function draftNotes(input: {
   entries: Entry[];
   openingBank: Money2;
   previousLabel: string | null;
-  fxCaption: string;
-  fxUnavailable: boolean;
   restrictedBdt: string;
   counterparty: string | null;
   payroll: PayrollDetail;
@@ -1053,22 +1050,21 @@ function draftNotes(input: {
     (entry) => entry.money.estimated !== true && entry.money.rate,
   ).length;
 
-  // When no rate exists at all the caption is already a whole sentence about
-  // that ("no exchange rate on record… Add one in Settings."), so it is quoted
-  // rather than folded into a clause that would end in two full stops.
-  if (input.fxUnavailable) {
-    notes.push(
-      withOwnRate
-        ? `${withOwnRate} of ${input.entries.length} entries carry the rate recorded against them on the day; there is no rate on record for this period, so every other dollar figure is left blank rather than guessed.`
-        : `No entry carries a rate of its own and there is no rate on record for this period, so this statement is in taka only — add a rate in Settings.`,
-    );
-  } else {
-    notes.push(
-      withOwnRate
-        ? `${withOwnRate} of ${input.entries.length} entries carry the rate recorded against them on the day; every other dollar figure is marked estimated and ${input.fxCaption}.`
-        : `No entry carries a rate of its own, so every dollar figure on this statement is ${input.fxCaption}.`,
-    );
-  }
+  /*
+   * One sentence now, because there is one rule.
+   *
+   * This used to branch on whether a rate existed in Settings, and to promise
+   * that figures without their own rate were "marked estimated and translated
+   * at 118.75". Nothing is translated any more: the owner's rule for the
+   * reports is that no figure comes from a rate somebody could edit later, so
+   * an entry with no rate of its own has no dollar figure at all. The note says
+   * that, and stops mentioning a Settings rate the statement does not read.
+   */
+  notes.push(
+    withOwnRate
+      ? `${withOwnRate} of ${input.entries.length} ${plural(input.entries.length, "entry", "entries")} carry the rate recorded against them on the day, and those are the only dollar figures here. Every other entry, and every balance, is shown in taka alone — this statement does not translate at a rate nobody typed.`
+      : `No entry carries a rate of its own, so this statement is in taka only. Dollar figures appear where a rate was recorded against the entry itself.`,
+  );
 
   const transfers = input.entries.filter(isTransferIn);
   if (transfers.length) {
@@ -1215,10 +1211,4 @@ function ordinalFor(
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return count === 1 ? one : many;
-}
-
-/** "118.300000" is a database column; "118.30" is a rate somebody reads. */
-function trimRate(rate: string): string {
-  const value = Number(rate);
-  return Number.isFinite(value) ? value.toFixed(2) : rate;
 }
