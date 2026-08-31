@@ -20,3 +20,7 @@ node .dataintact.mjs   # replays the pending migrations and proves no figure mov
 
 node .uploadqa.mjs      # the drawer knows what is on file, and a failure does not stick
 node .previewsweep.mjs  # every picker that holds a file offers to show it
+
+node .multidocqa.mjs    # several papers on one clip, and the slider
+node .nofxqa.mjs        # a report reads no exchange rate
+node .cardleakqa.mjs    # a card number appears in exactly one place

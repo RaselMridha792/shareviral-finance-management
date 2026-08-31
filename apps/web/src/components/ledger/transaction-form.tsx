@@ -229,8 +229,8 @@ export function TransactionForm({
    * Holding them is what lets both be chosen in the same pass as the numbers
    * they belong to.
    */
-  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,8 +310,8 @@ export function TransactionForm({
    */
   function close() {
     setAmount("");
-    setInvoiceFile(null);
-    setScreenshotFile(null);
+    setInvoiceFiles([]);
+    setScreenshotFiles([]);
     /**
      * Anything attached from the panel above landed after the table was last
      * refreshed, so ask for it again on the way out — otherwise the row whose
@@ -323,14 +323,22 @@ export function TransactionForm({
     onClose();
   }
 
-  /** The clips with a file in them, in the order they appear on the form. */
+  /**
+   * Every paper on every clip, flattened, in the order they appear.
+   *
+   * A clip holds a list now, so this is a flatMap rather than a filter — and
+   * the upload loop below already took a list, which is why sending three
+   * invoices costs nothing new: it sends them one at a time and reports each
+   * failure separately, exactly as it did for two.
+   */
   function chosen(): { kind: DocKind; file: File }[] {
     return [
-      { kind: "invoice" as const, file: invoiceFile },
-      { kind: "bank_statement" as const, file: screenshotFile },
-    ].filter(
-      (slot): slot is { kind: DocKind; file: File } => slot.file !== null,
-    );
+      ...invoiceFiles.map((file) => ({ kind: "invoice" as const, file })),
+      ...screenshotFiles.map((file) => ({
+        kind: "bank_statement" as const,
+        file,
+      })),
+    ];
   }
 
   /**
@@ -766,9 +774,13 @@ export function TransactionForm({
               error={fieldErrors.invoiceNo}
               hint="Attach the invoice itself — there is no number to type"
             >
-              <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
+              <Attach
+                kind="invoice"
+                files={invoiceFiles}
+                onPick={setInvoiceFiles}
+              >
                 <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {invoiceFile ? "" : "No invoice attached"}
+                  {invoiceFiles.length ? "" : "No invoice attached"}
                 </span>
               </Attach>
             </Field>
@@ -784,8 +796,8 @@ export function TransactionForm({
             >
               <Attach
                 kind="bank_statement"
-                file={screenshotFile}
-                onPick={setScreenshotFile}
+                files={screenshotFiles}
+                onPick={setScreenshotFiles}
               >
                 <Input
                   name="reference"
@@ -962,13 +974,21 @@ export function TransactionForm({
  */
 function Attach({
   kind,
-  file,
+  files,
   onPick,
   children,
 }: {
   kind: DocKind;
-  file: File | null;
-  onPick: (file: File | null) => void;
+  /**
+   * Everything clipped here, not one thing.
+   *
+   * The owner: "multiple documents upload korar option thakte hobe". An
+   * invoice can be two pages photographed separately, a bank slip can be the
+   * confirmation and the statement line; the form used to keep whichever was
+   * chosen last and silently drop the other.
+   */
+  files: File[];
+  onPick: (files: File[]) => void;
   children: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -981,32 +1001,66 @@ function Attach({
    */
   const preview = useFilePreview();
 
-  function choose(picked: File | undefined) {
+  /**
+   * Everything just chosen, judged together and appended in one go.
+   *
+   * One pass rather than a loop of single adds, and that is not tidiness: each
+   * `onPick` is a setState the parent has not re-rendered from yet, so three
+   * separate calls would each build on the ORIGINAL list and only the last
+   * would survive — the very bug this change exists to fix, reintroduced one
+   * level down. A ref would also work and the lint rule rightly refuses it:
+   * writing a ref during render is not something to reach for when the honest
+   * shape is simply to decide once.
+   */
+  function choose(chosenFiles: File[]) {
     // Emptied straight away so picking the same file again — after clearing
     // it, or after it was refused — still counts as a change.
     if (inputRef.current) inputRef.current.value = "";
-    if (!picked) return;
+    if (chosenFiles.length === 0) return;
 
-    /**
-     * Refused here as well as by the server, which reads the bytes and has the
-     * final say. This exists so the answer arrives while the file is being
-     * chosen, rather than after the entry is saved — which is the one moment
-     * the message is awkward to act on.
-     */
-    const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-    if (picked.type && !allowed.includes(picked.type)) {
-      setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
-      return;
-    }
-    if (picked.size > MAX_FILE_BYTES[kind]) {
-      setRejected(
-        `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
-      );
-      return;
+    const additions: File[] = [];
+    const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
+
+    for (const picked of chosenFiles) {
+      /*
+       * The same file twice is almost always a second click rather than a
+       * second page, and a duplicate upload is not undone by removing one of
+       * them. Checked against what is already attached AND against what this
+       * same choice is adding.
+       */
+      if (
+        files.some((f) => same(f, picked)) ||
+        additions.some((f) => same(f, picked))
+      ) {
+        setRejected("That one is already attached.");
+        continue;
+      }
+
+      /**
+       * Refused here as well as by the server, which reads the bytes and has
+       * the final say. This exists so the answer arrives while the file is
+       * being chosen, rather than after the entry is saved — which is the one
+       * moment the message is awkward to act on.
+       */
+      const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
+      if (picked.type && !allowed.includes(picked.type)) {
+        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
+        continue;
+      }
+      if (picked.size > MAX_FILE_BYTES[kind]) {
+        setRejected(
+          `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
+        );
+        continue;
+      }
+
+      additions.push(picked);
     }
 
-    setRejected(null);
-    onPick(picked);
+    if (additions.length > 0) {
+      setRejected(null);
+      onPick([...files, ...additions]);
+    }
   }
 
   return (
@@ -1017,12 +1071,18 @@ function Attach({
         <input
           ref={inputRef}
           type="file"
+          multiple
           className="sr-only"
           // Every camera roll and every scanner, as asked. The server keeps a
           // narrower list than this and says so if it has to; `choose` says it
           // first, in the moment.
           accept="image/*,application/pdf"
-          onChange={(event) => choose(event.target.files?.[0])}
+          /*
+           * Every file the picker returned, not the first. The input is
+           * `multiple`, so choosing three pages in one go has to attach three
+           * — taking [0] made the extra choice look accepted and drop it.
+           */
+          onChange={(event) => choose([...(event.target.files ?? [])])}
         />
 
         {/* A button rather than the file input itself: a bare one renders as a
@@ -1044,26 +1104,35 @@ function Attach({
 
       {rejected ? (
         <span className="text-xs text-negative">{rejected}</span>
-      ) : file ? (
-        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span className="truncate">{file.name}</span>
-          {/*
-            Before it is saved, not after. Until this was here the only way to
-            check the right scan had been attached was to save the entry and
-            then go and open it, which is the wrong order for the one moment
-            the mistake is still cheap.
-          */}
-          <PreviewButton name={file.name} onClick={() => preview.show(file)} />
+      ) : null}
+
+      {/*
+        One line per paper, each with its own eye and its own cross. The eye
+        opens the WHOLE set from that one — clicking the second of three starts
+        the slider on the second — because somebody checking their attachments
+        is checking all of them, not one.
+      */}
+      {files.map((one, index) => (
+        <span
+          key={`${one.name}-${one.size}-${index}`}
+          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+        >
+          <span className="truncate">{one.name}</span>
+          <PreviewButton
+            name={one.name}
+            count={files.length}
+            onClick={() => preview.show(files, index)}
+          />
           <button
             type="button"
-            onClick={() => onPick(null)}
-            aria-label={`Remove ${file.name}`}
+            onClick={() => onPick(files.filter((_, i) => i !== index))}
+            aria-label={`Remove ${one.name}`}
             className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
           >
             <X className="size-3" />
           </button>
         </span>
-      ) : null}
+      ))}
 
       {preview.overlay}
     </span>

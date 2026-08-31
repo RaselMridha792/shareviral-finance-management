@@ -11,7 +11,7 @@ below is started unless it says so.
 | 3 | Remove the "Record" button from an account's register | **done** — unpushed |
 | 4 | Multi-select rows in tables, and move the selection to trash in one go | **done for the six money/list tables**; users, FX history and payroll runs left |
 | 5 | A card account asks for card fields, with the CVC behind a password | **done** — unpushed |
-| 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | **two of three done**; several documents per entry, with a slider, still to build |
+| 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | **done** — unpushed |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 

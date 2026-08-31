@@ -111,8 +111,8 @@ export function TransferForm({
    * The paper, held until the pair exists to hang it on — the same two slots
    * every money form carries: the invoice (ours) and the bank's record.
    */
-  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
-  const [bankFile, setBankFile] = useState<File | null>(null);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [bankFiles, setBankFiles] = useState<File[]>([]);
   /** A transaction id, or only the paper — see ledger/reference-kind.tsx. */
   const [refKind, setRefKind] = useState<ReferenceKind>("id");
 
@@ -146,23 +146,35 @@ export function TransferForm({
        * and a failed upload must read as "attach it again", not as the
        * transfer having failed.
        */
+      /*
+       * Flattened, because a clip holds a list now. Still one at a time and
+       * still never thrown: by now the money has moved, and a failed upload
+       * must read as "attach it again" rather than as the transfer failing.
+       */
       const failed: string[] = [];
       for (const slot of [
-        { kind: "invoice", file: invoiceFile, name: "invoice" },
-        { kind: "bank_statement", file: bankFile, name: "bank record" },
+        ...invoiceFiles.map((file) => ({
+          kind: "invoice",
+          file,
+          name: "invoice",
+        })),
+        ...bankFiles.map((file) => ({
+          kind: "bank_statement",
+          file,
+          name: "bank record",
+        })),
       ]) {
-        if (!slot.file) continue;
         try {
           await uploadTransactionFile(row.id, slot.file, slot.kind);
         } catch {
-          failed.push(slot.name);
+          if (!failed.includes(slot.name)) failed.push(slot.name);
         }
       }
 
       await onSaved();
       if (failed.length) {
-        setInvoiceFile(null);
-        setBankFile(null);
+        setInvoiceFiles([]);
+        setBankFiles([]);
         setError(
           `The transfer is recorded, but the ${failed.join(" and the ")} did not upload — open it from the table's number and attach again.`,
         );
@@ -321,9 +333,13 @@ export function TransferForm({
             error={fieldErrors.invoiceNo}
             hint="Attach the invoice itself — there is no number to type"
           >
-            <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
+            <Attach
+              kind="invoice"
+              files={invoiceFiles}
+              onPick={setInvoiceFiles}
+            >
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {invoiceFile ? "" : "No invoice attached"}
+                {invoiceFiles.length ? "" : "No invoice attached"}
               </span>
             </Attach>
           </Field>
@@ -336,7 +352,11 @@ export function TransferForm({
                 : undefined
             }
           >
-            <Attach kind="bank_statement" file={bankFile} onPick={setBankFile}>
+            <Attach
+              kind="bank_statement"
+              files={bankFiles}
+              onPick={setBankFiles}
+            >
               <Input name="reference" className="num min-w-0 flex-1" />
             </Attach>
           </Field>
@@ -395,13 +415,21 @@ const DOCUMENT_NAMES: Record<DocKind, string> = {
  */
 function Attach({
   kind,
-  file,
+  files,
   onPick,
   children,
 }: {
   kind: DocKind;
-  file: File | null;
-  onPick: (file: File | null) => void;
+  /**
+   * Everything clipped here, not one thing.
+   *
+   * The owner: "multiple documents upload korar option thakte hobe". An
+   * invoice can be two pages photographed separately, a bank slip can be the
+   * confirmation and the statement line; the form used to keep whichever was
+   * chosen last and silently drop the other.
+   */
+  files: File[];
+  onPick: (files: File[]) => void;
   children: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -414,24 +442,52 @@ function Attach({
    */
   const preview = useFilePreview();
 
-  function choose(picked: File | undefined) {
+  /**
+   * Everything just chosen, judged together and appended in one go.
+   *
+   * One pass rather than a loop of single adds: each `onPick` is a setState the
+   * parent has not re-rendered from yet, so three separate calls would each
+   * build on the ORIGINAL list and only the last would survive — the very bug
+   * this change exists to fix, one level down.
+   */
+  function choose(chosenFiles: File[]) {
+    // Emptied straight away so picking the same file again — after clearing
+    // it, or after it was refused — still counts as a change.
     if (inputRef.current) inputRef.current.value = "";
-    if (!picked) return;
+    if (chosenFiles.length === 0) return;
 
-    const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-    if (picked.type && !allowed.includes(picked.type)) {
-      setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
-      return;
-    }
-    if (picked.size > MAX_FILE_BYTES[kind]) {
-      setRejected(
-        `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
-      );
-      return;
+    const additions: File[] = [];
+    const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
+
+    for (const picked of chosenFiles) {
+      /* The same file twice is a second click, not a second page. */
+      if (
+        files.some((f) => same(f, picked)) ||
+        additions.some((f) => same(f, picked))
+      ) {
+        setRejected("That one is already attached.");
+        continue;
+      }
+
+      const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
+      if (picked.type && !allowed.includes(picked.type)) {
+        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
+        continue;
+      }
+      if (picked.size > MAX_FILE_BYTES[kind]) {
+        setRejected(
+          `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
+        );
+        continue;
+      }
+
+      additions.push(picked);
     }
 
-    setRejected(null);
-    onPick(picked);
+    if (additions.length > 0) {
+      setRejected(null);
+      onPick([...files, ...additions]);
+    }
   }
 
   return (
@@ -442,9 +498,15 @@ function Attach({
         <input
           ref={inputRef}
           type="file"
+          multiple
           className="sr-only"
           accept="image/*,application/pdf"
-          onChange={(event) => choose(event.target.files?.[0])}
+          /*
+           * Every file the picker returned, not the first. The input is
+           * `multiple`, so choosing three pages in one go has to attach three
+           * — taking [0] made the extra choice look accepted and drop it.
+           */
+          onChange={(event) => choose([...(event.target.files ?? [])])}
         />
 
         <Button
@@ -462,26 +524,35 @@ function Attach({
 
       {rejected ? (
         <span className="text-xs text-negative">{rejected}</span>
-      ) : file ? (
-        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span className="truncate">{file.name}</span>
-          {/*
-            Before it is saved, not after. Until this was here the only way to
-            check the right scan had been attached was to save the entry and
-            then go and open it, which is the wrong order for the one moment
-            the mistake is still cheap.
-          */}
-          <PreviewButton name={file.name} onClick={() => preview.show(file)} />
+      ) : null}
+
+      {/*
+        One line per paper, each with its own eye and its own cross. The eye
+        opens the WHOLE set from that one — clicking the second of three starts
+        the slider on the second — because somebody checking their attachments
+        is checking all of them, not one.
+      */}
+      {files.map((one, index) => (
+        <span
+          key={`${one.name}-${one.size}-${index}`}
+          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+        >
+          <span className="truncate">{one.name}</span>
+          <PreviewButton
+            name={one.name}
+            count={files.length}
+            onClick={() => preview.show(files, index)}
+          />
           <button
             type="button"
-            onClick={() => onPick(null)}
-            aria-label={`Remove ${file.name}`}
+            onClick={() => onPick(files.filter((_, i) => i !== index))}
+            aria-label={`Remove ${one.name}`}
             className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
           >
             <X className="size-3" />
           </button>
         </span>
-      ) : null}
+      ))}
 
       {preview.overlay}
     </span>
