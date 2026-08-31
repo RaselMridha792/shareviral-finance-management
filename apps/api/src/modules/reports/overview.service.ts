@@ -31,6 +31,7 @@ import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { CHALLAN_COUNTS } from "../tds/challan-counts";
 import { notATransfer } from "../transactions/own-money";
+import { periodDollars } from "./own-dollars";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
@@ -171,14 +172,44 @@ export class OverviewService {
      * if `usdRate` is set the conversion happens, and if it is not, nothing is
      * shown at all.
      */
-    const usd = (value: string): string | null =>
-      usdRate
-        ? (FxService.convert(value, {
-            ...fx,
-            rate: usdRate,
-            unavailable: false,
-          }) ?? null)
-        : null;
+    /*
+     * The period's dollars, added up rather than divided out of taka.
+     *
+     * The owner's rule: "report ta calculate hobe kono fx rate theke na, karon
+     * prottekta transaction a manual dollar type er option ache." Dividing a
+     * taka total by one governing rate reported dollars nobody ever had, and
+     * moved them whenever anybody edited the rate in Settings — the same
+     * mistake that made $14,000 read back as $13,485 on the accounts screen.
+     */
+    const dollars = periodDollars(range);
+    const [dollarRow] = await this.db.client
+      .select({
+        moneyIn: dollars.moneyIn,
+        moneyOut: dollars.moneyOut,
+        exact: dollars.exact,
+      })
+      .from(transactions)
+      .where(dollars.where);
+
+    const usdIn = dollarRow?.moneyIn ?? "0.00";
+    const usdOut = dollarRow?.moneyOut ?? "0.00";
+    const usdNet = (Number(usdIn) - Number(usdOut)).toFixed(2);
+    const usdExact = dollarRow?.exact ?? true;
+
+    /**
+     * No dollar view for a figure that is not a sum of row dollars.
+     *
+     * Salary, tools spend, tax withheld and tax outstanding are taka facts:
+     * payroll is computed, filed and paid in taka, and not one row of it
+     * carries a dollar figure anybody typed. A per-account opening or closing
+     * balance is the same — the accounts screen answers that question properly
+     * from each row's own dollars, and it is the place to answer it.
+     *
+     * Returning null is the whole point. The alternative is to divide by a
+     * rate, which is the thing being removed, and a figure invented that way
+     * is worse than an absent one because it looks like an answer.
+     */
+    const noDollarView = (): string | null => null;
 
     return {
       period: {
@@ -191,6 +222,14 @@ export class OverviewService {
       fx,
       usdRate,
       usdRateSource: governing?.source ?? null,
+      /*
+       * Whether every row in the period carried a dollar figure. False means
+       * the dollar totals are a floor rather than the whole, and the screen
+       * marks them — the same contract `ownBalanceExact` uses on an account,
+       * so the two cannot disagree about what a tilde means.
+       */
+      usdExact,
+      usdTotals: { moneyIn: usdIn, moneyOut: usdOut, net: usdNet },
       totals: {
         moneyIn: convert(totals.moneyIn),
         moneyOut: convert(totals.moneyOut),
@@ -233,9 +272,9 @@ export class OverviewService {
         amount: convert(entry.amount),
       })),
       groups: groups.map((group) => {
-        const opening = usd(group.opening);
-        const moneyIn = usd(group.moneyIn);
-        const moneyOut = usd(group.moneyOut);
+        const opening = noDollarView();
+        const moneyIn = noDollarView();
+        const moneyOut = noDollarView();
 
         return {
           ...group,
@@ -262,7 +301,7 @@ export class OverviewService {
                     Number(moneyIn) -
                     Number(moneyOut)
                   ).toFixed(2)
-                : usd(group.closing),
+                : noDollarView(),
           },
         };
       }),
@@ -272,10 +311,10 @@ export class OverviewService {
         taxWithheld: tax.withheld,
         taxOutstanding: outstanding,
         usd: {
-          salaryPaid: usd(salaryPaid),
-          toolsAndSubscriptions: usd(toolsSpend),
-          taxWithheld: usd(tax.withheld),
-          taxOutstanding: usd(outstanding),
+          salaryPaid: noDollarView(),
+          toolsAndSubscriptions: noDollarView(),
+          taxWithheld: noDollarView(),
+          taxOutstanding: noDollarView(),
         },
       },
       headcount,

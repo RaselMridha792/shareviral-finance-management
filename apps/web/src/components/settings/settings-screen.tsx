@@ -9,7 +9,6 @@ import type { CategoryNode } from "@/lib/masters";
 import { cn } from "@/lib/utils";
 import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
-import { FxPanel } from "./fx-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
 import { EmailPanel } from "./email-panel";
@@ -23,7 +22,6 @@ import { useCan } from "@/components/auth/session-provider";
 const TABS = [
   { id: "company", label: "Company & formatting" },
   { id: "categories", label: "Categories" },
-  { id: "fx", label: "Exchange rate" },
   // Readable by anyone who can see the tax screens; only settings.write may
   // save. The calculator is the reason it is not settings-only — checking a
   // figure against the accountant's working is not an administrative act.
@@ -121,7 +119,21 @@ export function SettingsScreen({
       {tab === "categories" ? (
         <CategoriesPanel initialTree={initialTree} />
       ) : null}
-      {tab === "fx" ? <FxPanel settings={initialSettings} /> : null}
+      {/*
+        No Exchange rate tab.
+
+        The owner: "puro application er kono central or global currency rate ba
+        fx rate rakhbona ... eta setting theke o remove kore diba". Every figure
+        that used to be converted here is now either summed from the dollars the
+        transactions themselves carry, or not shown in dollars at all — a rate
+        set in one box that silently moved every historical report was the whole
+        problem.
+
+        The rate HISTORY is not deleted. `fx_rates` holds figures the owner
+        typed, on days that have passed, and throwing away recorded history to
+        tidy a screen is not a trade this app makes. The table stays; nothing
+        reads it to decide a figure any more.
+      */}
       {tab === "tax" && canReadTds ? <TaxPanel /> : null}
       {tab === "security" ? <SecurityPanel /> : null}
       {tab === "users" && canManageUsers ? (

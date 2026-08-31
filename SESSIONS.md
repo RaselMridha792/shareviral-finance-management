@@ -13,7 +13,7 @@ below is started unless it says so.
 | 5 | A card account asks for card fields, with the CVC behind a password | **done** — unpushed |
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | not started |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
-| 8 | **Remove the global FX rate entirely** — every transaction already carries its own | not started, and the largest |
+| 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 
 ## 3. The register's "Record" button
 

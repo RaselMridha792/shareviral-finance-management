@@ -253,6 +253,23 @@ export type OverviewReport = {
   usdRate: string | null;
   /** Where that rate came from. Null exactly when `usdRate` is. */
   usdRateSource: GoverningRateSource | null;
+
+  /**
+   * The period's dollars, summed from what the rows carry.
+   *
+   * Not a conversion. The owner's rule is that no figure in this app comes
+   * from a governing rate — "prottekta transaction a manual dollar type er
+   * option ache" — so a period's dollars are the dollar figures typed on its
+   * own transactions, added together. A row nobody gave a dollar figure
+   * contributes nothing and makes `usdExact` false.
+   */
+  usdTotals: { moneyIn: string; moneyOut: string; net: string };
+  /**
+   * False when some row in the period carried no dollar figure, so the totals
+   * above are a floor rather than the whole. The screen marks them with a
+   * tilde, the same way an account's own-currency balance is marked.
+   */
+  usdExact: boolean;
   totals: OverviewTotals;
   /** Every account, each with its own opening, movement and closing. */
   groups: AccountGroup[];
