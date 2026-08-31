@@ -36,7 +36,7 @@ below is started unless it says so.
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | **superseded by #29** — the owner changed it to per line |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
-| 32 | **Cash In: the amount fields follow the chosen account's own currency** | not started — arrived 1 Sep |
+| 32 | **Cash In: the amount fields follow the chosen account's own currency** | **done** — unpushed |
 | 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | **done** — and the two numbers got two names |
 | 35 | An attached file's NAME is barely readable — colour it | **done** — five places, not one |
 | 36 | Salary changes: pagination, tick column, move to trash | **done** — and it closed two traps |
@@ -534,6 +534,113 @@ Two things to settle before it is built, because there is data behind it:
   whichever way this goes, the two must not end up sharing a box.
 
 Not started.
+
+## 33. Paying for a subscription answered 404, live
+
+Found while building #21, in my own work from the day before. The Pay button on
+**AI tools and subscriptions** could never have worked: `payForSubscription`
+asked `VendorsService.billingPlan(id)`, which reads the **`vendors`** table,
+while every id on that screen comes from **`subscriptions`**. Every click
+answered *"That subscription is not here"*.
+
+It shipped green. Nothing caught it because both tables carry a billing cycle,
+a renewal date and a billing account, so the code reads correctly and typechecks
+perfectly — the only way to see it was to press the button.
+
+Two more faults behind the first, neither reachable until the lookup was fixed:
+
+- **`vendorId: plan.id`.** `transactions.vendor_id` has a foreign key to
+  `vendors`. A `subscriptions` id there is an insert that fails outright, so
+  even a corrected lookup would have written nothing.
+- **No category.** `createTransactionSchema` requires one and the code passed
+  `plan.defaultCategoryId ?? undefined` — a column `subscriptions` does not
+  have. An expense with no heading appears on no Expenses screen, which is
+  precisely the *"kono history thakena"* being complained about.
+
+Fixed by moving the lookup to where the data is: `SubscriptionsService` gained
+`billingPlan` and `setNextRenewal`, and `TransactionsModule` now imports
+`SubscriptionsModule` — safe in that direction, since `SubscriptionsModule`
+imports nothing, and the reverse is the cycle that put this method on the
+transactions side to begin with. `vendorId` is gone; the plan is named in the
+description. And **the Pay drawer now asks which expense heading the charge
+belongs under**, because a subscription's own category (`ai_tool`, `hosting`)
+is the register's vocabulary and not the company's expense headings — there is
+nothing to derive it from.
+
+## 21. A renewal date nobody types
+
+`nextRenewalAfter(startDate, cycle, today)` in `packages/shared`, six unit
+tests, plus `.renewalqa.mjs` (15) driving it against a real plan.
+
+Counted forward rather than added once: a plan entered today may have started in
+2024, and `start + one cycle` would be a date two years in the past presented as
+"next renewal". Strictly after today, and null for a cycle with no length.
+
+**What it must NOT do is the interesting half.** Recording a payment advances
+the stored date by a cycle — real information this cannot know — so the date is
+re-derived only when the START DATE or the CYCLE actually changes. Deriving it
+on every save would pull a card charge back a month the next time somebody fixed
+a typo in the notes, and nothing on screen would show it happening. The harness
+checks that specific sequence: pay, then edit the notes, then assert the date is
+where the payment left it.
+
+`nextRenewalOn` is gone from the contract rather than accepted-and-ignored — a
+value the server silently discards is worse than one it rejects.
+
+**One crash found on the way.** `nextRenewalAfter("")` reaches `parseIsoDate("")`
+and throws, and a new plan has no start date until somebody types one — so the
+Add drawer rendered nothing at all and the button appeared dead. Guarded, and
+the field now says "Choose when it started" until there is one.
+
+## 32. Cash In asks in the currency the account thinks in
+
+The owner, with two screenshots: *"account switch holeo currency switch
+hocchena. ekhane field take primary usd thakbe jokhon usd thake oi card er
+primary currency. r bdt thakbe oi card er type bdt thakle."*
+
+The drawer asked Amount (USD) then Rate then Amount (BDT) for every account,
+whatever it was. Now the account decides which box comes FIRST:
+
+- **USD-primary account** — dollars, then the rate, then the taka they come to,
+  read-only. Unchanged; this is what the screen already did for everyone.
+- **BDT account** — the taka FIRST, typed, and never derived. The dollars and
+  the rate follow as the optional pair, because a local receipt has neither.
+
+`accountId` and `usdPrimary` moved above the arithmetic that reads them, and the
+whole amounts block is rendered in one order or the other rather than rewritten.
+
+**Nothing about storage changes**, and half the harness exists to prove it:
+`transactions.amount` is still the taka that landed and `original_amount` still
+the dollars, on both kinds of account. `accounts.currency` marks which account
+is for foreign spend; it does not denominate anything.
+
+**Three things a review agent found in the first plan, all fixed here:**
+
+- **Deriving the taka on a BDT account would be the app arguing with the bank.**
+  `isDerived` is now gated on `usdPrimary`, so filling in the optional dollars
+  and a rate beside a typed taka leaves the taka alone. The harness types
+  50,000 taka, then 1,000 dollars at 122, and requires the box to still read
+  50,000 — 122,000 would mean the arithmetic had overruled the statement.
+- **Switching from a USD account to a BDT one dropped the figure on screen.**
+  The derived taka is recomputed each render and lives nowhere, so the moment
+  the account changed the box that had just become the required one went empty.
+  It is carried into state during the render that notices the flip.
+- **The taka was not normalised on the way out.** Its neighbour has always used
+  `plainAmount`; this box did not need it while arithmetic filled it, and now it
+  is the primary hand-typed field on every BDT account. "1,00,000" is a figure
+  to a reader and not one to `numeric(14,2)`.
+
+`.cashcurrencyqa.mjs` — 14 checks. It builds one account of each currency,
+because the dev database has no USD account at all and a harness that silently
+exercised one kind twice would have proved nothing.
+
+Two notes for whoever runs it: the account picker is a `SearchableSelect` and
+has to be driven the way a person does — open, type to narrow, click the
+`role="option"` — and the harness now CHECKS the account actually changed,
+because the first version missed silently and every check below it measured the
+default account. And its cleanup deletes in dependency order and refuses to
+throw: another harness running at the same time will hang a TDS deposit off
+"the first account", which for a minute can be one of these.
 
 ## 33. Paying for a subscription answered 404, live
 

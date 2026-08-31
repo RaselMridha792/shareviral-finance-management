@@ -30,8 +30,7 @@ import {
 } from "@/components/ui/field";
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
-import {
-} from "@/components/ledger/reference-kind";
+import {} from "@/components/ledger/reference-kind";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { type AccountDto } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
@@ -99,6 +98,40 @@ export function CashInForm({
    */
   const [usdRate, setUsdRate] = useState(transaction?.usdRate ?? "");
   const [latestRate, setLatestRate] = useState<string | null>(null);
+
+  /**
+   * Which account it landed in — declared here, above every figure.
+   *
+   * The two searchable boxes keep their value in state because the form is
+   * read with `FormData` and a hidden input remembers nothing on its own.
+   * Correcting: the row's own account, and the field is locked — see the
+   * comment on the submit. Recording: the first account, as before.
+   */
+  const [accountId, setAccountId] = useState(
+    transaction?.accountId ?? accounts[0]?.id ?? "",
+  );
+  /*
+   * The landing account's own currency, and the one thing that decides which
+   * box this form asks for FIRST.
+   *
+   * The owner: "account switch holeo currency switch hocchena. ekhane field
+   * take primary usd thakbe jokhon usd thake oi card er primary currency. r
+   * bdt thakbe oi card er type bdt thakle."
+   *
+   * A USD-primary account thinks in dollars: the advice states them, the rate
+   * converts them, and the taka is what the two come to. A BDT account thinks
+   * in taka: what landed is the fact, typed, and the dollars beside it are
+   * optional because a local receipt has none.
+   *
+   * NOTE, because it is the rule most easily misread here: this changes which
+   * box is asked for first and which is computed. It changes NOTHING about
+   * what is stored. `amount` is always the taka that landed, `usdSent` is
+   * always `original_amount`, and every figure in this app's ledger is BDT —
+   * a USD account's included.
+   */
+  const usdPrimary =
+    accounts.find((candidate) => candidate.id === accountId)?.currency ===
+    "USD";
 
   /**
    * Both tracked only so the realised rate can be read back while it is being
@@ -184,12 +217,43 @@ export function CashInForm({
    * So: dollars and a rate present means the arithmetic owns the box; anything
    * else means the person does.
    */
-  const isDerived = derivedAmount !== "";
+  /*
+   * Only on a USD-primary account.
+   *
+   * On a BDT account the taka is the fact — it is what the statement says
+   * landed — so it is typed and nothing overwrites it, even when somebody also
+   * fills in the optional dollars and a rate beside it. Deriving there would
+   * be the app arguing with the bank over the one figure the bank is certain
+   * about.
+   */
+  const isDerived = usdPrimary && derivedAmount !== "";
   const amount = isDerived
     ? derivedAmount
     : amountTyped
       ? typedAmount
       : (transaction?.amount ?? "");
+  /*
+   * Switching from a USD account to a BDT one keeps the figure on screen.
+   *
+   * On a USD account the taka is DERIVED — recomputed each render, never in
+   * state — so the moment the account changed to a BDT one the derivation
+   * stopped and the box fell back to empty. The number the person had watched
+   * being worked out vanished from the field that had just become the
+   * required one.
+   *
+   * Carried across during the render that notices the flip, the way the delete
+   * dialog resets itself: an effect would paint one frame with the empty box,
+   * and a save landing in that frame would send nothing.
+   */
+  const [wasUsdPrimary, setWasUsdPrimary] = useState(usdPrimary);
+  if (usdPrimary !== wasUsdPrimary) {
+    setWasUsdPrimary(usdPrimary);
+    if (!usdPrimary && derivedAmount !== "" && !amountTyped) {
+      setTypedAmount(derivedAmount);
+      setAmountTyped(true);
+    }
+  }
+
   const realised = realisedRate(amount, usdSent);
 
   /**
@@ -245,25 +309,6 @@ export function CashInForm({
       cancelled = true;
     };
   }, [open]);
-
-  /**
-   * The two searchable boxes keep their value here: the form is read with
-   * `FormData`, so the value has to reach a hidden input, and a hidden input
-   * does not remember anything on its own.
-   */
-  // Correcting: the row's own account, and the field is locked — see the
-  // comment on the submit. Recording: the first account, as before.
-  const [accountId, setAccountId] = useState(
-    transaction?.accountId ?? accounts[0]?.id ?? "",
-  );
-  /*
-   * The landing account's own choice. On a USD-primary account the dollars
-   * are not optional decoration — they are the figure the account thinks in,
-   * so the box turns required and loses its "blank for a local receipt" out.
-   */
-  const usdPrimary =
-    accounts.find((candidate) => candidate.id === accountId)?.currency ===
-    "USD";
 
   /**
    * Closing empties what the drawer would not.
@@ -358,7 +403,12 @@ export function CashInForm({
         invoiceNo: text("invoiceNo"),
         description: String(data.get("description")),
         accountId: String(data.get("accountId")),
-        amount: String(data.get("amount")),
+        /* Normalised like its neighbour. "1,00,000" and "৳1,00,000" are the
+           same figure to a reader and neither is one to numeric(14,2) — and
+           this box is now the primary hand-typed field on every BDT account,
+           where it used to be filled by arithmetic that could not produce a
+           comma. */
+        amount: plainAmount(String(data.get("amount") ?? "")),
         usdRate: String(data.get("usdRate")).trim(),
         // Blank on a local receipt, and then this row is exactly what it was
         // before: an ordinary money-in with a reference rate on it. Given, the
@@ -518,7 +568,7 @@ export function CashInForm({
               </Attach>
             </Field>
 
-              {/*
+            {/*
                 Attached, never typed — the same shape Invoice already has.
 
                 The owner: "sobgula table eri reference upload only hobe ekhane
@@ -596,7 +646,22 @@ export function CashInForm({
             />
           </Field>
 
-          {/* The dollar side and the rate first, then the taka they come to.
+          {/*
+            The account decides the order, not this file.
+
+            A USD-primary account is asked for dollars and a rate, and the taka
+            is what they come to — an answer printed above its own inputs is a
+            box that appears to change on its own, so it goes second. A BDT
+            account is asked for the taka FIRST, because that is the fact the
+            statement states, and the dollars follow as the optional pair.
+
+            The rate is asked in both, at the only moment anybody knows it: it
+            is read back all month, and a rate looked up later is the rate on
+            the day of the lookup.
+          */}
+          {usdPrimary ? (
+            <>
+              {/* The dollar side and the rate first, then the taka they come to.
             The sheet reads taka-first, but this box fills itself in from the
             two beside it, and an answer printed above its own inputs is a box
             that appears to change on its own. The rate is asked at the only
@@ -604,49 +669,49 @@ export function CashInForm({
             taka figure is shown in dollars at the rate the month's funding
             arrived at, and a rate looked up later is the rate on the day of
             the lookup. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
-              label="Amount (USD)"
-              required={usdPrimary}
-              error={fieldErrors.usdSent}
-              hint={
-                usdPrimary
-                  ? "This account's primary currency — the figure the advice states."
-                  : "What the sender sent. Blank for a local receipt."
-              }
-            >
-              <MoneyInput
-                name="usdSent"
-                required={usdPrimary}
-                placeholder="0.00"
-                value={usdSent}
-                onChange={(event) => setUsdSent(event.target.value)}
-              />
-            </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="Amount (USD)"
+                  required={usdPrimary}
+                  error={fieldErrors.usdSent}
+                  hint={
+                    usdPrimary
+                      ? "This account's primary currency — the figure the advice states."
+                      : "What the sender sent. Blank for a local receipt."
+                  }
+                >
+                  <MoneyInput
+                    name="usdSent"
+                    required={usdPrimary}
+                    placeholder="0.00"
+                    value={usdSent}
+                    onChange={(event) => setUsdSent(event.target.value)}
+                  />
+                </Field>
 
-            <Field
-              label="Rate"
-              required
-              error={fieldErrors.usdRate}
-              hint={
-                latestRate
-                  ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
-                  : "What a dollar was worth on the day. It governs the whole month."
-              }
-            >
-              <Input
-                name="usdRate"
-                required
-                inputMode="decimal"
-                className="col-amount"
-                placeholder="122.77"
-                value={usdRate}
-                onChange={(event) => setUsdRate(event.target.value)}
-              />
-            </Field>
-          </div>
+                <Field
+                  label="Rate"
+                  required
+                  error={fieldErrors.usdRate}
+                  hint={
+                    latestRate
+                      ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
+                      : "What a dollar was worth on the day. It governs the whole month."
+                  }
+                >
+                  <Input
+                    name="usdRate"
+                    required
+                    inputMode="decimal"
+                    className="col-amount"
+                    placeholder="122.77"
+                    value={usdRate}
+                    onChange={(event) => setUsdRate(event.target.value)}
+                  />
+                </Field>
+              </div>
 
-          {/*
+              {/*
             Worked out, and not typed over.
 
             The owner: "je field ta auto fill hobe rate bosanor por oi field ta
@@ -661,36 +726,136 @@ export function CashInForm({
             the honest edit is the RATE — that is what the difference actually
             was — and the working underneath shows it.
           */}
-          <Field
-            label="Amount (BDT)"
-            required
-            error={fieldErrors.amount}
-            hint={
-              isDerived
-                ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
-                : "What landed, in taka"
-            }
-          >
-            <MoneyInput
-              name="amount"
-              required
-              placeholder="0.00"
-              value={amount}
-              readOnly={isDerived}
-              tabIndex={isDerived ? -1 : undefined}
-              aria-readonly={isDerived || undefined}
-              className={
-                isDerived
-                  ? "cursor-not-allowed text-muted-foreground"
-                  : undefined
-              }
-              onChange={(event) => {
-                if (isDerived) return;
-                setTypedAmount(event.target.value);
-                setAmountTyped(true);
-              }}
-            />
-          </Field>
+              <Field
+                label="Amount (BDT)"
+                required
+                error={fieldErrors.amount}
+                hint={
+                  isDerived
+                    ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
+                    : "What landed, in taka"
+                }
+              >
+                <MoneyInput
+                  name="amount"
+                  required
+                  placeholder="0.00"
+                  value={amount}
+                  readOnly={isDerived}
+                  tabIndex={isDerived ? -1 : undefined}
+                  aria-readonly={isDerived || undefined}
+                  className={
+                    isDerived
+                      ? "cursor-not-allowed text-muted-foreground"
+                      : undefined
+                  }
+                  onChange={(event) => {
+                    if (isDerived) return;
+                    setTypedAmount(event.target.value);
+                    setAmountTyped(true);
+                  }}
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              {/*
+            Worked out, and not typed over.
+
+            The owner: "je field ta auto fill hobe rate bosanor por oi field ta
+            edit kora jawa ucit na karon oita calculation korei to asteche" —
+            and he is right. The box said "Worked out from the two above" and
+            then accepted typing, so a figure could sit there disagreeing with
+            the two numbers printed beside it, and nothing on the screen would
+            say which was true.
+
+            It is read-only now. The dollars and the rate are the two facts;
+            the taka is what they come to. If the bank credited something else,
+            the honest edit is the RATE — that is what the difference actually
+            was — and the working underneath shows it.
+          */}
+              <Field
+                label="Amount (BDT)"
+                required
+                error={fieldErrors.amount}
+                hint={
+                  isDerived
+                    ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
+                    : "What landed, in taka"
+                }
+              >
+                <MoneyInput
+                  name="amount"
+                  required
+                  placeholder="0.00"
+                  value={amount}
+                  readOnly={isDerived}
+                  tabIndex={isDerived ? -1 : undefined}
+                  aria-readonly={isDerived || undefined}
+                  className={
+                    isDerived
+                      ? "cursor-not-allowed text-muted-foreground"
+                      : undefined
+                  }
+                  onChange={(event) => {
+                    if (isDerived) return;
+                    setTypedAmount(event.target.value);
+                    setAmountTyped(true);
+                  }}
+                />
+              </Field>
+
+              {/* The dollar side and the rate first, then the taka they come to.
+            The sheet reads taka-first, but this box fills itself in from the
+            two beside it, and an answer printed above its own inputs is a box
+            that appears to change on its own. The rate is asked at the only
+            moment anybody knows it: it is read back all month, since every
+            taka figure is shown in dollars at the rate the month's funding
+            arrived at, and a rate looked up later is the rate on the day of
+            the lookup. */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="Amount (USD)"
+                  required={usdPrimary}
+                  error={fieldErrors.usdSent}
+                  hint={
+                    usdPrimary
+                      ? "This account's primary currency — the figure the advice states."
+                      : "What the sender sent. Blank for a local receipt."
+                  }
+                >
+                  <MoneyInput
+                    name="usdSent"
+                    required={usdPrimary}
+                    placeholder="0.00"
+                    value={usdSent}
+                    onChange={(event) => setUsdSent(event.target.value)}
+                  />
+                </Field>
+
+                <Field
+                  label="Rate"
+                  required
+                  error={fieldErrors.usdRate}
+                  hint={
+                    latestRate
+                      ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
+                      : "What a dollar was worth on the day. It governs the whole month."
+                  }
+                >
+                  <Input
+                    name="usdRate"
+                    required
+                    inputMode="decimal"
+                    className="col-amount"
+                    placeholder="122.77"
+                    value={usdRate}
+                    onChange={(event) => setUsdRate(event.target.value)}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
 
           {/* The arithmetic, back in front of the person who typed it. A digit
             too many in either box turns a plausible rate into an absurd one,
