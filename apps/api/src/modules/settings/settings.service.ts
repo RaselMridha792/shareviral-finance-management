@@ -19,6 +19,17 @@ const SECRET_COLUMNS = [
   // carrying fields nobody consumes is a payload nobody audits.
   "anthropicKeySetAt",
   "anthropicKeySetBy",
+  /*
+   * The card password's hash, and the two columns beside it. The hash is the
+   * obvious one; the other two are here for the same reason the Anthropic
+   * pair is — nothing on the settings screen reads them, and a payload
+   * carrying fields nobody consumes is a payload nobody audits. Whether a card
+   * password exists, and when it was last changed, is answered by its own
+   * endpoint.
+   */
+  "cardPasswordHash",
+  "cardPasswordSetAt",
+  "cardPasswordSetBy",
 ] as const;
 type SecretColumn = (typeof SECRET_COLUMNS)[number];
 

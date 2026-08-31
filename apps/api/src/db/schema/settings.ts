@@ -122,6 +122,19 @@ export const appSettings = pgTable(
      * starts sending the moment somebody pastes a key is how a test message
      * reaches a customer.
      */
+    /**
+     * The shared card password, bcrypt'd — never the password.
+     *
+     * Null until somebody sets one, and while it is null the card reveal
+     * refuses everybody. That is the safe direction to fail: a card number
+     * behind no password at all would be worse than one nobody can reach.
+     */
+    cardPasswordHash: text("card_password_hash"),
+    cardPasswordSetAt: timestamp("card_password_set_at", {
+      withTimezone: true,
+    }),
+    cardPasswordSetBy: uuid("card_password_set_by"),
+
     resendApiKey: text("resend_api_key"),
     resendKeySetAt: timestamp("resend_key_set_at", { withTimezone: true }),
     resendKeySetBy: uuid("resend_key_set_by"),

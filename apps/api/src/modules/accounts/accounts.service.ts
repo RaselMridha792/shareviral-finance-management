@@ -26,9 +26,29 @@ import {
 } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 
+/**
+ * An account as the rest of the world may see it.
+ *
+ * The two sealed card columns are omitted at the TYPE level, not merely left
+ * out of `projection`, and that is the guard rather than a tidy-up: this type
+ * is what `list()` and `findOne()` promise, so adding either column to the
+ * projection later becomes a compile error instead of a leak. It would
+ * otherwise be an easy line to write — every other account column lives there
+ * — and it would put a card number on the wire to every account picker, into
+ * the Accounts spreadsheet, and into `audit_logs.before` for every mutation on
+ * this table, all from one edit.
+ *
+ * `cardLast4` and `cardExpiry` stay: four digits and a month are what the
+ * screen shows to tell one card from another.
+ */
 export type AccountDto = Omit<
   Account,
-  "deletedAt" | "deletedBy" | "deleteReason" | "entityId"
+  | "deletedAt"
+  | "deletedBy"
+  | "deleteReason"
+  | "entityId"
+  | "cardNumberSealed"
+  | "cardCvcSealed"
 >;
 
 /**
@@ -654,6 +674,21 @@ const projection = {
   openingBalance: accounts.openingBalance,
   openingBalanceUsd: accounts.openingBalanceUsd,
   openingBalanceOn: accounts.openingBalanceOn,
+
+  /*
+   * The card's readable half. `cardNumberSealed` and `cardCvcSealed` are NOT
+   * here and must never be: this object feeds GET /accounts, the dashboard,
+   * every account picker, the Accounts spreadsheet, and the before/after image
+   * of every audit row on this table. `AccountDto` omits them at the type
+   * level so adding either becomes a compile error rather than a leak.
+   */
+  cardHolderName: accounts.cardHolderName,
+  cardLabel: accounts.cardLabel,
+  cardLast4: accounts.cardLast4,
+  cardExpiry: accounts.cardExpiry,
+  cardSecretsSetAt: accounts.cardSecretsSetAt,
+  cardSecretsSetBy: accounts.cardSecretsSetBy,
+
   sortOrder: accounts.sortOrder,
   isActive: accounts.isActive,
   notes: accounts.notes,

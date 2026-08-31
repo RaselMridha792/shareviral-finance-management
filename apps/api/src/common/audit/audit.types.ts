@@ -71,6 +71,15 @@ const SECRET_FIELDS = new Set([
   // ciphertext — and a before/after diff of a key change is not information
   // anybody needs.
   "anthropicApiKey",
+  /*
+   * Belt and braces. These never reach an audit row anyway — `AccountDto`
+   * omits them and `projection` does not select them, which is what actually
+   * keeps them out — but a future `read` that reached for the raw row would
+   * otherwise put a card number's ciphertext in `audit_logs.before`.
+   */
+  "cardNumberSealed",
+  "cardCvcSealed",
+  "cardPasswordHash",
 ]);
 
 export function redact(value: unknown): unknown {

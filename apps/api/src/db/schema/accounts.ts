@@ -60,6 +60,35 @@ export const accounts = pgTable(
     openingBalanceOn: date("opening_balance_on").notNull(),
 
     /** Order in the sidebar and on the dashboard. */
+    /* ------------------------------------------------------------------ */
+    /*  A card, when `type` is 'card'                                      */
+    /* ------------------------------------------------------------------ */
+
+    /** Whose name is embossed on it. */
+    cardHolderName: text("card_holder_name"),
+    /** What the card itself is called — "Platinum Business", not the bank. */
+    cardLabel: text("card_label"),
+
+    /**
+     * The whole number, sealed.
+     *
+     * MUST NOT be added to `projection` in accounts.service.ts. That object
+     * feeds `GET /accounts`, the dashboard, every account picker, the Accounts
+     * spreadsheet, AND the before/after image of every audit row on this
+     * table — so one line there would put a card number in three places at
+     * once. It is read only through the reveal endpoint.
+     */
+    cardNumberSealed: text("card_number_sealed"),
+    /** Plain on purpose: what the screen shows to tell one card from another. */
+    cardLast4: varchar("card_last4", { length: 4 }),
+    /** MM/YYYY as typed. A card expires at the end of a month, not on a day. */
+    cardExpiry: varchar("card_expiry", { length: 7 }),
+    /** The three digits on the back, sealed. Same rule as the number above. */
+    cardCvcSealed: text("card_cvc_sealed"),
+
+    cardSecretsSetAt: timestamp("card_secrets_set_at", { withTimezone: true }),
+    cardSecretsSetBy: uuid("card_secrets_set_by"),
+
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     notes: text("notes"),
