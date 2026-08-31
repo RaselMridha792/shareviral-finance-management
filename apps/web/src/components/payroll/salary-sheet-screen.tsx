@@ -908,16 +908,14 @@ function LineRow({
           {saving ? (
             <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
           ) : null}
-          {editable ? (
-            <button
-              type="button"
-              onClick={() => setBreakdown(true)}
-              className="cursor-pointer text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-            >
-              <ListTree className="mr-1 inline size-3" />
-              Breakdown
-            </button>
-          ) : null}
+          {/*
+            No Breakdown link, on the owner's word.
+
+            The four figures it opened — basic, house rent, medical, conveyance
+            — are already columns on this same row, each with its percentage in
+            the heading. A drawer that re-states four visible numbers is a
+            second place for them to disagree.
+          */}
           {line.isPaid ? (
             <Link
               href={`/payroll/${line.id}/payslip`}

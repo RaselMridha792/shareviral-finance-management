@@ -17,6 +17,10 @@ below is started unless it says so.
 | 18 | **A subscription that is paid takes money out of the bank** | **API done** — the button on the screen is next |
 | 23 | **Expenses: a real overview page** — rename the category grid, six dynamic boxes, Other expenses off the menu | not started |
 | 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | not started |
+| 28 | Salary sheet: the TDS cell opens its working | already built — **verify only** |
+| 29 | Salary sheet: an FX rate typed per LINE | not started — needs a column |
+| 30 | Salary sheet: the Breakdown link goes | **done** — unpushed |
+| 31 | Bank statement: oldest first, and whole-row colour | not started |
 | 26 | All transactions: no Category column, no small line under the description | not started |
 | 27 | A reference with no document reads N/A, not a link | not started |
 | 25 | All transactions: a money-in row reads green, a money-out row red — the whole row | not started |
@@ -167,6 +171,30 @@ leaving it off the expenses page is why the page never matched the bank.
   its own column.
 - **"Show voided" goes.** A voided row is struck through in place; a checkbox
   that hides them is a second way to ask the same question.
+
+## 28-31. The salary sheet and the statement
+
+**28 — the TDS cell already opens its working.** `TdsCell` is a button on every
+row, draft or finalised, and `TdsWorkingDrawer` sits behind it. Nothing to
+build; it needs driving once to confirm the drawer actually renders, because
+the owner asked for something the code says exists.
+
+**29 — an FX rate per LINE.** The owner: *"fx rate take edit option dite hobe
+etake prottekta table a fx rate likhte parbe."* The cell prints the month's
+governing figure today, and that figure is exactly what has been removed from
+the rest of the app. A rate stored on the LINE is the shape every other figure
+now has — the row carries what it was worth and nothing recalculates it later.
+`payroll_lines` has no such column, so this is a migration and travels alone.
+It supersedes #11's per-month rate: per line is finer and the owner asked for
+it second.
+
+**30 — the Breakdown link is gone.** The four figures it opened are already
+columns on the same row with their percentages in the headings.
+
+**31 — the bank statement reads oldest first**, and takes the same whole-row
+colour as #25. Oldest-first is what a bank's own paper does and what makes a
+running balance readable; the screen's own description already says "newest
+first", so that line changes too.
 
 ## 26-27. The transactions table, tidied
 
