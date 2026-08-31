@@ -205,7 +205,13 @@ export function SubscriptionForm({
   const [websiteUrl, setWebsiteUrl] = useState(subscription?.websiteUrl ?? "");
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const invoicePicker = useRef<HTMLInputElement>(null);
-  const [reference, setReference] = useState(subscription?.reference ?? "");
+  /*
+   * Read, never written. The box that set it is gone — a reference is attached
+   * now — but the value a plan already carries has to keep being sent, or
+   * editing anything else on the plan would quietly erase the bank's number
+   * somebody recorded before this change.
+   */
+  const [reference] = useState(subscription?.reference ?? "");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   /*
    * A transaction id, or only the paper. Read back from the plan being
@@ -780,20 +786,19 @@ export function SubscriptionForm({
           <Field
             label="Reference"
             error={fieldErrors.reference}
-            hint="What the bank or the card statement calls it — or attach the record"
+            hint="Attach the bank or card record — there is no number to type"
           >
+            {/* Attached, never typed — the same change the three ledger forms
+                got. The stored value and every number already in it stay. */}
             <Clip
               picker={referencePicker}
               file={referenceFile}
               onPick={setReferenceFile}
               label="Attach the bank's record"
             >
-              <Input
-                className="num min-w-0 flex-1"
-                value={reference}
-                maxLength={120}
-                onChange={(e) => setReference(e.target.value)}
-              />
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                {referenceFile ? "" : "No reference attached"}
+              </span>
             </Clip>
           </Field>
         </div>

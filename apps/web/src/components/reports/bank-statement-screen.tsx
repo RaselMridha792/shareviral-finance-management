@@ -226,10 +226,17 @@ export function BankStatementScreen({
                 <Th align="right">Debit</Th>
                 <Th align="right">Credit</Th>
                 <Th align="right">Balance</Th>
-                {/* The bank's own number for the line — what you quote back to
-                    them, not what you read the statement by, so it sits after
-                    the figures. It still opens the row's documents. */}
-                <Th>Reference</Th>
+                {/*
+                  "Entry No." — this app's number for the line, with the bank's
+                  underneath when there is one.
+
+                  It used to print `reference ?? refNo` under the heading
+                  "Reference": the bank's number when one had been typed, and
+                  ours when one had not, with nothing to say which you were
+                  looking at. Two facts under one word, and no way to tell them
+                  apart on the row that matters.
+                */}
+                <Th>Entry No.</Th>
                 {/* The paper behind the movement. Every entry can carry one,
                     and the two references sit together because a reader
                     matching this statement against a file is looking for
@@ -316,8 +323,13 @@ export function BankStatementScreen({
                         onClick={() => setDocumentsFor(row)}
                         className="num cursor-pointer rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                       >
-                        {row.reference ?? row.refNo}
+                        {row.refNo}
                       </button>
+                      {row.reference ? (
+                        <span className="num block text-xs text-muted-foreground">
+                          {row.reference}
+                        </span>
+                      ) : null}
                     </td>
                     <td>
                       {row.invoiceNo ? (

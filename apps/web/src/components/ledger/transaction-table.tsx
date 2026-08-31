@@ -1,7 +1,7 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
-import { Link2, Paperclip, TriangleAlert } from "lucide-react";
+import { Link2, Paperclip } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -216,8 +216,21 @@ export function TransactionTable({
                 meant neither could be scanned down or read against a heading
                 that named it.
               */}
-              <Th width="w-32">Invoice number</Th>
-              <Th width="w-32">Transaction number</Th>
+              <Th width="w-32">Invoice</Th>
+              {/*
+                "Entry No.", because this column holds OUR number.
+
+                The owner's point, once both existed: `TXN-2026-000005` is
+                issued by this app and `FT26081200412` is issued by the bank,
+                and calling either of them "Reference" made two different facts
+                answer to one word. "Transaction number" was no better — it
+                reads exactly like the bank's transaction id.
+
+                The bank's own number still shows, small, underneath, which is
+                where every number already recorded continues to live now that
+                nobody types a new one.
+              */}
+              <Th width="w-32">Entry No.</Th>
               {showBalance ? (
                 <Th align="right" width="w-32">
                   Balance
@@ -491,9 +504,25 @@ export function TransactionTable({
                       that it opens something.
                     */}
                     {row.documentCount === 0 ? (
-                      <span className="num text-xs text-muted-foreground">
+                      <span className="num block text-xs text-muted-foreground">
                         {row.refNo}
                         <span className="ml-1.5 text-faint">N/A</span>
+                        {/*
+                          The bank's number belongs on BOTH branches.
+
+                          It was written only inside the branch that has a
+                          document, so an entry carrying a typed reference and
+                          no attachment lost the bank's number from the table
+                          entirely — and now that a reference is attached rather
+                          than typed, those legacy rows are precisely the ones
+                          that exist. The N/A is about the paperwork; the number
+                          under it is a fact the row still holds.
+                        */}
+                        {row.reference ? (
+                          <span className="num block text-xs text-faint">
+                            {row.reference}
+                          </span>
+                        ) : null}
                       </span>
                     ) : (
                       <button

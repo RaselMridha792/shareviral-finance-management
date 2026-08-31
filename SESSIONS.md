@@ -37,7 +37,7 @@ below is started unless it says so.
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 32 | **Cash In: the amount fields follow the chosen account's own currency** | not started — arrived 1 Sep |
-| 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | not started — arrived 1 Sep |
+| 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | **done** — and the two numbers got two names |
 | 35 | An attached file's NAME is barely readable — colour it | **done** — five places, not one |
 | 36 | Salary changes: pagination, tick column, move to trash | **done** — and it closed two traps |
 | 37 | The Payslips table still prints `2026-06-29` — #1 missed it | **done** — and Reports had four more |
@@ -134,6 +134,195 @@ passes in a run where the whole site was down. "No bad dates found" and "no
 dates found" are now different answers.
 
 `.dateqa.mjs` — 22 checks.
+
+## 35. An attached file's name reads like a caption
+
+From the Cash In drawer: once a file is attached, its name
+("Tohibar_Academy_Tech...") sat in the same muted tone as the hint underneath
+telling you to attach one, and the eye and the cross beside it — being icons —
+carried more weight than the name they act on. The owner: *"upload document
+gular name color change hobe."*
+
+The name now steps forward (`font-medium text-foreground`); the row stays muted,
+which is right for the two buttons.
+
+**Five places, not one.** `Attach` is copied verbatim into
+`cash-in-form.tsx`, `transaction-form.tsx` and `transfer-form.tsx`, and
+`subscription-form.tsx` has its own version — plus a FIFTH rendering, the plan
+screenshot picker written inline in that same file, which the harness caught
+because it was still muted after the other four were done. Changing four of five
+would have been worse than changing none. (`document-slots.tsx`, which lists
+files already SAVED, was already right: the name is foreground and the size and
+uploader below it are the muted line.)
+
+None of these live under `components/ui/`, `components/money/`, `lib/` or
+`packages/shared`, so this is four page-local edits rather than a shared change
+— but it does reach Cash in, All transactions, the register, Expenses, Other
+expenses, the category pages, Money transfer and Subscriptions, which is worth
+knowing.
+
+`.attachnameqa.mjs` — 12 checks. It attaches a real file on each form and asks
+the BROWSER for the computed colour of the name and of the caption beside it,
+because `text-foreground` in the source proves nothing about what gets painted.
+Three of its own faults, all of the same family this file keeps hitting:
+
+- the browser answers `lab(95.93 …)` here, not `oklab(0.95 …)`. The parser knew
+  only oklab, so every real colour fell through, returned null, and two nulls
+  compared equal — it reported two visibly different colours as identical.
+- the subscription screenshot slot has no field hint to compare against, so the
+  comparison was against null. It now falls back to any muted caption.
+- it looked for an Add button on All transactions. There is none — an entry is
+  recorded where it belongs, not on the list that shows all of them — so the
+  form was opened from Other expenses instead, which is one of the screens that
+  actually uses it.
+
+## 36. Salary changes - a pager, a tick column, and two traps it opened
+
+Asked for from a team member's profile: *"ekhane pagination add koro and aro
+beshi data rakhte parbo. also ekhane multiple select and trash a felar option
+tao diyo ei table a."* The screenshot's own first row read *"just test"*, which
+is the case for wanting a delete.
+
+The panel now pages at twenty with the serial counting across pages, carries a
+tick column and a bulk **Move to trash**, and a trash button per row. The
+**current** salary is not in this list and cannot be reached from it - it is the
+row every future payroll sheet reads, and the app has no notion of a person with
+no current salary.
+
+**The delete was the dangerous part.** A search of every reader of
+`compensation_history` found two traps waiting for whoever performed the first
+one. Neither was reachable before, because nothing in the app could delete one
+of these rows. Both are closed here.
+
+**Trap 1 - a figure typed in, saved, and invisible.**
+`compensation_effective_idx` is on `(team_member_id, effective_from)` and is NOT
+partial, so a trashed row still occupies its date. Recording pay effective on
+that same date takes the `onConflictDoUpdate` branch, whose `set` wrote the
+amount and never cleared `deleted_at`: the request answered 200, the screen
+refreshed, and nothing appeared. The person kept the older salary and the new
+figure sat in the trash. It now un-deletes the row it lands on - somebody
+recording a figure for a date is saying that IS the figure for that date. The
+same fix stops a raise stamping an end date onto a row that is in the trash.
+
+**Trap 2 - the table saying one thing and the money doing another.**
+Nothing in this app resolves a salary through `effective_to`; payroll and the
+directory both take the newest row starting on or before the date they want
+(`payroll.service.ts:1120`, `:451`, `:1196`, `team-members.service.ts:559`,
+`:692`). That column is written once, by the change that closes the row, and
+nothing repairs it. So deleting a row out of the MIDDLE left its predecessor
+stamped with an end date from a row nobody can see: the money quietly carried on
+paying the predecessor's figure while this column claimed it had stopped months
+earlier. The **Until** cell is now derived from the row that follows, so the two
+cannot disagree.
+
+**What deliberately does not change**, and the confirmation says so: a finalised
+or paid sheet keeps its figures - `payroll_lines.gross_amount` is frozen when
+the sheet is built. The one live edge is a DRAFT sheet, whose pro-rata path
+re-reads this table, so a draft keeps its figure until somebody edits that
+person's working days.
+
+**Left standing, and worth the owner's decision** - none of it reachable from
+this screen, all of it reachable by a deliberate API call:
+
+- `compensation_effective_idx` should be partial (`where deleted_at is null`).
+  That is a migration and travels alone.
+- Restoring a compensation row from Settings > Trashed only nulls `deleted_at`.
+  It does not check for an overlapping open row, so a restore can in principle
+  leave two rows with no end date.
+- `backfillCompensationFromJoining` tests `not exists (...)` without filtering
+  `deleted_at`, so a person whose only salary row was trashed is invisible to
+  the repair action - neither offered nor listed as skipped.
+
+`.salaryhistoryqa.mjs` - 17 checks, built on a twenty-two-raise history so the
+pager has a second page to get wrong. Three of its first failures were the
+harness: the pager text sits past the slice it was reading, a two-piece date
+substring matched the wrong row, and the delete dialog arms on TWO gates (a tick
+AND the word "trash" typed out) where the harness had filled only the reason -
+it clicked a disabled button and reported the product as deleting nothing. A
+fourth read the row count while the request was still in flight; it now waits
+for the fact rather than for a clock.
+
+## 37. The Payslips table printed ISO dates — and so did Reports
+
+Spotted by the owner: Salary changes reads `30/08/2026` and the Payslips panel
+directly under it read `2026-06-29`. Two panels on one screen disagreeing.
+
+**Why #1 missed it, which matters more than the fix.** `.dateqa.mjs` walked
+seven LIST screens and no detail page. `/team/[id]` was never opened, so the
+sweep reported the app converted while that table had never been touched.
+
+The sweep now walks seventeen screens — every list plus the profile, the salary
+sheet, an account, its register, Reports and Settings — and the widening
+immediately found a second miss nobody had reported: **Reports** printed
+`2026-09-01 → 2026-09-30` in its header, `2026-09-30` in two table cells, and
+carried **"as at"** in two places, which is the exact phrase #2 removed a
+fortnight ago. It survived because the sweep that checked for "as at" only ever
+opened an account drawer.
+
+**And the sweep learned to fail on a blank page.** Mid-fix a JSX comment was
+placed between two attributes — a compile error, which in dev 500s every route.
+The sweep then walked seventeen blank screens and ticked every one: seventeen
+passes in a run where the whole site was down. "No bad dates found" and "no
+dates found" are now different answers.
+
+`.dateqa.mjs` — 22 checks.
+
+## 35. An attached file's name is the wrong colour
+
+Arrived 1 Sep with the Cash In drawer. Once a file is attached, its name
+("Tohibar_Academy_Tech...") renders in a colour close enough to the drawer's
+own text that it reads as a caption rather than as the thing you just attached
+— and the eye and the cross beside it are louder than the name they act on.
+
+The owner: *"upload document gular name color change hobe."*
+
+Where it lives is the part to check before touching anything: the name is drawn
+by the shared file components under `components/files/`, so whatever is changed
+reaches every form that attaches a document — cash in, transactions, other
+expenses, subscriptions, team member, TDS challans. That is the ask-first list.
+
+Not started.
+
+## 34. Reference stops being typed, and stops sharing a name
+
+Two changes, because there were two things called Reference and the owner, asked
+which he meant, said both.
+
+**The box goes.** *"sobgula table eri reference upload only hobe ekhane field
+dorkar nai. etao invoice tar motoi hobe."* Invoice was already attach-only -
+"No invoice attached" and a paperclip - while Reference beside it was a text box
+with a paperclip, so the pair looked like two different kinds of thing when they
+are one: the bank's record of the movement. All four forms now read
+"No reference attached". The `reference` column stays, every number already in
+it stays, and the "number or slip" toggle that governed the box goes with it -
+there is only the slip now, so there is nothing to choose between.
+
+**The two numbers get two names.** `TXN-2026-000005` is issued by this app;
+`FT26081200412` is issued by the bank. All transactions called ours
+"Transaction number", which reads exactly like the bank's transaction id, and
+the bank statement printed `reference ?? refNo` under the heading "Reference" -
+the bank's number when one had been typed, ours when it had not, with nothing to
+say which you were looking at. Both columns are now **Entry No.**, holding our
+number with the bank's small underneath.
+
+**Two things the harness caught that the diff could not:**
+
+- **An edit would have erased the bank's number.** A form that stops sending a
+  field it used to send empties that column one save at a time. The subscription
+  form's `reference` is now read-but-never-written, so an existing value keeps
+  being submitted. `.refuploadqa.mjs` edits a row's description and asserts the
+  reference is still there afterwards - that is the check that matters.
+- **The legacy rows lost their number on screen.** #27 put the "N/A" branch on
+  the transactions table for an entry with no document, and that branch never
+  rendered `row.reference` - only the has-a-document branch did. So an entry
+  carrying a typed reference and NO attachment showed nothing, and now that a
+  reference is attached rather than typed, those legacy rows are precisely the
+  ones that exist. Both branches show it.
+
+`.refuploadqa.mjs` - 19 checks. It creates an entry carrying a bank reference
+the way every existing live row carries one, then proves the box is gone on four
+forms, the number still displays on two tables, and an unrelated edit leaves it
+alone.
 
 ## 35. An attached file's name reads like a caption
 

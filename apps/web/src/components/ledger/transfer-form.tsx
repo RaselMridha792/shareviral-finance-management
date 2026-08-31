@@ -22,11 +22,6 @@ import {
 } from "@/components/ui/field";
 import { formatMoney } from "@finance/shared";
 
-import {
-  ReferenceInput,
-  ReferenceKindToggle,
-  type ReferenceKind,
-} from "@/components/ledger/reference-kind";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
@@ -113,8 +108,13 @@ export function TransferForm({
    */
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [bankFiles, setBankFiles] = useState<File[]>([]);
-  /** A transaction id, or only the paper — see ledger/reference-kind.tsx. */
-  const [refKind, setRefKind] = useState<ReferenceKind>("id");
+  /*
+   * The "number or slip" choice is gone with the box it governed.
+   *
+   * It existed to say which of two things a reference was — a number the bank
+   * gave, or only the paper. Now there is only the paper, so there is nothing
+   * to choose between and nothing to remember choosing.
+   */
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -343,21 +343,21 @@ export function TransferForm({
               </span>
             </Attach>
           </Field>
+          {/* Attached, never typed — the same shape Invoice already has, and
+              the same change the other three forms got. */}
           <Field
             label="Reference"
             error={fieldErrors.reference}
-            hint={
-              refKind === "paper"
-                ? "No number — the slip is the reference."
-                : undefined
-            }
+            hint="Attach the bank's slip — there is no number to type"
           >
             <Attach
               kind="bank_statement"
               files={bankFiles}
               onPick={setBankFiles}
             >
-              <Input name="reference" className="num min-w-0 flex-1" />
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                {bankFiles.length ? "" : "No reference attached"}
+              </span>
             </Attach>
           </Field>
         </div>

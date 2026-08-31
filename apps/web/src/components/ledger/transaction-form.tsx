@@ -33,9 +33,6 @@ import {
   Textarea,
 } from "@/components/ui/field";
 import {
-  ReferenceInput,
-  ReferenceKindToggle,
-  type ReferenceKind,
 } from "@/components/ledger/reference-kind";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
@@ -155,9 +152,13 @@ export function TransactionForm({
    * A transaction id, or only the paper. Read back from the row being edited
    * rather than stored — see components/ledger/reference-kind.tsx.
    */
-  const [refKind, setRefKind] = useState<ReferenceKind>(
-    transaction && !transaction.reference ? "paper" : "id",
-  );
+  /*
+   * The "number or slip" choice is gone with the box it governed.
+   *
+   * It existed to say which of two things a reference was — a number the bank
+   * gave, or only the paper. Now there is only the paper, so there is nothing
+   * to choose between and nothing to remember choosing.
+   */
 
   /**
    * The taka, held here rather than left to the DOM, so the dollar figure
@@ -785,26 +786,33 @@ export function TransactionForm({
               </Attach>
             </Field>
 
+              {/*
+                Attached, never typed — the same shape Invoice already has.
+
+                The owner: "sobgula table eri reference upload only hobe ekhane
+                field dorkar nai. etao invoice tar motoi hobe." Two boxes side
+                by side, one asking for a file and one asking for a number, made
+                the pair look like two different kinds of thing when they are
+                one: the bank's record of this movement.
+
+                The stored `reference` column and every number already in it
+                stay exactly as they are, and still show under the entry number
+                on every table that lists these rows. What goes is the act of
+                typing a new one.
+              */}
             <Field
               label="Reference"
               error={fieldErrors.reference}
-              hint={
-                refKind === "id"
-                  ? "Cheque or bank reference — theirs."
-                  : "No number from the bank — attach the slip and it becomes the reference."
-              }
+              hint="Attach the bank's slip — there is no number to type"
             >
               <Attach
                 kind="bank_statement"
                 files={screenshotFiles}
                 onPick={setScreenshotFiles}
               >
-                <Input
-                  name="reference"
-                  className="num min-w-0 flex-1"
-                  placeholder="FT26081200412"
-                  defaultValue={transaction?.reference ?? ""}
-                />
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {screenshotFiles.length ? "" : "No reference attached"}
+                </span>
               </Attach>
             </Field>
           </div>
