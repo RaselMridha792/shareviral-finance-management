@@ -12,11 +12,13 @@ import {
   listTeamQuerySchema,
   setCompensationSchema,
   setTeamSocialsSchema,
+  upsertEreturnSchema,
   updateTeamMemberSchema,
   type CreateTeamMemberInput,
   type ListTeamQuery,
   type SetCompensationInput,
   type SetTeamSocialsInput,
+  type UpsertEreturnInput,
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { z } from "zod";
@@ -100,6 +102,29 @@ export class TeamMembersController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.team.setSocials(uuidSchema.parse(id), body, actor);
+  }
+
+  /* Above `:id`, with the socials pair, for the reason stated there. */
+  @Get(":id/ereturns")
+  @RequirePermission("team.read")
+  ereturns(@Param("id") id: string) {
+    return this.team.ereturns(uuidSchema.parse(id));
+  }
+
+  /**
+   * Record a year's return, or correct the one already there.
+   *
+   * `PUT` rather than `POST`: one per person per year is the rule, so sending
+   * the same year twice is the same act twice, not two returns.
+   */
+  @Put(":id/ereturns")
+  @RequirePermission("team.write")
+  upsertEreturn(
+    @Param("id") id: string,
+    @ZodBody(upsertEreturnSchema) body: UpsertEreturnInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.team.upsertEreturn(uuidSchema.parse(id), body, actor);
   }
 
   @Get(":id")

@@ -45,6 +45,12 @@ const SLOTS: readonly FileKind[] = [
   "salary_certificate",
   "nid",
   "etin_certificate",
+  /* The e-Return acknowledgement. It sits with the person's other papers
+     rather than on the E-Return card, because that is where somebody looks for
+     "this person's documents" — and because `files_one_owner` counts eight
+     owner columns, so an e-Return document is a team_member file rather than a
+     ninth owner. The card names the year; this is the paper. */
+  "e_return",
   "other",
 ];
 

@@ -15,6 +15,7 @@ import type {
   PsrStatus,
   SetCompensationInput,
   SetTeamSocialsInput,
+  UpsertEreturnInput,
   SocialPlatform,
   UpdatePayrollLineInput,
   UpdateTeamMemberInput,
@@ -223,6 +224,16 @@ export type TeamSocialDto = {
   sortOrder: number;
 };
 
+/** One year's income-tax e-Return on a person's profile. */
+export type EreturnDto = {
+  id: string;
+  fiscalYear: number;
+  submittedOn: string | null;
+  notes: string | null;
+  fileId: string | null;
+  fileName: string | null;
+};
+
 /** A labelled amount on the payslip's earnings or deductions side. */
 export type PayslipLineDto = { label: string; amount: string };
 
@@ -301,6 +312,16 @@ export const teamApi = {
     }),
 
   /** Separately gated — HR gets a 403 here. */
+  ereturns: (id: string) =>
+    apiFetch<EreturnDto[]>(`/team-members/${id}/ereturns`, {
+      cache: "no-store",
+    }),
+  upsertEreturn: (id: string, input: UpsertEreturnInput) =>
+    apiFetch<EreturnDto>(`/team-members/${id}/ereturns`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
   socials: (id: string) =>
     apiFetch<TeamSocialDto[]>(`/team-members/${id}/socials`, {
       cache: "no-store",

@@ -29,7 +29,7 @@ below is started unless it says so.
 | 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
 | 19 | A monthly date filter on AI tools and subscriptions | with #18 |
 | 14 | Team member: a Social media section, "add another", with icons | **done** — see the note on icons |
-| 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
+| 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | **done** — e-TIN already existed |
 | 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
 | 17 | Salary changes history on a person's profile | **done** — unpushed |
 | 10 | Void allowed inside a locked period — the owner's decision | **done** — unpushed |
@@ -282,6 +282,46 @@ reaches every form that attaches a document — cash in, transactions, other
 expenses, subscriptions, team member, TDS challans. That is the ask-first list.
 
 Not started.
+
+## 15. e-TIN, and one E-Return per income year
+
+*"1. E-Tin Number 2. E Return (akhane akta kore ortho bochor thakbe like
+2026-2027 and document upload korar option thakbe. Ata every year a 1 ta hobe)"*
+
+**The e-TIN half was already built** — `team_members.etin`, on the edit form and
+on the profile. Worth checking before writing anything, and it saved a column
+nobody needed.
+
+The return is new: an **E-Return** card on the profile listing one row per income
+year, with a drawer to record one.
+
+- **The year is stored as a number and shown in full.** `fiscal_year` holds the
+  year the year STARTS in — 2026 means 2026-2027 — because `periods.ts` already
+  speaks that way. A first draft of this duplicated `fiscalYearOf` and
+  `fiscalYearLabel` before noticing they existed; both were deleted and the
+  existing ones imported. What survives is one genuinely new helper,
+  `fiscalYearLabelLong`, because the owner asked for "2026-2027" written out and
+  `fiscalYearLabel` gives the short "FY 2026-27" the rest of the app reads in.
+- **The picker runs backwards only.** A return for a year that has not finished
+  cannot have been filed, and offering it is how one is recorded against the
+  wrong label. A year already recorded is greyed out rather than silently
+  overwritten.
+- **One per year is the database's job, not the screen's** — a partial unique
+  index on `(team_member_id, fiscal_year) where deleted_at is null`. Two people
+  recording the same year from two tabs get one row, and a year that was trashed
+  and is being recorded again does not collide with its own deleted row. That
+  last clause is #36's lesson applied before it could bite.
+- **The acknowledgement has exactly one home.** It is a `team_member` file of
+  kind `e_return`, so it appears as a slot on the person's existing Documents
+  card. `files_one_owner` counts eight owner columns and three migrations have
+  already fought over that constraint; a ninth owner would mean a fourth. A
+  second upload control on the E-Return card was written and then removed — two
+  places for one file is two places that disagree the first time one is used.
+
+`.ereturnqa.mjs` — 17 checks. Recording the same year twice corrects rather than
+duplicates; a trashed year can be recorded again; the picker leads with
+2026-2027 and offers nothing later; and the acknowledgement's slot is on the
+Documents card, once.
 
 ## 14. Social media on a team member
 

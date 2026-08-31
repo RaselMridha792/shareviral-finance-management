@@ -27,6 +27,15 @@ export const FILE_KINDS = [
   "salary_certificate",
   "nid",
   "etin_certificate",
+  /**
+   * The acknowledgement for one year's income-tax e-Return.
+   *
+   * A `team_member` file rather than an owner of its own: `files_one_owner`
+   * counts eight columns and three migrations have already fought over it. The
+   * return row in `team_ereturns` points at the file by id, which is enough —
+   * and it is honest, because the document IS a paper about the person.
+   */
+  "e_return",
   "receipt",
   /**
    * The bill the money was against, as opposed to `receipt`, which is proof it
@@ -127,6 +136,7 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   salary_certificate: "Salary certificate",
   nid: "National ID",
   etin_certificate: "e-TIN certificate",
+  e_return: "e-Return acknowledgement",
   receipt: "Receipt",
   invoice: "Invoice",
   bank_statement: "Bank statement",
@@ -161,6 +171,10 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
     "salary_certificate",
     "nid",
     "etin_certificate",
+    /* The acknowledgement for one year's return. Owned by the person rather
+       than by the `team_ereturns` row, because `files_one_owner` counts eight
+       columns and three migrations have already fought over it. */
+    "e_return",
     "resignation_letter",
     "other",
   ],
@@ -231,6 +245,7 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   salary_certificate: DOCUMENT_MIME_TYPES,
   nid: DOCUMENT_MIME_TYPES,
   etin_certificate: DOCUMENT_MIME_TYPES,
+  e_return: DOCUMENT_MIME_TYPES,
   receipt: DOCUMENT_MIME_TYPES,
   invoice: DOCUMENT_MIME_TYPES,
   // Images too, because "bank statement" in practice means a screenshot of one.
@@ -272,6 +287,7 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   salary_certificate: 15 * MB,
   nid: 10 * MB,
   etin_certificate: 10 * MB,
+  e_return: 10 * MB,
   receipt: 15 * MB,
   invoice: 15 * MB,
   // A screenshot, so smaller — and the cap is the honest place to say so. The

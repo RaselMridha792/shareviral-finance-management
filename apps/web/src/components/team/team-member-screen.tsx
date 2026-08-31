@@ -66,10 +66,12 @@ import {
   teamApi,
   type CompensationDto,
   type TeamSocialDto,
+  type EreturnDto,
   type MemberPayslipDto,
   type TeamMemberDto,
 } from "@/lib/payroll";
 import { formatDate, cn } from "@/lib/utils";
+import { Ereturns } from "./ereturns";
 import { SocialAccounts } from "./social-accounts";
 import { TeamMemberForm } from "./team-member-form";
 
@@ -92,12 +94,15 @@ import { TeamMemberForm } from "./team-member-form";
 export function TeamMemberScreen({
   member,
   socials,
+  ereturns,
   compensation,
   payslips,
 }: {
   member: TeamMemberDto;
   /** Where they can be found. Empty when nothing is recorded. */
   socials: TeamSocialDto[];
+  /** One filing per income year. */
+  ereturns: EreturnDto[];
   compensation: CompensationDto[];
   /**
    * Empty both when there are none and when the role cannot read payroll —
@@ -631,6 +636,16 @@ export function TeamMemberScreen({
             memberId={member.id}
             memberName={member.fullName}
             socials={socials}
+            canWrite={canWrite}
+            onSaved={refresh}
+          />
+
+          {/* Tax: the year, the acknowledgement, and nothing invented. The
+              e-TIN itself is a field on the person, above. */}
+          <Ereturns
+            memberId={member.id}
+            memberName={member.fullName}
+            ereturns={ereturns}
             canWrite={canWrite}
             onSaved={refresh}
           />

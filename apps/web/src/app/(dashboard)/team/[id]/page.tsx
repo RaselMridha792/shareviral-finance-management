@@ -16,7 +16,7 @@ export default async function TeamMemberPage({
 }: PageProps<"/team/[id]">) {
   const { id } = await params;
 
-  const [member, user, socials] = await Promise.all([
+  const [member, user, socials, ereturns] = await Promise.all([
     teamApi.get(id),
     getSession(),
     /*
@@ -27,6 +27,7 @@ export default async function TeamMemberPage({
      * table is the one thing that might not exist yet.
      */
     teamApi.socials(id).catch(() => []),
+    teamApi.ereturns(id).catch(() => []),
   ]);
 
   // Not fetched at all when the role cannot see pay — there is no request to
@@ -51,6 +52,7 @@ export default async function TeamMemberPage({
     <TeamMemberScreen
       member={member}
       socials={socials}
+      ereturns={ereturns}
       compensation={compensation}
       payslips={payslips}
     />

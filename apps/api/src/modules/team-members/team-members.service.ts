@@ -17,6 +17,8 @@ import {
   type Paginated,
   type SetCompensationInput,
   type SetTeamSocialsInput,
+  type UpsertEreturnInput,
+  fiscalYearLabelLong,
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
@@ -28,6 +30,7 @@ import {
   appSettings,
   compensationHistory,
   teamSocials,
+  teamEreturns,
   files,
   teamMembers,
 } from "../../db/schema";
@@ -504,6 +507,107 @@ export class TeamMembersService {
           )
           .returning();
         return { socials: rows };
+      },
+    });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /*  E-Return — one per fiscal year                                         */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A person's returns, newest year first, with the acknowledgement's id.
+   *
+   * The file is a `team_member` file of kind `e_return` that this row points
+   * at, so the join is a left one: a return can be recorded as filed before the
+   * receipt is to hand, and refusing to list it until the PDF arrives is how
+   * the record never gets made at all.
+   */
+  async ereturns(teamMemberId: string) {
+    await this.findOne(teamMemberId);
+
+    return this.db.client
+      .select({
+        id: teamEreturns.id,
+        fiscalYear: teamEreturns.fiscalYear,
+        submittedOn: teamEreturns.submittedOn,
+        notes: teamEreturns.notes,
+        fileId: teamEreturns.fileId,
+        fileName: files.originalName,
+      })
+      .from(teamEreturns)
+      .leftJoin(files, eq(files.id, teamEreturns.fileId))
+      .where(
+        and(
+          isNull(teamEreturns.deletedAt),
+          eq(teamEreturns.teamMemberId, teamMemberId),
+        ),
+      )
+      .orderBy(desc(teamEreturns.fiscalYear));
+  }
+
+  /**
+   * Record a year's return, or correct the one already recorded.
+   *
+   * One per person per year is the owner's rule — *"Ata every year a 1 ta
+   * hobe"* — and the database enforces it with a PARTIAL unique index. Partial
+   * matters here: a year that was trashed and is being recorded again must not
+   * collide with its own deleted row, which is the bug this repo hit the same
+   * week on `compensation_history`.
+   *
+   * So the conflict target carries the same `where`, and the update clears
+   * `deleted_at` — a year somebody is recording again is a year they have
+   * decided is real.
+   */
+  async upsertEreturn(
+    teamMemberId: string,
+    input: UpsertEreturnInput,
+    actor: AuthenticatedUser,
+  ) {
+    const member = await this.findOne(teamMemberId);
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "team_ereturns",
+      entityId: teamMemberId,
+      summary: `${actor.fullName} recorded ${member.fullName}'s ${fiscalYearLabelLong(input.fiscalYear)} e-Return`,
+      module: "team",
+      read: async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(teamEreturns)
+          .where(
+            and(
+              eq(teamEreturns.teamMemberId, teamMemberId),
+              eq(teamEreturns.fiscalYear, input.fiscalYear),
+            ),
+          )
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const [row] = await tx
+          .insert(teamEreturns)
+          .values({
+            teamMemberId,
+            fiscalYear: input.fiscalYear,
+            submittedOn: input.submittedOn ?? null,
+            notes: input.notes ?? null,
+            createdBy: actor.id,
+            updatedBy: actor.id,
+          })
+          .onConflictDoUpdate({
+            target: [teamEreturns.teamMemberId, teamEreturns.fiscalYear],
+            targetWhere: isNull(teamEreturns.deletedAt),
+            set: {
+              submittedOn: input.submittedOn ?? null,
+              notes: input.notes ?? null,
+              updatedAt: new Date(),
+              updatedBy: actor.id,
+            },
+          })
+          .returning();
+        return row;
       },
     });
   }

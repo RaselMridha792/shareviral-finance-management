@@ -610,6 +610,49 @@ export const teamSocials = pgTable(
 
 export type TeamSocial = typeof teamSocials.$inferSelect;
 
+/**
+ * One income-tax e-Return per person per fiscal year.
+ *
+ * `fiscalYear` holds the year the year STARTS in — 2026 is 2026-2027, July to
+ * June — because `deadlines.ts` already speaks in start years and a stored
+ * label would be a second spelling of the same fact.
+ *
+ * The acknowledgement is a `team_member` file with kind `e_return`, pointed at
+ * from here. It does not hang on this row: `files_one_owner` counts eight owner
+ * columns and three migrations have already fought over that constraint.
+ */
+export const teamEreturns = pgTable(
+  "team_ereturns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamMemberId: uuid("team_member_id")
+      .notNull()
+      .references(() => teamMembers.id, { onDelete: "cascade" }),
+
+    fiscalYear: integer("fiscal_year").notNull(),
+
+    /* Nullable: a return can be recorded as filed before the receipt is to
+       hand, and refusing the row until the PDF arrives is how the record never
+       gets made at all. */
+    fileId: uuid("file_id"),
+    submittedOn: date("submitted_on"),
+    notes: varchar("notes", { length: 300 }),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by"),
+    updatedBy: uuid("updated_by"),
+    ...deletion(),
+  },
+  (t) => [index("team_ereturns_member_idx").on(t.teamMemberId, t.fiscalYear)],
+);
+
+export type TeamEreturn = typeof teamEreturns.$inferSelect;
+
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type Compensation = typeof compensationHistory.$inferSelect;
 export type PayrollRun = typeof payrollRuns.$inferSelect;

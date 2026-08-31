@@ -732,3 +732,33 @@ export const setTeamSocialsSchema = z
     { message: "That platform is already on this list", path: ["socials"] },
   );
 export type SetTeamSocialsInput = z.infer<typeof setTeamSocialsSchema>;
+
+/* -------------------------------------------------------------------------- */
+/*  E-Return — one per fiscal year                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "2026-2027" — the fiscal year written out in full.
+ *
+ * `periods.ts` already has `fiscalYearOf` and `fiscalYearLabel`, and they are
+ * the ones to use: mode-aware, tested, and the app's own. This adds nothing but
+ * a second SPELLING, because the owner asked for the year in full — *"akhane
+ * akta kore ortho bochor thakbe like 2026-2027"* — and `fiscalYearLabel` gives
+ * the short form the rest of the app reads better in ("FY 2026-27").
+ *
+ * A first draft of this file duplicated all three helpers before noticing they
+ * existed. They are one import away in `periods.ts`.
+ */
+export function fiscalYearLabelLong(startYear: number): string {
+  return `${startYear}-${startYear + 1}`;
+}
+
+export const upsertEreturnSchema = z.strictObject({
+  fiscalYear: z.coerce.number().int().min(2000).max(2200),
+  submittedOn: z
+    .union([isoDateSchema, z.literal("")])
+    .transform((v) => (v === "" ? null : v))
+    .nullish(),
+  notes: optionalText(300),
+});
+export type UpsertEreturnInput = z.infer<typeof upsertEreturnSchema>;
