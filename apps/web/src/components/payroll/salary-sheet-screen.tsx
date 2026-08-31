@@ -50,17 +50,22 @@ import {
 } from "@/lib/payroll";
 import { cn } from "@/lib/utils";
 
+/*
+ * No `usdRate` prop any more.
+ *
+ * The sheet used to be handed the app's one governing rate and print it on
+ * every row. Each line now carries its own, typed here, so the screen has
+ * nothing to ask the FX module for — and the page below it stopped fetching a
+ * rate it no longer passes anywhere.
+ */
 export function SalarySheetScreen({
   run,
   lines,
   accounts,
-  usdRate,
 }: {
   run: PayrollRunDto;
   lines: PayrollLineDto[];
   accounts: AccountDto[];
-  /** This month's governing taka-per-dollar rate, or null when none governs. */
-  usdRate: string | null;
 }) {
   // The rail knows the ancestors; only this page knows the record.
   useNameThisPage(run.label);
@@ -200,6 +205,36 @@ export function SalarySheetScreen({
       otherAdditions: sum((line) => line.otherAdditions),
       otherDeductions: sum((line) => line.otherDeductions),
     };
+  }, [lines]);
+
+  /**
+   * The sheet in dollars, added up line by line.
+   *
+   * There is no longer one rate to divide the month's net by — every line
+   * carries its own — so the total is the sum of what each line is actually
+   * worth, and lines with no rate are counted separately rather than silently
+   * left out. A dollar figure quietly missing four people is worse than no
+   * dollar figure at all.
+   *
+   * Kept in floating point deliberately, unlike every other total here: this
+   * one is a translation of a figure that is already exact in taka, shown with
+   * a "≈" in front of it. The taka totals are summed in minor units because
+   * they are the ones somebody pays.
+   */
+  const usdTotal = useMemo(() => {
+    let amount = 0;
+    let without = 0;
+    let counted = 0;
+    for (const line of lines) {
+      const rate = Number(line.fxRate);
+      if (!line.fxRate || !Number.isFinite(rate) || rate <= 0) {
+        without += 1;
+        continue;
+      }
+      amount += Number(line.netAmount) / rate;
+      counted += 1;
+    }
+    return counted === 0 ? null : { amount, without };
   }, [lines]);
 
   /**
@@ -567,7 +602,6 @@ export function SalarySheetScreen({
                     line={line}
                     splitLabels={splitLabels}
                     daysInMonth={daysInMonth}
-                    usdRate={usdRate}
                     editable={canWrite && draft}
                     onSaved={refresh}
                     onShowWorking={() => setWorkingFor(line)}
@@ -610,10 +644,21 @@ export function SalarySheetScreen({
                   <FootAmount value={totals.otherDeductions} />
                   <FootAmount value={run.totalNet} />
                   <td />
+                  {/*
+                    Added up from the lines, not the total net divided by a
+                    rate — there is no longer one rate to divide by. A line
+                    with no rate contributes nothing and the figure says how
+                    many those are, because a dollar total quietly missing four
+                    people is worse than no dollar total.
+                  */}
                   <td className="col-amount">
-                    {usdRate
-                      ? `≈ $${(Number(run.totalNet) / Number(usdRate)).toFixed(2)}`
-                      : "N/A"}
+                    {usdTotal === null
+                      ? "N/A"
+                      : `≈ $${usdTotal.amount.toFixed(2)}${
+                          usdTotal.without > 0
+                            ? ` (${usdTotal.without} without a rate)`
+                            : ""
+                        }`}
                   </td>
                   <td />
                 </tr>
@@ -729,7 +774,6 @@ function LineRow({
   line,
   splitLabels,
   daysInMonth,
-  usdRate,
   editable,
   onSaved,
   onShowWorking,
@@ -741,7 +785,6 @@ function LineRow({
   splitLabels: string[];
   /** The month's own calendar length — what Working Days is out of. */
   daysInMonth: number;
-  usdRate: string | null;
   editable: boolean;
   onSaved: () => void;
   /** Ask the sheet to open this line's tax working. */
@@ -766,6 +809,31 @@ function LineRow({
       const result = await payrollApi.updateLine(line.id, {
         workingDays: days,
       });
+      setWarning(result.warning ?? null);
+      onSaved();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not save that.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /*
+   * A rate, or nothing. Its own path for the same reason days have one: `save`
+   * sends whatever string is in the box, and the contract rightly refuses ""
+   * for a number. Emptying the box means "nobody has stated a rate for this
+   * line", which is a real answer and has to reach the server as null rather
+   * than as a key that was never sent.
+   */
+  async function saveRate(raw: string) {
+    const next = raw.trim() === "" ? null : raw.trim();
+    if (next === (line.fxRate ?? null)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await payrollApi.updateLine(line.id, { fxRate: next });
       setWarning(result.warning ?? null);
       onSaved();
     } catch (caught) {
@@ -912,15 +980,24 @@ function LineRow({
           />
         </div>
       </td>
-      {/* The rate is the month's one governing figure, stated on every row
-          because the sheet states it on every row; the dollars are that rate
-          applied to the net — a translation, marked as one. */}
+      {/*
+        The rate this line is read in dollars at, typed here.
+
+        It used to print the app's ONE governing rate on every row, and the
+        dollars were that rate applied to the net. The owner is removing that
+        rate from the app entirely — one box that silently restates every
+        historical figure the moment somebody edits it — and his instruction
+        for this screen was to type it instead: "fx rate take edit option dite
+        hobe etake prottekta table a fx rate likhte parbe".
+
+        Editable only while the sheet is a draft, like every other cell here.
+        Once a run is finalised its figures are what was filed, and a rate that
+        could still move would make a filed month read differently tomorrow.
+      */}
+      <RateCell value={line.fxRate} editable={editable} onSave={saveRate} />
       <td className="col-amount text-sm text-muted-foreground">
-        {usdRate ? Number(usdRate).toFixed(2) : "N/A"}
-      </td>
-      <td className="col-amount text-sm text-muted-foreground">
-        {usdRate
-          ? `≈ $${(Number(line.netAmount) / Number(usdRate)).toFixed(2)}`
+        {line.fxRate
+          ? `≈ $${(Number(line.netAmount) / Number(line.fxRate)).toFixed(2)}`
           : "N/A"}
       </td>
       <td>
@@ -1090,6 +1167,51 @@ function TdsWorkingPanel({
 }
 
 /** Edits in place — a payroll sheet is a grid, not twenty separate forms. */
+/**
+ * A rate, which is not money.
+ *
+ * Its own cell rather than `Cell`, which renders an `Amount` when it is not
+ * editable — and an `Amount` puts a taka sign in front of it. 122.50 taka to
+ * the dollar is not ৳122.50, and a currency symbol on a divisor is the kind of
+ * small wrongness somebody reads past for a year.
+ */
+function RateCell({
+  value,
+  editable,
+  onSave,
+}: {
+  value: string | null;
+  editable: boolean;
+  onSave: (value: string) => void;
+}) {
+  if (!editable) {
+    return (
+      <td className="col-amount text-sm text-muted-foreground">
+        {value ? Number(value).toFixed(2) : "N/A"}
+      </td>
+    );
+  }
+
+  return (
+    <td>
+      <input
+        /* Keyed by the value so a save elsewhere on the row — which refetches
+           the sheet — does not leave a stale figure in an uncontrolled box. */
+        key={value ?? ""}
+        defaultValue={value ? Number(value).toFixed(2) : ""}
+        inputMode="decimal"
+        placeholder="N/A"
+        title="Taka per US dollar for this line. Leave it empty and no dollar figure is shown."
+        onBlur={(event) => onSave(event.target.value)}
+        className={cn(
+          "col-amount h-8 w-full rounded border border-transparent bg-transparent px-2 text-sm outline-none transition",
+          "hover:border-border focus-visible:border-primary focus-visible:bg-surface",
+        )}
+      />
+    </td>
+  );
+}
+
 function Cell({
   value,
   field,

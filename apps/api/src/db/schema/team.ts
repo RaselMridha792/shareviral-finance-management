@@ -411,6 +411,21 @@ export const payrollLines = pgTable(
     tdsBasis: jsonb("tds_basis"),
 
     /**
+     * Taka per US dollar for THIS line, typed while the sheet is a draft.
+     *
+     * The sheet used to print the app's one governing rate on every row and
+     * divide the net by it. That rate is being removed: a single box that
+     * restates every historical figure the moment somebody edits it. Typed per
+     * line, the number behaves like everything else in this app — frozen where
+     * it was recorded, never recalculated afterwards.
+     *
+     * Null means nobody has said what this month was worth in dollars, and the
+     * dollar column stays empty rather than inventing a figure from today's
+     * rate.
+     */
+    fxRate: numeric("fx_rate", { precision: 18, scale: 6 }),
+
+    /**
      * What this person actually put into a rebatable investment.
      *
      * Only read when the year's rule has `assumeFullInvestment` switched off.

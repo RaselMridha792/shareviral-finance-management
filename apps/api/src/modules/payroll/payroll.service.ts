@@ -154,6 +154,14 @@ export class PayrollService {
         tdsDeclaredInvestment: payrollLines.tdsDeclaredInvestment,
         paidDays: payrollLines.paidDays,
         workingDays: payrollLines.workingDays,
+        /*
+         * In the projection as well as the schema, which is the step this
+         * codebase has forgotten three times — on accounts, on team members
+         * and on vendors. The column stores perfectly and the screen reads
+         * undefined, so a figure somebody typed comes back as N/A and looks
+         * like a save that silently failed.
+         */
+        fxRate: payrollLines.fxRate,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
@@ -362,6 +370,7 @@ export class PayrollService {
         fullName: teamMembers.fullName,
         periodYear: payrollRuns.periodYear,
         periodMonth: payrollRuns.periodMonth,
+        runStatus: payrollRuns.status,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
@@ -370,6 +379,27 @@ export class PayrollService {
       .limit(1);
 
     if (!line) throw new NotFoundException("No such payroll line");
+
+    /*
+     * A finalised sheet is finalised on the server too.
+     *
+     * `finalize` is documented as "Locks the figures", the screen stops drawing
+     * editable cells the moment a run leaves draft, and `generateLines`,
+     * `syncMembers` and `recalculateTds` all refuse a non-draft run. This one
+     * checked only whether the PERSON had been paid — so every figure on a
+     * finalised, unpaid sheet was still writable through the API, and the lock
+     * was a thing the screen believed rather than a thing the app enforced.
+     *
+     * Found while adding the per-line FX rate: the sheet stops offering the box
+     * once a run is finalised, and the server took the value anyway.
+     *
+     * The way back is `reopen`, which exists and says what it costs.
+     */
+    if (line.runStatus !== "draft") {
+      throw new BadRequestException(
+        "That sheet has been finalised — reopen it before changing a figure.",
+      );
+    }
     if (line.isPaid) {
       throw new BadRequestException(
         "This person has been paid — the figures cannot change now.",

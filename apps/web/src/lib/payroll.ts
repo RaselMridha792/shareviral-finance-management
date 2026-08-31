@@ -204,6 +204,13 @@ export type PayrollLineDto = {
   paidDays: number | null;
   workingDays: number | null;
   remarks: string | null;
+  /**
+   * Taka per dollar for this line, typed on the sheet.
+   *
+   * Null means nobody has stated one — the dollar column shows nothing rather
+   * than converting at whatever the rate happens to be today.
+   */
+  fxRate: string | null;
 };
 
 /** A labelled amount on the payslip's earnings or deductions side. */

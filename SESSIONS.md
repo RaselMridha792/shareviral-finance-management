@@ -18,7 +18,7 @@ below is started unless it says so.
 | 23 | **Expenses: a real overview page** — rename the category grid, six dynamic boxes, Other expenses off the menu | not started |
 | 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | **done** — unpushed |
 | 28 | Salary sheet: the TDS cell opens its working | **done** — it opened, but the panel was broken |
-| 29 | Salary sheet: an FX rate typed per LINE | not started — needs a column |
+| 29 | Salary sheet: an FX rate typed per LINE | **done** — unpushed. Supersedes #11 |
 | 30 | Salary sheet: the Breakdown link goes | **done** — unpushed |
 | 31 | Bank statement: oldest first, and whole-row colour | **done** — unpushed |
 | 26 | All transactions: no Category column, no small line under the description | **done** — unpushed |
@@ -33,10 +33,61 @@ below is started unless it says so.
 | 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
 | 17 | Salary changes history on a person's profile | **done** — unpushed |
 | 10 | Void allowed inside a locked period — the owner's decision | **done** — unpushed |
-| 11 | A payroll month carries its own USD rate, typed when it is finalised | not started |
+| 11 | A payroll month carries its own USD rate, typed when it is finalised | **superseded by #29** — the owner changed it to per line |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
+
+## 29. A rate typed on the LINE
+
+The owner: *"fx rate take edit option dite hobe etake prottekta table a fx rate
+likhte parbe"*. This replaces #11, which was the same idea a month at a time.
+
+The sheet used to be handed the app's ONE governing rate, print it on every row
+under "FX Rate", and divide each net by it for "Net Pay (USD)". That is the rate
+#8 is removing from the app: one box that restates every historical figure the
+moment somebody edits it. Now each line carries the rate it was read in dollars
+at, frozen where it was typed — the same shape every other figure here already
+has.
+
+The whole chain, because missing one link is how this has failed three times
+before:
+
+| where | what |
+|---|---|
+| `deploy/sql/2026-09-01-payroll-line-fx-rate.sql` | `fx_rate numeric(18,6)`, nullable, positive-check. Pushed alone, before the code |
+| `db/schema/team.ts` | the column |
+| `payroll.service.ts` | **the projection** — the step forgotten on accounts, team members and vendors, each time storing perfectly and reading back N/A |
+| `shared/payroll.ts` | `fxRate` on the update contract, six decimal places, null clears it |
+| `lib/payroll.ts` | `fxRate` on the DTO |
+| `salary-sheet-screen.tsx` | `RateCell`, its own save path, and the dollars per row |
+
+Four things worth knowing:
+
+- **`RateCell`, not `Cell`.** `Cell` renders an `Amount` when it is not editable,
+  and an `Amount` puts a taka sign in front. 122.50 taka to the dollar is not
+  ৳122.50.
+- **The total is added up from the lines**, not the month's net over one rate —
+  there is no longer one rate to divide by. Lines without a rate are counted and
+  said out loud: `≈ $945.71 (1 without a rate)`. A dollar total quietly missing
+  four people is worse than none.
+- **Null is a real answer.** No rate means no dollar figure, rather than
+  converting at whatever today's rate happens to be.
+- **The page stopped fetching a rate.** `/payroll/[runId]` called
+  `fxApi.governing()` for these two columns and no longer does.
+
+**A hole found while doing it, and closed.** `updateLine` guarded `line.isPaid`
+and nothing else — so every figure on a FINALISED, unpaid sheet was still
+writable through the API. The screen stops drawing editable cells the moment a
+run leaves draft, `finalize` is documented as "Locks the figures", and
+`generateLines`, `syncMembers` and `recalculateTds` all refuse a non-draft run.
+This one did not, so the lock was something the screen believed rather than
+something the app enforced. It now refuses, and names `reopen` as the way back.
+
+`.payrollfxqa.mjs` — 19 checks, two people on one sheet at two different rates,
+which is the one thing a global rate cannot express. It drives the projection,
+the refusals (zero, negative, letters), typing into the box, the totals row, and
+the finalised sheet from both sides.
 
 ## 28. The tax working — it opened, and it was broken
 

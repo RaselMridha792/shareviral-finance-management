@@ -534,6 +534,23 @@ export const updatePayrollLineSchema = z
      * and two numbers was how a slip printed "14 of 14" that meant nothing.
      */
     workingDays: z.number().int().min(1).max(31).nullable().optional(),
+
+    /*
+     * Taka per dollar for this one line. Null clears it, which is different
+     * from omitting the key and leaving what is there.
+     *
+     * Not `amountSchema`: that is money at two decimal places, and a rate is a
+     * divisor. At two places 122.00 and 122.004 move a 12,00,000 net by more
+     * than thirty dollars, so it takes six — the same precision `fx_rates` and
+     * `transactions.fx_rate` are stored at.
+     */
+    fxRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,12}(\.\d{1,6})?$/, "Enter a rate like 122.50")
+      .refine((v) => Number(v) > 0, "A rate has to be more than nothing")
+      .nullable()
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
