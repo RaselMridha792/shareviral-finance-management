@@ -16,7 +16,18 @@ export default async function TeamMemberPage({
 }: PageProps<"/team/[id]">) {
   const { id } = await params;
 
-  const [member, user] = await Promise.all([teamApi.get(id), getSession()]);
+  const [member, user, socials] = await Promise.all([
+    teamApi.get(id),
+    getSession(),
+    /*
+     * Its own table, so its own call — and one that cannot take the page down
+     * with it. Everything else here is `team.read` too, so a failure means the
+     * profile was not loading anyway; this catch is for the window between the
+     * code shipping and the migration having run on the server, where the
+     * table is the one thing that might not exist yet.
+     */
+    teamApi.socials(id).catch(() => []),
+  ]);
 
   // Not fetched at all when the role cannot see pay — there is no request to
   // intercept and no payload to leak.
@@ -39,6 +50,7 @@ export default async function TeamMemberPage({
   return (
     <TeamMemberScreen
       member={member}
+      socials={socials}
       compensation={compensation}
       payslips={payslips}
     />

@@ -16,6 +16,7 @@ import {
   type ListTeamQuery,
   type Paginated,
   type SetCompensationInput,
+  type SetTeamSocialsInput,
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
@@ -26,6 +27,7 @@ import { DbService } from "../../db/db.service";
 import {
   appSettings,
   compensationHistory,
+  teamSocials,
   files,
   teamMembers,
 } from "../../db/schema";
@@ -411,6 +413,99 @@ export class TeamMembersService {
         ),
       )
       .orderBy(desc(compensationHistory.effectiveFrom));
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /*  Social accounts                                                        */
+  /* ---------------------------------------------------------------------- */
+
+  /** The accounts on a person's profile, in the order they were arranged. */
+  async socials(teamMemberId: string) {
+    await this.findOne(teamMemberId);
+
+    return this.db.client
+      .select({
+        id: teamSocials.id,
+        platform: teamSocials.platform,
+        handle: teamSocials.handle,
+        sortOrder: teamSocials.sortOrder,
+      })
+      .from(teamSocials)
+      .where(
+        and(
+          isNull(teamSocials.deletedAt),
+          eq(teamSocials.teamMemberId, teamMemberId),
+        ),
+      )
+      .orderBy(asc(teamSocials.sortOrder), asc(teamSocials.platform));
+  }
+
+  /**
+   * The whole list, replaced in one act.
+   *
+   * Declarative, like `syncMembers` and the subscription seats: a list somebody
+   * edits has one truth — its final state — and sending a delta means three
+   * requests that have to be read together to know what happened. One request,
+   * one audit row, one before-image.
+   *
+   * A HARD delete of what is gone, and that is deliberate. Everything else in
+   * this app is soft-deleted because somebody may need to answer a question
+   * about it later; nobody will ever ask what a person's Instagram handle used
+   * to be. Soft-deleting here would also collide with the partial unique index
+   * the moment somebody removed a platform and added it back — the row would
+   * be out of the way, but the audit log would fill with rows nobody reads.
+   * The before-image in the audit row is the record that this changed.
+   */
+  async setSocials(
+    teamMemberId: string,
+    input: SetTeamSocialsInput,
+    actor: AuthenticatedUser,
+  ) {
+    const member = await this.findOne(teamMemberId);
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "team_socials",
+      entityId: teamMemberId,
+      summary: `${actor.fullName} set ${member.fullName}'s social accounts (${input.socials.length})`,
+      module: "team",
+      read: async (tx) => {
+        const rows = await tx
+          .select()
+          .from(teamSocials)
+          .where(
+            and(
+              isNull(teamSocials.deletedAt),
+              eq(teamSocials.teamMemberId, teamMemberId),
+            ),
+          );
+        return { socials: rows };
+      },
+      run: async (tx) => {
+        await tx
+          .delete(teamSocials)
+          .where(eq(teamSocials.teamMemberId, teamMemberId));
+
+        if (input.socials.length === 0) return { socials: [] };
+
+        const rows = await tx
+          .insert(teamSocials)
+          .values(
+            input.socials.map((one, index) => ({
+              teamMemberId,
+              platform: one.platform,
+              handle: one.handle,
+              /* The order they arrived in, so the screen can put the one that
+                 matters first and it stays there. */
+              sortOrder: index,
+              createdBy: actor.id,
+              updatedBy: actor.id,
+            })),
+          )
+          .returning();
+        return { socials: rows };
+      },
+    });
   }
 
   /** What someone was on for a given date — the figure payroll picks up. */

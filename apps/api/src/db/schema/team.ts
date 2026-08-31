@@ -561,6 +561,55 @@ export const payrollLinesRelations = relations(payrollLines, ({ one }) => ({
   }),
 }));
 
+/**
+ * A person's social accounts — as many as they have.
+ *
+ * A table rather than a jsonb column on `team_members`, because this is a list
+ * somebody edits rather than a snapshot frozen when it was written — the same
+ * distinction `compensation_history` and `subscription_users` are on the far
+ * side of. The operational half of the argument is in
+ * `deploy/sql/2026-09-01-team-socials.sql`: a jsonb column would have to join
+ * the team projection, and one missing column there kills every team query.
+ */
+export const teamSocials = pgTable(
+  "team_socials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamMemberId: uuid("team_member_id")
+      .notNull()
+      .references(() => teamMembers.id, { onDelete: "cascade" }),
+
+    /**
+     * Plain text, matching `subscriptions.billing_cycle` — the list will grow,
+     * and a pgEnum means an `ALTER TYPE` that cannot run in a transaction and
+     * has to reach two databases. `SOCIAL_PLATFORMS` in the shared package is
+     * the one place it is written down.
+     */
+    platform: text("platform").notNull(),
+
+    /** A handle, or a whole address. People paste whichever they have. */
+    handle: text("handle").notNull(),
+
+    /** Sparse, so somebody can put the one that matters first. */
+    sortOrder: integer("sort_order").notNull().default(0),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /* Plain uuids, like every other table in this file — the FK to `users`
+       lives in the migration; the schema does not import that module. */
+    createdBy: uuid("created_by"),
+    updatedBy: uuid("updated_by"),
+    ...deletion(),
+  },
+  (t) => [index("team_socials_member_idx").on(t.teamMemberId)],
+);
+
+export type TeamSocial = typeof teamSocials.$inferSelect;
+
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type Compensation = typeof compensationHistory.$inferSelect;
 export type PayrollRun = typeof payrollRuns.$inferSelect;

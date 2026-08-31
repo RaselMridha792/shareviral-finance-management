@@ -28,7 +28,7 @@ below is started unless it says so.
 | 21 | Renewal date computed from the cycle, not typed | **done** — unpushed |
 | 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
 | 19 | A monthly date filter on AI tools and subscriptions | with #18 |
-| 14 | Team member: a Social media section, "add another", with icons | not started |
+| 14 | Team member: a Social media section, "add another", with icons | **done** — see the note on icons |
 | 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
 | 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
 | 17 | Salary changes history on a person's profile | **done** — unpushed |
@@ -282,6 +282,58 @@ reaches every form that attaches a document — cash in, transactions, other
 expenses, subscriptions, team member, TDS challans. That is the ask-first list.
 
 Not started.
+
+## 14. Social media on a team member
+
+*"Team member ar social media add korte hobe eta ekta section thakbe jekhane
+tara add new add new kore social media account add korte parbe. eta obossoi
+icons soho hobe."*
+
+A **Social media** card on the profile, above the money. Each account is a chip
+carrying its platform, its handle and a link out; the card's own drawer adds and
+removes them with "Add another". Ten platforms, one account each.
+
+`team_socials` is a TABLE, not a jsonb column on `team_members`, and the reason
+is operational rather than aesthetic: a jsonb column would have to join the team
+projection, and Drizzle names every column in its SELECT — so shipping the code
+before the migration ran would kill the directory, the payroll picker and the
+salary sheet at once. A separate table can only fail its own card. Its unique
+index is **partial** (`where deleted_at is null`), which is the lesson from #36
+applied before it could bite.
+
+The whole list is replaced in one request, the shape `syncMembers` and the
+subscription seats already use: a list somebody edits has one truth, and one
+request means one audit row instead of three that have to be read together.
+
+**A handle is not an address and the app does not pretend otherwise.**
+`socialUrl` takes a pasted URL as typed, joins a bare handle to the platform's
+base (dropping the "@" people type out of habit), and returns **null** for a
+WhatsApp number or an "other" — those render as plain text, because a link that
+lands on the wrong profile is worse than no link.
+
+### The icons, which need the owner's decision
+
+He asked for icons. This app draws every icon from **lucide-react**, and lucide
+ships **no brand marks at all** — there is no Facebook, Instagram, LinkedIn or X
+export in it. `ls node_modules/lucide-react/dist/esm/icons` confirms it.
+
+Two honest options: add a brand-icon dependency, or draw them another way. This
+took the second, because adding a package to a live finance app overnight
+without being asked is not a decision to make on somebody's behalf. Each
+platform gets **its own brand colour and its own short mark** — the LinkedIn
+blue and "in", the WhatsApp green and "wa" — which is what the eye actually uses
+to pick one out of a row, and which is honest about being a chip rather than a
+slightly-wrong trademark.
+
+**If the real marks are wanted it is one dependency and one swap of the `MARK`
+table in `social-accounts.tsx`. Nothing else changes.**
+
+`.socialsqa.mjs` — 18 checks. The three that matter: sending a shorter list
+REPLACES rather than appends (an append would quietly accumulate duplicates
+every time somebody removed one), removing a platform and adding it straight
+back is not refused (the partial index earning its keep), and the three chips
+are distinct in both mark and colour — a row of identical grey squares would
+satisfy "there is an icon" and fail the thing icons are for.
 
 ## 8. The last place a report read a rate nobody typed
 

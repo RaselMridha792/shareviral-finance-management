@@ -14,6 +14,8 @@ import type {
   PayrollStatus,
   PsrStatus,
   SetCompensationInput,
+  SetTeamSocialsInput,
+  SocialPlatform,
   UpdatePayrollLineInput,
   UpdateTeamMemberInput,
 } from "@finance/shared";
@@ -213,6 +215,14 @@ export type PayrollLineDto = {
   fxRate: string | null;
 };
 
+/** One social account on a person's profile. */
+export type TeamSocialDto = {
+  id: string;
+  platform: SocialPlatform;
+  handle: string;
+  sortOrder: number;
+};
+
 /** A labelled amount on the payslip's earnings or deductions side. */
 export type PayslipLineDto = { label: string; amount: string };
 
@@ -291,6 +301,16 @@ export const teamApi = {
     }),
 
   /** Separately gated — HR gets a 403 here. */
+  socials: (id: string) =>
+    apiFetch<TeamSocialDto[]>(`/team-members/${id}/socials`, {
+      cache: "no-store",
+    }),
+  setSocials: (id: string, input: SetTeamSocialsInput) =>
+    apiFetch<{ socials: TeamSocialDto[] }>(`/team-members/${id}/socials`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
   compensation: (id: string) =>
     apiFetch<CompensationDto[]>(`/team-members/${id}/compensation`, {
       cache: "no-store",

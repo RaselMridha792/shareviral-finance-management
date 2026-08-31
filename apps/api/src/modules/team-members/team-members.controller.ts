@@ -1,12 +1,22 @@
-import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+} from "@nestjs/common";
 import {
   createTeamMemberSchema,
   listTeamQuerySchema,
   setCompensationSchema,
+  setTeamSocialsSchema,
   updateTeamMemberSchema,
   type CreateTeamMemberInput,
   type ListTeamQuery,
   type SetCompensationInput,
+  type SetTeamSocialsInput,
   type UpdateTeamMemberInput,
 } from "@finance/shared";
 import { z } from "zod";
@@ -58,6 +68,38 @@ export class TeamMembersController {
   @RequirePermission("team.compensation.write")
   backfillCompensation(@CurrentUser() actor: AuthenticatedUser) {
     return this.team.backfillCompensationFromJoining(actor);
+  }
+
+  /*
+   * Declared ABOVE `@Get(":id")`, and that is not a style choice.
+   *
+   * Nest matches in declaration order, so a literal segment written below a
+   * `:param` route is never reached — `/team-members/socials` would be read as
+   * a member whose id is the word "socials". This one has its own :id in front
+   * so it cannot collide, but the pair stays together and stays above, because
+   * the next literal route somebody adds here will not be so lucky.
+   */
+  @Get(":id/socials")
+  @RequirePermission("team.read")
+  socials(@Param("id") id: string) {
+    return this.team.socials(uuidSchema.parse(id));
+  }
+
+  /**
+   * The whole list, replaced.
+   *
+   * `team.write` rather than a permission of its own: a social handle is
+   * directory information, the same kind of fact as a phone number, and it sits
+   * behind the same door.
+   */
+  @Put(":id/socials")
+  @RequirePermission("team.write")
+  setSocials(
+    @Param("id") id: string,
+    @ZodBody(setTeamSocialsSchema) body: SetTeamSocialsInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.team.setSocials(uuidSchema.parse(id), body, actor);
   }
 
   @Get(":id")

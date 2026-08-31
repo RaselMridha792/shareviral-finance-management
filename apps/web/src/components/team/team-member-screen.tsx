@@ -65,10 +65,12 @@ import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import {
   teamApi,
   type CompensationDto,
+  type TeamSocialDto,
   type MemberPayslipDto,
   type TeamMemberDto,
 } from "@/lib/payroll";
 import { formatDate, cn } from "@/lib/utils";
+import { SocialAccounts } from "./social-accounts";
 import { TeamMemberForm } from "./team-member-form";
 
 /**
@@ -89,10 +91,13 @@ import { TeamMemberForm } from "./team-member-form";
  */
 export function TeamMemberScreen({
   member,
+  socials,
   compensation,
   payslips,
 }: {
   member: TeamMemberDto;
+  /** Where they can be found. Empty when nothing is recorded. */
+  socials: TeamSocialDto[];
   compensation: CompensationDto[];
   /**
    * Empty both when there are none and when the role cannot read payroll —
@@ -614,6 +619,22 @@ export function TeamMemberScreen({
             because a person hired last month has no history and that is not a
             gap.
           */}
+          {/*
+            Where they can be found — its own section, above the money.
+
+            Always rendered, unlike Salary changes: an empty one is an
+            invitation to add the first account, and this is the card somebody
+            comes to the profile to fill in. It carries its own drawer, so
+            nothing about the big edit form has to change.
+          */}
+          <SocialAccounts
+            memberId={member.id}
+            memberName={member.fullName}
+            socials={socials}
+            canWrite={canWrite}
+            onSaved={refresh}
+          />
+
           {history.length > 0 ? (
             <Card>
               <CardHeader

@@ -625,3 +625,110 @@ export function splitSalary(
     amount: fromMinorUnits(part.minor),
   }));
 }
+
+/* -------------------------------------------------------------------------- */
+/*  A person's social accounts                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The platforms a team member's account can be on.
+ *
+ * Written down once, here, because the web draws the chips from it and the API
+ * validates against it. Plain text in the database rather than a pgEnum, for
+ * the reason `subscriptions.billing_cycle` is: this list will grow, and an
+ * `ALTER TYPE` cannot run inside a transaction and has to reach two databases.
+ *
+ * `website` and `other` are the escape hatches. Somebody will have a portfolio
+ * or a platform nobody thought of, and a list that forces the nearest wrong
+ * choice produces a directory full of values nobody meant.
+ */
+export const SOCIAL_PLATFORMS = [
+  "linkedin",
+  "facebook",
+  "instagram",
+  "x",
+  "youtube",
+  "github",
+  "whatsapp",
+  "telegram",
+  "website",
+  "other",
+] as const;
+export const socialPlatformSchema = z.enum(SOCIAL_PLATFORMS);
+export type SocialPlatform = z.infer<typeof socialPlatformSchema>;
+
+export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
+  linkedin: "LinkedIn",
+  facebook: "Facebook",
+  instagram: "Instagram",
+  x: "X",
+  youtube: "YouTube",
+  github: "GitHub",
+  whatsapp: "WhatsApp",
+  telegram: "Telegram",
+  website: "Website",
+  other: "Other",
+};
+
+/**
+ * Where a handle goes when it is not already a whole address.
+ *
+ * `null` for the platforms that have no single profile URL to build — a phone
+ * number is not a path, and "other" is by definition unknown. Those show the
+ * value as text rather than as a link that would go somewhere wrong.
+ */
+const SOCIAL_PLATFORM_BASE: Record<SocialPlatform, string | null> = {
+  linkedin: "https://www.linkedin.com/in/",
+  facebook: "https://www.facebook.com/",
+  instagram: "https://www.instagram.com/",
+  x: "https://x.com/",
+  youtube: "https://www.youtube.com/@",
+  github: "https://github.com/",
+  whatsapp: null,
+  telegram: "https://t.me/",
+  website: null,
+  other: null,
+};
+
+/**
+ * The address a social entry opens, or null when there is nothing safe to open.
+ *
+ * Three cases, in order:
+ *   - the value is already a URL — use it as typed, because somebody who pasted
+ *     a whole address knows where it goes better than a rule does;
+ *   - the platform has a base and the value is a handle — join them, dropping a
+ *     leading "@" which people type out of habit and no path wants;
+ *   - anything else — null, and the screen prints the value as plain text. A
+ *     link that lands on the wrong profile is worse than no link.
+ */
+export function socialUrl(
+  platform: SocialPlatform,
+  handle: string,
+): string | null {
+  const value = handle.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (platform === "website" && /\./.test(value)) return `https://${value}`;
+  const base = SOCIAL_PLATFORM_BASE[platform];
+  if (!base) return null;
+  return base + value.replace(/^@/, "");
+}
+
+export const teamSocialSchema = z.strictObject({
+  platform: socialPlatformSchema,
+  handle: z.string().trim().min(1, "Type the handle or the address").max(300),
+});
+export type TeamSocialInput = z.infer<typeof teamSocialSchema>;
+
+/**
+ * The whole list, not a delta — the shape `syncRunMembers` and the subscription
+ * seats already use. A checklist's truth is its final state, and one request
+ * means one audit row rather than three that have to be read together.
+ */
+export const setTeamSocialsSchema = z
+  .strictObject({ socials: z.array(teamSocialSchema).max(20) })
+  .refine(
+    (v) => new Set(v.socials.map((s) => s.platform)).size === v.socials.length,
+    { message: "That platform is already on this list", path: ["socials"] },
+  );
+export type SetTeamSocialsInput = z.infer<typeof setTeamSocialsSchema>;
