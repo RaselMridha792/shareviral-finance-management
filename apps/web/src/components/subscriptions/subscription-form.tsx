@@ -130,7 +130,12 @@ function Clip({
       </div>
       {file ? (
         <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span className="truncate">{file.name}</span>
+          {/* The name reads as content, not as a caption — the same change
+              the other three attach helpers got, so the four screens do not
+              drift. */}
+          <span className="truncate font-medium text-foreground">
+            {file.name}
+          </span>
           {/*
             The invoice for a subscription is usually a screenshot, and one
             screenshot looks much like another in a folder. Being able to open
@@ -514,7 +519,11 @@ export function SubscriptionForm({
 
             {screenshot ? (
               <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="min-w-0 flex-1 truncate">
+                {/* The fifth copy of this row, and the one the harness caught:
+                    it inherits the muted tone from the paragraph, so the name
+                    read like the caption it sits in. Same treatment as the
+                    other four. */}
+                <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                   {screenshot.name}
                 </span>
                 {/*

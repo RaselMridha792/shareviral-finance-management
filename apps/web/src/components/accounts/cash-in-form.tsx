@@ -913,7 +913,19 @@ function Attach({
           key={`${one.name}-${one.size}-${index}`}
           className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
         >
-          <span className="truncate">{one.name}</span>
+          {/*
+            The name reads as content, not as a caption.
+
+            The owner: "upload document gular name color change hobe." The
+            whole row was `text-muted-foreground`, so the file somebody had
+            just attached looked exactly like the hint underneath telling them
+            to attach one — and the eye and the cross beside it, being icons,
+            carried more weight than the name they act on. The row stays muted
+            because that is right for the two buttons; the name steps forward.
+          */}
+          <span className="truncate font-medium text-foreground">
+            {one.name}
+          </span>
           <PreviewButton
             name={one.name}
             count={files.length}
