@@ -11,6 +11,8 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
   costsAgree,
   deriveCost,
+  nextRenewalAfter,
+  todayInDhaka,
   type BillingCycle,
   type AccountType,
   type PaymentMethod,
@@ -30,9 +32,9 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
-import {} from "@/components/ledger/reference-kind";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
+import { formatDate } from "@/lib/utils";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
@@ -223,9 +225,24 @@ export function SubscriptionForm({
     subscription?.billingCycle ?? "monthly",
   );
   const [startDate, setStartDate] = useState(subscription?.startDate ?? "");
-  const [nextRenewalOn, setNextRenewalOn] = useState(
-    subscription?.nextRenewalOn ?? "",
-  );
+  /*
+   * No renewal-date state, because the form no longer asks for one.
+   *
+   * The owner: "If select Monthly hoy tahole renews date auto calculation hobe
+   * ekhane notun kore renewal date dite hobena oi field ta remove korte hobe."
+   * The server derives it from the start date and the cycle. What is shown
+   * below is that same derivation, so somebody sees the date they are choosing
+   * rather than being told about it afterwards.
+   */
+  /*
+   * Guarded, because a new plan has no start date until somebody types one.
+   * `nextRenewalAfter("")` reaches `parseIsoDate("")` and throws, which took
+   * the whole drawer down — it rendered nothing at all, and the only symptom
+   * was an "Add a subscription" button that appeared to do nothing.
+   */
+  const derivedRenewal = /^\d{4}-\d{2}-\d{2}$/.test(startDate)
+    ? nextRenewalAfter(startDate, billingCycle, todayInDhaka())
+    : null;
 
   const [accountId, setAccountId] = useState(subscription?.accountId ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
@@ -331,7 +348,6 @@ export function SubscriptionForm({
         usdRate,
         billingCycle,
         startDate,
-        nextRenewalOn,
         // No longer asked for — the account picker is the only "paid by" the
         // form shows. It still has to be sent: the field's `.default("card")`
         // lands in the schema's output type, which is what the client is typed
@@ -628,15 +644,26 @@ export function SubscriptionForm({
             />
           </Field>
 
-          <Field
-            label="Renews on"
-            error={fieldErrors.nextRenewalOn}
-            hint="Leave empty when there is no date — say why in Notes"
-          >
-            <DateInput
-              value={nextRenewalOn}
-              onChange={(e) => setNextRenewalOn(e.target.value)}
-            />
+          {/*
+            Stated, not asked. A renewal date is the start date plus however
+            many cycles have gone by, and two fields for one fact is two
+            fields that can disagree.
+
+            It still MOVES on its own afterwards: recording a payment advances
+            the stored date by a cycle, which is real information this cannot
+            know. So this says what the date will be when the plan is saved,
+            not what it will read forever.
+          */}
+          <Field label="Renews on">
+            <p className="flex h-9 items-center rounded-lg border border-dashed border-border px-3 text-sm text-muted-foreground">
+              {derivedRenewal ? (
+                <span className="num">{formatDate(derivedRenewal)}</span>
+              ) : /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? (
+                "Not recurring — no renewal date"
+              ) : (
+                "Choose when it started"
+              )}
+            </p>
           </Field>
 
           <Field label="Payment Method" error={fieldErrors.paymentMethod}>

@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  billingCycleSchema,
   deriveCost,
+  nextRenewalAfter,
+  todayInDhaka,
   type CreateSubscriptionInput,
   type ListSubscriptionsQuery,
   type Paginated,
@@ -225,7 +228,25 @@ export class SubscriptionsService {
             ...values,
             billingCycle: input.billingCycle,
             startDate: input.startDate,
-            nextRenewalOn: input.nextRenewalOn ?? null,
+            /*
+             * Worked out from the start date and the cycle, never typed.
+             *
+             * The owner: "If select Monthly hoy tahole renews date auto
+             * calculation hobe ekhane notun kore renewal date dite hobena oi
+             * field ta remove korte hobe." A renewal date is not an
+             * independent fact — it is the start date plus however many cycles
+             * have gone by — and asking for it separately meant two fields
+             * that could disagree with nothing to say which was right.
+             *
+             * It is still a stored COLUMN, because recording a payment
+             * advances it (`payForSubscription`), and that is real information
+             * this cannot know. What has gone is somebody typing it.
+             */
+            nextRenewalOn: nextRenewalAfter(
+              input.startDate,
+              input.billingCycle,
+              todayInDhaka(),
+            ),
             renewalNote: input.renewalNote ?? null,
             paymentMethod: input.paymentMethod,
             accountId: input.accountId ?? null,
@@ -281,10 +302,44 @@ export class SubscriptionsService {
       },
       run: async (tx) => {
         const { users, ...rest } = input;
+
+        /*
+         * The renewal date follows the start date and the cycle, and moves
+         * only when one of those two does.
+         *
+         * Not recomputed on every edit: recording a payment advances the
+         * stored date by a cycle, so re-deriving it because somebody fixed a
+         * spelling in the notes would undo that and quietly move a card charge
+         * back a month. The contract no longer carries the field at all, so
+         * there is nothing in `rest` to overwrite it with.
+         */
+        const startDate = input.startDate ?? existing.startDate;
+        /* The column is plain `text`, so what comes back is a string rather
+           than the union. Parsed rather than cast: a stored value outside the
+           four should mean "no cycle" and no renewal date, not a crash and not
+           a guessed month. */
+        const stored = billingCycleSchema.safeParse(existing.billingCycle);
+        const billingCycle =
+          input.billingCycle ?? (stored.success ? stored.data : "none");
+        const cycleMoved =
+          (input.startDate !== undefined &&
+            input.startDate !== existing.startDate) ||
+          (input.billingCycle !== undefined &&
+            input.billingCycle !== existing.billingCycle);
+
         await tx
           .update(subscriptions)
           .set({
             ...rest,
+            ...(cycleMoved
+              ? {
+                  nextRenewalOn: nextRenewalAfter(
+                    startDate,
+                    billingCycle,
+                    todayInDhaka(),
+                  ),
+                }
+              : {}),
             // Only when money was actually in the body: otherwise an edit to
             // the plan name would rewrite a rate somebody had corrected by
             // hand.
@@ -303,6 +358,53 @@ export class SubscriptionsService {
         if (users) await this.replaceUsers(tx, id, users, actor);
       },
     });
+  }
+
+  /**
+   * What paying for this plan costs, and out of which card.
+   *
+   * The transactions side asks this before writing the ledger entry. It used
+   * to ask `VendorsService.billingPlan`, which reads the `vendors` table — and
+   * the ids on the AI tools and subscriptions screen are `subscriptions` ids.
+   * Every click on "Record a payment" answered 404, on a feature that was
+   * already live and had been asked for precisely because nothing was moving
+   * money.
+   *
+   * `vendors` is a different register with its own screens. The two tables
+   * both have a billing cycle and a renewal date, which is what made the
+   * mistake possible and is why this reads from one place only.
+   */
+  async billingPlan(id: string) {
+    const [row] = await this.db.client
+      .select({
+        id: subscriptions.id,
+        toolName: subscriptions.toolName,
+        planName: subscriptions.planName,
+        billingCycle: subscriptions.billingCycle,
+        costBdt: subscriptions.costBdt,
+        costUsd: subscriptions.costUsd,
+        usdRate: subscriptions.usdRate,
+        accountId: subscriptions.accountId,
+        nextRenewalOn: subscriptions.nextRenewalOn,
+      })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.id, id), isNull(subscriptions.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Move the renewal on, after a payment was recorded against this plan.
+   *
+   * A setter rather than letting the transactions side write here directly:
+   * the renewal date is this module's fact, and one door to it is what stops a
+   * second caller setting it a different way.
+   */
+  async setNextRenewal(id: string, on: string, actor: AuthenticatedUser) {
+    await this.db.client
+      .update(subscriptions)
+      .set({ nextRenewalOn: on, updatedAt: new Date(), updatedBy: actor.id })
+      .where(eq(subscriptions.id, id));
   }
 
   /**

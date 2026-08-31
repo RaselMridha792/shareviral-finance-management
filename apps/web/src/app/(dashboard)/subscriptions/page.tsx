@@ -1,5 +1,5 @@
 import { SubscriptionsScreen } from "@/components/subscriptions/subscriptions-screen";
-import { accountsApi } from "@/lib/masters";
+import { accountsApi, categoriesApi } from "@/lib/masters";
 import { teamApi } from "@/lib/payroll";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,20 @@ export const dynamic = "force-dynamic";
  * plans the screen has already loaded, so there is nothing left to fetch.
  */
 export default async function SubscriptionsPage() {
-  const [accounts, members] = await Promise.all([
+  const [accounts, members, categories] = await Promise.all([
     accountsApi.list(),
     teamApi.list({ page: 1, status: "active" }),
+    /* For "Record a payment": the ledger will not write an expense without a
+       heading, and a subscription's own category — `ai_tool`, `hosting` — is
+       this register's vocabulary rather than the company's expense headings. */
+    categoriesApi.tree(),
   ]);
 
-  return <SubscriptionsScreen accounts={accounts} members={members.items} />;
+  return (
+    <SubscriptionsScreen
+      accounts={accounts}
+      members={members.items}
+      categories={categories}
+    />
+  );
 }

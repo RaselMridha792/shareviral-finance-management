@@ -25,7 +25,7 @@ below is started unless it says so.
 | 27 | A reference with no document reads N/A, not a link | **done** — unpushed |
 | 25 | All transactions: a money-in row reads green, a money-out row red — the whole row | **done** — unpushed |
 | 20 | Subscription drawer: "Could not save that" on Invoice/Reference | **done** — the columns never existed |
-| 21 | Renewal date computed from the cycle, not typed | not started |
+| 21 | Renewal date computed from the cycle, not typed | **done** — unpushed |
 | 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
 | 19 | A monthly date filter on AI tools and subscriptions | with #18 |
 | 14 | Team member: a Social media section, "add another", with icons | not started |
@@ -36,7 +36,163 @@ below is started unless it says so.
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | **superseded by #29** — the owner changed it to per line |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
+| 32 | **Cash In: the amount fields follow the chosen account's own currency** | not started — arrived 1 Sep |
+| 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | not started — arrived 1 Sep |
+| 35 | An attached file's NAME is barely readable — colour it | not started — arrived 1 Sep |
+| 36 | Salary changes: pagination, tick column, move to trash | not started — arrived 1 Sep |
+| 37 | The Payslips table still prints `2026-06-29` — #1 missed it | not started — spotted 1 Sep |
+| 33 | **Paying for a subscription 404s** — it looks a `subscriptions` id up in `vendors` | **fixed** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
+
+## 36. Salary changes needs a pager and a tick column
+
+Arrived 1 Sep, from a team member's profile. The **Salary changes** panel shows
+two rows and stops: no pager, so a person with a longer history has the rest of
+it nowhere, and no way to remove a row typed by mistake — the screenshot's own
+first row reads *"just test"*.
+
+The owner: *"ekhane pagination add koro and aro beshi data rakhte parbo. also
+ekhane multiple select and trash a felar option tao diyo ei table a."*
+
+Both pieces exist and are the same ones #4 used on six tables — `useBulkSelect`,
+`BulkBar`, `TickHead`/`TickCell`, `POST /trash/:kind/bulk`. What has to be
+checked before wiring them, because this table is not like the six:
+
+- **`compensation_history` may have no trash entry yet.** `trash.service.ts`
+  keys off a `kind`; if `compensation` is not one of them the bulk route
+  refuses, and a single-row delete has to exist before a bulk one is offered —
+  that is the rule #4 set and it holds here.
+- **Deleting a salary row is not like deleting an expense.** The payroll sheet
+  reads `compensation_history` to work out what somebody is paid in a month.
+  Removing a row changes what a FUTURE sheet computes. It must not change a
+  sheet already built — those store their own gross — and that is the thing to
+  prove rather than assume.
+
+## 37. The Payslips table still prints ISO dates
+
+Spotted in the same screenshot. Salary changes reads `30/08/2026`; the Payslips
+panel directly under it reads `2026-06-29`. #1 converted the app to
+day/month/year and missed this one table.
+
+Small, and worth doing with #36 since they are the same screen.
+
+## 35. An attached file's name is the wrong colour
+
+Arrived 1 Sep with the Cash In drawer. Once a file is attached, its name
+("Tohibar_Academy_Tech...") renders in a colour close enough to the drawer's
+own text that it reads as a caption rather than as the thing you just attached
+— and the eye and the cross beside it are louder than the name they act on.
+
+The owner: *"upload document gular name color change hobe."*
+
+Where it lives is the part to check before touching anything: the name is drawn
+by the shared file components under `components/files/`, so whatever is changed
+reaches every form that attaches a document — cash in, transactions, other
+expenses, subscriptions, team member, TDS challans. That is the ask-first list.
+
+Not started.
+
+## 34. Reference stops being typed
+
+Arrived 1 Sep, with the Cash In drawer as the example: **Invoice** is already an
+attach-only field — "No invoice attached" and a paperclip — while **Reference**
+beside it is still a text box with a paperclip. The owner: *"sobgula table eri
+reference upload only hobe ekhane field dorkar nai. etao invoice tar motoi
+hobe."*
+
+So the pair becomes symmetrical: both are things you attach, neither is a thing
+you type, on **every** table and form that carries them — cash in, transactions,
+other expenses, category pages, subscriptions.
+
+Two things to settle before it is built, because there is data behind it:
+
+- **`reference` holds values today.** The screenshot shows `FT26081200412`, a
+  real bank reference. Removing the input must not remove the column or the
+  values — a reference already recorded still has to display. This is a change
+  to how one is ADDED.
+- **`refNo` is not `reference`.** The app issues `TXN-2026-000005` itself, and
+  the transactions table's "Reference" column shows that. The typed
+  bank-reference field is a different thing with a confusingly similar name, and
+  whichever way this goes, the two must not end up sharing a box.
+
+Not started.
+
+## 33. Paying for a subscription answered 404, live
+
+Found while building #21, in my own work from the day before. The Pay button on
+**AI tools and subscriptions** could never have worked: `payForSubscription`
+asked `VendorsService.billingPlan(id)`, which reads the **`vendors`** table,
+while every id on that screen comes from **`subscriptions`**. Every click
+answered *"That subscription is not here"*.
+
+It shipped green. Nothing caught it because both tables carry a billing cycle,
+a renewal date and a billing account, so the code reads correctly and typechecks
+perfectly — the only way to see it was to press the button.
+
+Two more faults behind the first, neither reachable until the lookup was fixed:
+
+- **`vendorId: plan.id`.** `transactions.vendor_id` has a foreign key to
+  `vendors`. A `subscriptions` id there is an insert that fails outright, so
+  even a corrected lookup would have written nothing.
+- **No category.** `createTransactionSchema` requires one and the code passed
+  `plan.defaultCategoryId ?? undefined` — a column `subscriptions` does not
+  have. An expense with no heading appears on no Expenses screen, which is
+  precisely the *"kono history thakena"* being complained about.
+
+Fixed by moving the lookup to where the data is: `SubscriptionsService` gained
+`billingPlan` and `setNextRenewal`, and `TransactionsModule` now imports
+`SubscriptionsModule` — safe in that direction, since `SubscriptionsModule`
+imports nothing, and the reverse is the cycle that put this method on the
+transactions side to begin with. `vendorId` is gone; the plan is named in the
+description. And **the Pay drawer now asks which expense heading the charge
+belongs under**, because a subscription's own category (`ai_tool`, `hosting`)
+is the register's vocabulary and not the company's expense headings — there is
+nothing to derive it from.
+
+## 21. A renewal date nobody types
+
+`nextRenewalAfter(startDate, cycle, today)` in `packages/shared`, six unit
+tests, plus `.renewalqa.mjs` (15) driving it against a real plan.
+
+Counted forward rather than added once: a plan entered today may have started in
+2024, and `start + one cycle` would be a date two years in the past presented as
+"next renewal". Strictly after today, and null for a cycle with no length.
+
+**What it must NOT do is the interesting half.** Recording a payment advances
+the stored date by a cycle — real information this cannot know — so the date is
+re-derived only when the START DATE or the CYCLE actually changes. Deriving it
+on every save would pull a card charge back a month the next time somebody fixed
+a typo in the notes, and nothing on screen would show it happening. The harness
+checks that specific sequence: pay, then edit the notes, then assert the date is
+where the payment left it.
+
+`nextRenewalOn` is gone from the contract rather than accepted-and-ignored — a
+value the server silently discards is worse than one it rejects.
+
+**One crash found on the way.** `nextRenewalAfter("")` reaches `parseIsoDate("")`
+and throws, and a new plan has no start date until somebody types one — so the
+Add drawer rendered nothing at all and the button appeared dead. Guarded, and
+the field now says "Choose when it started" until there is one.
+
+## 32. Cash In does not follow the account's currency
+
+Arrived 1 Sep with two screenshots. Choosing a different account in **Received
+Bank Name** leaves the amount fields exactly as they were.
+
+The owner's rule: *"ekhane field take primary usd thakbe jokhon usd thake oi
+card er primary currency. r bdt thakbe oi card er type bdt thakle."* So the
+form's primary amount box is the chosen account's own currency — a USD account
+asks for dollars first, a BDT account asks for taka first — and the other
+becomes the derived one.
+
+Worth stating before it is built, because this app has a rule about it that
+looks like it contradicts the ask and does not: **`accounts.currency` marks
+which account is for foreign spend; it does not denominate the stored figures.**
+Every amount in the ledger is BDT, a USD card's included. So this is a change to
+which box is asked for FIRST and which is computed — not to what gets stored,
+and not to what any report reads.
+
+Not started.
 
 ## 29. A rate typed on the LINE
 

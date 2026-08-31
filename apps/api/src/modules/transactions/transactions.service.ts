@@ -43,7 +43,7 @@ import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
-import { VendorsService } from "../vendors/vendors.service";
+import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
@@ -153,7 +153,7 @@ export class TransactionsService {
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly settings: SettingsService,
-    private readonly vendorsService: VendorsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   /* ---------------------------------------------------------------------- */
@@ -892,32 +892,57 @@ export class TransactionsService {
       txnDate: string;
       amount?: string;
       accountId?: string;
+      categoryId: string;
       note?: string | null;
       advanceRenewal?: boolean;
     },
     actor: AuthenticatedUser,
   ) {
-    const plan = await this.vendorsService.billingPlan(id);
+    /*
+     * `subscriptionsService`, not `vendorsService`.
+     *
+     * This asked `VendorsService.billingPlan` and therefore looked the id up
+     * in the `vendors` table — while the ids on the AI tools and subscriptions
+     * screen come from `subscriptions`. Every "Record a payment" answered 404,
+     * on a feature shipped precisely because nothing was moving money. Both
+     * tables carry a billing cycle and a renewal date, which is what made the
+     * mistake possible and why the lookup now has one home.
+     */
+    const plan = await this.subscriptionsService.billingPlan(id);
     if (!plan) throw new NotFoundException("That subscription is not here");
 
-    const accountId = input.accountId ?? plan.billingAccountId;
+    const accountId = input.accountId ?? plan.accountId;
     if (!accountId) {
       throw new BadRequestException(
         "This plan has no card or account on it — choose one, or set one on the plan first",
       );
     }
 
-    const amount = input.amount ?? plan.billingAmount;
+    /*
+     * The taka price, because the ledger is in taka. `costBdt` is what the
+     * screen derives and stores beside the dollar price for exactly this; a
+     * plan with only a dollar price and no rate has no taka figure this could
+     * invent, and says so instead of guessing one.
+     */
+    const amount = input.amount ?? plan.costBdt;
     if (!amount || Number(amount) <= 0) {
       throw new BadRequestException(
-        "This plan has no price on it — type what was charged",
+        "This plan has no taka price on it — type what was charged",
       );
     }
 
     /*
-     * The plan's own category when it has one. Without it the entry would land
-     * uncategorised, which is what put transfers on the Other expenses screen
-     * and is not a mistake worth repeating.
+     * The category is asked for, not guessed.
+     *
+     * `createTransactionSchema` requires one and is right to: an uncategorised
+     * expense is invisible on every Expenses screen, which is the opposite of
+     * "kono history thakena" being fixed. A subscription's own category is
+     * `ai_tool` / `hosting` and so on — the register's own words, not the
+     * company's expense headings — so there is nothing here to map from.
+     *
+     * No `vendorId`. That column has a foreign key to `vendors`, and a
+     * `subscriptions` id in it is an insert that fails outright. The plan is
+     * named in the description instead.
      */
     const created = await this.create(
       {
@@ -925,11 +950,10 @@ export class TransactionsService {
         txnDate: input.txnDate,
         accountId,
         amount,
-        categoryId: plan.defaultCategoryId ?? undefined,
-        vendorId: plan.id,
+        categoryId: input.categoryId,
         description: input.note?.trim()
-          ? `${plan.name} — ${input.note.trim()}`
-          : `${plan.name} subscription`,
+          ? `${plan.toolName} — ${input.note.trim()}`
+          : `${plan.toolName} subscription`,
         paymentMethod: "card",
       },
       actor,
@@ -943,7 +967,7 @@ export class TransactionsService {
      */
     if (input.advanceRenewal && plan.nextRenewalOn) {
       const next = advanceCycle(plan.nextRenewalOn, plan.billingCycle);
-      if (next) await this.vendorsService.setNextRenewal(id, next, actor);
+      if (next) await this.subscriptionsService.setNextRenewal(id, next, actor);
     }
 
     return created;

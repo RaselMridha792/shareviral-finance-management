@@ -9,6 +9,7 @@ import {
   costsAgree,
   createSubscriptionSchema,
   deriveCost,
+  nextRenewalAfter,
   updateSubscriptionSchema,
   wasPaidInPeriod,
   type SubscriptionLine,
@@ -286,25 +287,41 @@ describe("creating a subscription", () => {
   });
 
   it("takes a note where a date will not go", () => {
-    // The sheet has a row reading "Credit base" where a date belongs. Forcing
-    // one there produces either a wrong date or a lost row.
+    // The sheet has a row reading "Credit base" where a date belongs. The note
+    // is what survives that; the date itself is no longer typed at all.
     const parsed = createSubscriptionSchema.safeParse({
       ...plan,
-      nextRenewalOn: "",
       renewalNote: "Credit base",
     });
     assert.equal(parsed.success, true);
-    assert.equal(parsed.data?.nextRenewalOn, undefined);
     assert.equal(parsed.data?.renewalNote, "Credit base");
   });
 
-  it("refuses a renewal before the plan started", () => {
+  it("refuses a renewal date outright, rather than ignoring one", () => {
+    /*
+     * It used to accept one and check it was not before the start date. The
+     * date is now derived from the start date and the cycle — the two could
+     * disagree with nothing to say which was right — so the key is gone from
+     * the contract.
+     *
+     * Refused rather than silently dropped: a value the server discards is
+     * worse than one it rejects, because the caller never finds out.
+     */
     const parsed = createSubscriptionSchema.safeParse({
       ...plan,
       nextRenewalOn: "2025-12-01",
     });
     assert.equal(parsed.success, false);
-    assert.equal(parsed.error?.issues[0]?.path[0], "nextRenewalOn");
+    /* An unrecognised key is reported against the OBJECT, not against the key
+       — `path` is empty and the name is in `keys`. Asserting on path[0] passed
+       for a field that had its own rule and says nothing about one that has
+       been removed. */
+    const issue = parsed.error?.issues[0];
+    assert.equal(issue?.code, "unrecognized_keys");
+    assert.deepEqual(
+      (issue as { keys?: string[] } | undefined)?.keys,
+      ["nextRenewalOn"],
+    );
   });
 
   it("refuses the same person twice on one plan", () => {
@@ -417,5 +434,42 @@ describe("changing a subscription", () => {
     const untouched = updateSubscriptionSchema.safeParse({ planName: "x" });
     assert.equal(untouched.success, true);
     assert.equal("users" in (untouched.data ?? {}), false);
+  });
+});
+
+describe("nextRenewalAfter", () => {
+  it("is one cycle on, for a plan that started recently", () => {
+    assert.equal(nextRenewalAfter("2026-08-15", "monthly", "2026-09-01"), "2026-09-15");
+    assert.equal(nextRenewalAfter("2026-08-15", "quarterly", "2026-09-01"), "2026-11-15");
+    assert.equal(nextRenewalAfter("2026-08-15", "yearly", "2026-09-01"), "2027-08-15");
+  });
+
+  it("counts forward rather than adding once", () => {
+    // The reason it is a loop. A plan entered today may have started in 2024,
+    // and "start + 1 month" would be a date two years past.
+    assert.equal(nextRenewalAfter("2024-01-10", "monthly", "2026-09-01"), "2026-09-10");
+    assert.equal(nextRenewalAfter("2024-01-10", "yearly", "2026-09-01"), "2027-01-10");
+  });
+
+  it("is strictly after today, never today itself", () => {
+    // A plan renewing today has not renewed yet; the payment moves it.
+    assert.equal(nextRenewalAfter("2026-08-01", "monthly", "2026-09-01"), "2026-10-01");
+  });
+
+  it("keeps the day of the month across a short one", () => {
+    // addMonths clamps, so the 31st becomes the 30th in September — and comes
+    // back to the 31st in October, which only stepping produces.
+    assert.equal(nextRenewalAfter("2026-08-31", "monthly", "2026-09-01"), "2026-09-30");
+    assert.equal(nextRenewalAfter("2026-01-31", "monthly", "2026-02-01"), "2026-02-28");
+  });
+
+  it("has no answer for a plan that does not recur", () => {
+    // A lifetime licence or a credit balance renews on no date at all, and an
+    // invented one would be shown as the day a card gets charged.
+    assert.equal(nextRenewalAfter("2026-08-15", "none", "2026-09-01"), null);
+  });
+
+  it("handles a plan starting in the future", () => {
+    assert.equal(nextRenewalAfter("2026-12-01", "monthly", "2026-09-01"), "2027-01-01");
   });
 });

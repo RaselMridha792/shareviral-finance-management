@@ -46,6 +46,7 @@ import { useBulkSelect } from "@/components/ui/use-bulk-select";
 import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { ApiError, trashApi } from "@/lib/api-client";
+import type { CategoryNode } from "@/lib/masters";
 import { PayDialog } from "./pay-dialog";
 
 /**
@@ -63,9 +64,14 @@ import { PayDialog } from "./pay-dialog";
 export function SubscriptionsScreen({
   accounts,
   members,
+  categories,
 }: {
   accounts: AccountDto[];
   members: TeamMemberDto[];
+  /* For "Record a payment" only. The ledger will not write an expense with no
+     heading, and a subscription's own category is this register's vocabulary
+     rather than the company's expense headings. */
+  categories: CategoryNode[];
 }) {
   const settings = useSettings();
   const canWrite = useCan("vendors.write");
@@ -507,6 +513,7 @@ export function SubscriptionsScreen({
 
       <PayDialog
         plan={paying}
+        categories={categories}
         onClose={() => setPaying(null)}
         onPaid={() => void load()}
       />

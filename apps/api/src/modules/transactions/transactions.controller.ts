@@ -45,6 +45,19 @@ const paySubscriptionSchema = z.object({
   amount: z.string().trim().optional(),
   /** Blank means the card on the plan. */
   accountId: z.string().uuid().optional(),
+  /*
+   * Required, because the ledger requires it.
+   *
+   * `createTransactionSchema` will not write an expense without a category and
+   * is right not to: an uncategorised entry does not appear on any Expenses
+   * screen, which is the very complaint this feature exists to answer. A
+   * subscription's own category — `ai_tool`, `hosting` — is the register's
+   * vocabulary rather than the company's expense headings, so there is nothing
+   * to derive it from and it is asked for.
+   */
+  categoryId: z
+    .string()
+    .uuid("Choose which expense heading this belongs under"),
   note: z.string().trim().max(200).nullish(),
   /** Roll the renewal on a cycle. Off for a payment being recorded late. */
   advanceRenewal: z.boolean().optional(),

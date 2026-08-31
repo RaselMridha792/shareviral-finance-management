@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   amountSchema,
+  BILLING_CYCLE_MONTHS,
   billingCycleSchema,
   isoDateSchema,
   subscriptionCategorySchema,
@@ -9,6 +10,7 @@ import {
   type BillingCycle,
   type VendorType,
 } from "./masters.ts";
+import { addMonths, type IsoDate } from "./datetime.ts";
 import { paginationQuerySchema } from "./pagination.ts";
 import { isNAText } from "./transactions.ts";
 import { patchOf } from "./patch.ts";
@@ -244,13 +246,19 @@ const subscriptionFieldsSchema = z.strictObject({
   billingCycle: billingCycleSchema.default("monthly"),
 
   startDate: isoDateSchema,
-  // Nullable, and that is what the sheet needs: one row says "Credit Base"
-  // where a date belongs. Forcing one there produces a wrong date or a lost
-  // row, so the reason goes in the note instead.
-  nextRenewalOn: z
-    .union([isoDateSchema, z.literal("")])
-    .transform((v) => (v === "" ? undefined : v))
-    .optional(),
+  /*
+   * No `nextRenewalOn`. It is worked out from the start date and the cycle —
+   * `nextRenewalAfter` below — and moves after that only when a payment is
+   * recorded against the plan.
+   *
+   * Removed rather than accepted-and-ignored: a field the server quietly
+   * discards is worse than one it refuses, because the caller has no way to
+   * find out. A client still sending it now gets an error naming the key.
+   *
+   * `renewalNote` stays and matters more for it. The importer's sheet has rows
+   * saying "Credit Base" where a date belongs, and that is where the reason
+   * goes.
+   */
   renewalNote: optionalSubText(120),
 
   paymentMethod: paymentMethodSchema.default("card"),
@@ -295,13 +303,6 @@ export const createSubscriptionSchema = subscriptionFieldsSchema
     path: ["costBdt"],
   })
   .refine(
-    (v) => !v.nextRenewalOn || !v.startDate || v.nextRenewalOn >= v.startDate,
-    {
-      message: "The renewal cannot be before it started",
-      path: ["nextRenewalOn"],
-    },
-  )
-  .refine(
     (v) => new Set(v.users.map((u) => u.teamMemberId)).size === v.users.length,
     {
       message: "Somebody is on this list twice",
@@ -342,3 +343,50 @@ export const listSubscriptionsQuerySchema = paginationQuerySchema.extend({
 export type ListSubscriptionsQuery = z.infer<
   typeof listSubscriptionsQuerySchema
 >;
+
+/* -------------------------------------------------------------------------- */
+/*  When a plan renews — worked out, not typed                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The next time a plan renews, counted from the day it started.
+ *
+ * The owner's instruction: *"If select Monthly hoy tahole renews date auto
+ * calculation hobe ekhane notun kore renewal date dite hobena oi field ta
+ * remove korte hobe"*. A renewal date is not an independent fact — it is the
+ * start date plus however many cycles have gone by — and typing it separately
+ * meant two fields that could disagree, with nothing to say which was right.
+ *
+ * Counted forward rather than added once, because a plan entered today may have
+ * started in 2024. `startDate + 1 month` would then be a date two years in the
+ * past presented as "next renewal".
+ *
+ * Strictly after `today`: a plan renewing today has not renewed yet, but it is
+ * the payment being recorded that moves it, not this function.
+ */
+export function nextRenewalAfter(
+  startDate: IsoDate,
+  cycle: BillingCycle,
+  today: IsoDate,
+): IsoDate | null {
+  /* `BILLING_CYCLE_MONTHS` already states this and has since the register was
+     built — 0 for `none`, which is a real answer: a lifetime licence renews on
+     no date at all. A second table of the same fact is how the two drift. */
+  const months = BILLING_CYCLE_MONTHS[cycle];
+  if (!months) return null;
+
+  /*
+   * Stepped rather than solved with arithmetic on the month count, because
+   * `addMonths` clamps: a plan started on the 31st renews on the 30th, the 28th
+   * and the 31st again depending on the month, and only walking it produces
+   * that. The loop is bounded — a monthly plan started in 2000 is 300-odd
+   * steps, and the cap stops a bad date spinning forever.
+   */
+  let next = addMonths(startDate, months);
+  let guard = 0;
+  while (next <= today && guard < 2400) {
+    next = addMonths(next, months);
+    guard += 1;
+  }
+  return next;
+}

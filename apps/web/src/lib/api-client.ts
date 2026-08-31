@@ -580,6 +580,10 @@ export const subscriptionsApi = {
       txnDate: string;
       amount?: string;
       accountId?: string;
+      /* Required. The ledger will not write an expense with no heading, and an
+         entry that appears on no Expenses screen is not the history that was
+         asked for. */
+      categoryId: string;
       note?: string | null;
       advanceRenewal?: boolean;
     },
