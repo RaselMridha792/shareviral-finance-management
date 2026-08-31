@@ -29,3 +29,5 @@ node .teambankqa.mjs    # the six bank fields, and no Wallet
 node .payhistqa.mjs     # what pay has been, not only what it is
 node .dateqa.mjs        # every screen reads dates day first
 node .refqa.mjs         # one Reference, and an invoice that is a paper
+
+node .lockedqa.mjs      # a closed month can be corrected, not rewritten

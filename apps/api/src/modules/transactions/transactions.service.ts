@@ -864,7 +864,27 @@ export class TransactionsService {
     if (existing.voidedAt) {
       throw new BadRequestException("This entry is already voided");
     }
-    await this.settings.assertPeriodOpen(existing.txnDate);
+
+    /*
+     * No period check here, on the owner's explicit decision (31 Aug 2026).
+     *
+     * The inconsistency he was shown: the trash would move an entry out of a
+     * CLOSED month while `void` refused the same act on the same row. Asked
+     * which way to resolve it, he chose to open `void` rather than close the
+     * trash. Recorded as his in SESSIONS.md, along with what he was told at the
+     * time — that after this, locking a month stops preventing anything and
+     * becomes a label rather than a lock.
+     *
+     * What still holds, and is what makes this survivable: a void does not
+     * erase. The row stays, struck through, out of every total, with who
+     * voided it and why, in the audit log. A closed month can now be corrected;
+     * it cannot be quietly rewritten.
+     *
+     * Creating and EDITING an entry in a closed month are still refused —
+     * `create` and `update` keep their `assertPeriodOpen`. The lock still stops
+     * new money appearing in a filed month; it no longer stops a mistake in it
+     * being marked as one.
+     */
 
     // A transfer is one movement recorded twice; voiding half would leave the
     // two accounts disagreeing.

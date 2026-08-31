@@ -18,7 +18,7 @@ below is started unless it says so.
 | 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
 | 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
 | 17 | Salary changes history on a person's profile | **done** — unpushed |
-| 10 | Void allowed inside a locked period — the owner's decision | not started |
+| 10 | Void allowed inside a locked period — the owner's decision | **done** — unpushed |
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | not started |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | not started |
