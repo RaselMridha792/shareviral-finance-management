@@ -13,6 +13,15 @@ below is started unless it says so.
 | 5 | A card account asks for card fields, with the CVC behind a password | **done** — unpushed |
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | **done** — unpushed |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
+| 9 | A team member's bank section: holder name, branch and SWIFT | **next** |
+| 14 | Team member: a Social media section, "add another", with icons | not started |
+| 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
+| 16 | Remove Wallet and Wallet number from "Where they are paid" | **with #9** |
+| 17 | Salary changes history on a person's profile | not started — the rows already exist |
+| 10 | Void allowed inside a locked period — the owner's decision | not started |
+| 11 | A payroll month carries its own USD rate, typed when it is finalised | not started |
+| 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
+| 13 | Tick column on Settings > Trashed: restore and purge in one go | not started |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 
 ## 3. The register's "Record" button
@@ -66,6 +75,85 @@ where being careless is expensive:
 - the confirmation names the count and the money, not "3 items".
 - the API needs a real bulk path, or one request per row with a single audit
   entry — deleting 40 rows must not write 40 unexplained audit lines.
+
+## 9. A team member's bank details
+
+From the Add/Edit person drawer. Three of the six the owner listed are missing:
+
+| | Field | Reality |
+|---|---|---|
+| 1 | Bank Name | `team_members.bank_name` — exists |
+| 2 | **Account Holder Name** | **missing** — a salary often goes to an account in a slightly different name, and the bank rejects a transfer that does not match |
+| 3 | Account Number | `bank_account_number` — exists |
+| 4 | **Branch Name** | **missing** |
+| 5 | Routing | `bank_routing` — exists |
+| 6 | **SWIFT Code** | **missing** |
+
+Three new nullable columns. Migration travels alone.
+
+## 14. Social media accounts on a person
+
+A section on the profile where several accounts are added one at a time —
+"add new, add new" — each with the platform's icon. So it is a LIST, not a
+handful of fixed columns: somebody has two Facebook pages, somebody has none,
+and a fixed set of boxes gets both wrong.
+
+A `team_member_links` table (member, platform, url, sort order), the platform
+as an enum so the icon is chosen from something known rather than guessed from
+the URL. Migration travels alone.
+
+## 15. e-TIN, and an E-Return for each year
+
+The Tax card holds an e-TIN and a single assessment year today. The owner wants
+**one E-Return per fiscal year** — 2026-2027, 2027-2028 — each with its own
+document. That is a list again, and for the same reason: a person accumulates
+one a year for as long as they are employed, and a single row cannot hold last
+year's as well as this year's.
+
+`files` already attaches to a team member, so the document needs no new table —
+but the RETURN does: which year, whether it was filed, and the file against it.
+
+## 16. Wallet, off the profile
+
+"Where they are paid" prints Wallet and Wallet number, both N/A for everyone.
+The owner wants them gone. Done alongside #9, since it is the same card.
+
+## 17. The salary changes already recorded, shown
+
+The profile prints the CURRENT gross and the date it started, and nothing
+before it. But every change is already stored: `setCompensation` writes a row
+with its own `effective_from` and `change_reason` each time pay is set, which
+is what "Since 2026-08-30" is reading.
+
+So this is a reader over rows that exist, not a new record — no migration. The
+card lists what pay was, from when, and why it changed, newest first.
+
+## 10-13. What the owner decided on 31 Aug, asked one at a time
+
+**10 — Void inside a locked period is allowed.** Today the trash lets a closed
+month be changed and `void` refuses, which is the inconsistency that started
+the question. Asked which way to resolve it; the owner chose to open `void` up
+rather than close the trash down. Said to him at the time, and worth keeping
+here: after this, locking a month stops preventing anything and becomes a
+label. His books, his call.
+
+**11 — A payroll month carries its own USD rate.** Typed when the run is
+finalised and frozen with it, so salary and tax can be read in dollars without
+any governing rate and without last month's figures moving. This is the same
+principle as every other figure in the app now: the row carries its own rate.
+It needs a column on `payroll_runs`, a box on the finalise step, and the
+dashboard's salary/tax dollar view back — reading that stored rate, nothing else.
+
+**12 — Tick columns on the last three tables**, with the lock-out hole closed
+FIRST: `TrashService` checks "is this the last super admin" per row, before the
+write and outside the transaction, so ticking both super admins together
+defeats it and locks everyone out of Settings and Users. That check moves
+inside the transaction and counts the whole selection. Auth-adjacent, so its
+own push.
+
+**13 — Settings > Trashed gets the tick too**, with both verbs: Restore and
+Delete for ever. Undoing a mistaken 40-row delete currently takes 40 clicks,
+which makes the bulk delete more dangerous than it needs to be.
 
 ## 8. No global FX rate
 

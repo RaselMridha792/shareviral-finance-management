@@ -59,8 +59,12 @@ export type TeamMemberDto = {
   psrStatus: PsrStatus;
   psrAssessmentYear: string | null;
   bankName: string | null;
+  /** The name on the account, which is not always the employee's own. */
+  bankAccountHolder: string | null;
   bankAccountNumber: string | null;
+  bankBranch: string | null;
   bankRouting: string | null;
+  bankSwift: string | null;
   walletProvider: string | null;
   walletNumber: string | null;
   address: string | null;

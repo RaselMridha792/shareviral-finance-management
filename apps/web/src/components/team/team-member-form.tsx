@@ -121,8 +121,7 @@ export function TeamMemberForm({
     id: string;
     files: Record<string, Stored>;
   } | null>(null);
-  const onFile =
-    member && loadedFor?.id === member.id ? loadedFor.files : null;
+  const onFile = member && loadedFor?.id === member.id ? loadedFor.files : null;
   const preview = useFilePreview();
 
   useEffect(() => {
@@ -221,8 +220,11 @@ export function TeamMemberForm({
       etin: text("etin"),
       psrAssessmentYear: text("psrAssessmentYear"),
       bankName: text("bankName"),
+      bankAccountHolder: text("bankAccountHolder"),
       bankAccountNumber: text("bankAccountNumber"),
+      bankBranch: text("bankBranch"),
       bankRouting: text("bankRouting"),
+      bankSwift: text("bankSwift").toUpperCase(),
       address: text("address"),
       notes: text("notes"),
       dateOfBirth: text("dateOfBirth"),
@@ -629,11 +631,47 @@ export function TeamMemberForm({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/*
+            The name ON the account, which is not always the employee's own —
+            a father's name, a joint account, a maiden name. A bank refuses a
+            transfer whose beneficiary name does not match, so this is the
+            field most likely to be the reason a salary bounced, and there was
+            nowhere to record it.
+          */}
+          <Field
+            label="Account holder"
+            error={fieldErrors.bankAccountHolder}
+            hint="The name on the account, if it is not theirs"
+          >
+            <Input
+              name="bankAccountHolder"
+              defaultValue={member?.bankAccountHolder ?? ""}
+            />
+          </Field>
+          <Field label="Branch" error={fieldErrors.bankBranch}>
+            <Input name="bankBranch" defaultValue={member?.bankBranch ?? ""} />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Routing" error={fieldErrors.bankRouting}>
             <Input
               name="bankRouting"
               className="num"
               defaultValue={member?.bankRouting ?? ""}
+            />
+          </Field>
+          <Field
+            label="SWIFT / BIC"
+            error={fieldErrors.bankSwift}
+            hint="8 or 11 characters — needed when a salary is paid from abroad"
+          >
+            <Input
+              name="bankSwift"
+              className="num uppercase"
+              maxLength={11}
+              placeholder="SCBLBDDX"
+              defaultValue={member?.bankSwift ?? ""}
             />
           </Field>
         </div>

@@ -228,7 +228,11 @@ export function TeamMemberScreen({
               value={member.gender ? GENDER_LABELS[member.gender] : null}
             />
             <Row label="Blood Group" value={member.bloodGroup} />
-            <Row label="Date Of Birth" mono value={formatDate(member.dateOfBirth)} />
+            <Row
+              label="Date Of Birth"
+              mono
+              value={formatDate(member.dateOfBirth)}
+            />
             <Row label="NID Number" mono value={member.nid} />
           </CardBody>
         </Card>
@@ -250,7 +254,11 @@ export function TeamMemberScreen({
             description="Joining Salary is what was agreed at hire — what they are paid now is below"
           />
           <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="Date of Joining" mono value={formatDate(member.joinedOn)} />
+            <Row
+              label="Date of Joining"
+              mono
+              value={formatDate(member.joinedOn)}
+            />
             <Row label="Joining Salary">
               {member.joiningSalary ? (
                 <Amount value={member.joiningSalary} className="font-medium" />
@@ -329,11 +337,27 @@ export function TeamMemberScreen({
         <Card>
           <CardHeader title="Where they are paid" />
           <CardBody className="flex flex-col gap-2.5 text-sm">
+            {/*
+              The six a salary transfer actually needs, in the order a bank
+              form asks for them.
+
+              The account HOLDER is new and is the one most likely to be the
+              reason a payment bounced: a salary often goes to an account in a
+              name that is not exactly the employee's — a father's name, a
+              joint account, a maiden name — and the bank refuses a transfer
+              whose beneficiary name does not match. The app had nowhere to
+              record it.
+
+              Wallet and Wallet number are gone on the owner's word. They were
+              N/A for everybody; the columns stay in the database, so nothing
+              recorded is lost if a wallet is ever wanted again.
+            */}
             <Row label="Bank" value={member.bankName} />
+            <Row label="Account holder" value={member.bankAccountHolder} />
             <Row label="Account" mono value={member.bankAccountNumber} />
+            <Row label="Branch" value={member.bankBranch} />
             <Row label="Routing" mono value={member.bankRouting} />
-            <Row label="Wallet" value={member.walletProvider} />
-            <Row label="Wallet number" mono value={member.walletNumber} />
+            <Row label="SWIFT" mono value={member.bankSwift} />
           </CardBody>
         </Card>
 

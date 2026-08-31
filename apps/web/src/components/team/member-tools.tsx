@@ -217,7 +217,10 @@ export function MemberTools({
                   />
                   {hasOwnDates ? (
                     <td>
-                      <OwnDates from={formatDate(row.fromDate)} until={formatDate(row.untilDate)} />
+                      <OwnDates
+                        from={formatDate(row.fromDate)}
+                        until={formatDate(row.untilDate)}
+                      />
                     </td>
                   ) : null}
                   <td>
@@ -280,7 +283,8 @@ function OwnDates({
   from: string | null;
   until: string | null;
 }) {
-  if (!from && !until) return <span className="text-muted-foreground">N/A</span>;
+  if (!from && !until)
+    return <span className="text-muted-foreground">N/A</span>;
   return (
     <span className="inline-flex items-baseline gap-1.5">
       {from ? (

@@ -727,6 +727,14 @@ const projection = {
   psrStatus: teamMembers.psrStatus,
   psrAssessmentYear: teamMembers.psrAssessmentYear,
   bankName: teamMembers.bankName,
+  /*
+   * The three that were missing. They have to be here as well as in the
+   * schema: the columns were storing correctly and the screen still read N/A,
+   * because this object is what the API actually answers with.
+   */
+  bankAccountHolder: teamMembers.bankAccountHolder,
+  bankBranch: teamMembers.bankBranch,
+  bankSwift: teamMembers.bankSwift,
   bankAccountNumber: teamMembers.bankAccountNumber,
   bankRouting: teamMembers.bankRouting,
   walletProvider: teamMembers.walletProvider,

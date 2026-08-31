@@ -246,8 +246,33 @@ export const createTeamMemberSchema = z.strictObject({
   psrStatus: psrStatusSchema.default("unknown"),
   psrAssessmentYear: optionalOf(assessmentYearSchema),
   bankName: optionalText(80),
+  /* The name on the account. A bank rejects a transfer that does not match. */
+  bankAccountHolder: optionalText(120),
   bankAccountNumber: optionalText(40),
+  bankBranch: optionalText(80),
   bankRouting: optionalText(20),
+  /*
+   * Checked rather than merely stored. `optionalText` here takes a length, not
+   * a schema — the payroll module's helper differs from the masters one — so
+   * the shape is written out. A wrong SWIFT is not a cosmetic error: it is a
+   * salary that does not arrive, found out days later by the person waiting
+   * for it.
+   */
+  bankSwift: z
+    .union([
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(
+          /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/,
+          "A SWIFT code is 8 or 11 characters, like SCBLBDDX",
+        ),
+      z.literal(""),
+      z.null(),
+    ])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
   walletProvider: optionalText(30),
   walletNumber: optionalText(20),
   address: optionalText(300),

@@ -132,8 +132,20 @@ export const teamMembers = pgTable(
     psrAssessmentYear: varchar("psr_assessment_year", { length: 9 }),
 
     bankName: text("bank_name"),
+    /**
+     * The name ON the account, which is not always the employee's own.
+     *
+     * A father's name, a joint account, a maiden name. A bank refuses a
+     * transfer whose beneficiary name does not match, so this is the field
+     * most likely to be the reason a salary bounced — and the app had nowhere
+     * to record it.
+     */
+    bankAccountHolder: text("bank_account_holder"),
     bankAccountNumber: text("bank_account_number"),
+    bankBranch: text("bank_branch"),
     bankRouting: text("bank_routing"),
+    /** 8 or 11 characters. Needed when a salary is paid from abroad. */
+    bankSwift: varchar("bank_swift", { length: 11 }),
     walletProvider: text("wallet_provider"),
     walletNumber: text("wallet_number"),
 
