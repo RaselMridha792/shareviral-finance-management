@@ -33,6 +33,24 @@ import { TransactionsService } from "./transactions.service";
 
 const uuidSchema = z.string().uuid("Not a valid id");
 
+/*
+ * Declared here rather than in packages/shared: one screen reads it, and that
+ * package is consumed as built dist/ by twenty others.
+ */
+const paySubscriptionSchema = z.object({
+  txnDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date it was charged"),
+  /** Blank means the plan's own price. */
+  amount: z.string().trim().optional(),
+  /** Blank means the card on the plan. */
+  accountId: z.string().uuid().optional(),
+  note: z.string().trim().max(200).nullish(),
+  /** Roll the renewal on a cycle. Off for a payment being recorded late. */
+  advanceRenewal: z.boolean().optional(),
+});
+type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
+
 @Controller()
 export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
@@ -110,6 +128,23 @@ export class TransactionsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.transactions.recordCashIn(body, actor);
+  }
+
+  /**
+   * Pay a subscription: a real ledger entry against the plan's card.
+   *
+   * On this controller rather than the vendors one because that is where the
+   * service lives — TransactionsModule already imports VendorsModule, and the
+   * other way round is a cycle Nest refuses to start with.
+   */
+  @Post("subscriptions/:id/pay")
+  @RequirePermission("transactions.write")
+  paySubscription(
+    @Param("id") id: string,
+    @ZodBody(paySubscriptionSchema) body: PaySubscriptionInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.transactions.payForSubscription(id, body, actor);
   }
 
   @Post("transactions/transfer")

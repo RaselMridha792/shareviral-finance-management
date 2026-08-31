@@ -490,7 +490,7 @@ export function SubscriptionsScreen({
         <DocumentsDialog
           owner="subscription"
           transactionId={documentsFor.row.id}
-          refNo={documentsFor.row.invoiceNo ?? documentsFor.row.toolName}
+          refNo={documentsFor.row.reference ?? documentsFor.row.toolName}
           title={documentsFor.row.toolName}
           kinds={documentsFor.kinds}
           onClose={() => setDocumentsFor(null)}

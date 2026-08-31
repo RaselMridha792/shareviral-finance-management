@@ -30,11 +30,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
-import {
-  ReferenceInput,
-  ReferenceKindToggle,
-  type ReferenceKind,
-} from "@/components/ledger/reference-kind";
+import {} from "@/components/ledger/reference-kind";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
@@ -200,7 +196,6 @@ export function SubscriptionForm({
    * it, the way every other money form in this app asks for them.
    */
   const [websiteUrl, setWebsiteUrl] = useState(subscription?.websiteUrl ?? "");
-  const [invoiceNo, setInvoiceNo] = useState(subscription?.invoiceNo ?? "");
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const invoicePicker = useRef<HTMLInputElement>(null);
   const [reference, setReference] = useState(subscription?.reference ?? "");
@@ -211,9 +206,6 @@ export function SubscriptionForm({
    * The controlled `reference` is cleared when the choice turns to paper, so
    * a number typed and then abandoned does not get saved behind a hidden box.
    */
-  const [refKind, setRefKind] = useState<ReferenceKind>(
-    subscription && !subscription.reference ? "paper" : "id",
-  );
   const referencePicker = useRef<HTMLInputElement>(null);
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
   const [category, setCategory] = useState<SubscriptionCategory>(
@@ -351,7 +343,6 @@ export function SubscriptionForm({
         boughtFor,
         loginEmail,
         websiteUrl,
-        invoiceNo,
         reference,
         notes,
         users: seats.map((teamMemberId) => ({
@@ -720,10 +711,23 @@ export function SubscriptionForm({
             />
           </Field>
 
+          {/*
+            The same pair as every other drawer, and for the same reasons.
+
+            The invoice is a DOCUMENT, not a number — "Invoice a sudhu upload
+            system thakbe field lagbena" — so the box is gone and the clip
+            stays. And there is one Reference rather than a Transaction ID with
+            a toggle above it: there was only ever one field under that toggle,
+            and asking which KIND of number this was made a decision out of
+            something the row already showed.
+
+            `invoice_no` is NOT dropped. Plans recorded before today carry
+            numbers in it and the table still prints them; the form simply
+            stops asking.
+          */}
           <Field
-            label="Invoice No."
-            error={fieldErrors.invoiceNo}
-            hint="The bill this plan was charged against. Ours."
+            label="Invoice"
+            hint="Attach the bill this plan was charged against"
           >
             <Clip
               picker={invoicePicker}
@@ -731,46 +735,29 @@ export function SubscriptionForm({
               onPick={setInvoiceFile}
               label="Attach the invoice"
             >
-              <Input
-                className="num min-w-0 flex-1"
-                value={invoiceNo}
-                maxLength={60}
-                placeholder="INV-002"
-                onChange={(e) => setInvoiceNo(e.target.value)}
-              />
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                {invoiceFile ? "" : "No invoice attached"}
+              </span>
             </Clip>
           </Field>
 
           <Field
-            label={refKind === "id" ? "Transaction ID" : "Reference"}
+            label="Reference"
             error={fieldErrors.reference}
-            hint={
-              refKind === "id"
-                ? "What the bank or the card statement calls it. Theirs."
-                : "No number on the statement — attach the record and it becomes the reference."
-            }
+            hint="What the bank or the card statement calls it — or attach the record"
           >
-            <ReferenceKindToggle
-              value={refKind}
-              onChange={(next) => {
-                setRefKind(next);
-                if (next === "paper") setReference("");
-              }}
-            />
             <Clip
               picker={referencePicker}
               file={referenceFile}
               onPick={setReferenceFile}
               label="Attach the bank's record"
             >
-              <ReferenceInput kind={refKind}>
-                <Input
-                  className="num min-w-0 flex-1"
-                  value={reference}
-                  maxLength={120}
-                  onChange={(e) => setReference(e.target.value)}
-                />
-              </ReferenceInput>
+              <Input
+                className="num min-w-0 flex-1"
+                value={reference}
+                maxLength={120}
+                onChange={(e) => setReference(e.target.value)}
+              />
             </Clip>
           </Field>
         </div>

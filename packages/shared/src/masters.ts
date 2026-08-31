@@ -349,6 +349,13 @@ export const PSR_STATUS_LABELS: Record<PsrStatus, string> = {
 };
 
 export const createVendorSchema = z.strictObject({
+  /*
+   * The reference the drawer has been sending since it was built, to a schema
+   * that did not know the word — and `strictObject` does not ignore an
+   * unrecognised key, it refuses the whole request. Every edit that touched
+   * this box answered "Could not save that" and said nothing about why.
+   */
+  reference: optionalText(z.string().trim().max(120)),
   name: z.string().trim().min(2, "Give the vendor a name").max(120),
   type: vendorTypeSchema.default("supplier"),
 

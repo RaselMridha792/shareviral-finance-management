@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  addMonths,
   formatMoney,
   type CreateTransactionInput,
   type ListTransactionsQuery,
@@ -851,6 +852,104 @@ export class TransactionsService {
   }
 
   /**
+   * Record a payment for a subscription.
+   *
+   * The gap the owner found: *"ekhane kichu kinle eta taka katena bank theke
+   * kono history thakena"*. He was right, and it was structural rather than a
+   * bug — a subscription is a PLAN (cycle, amount, account, next renewal) and
+   * nothing about adding or renewing one ever wrote a transaction. The "paid
+   * this period" figure was summing entries somebody had separately recorded
+   * and remembered to tag with the vendor.
+   *
+   * So a plan and a payment are two different things, and the app only had the
+   * first. This is the second.
+   *
+   * **It lives HERE, on the transactions side, and goes through `create` rather
+   * than its own INSERT.** Two reasons, and the second was found the hard way:
+   * writing the row anywhere else would mean writing the period lock, the
+   * overdraft rule, the audit entry, the reference number and the category
+   * resolution a second time — five rules already right once. And putting it on
+   * VendorsService meant injecting TransactionsService into it, which is a
+   * circular module dependency: TransactionsModule already imports
+   * VendorsModule, and Nest simply refused to start. That
+   * is the whole design decision. Writing the row here would mean writing the
+   * period lock, the overdraft rule, the audit entry, the reference number and
+   * the category resolution a second time — five rules that are already right
+   * once, and would be right in four of five places by next month. Everything
+   * that follows comes free: the balance moves because it is an ordinary
+   * expense, the history IS the ledger, the trash and the audit log work, and
+   * "paid this period" stops being a guess.
+   *
+   * **Never automatic.** No scheduler creates these. Money leaving a bank has
+   * to be somebody's act on a date they chose — an app that quietly wrote
+   * expenses would put figures in the books nobody typed, and the first time a
+   * card was declined the app and the bank would disagree with nothing to say
+   * which was right.
+   */
+  async payForSubscription(
+    id: string,
+    input: {
+      txnDate: string;
+      amount?: string;
+      accountId?: string;
+      note?: string | null;
+      advanceRenewal?: boolean;
+    },
+    actor: AuthenticatedUser,
+  ) {
+    const plan = await this.vendorsService.billingPlan(id);
+    if (!plan) throw new NotFoundException("That subscription is not here");
+
+    const accountId = input.accountId ?? plan.billingAccountId;
+    if (!accountId) {
+      throw new BadRequestException(
+        "This plan has no card or account on it — choose one, or set one on the plan first",
+      );
+    }
+
+    const amount = input.amount ?? plan.billingAmount;
+    if (!amount || Number(amount) <= 0) {
+      throw new BadRequestException(
+        "This plan has no price on it — type what was charged",
+      );
+    }
+
+    /*
+     * The plan's own category when it has one. Without it the entry would land
+     * uncategorised, which is what put transfers on the Other expenses screen
+     * and is not a mistake worth repeating.
+     */
+    const created = await this.create(
+      {
+        direction: "out",
+        txnDate: input.txnDate,
+        accountId,
+        amount,
+        categoryId: plan.defaultCategoryId ?? undefined,
+        vendorId: plan.id,
+        description: input.note?.trim()
+          ? `${plan.name} — ${input.note.trim()}`
+          : `${plan.name} subscription`,
+        paymentMethod: "card",
+      },
+      actor,
+    );
+
+    /*
+     * Roll the renewal forward only if asked. A payment is not always the
+     * month's renewal — somebody may be recording one they forgot in March —
+     * and moving the date on a back-dated entry would tell the reminder it has
+     * a month it does not.
+     */
+    if (input.advanceRenewal && plan.nextRenewalOn) {
+      const next = advanceCycle(plan.nextRenewalOn, plan.billingCycle);
+      if (next) await this.vendorsService.setNextRenewal(id, next, actor);
+    }
+
+    return created;
+  }
+
+  /**
    * Voids an entry. It stays visible, struck through, and out of every total.
    * Deleting would remove the answer to a question someone asks later.
    */
@@ -1274,4 +1373,26 @@ function describeUpdate(
   }
   const detail = parts.length ? parts.join(", ") : "details updated";
   return `${existing.refNo}: ${detail}`;
+}
+
+/**
+ * The next renewal, one cycle on.
+ *
+ * Returns null for a cycle that has no length — "none", or anything unknown —
+ * rather than guessing a month, because a date invented here would be shown to
+ * somebody as the day their card is charged.
+ */
+function advanceCycle(from: string, cycle: string): string | null {
+  const months =
+    cycle === "monthly"
+      ? 1
+      : cycle === "quarterly"
+        ? 3
+        : cycle === "half_yearly"
+          ? 6
+          : cycle === "yearly"
+            ? 12
+            : null;
+  if (months === null) return null;
+  return addMonths(from, months);
 }

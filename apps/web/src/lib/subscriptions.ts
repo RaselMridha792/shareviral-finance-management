@@ -53,7 +53,12 @@ export type SubscriptionDto = {
   boughtFor: string | null;
   loginEmail: string | null;
   websiteUrl: string | null;
-  invoiceNo: string | null;
+  /*
+   * Gone. An invoice is a document now, attached through `files` — the drawer
+   * asks for the bill rather than a number for it, and the API never had a
+   * column to answer with. Declaring it here made the form post a key that
+   * `strictObject` refused, which is what "Could not save that" was.
+   */
   reference: string | null;
   /** Derived from the file that points at this row, not a column here. */
   screenshotFileId: string | null;

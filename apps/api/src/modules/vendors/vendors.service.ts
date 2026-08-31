@@ -247,6 +247,45 @@ export class VendorsService {
    * and defaults to this one. Any earlier month can be asked for, because "did
    * we pay for Claude in June" is a question that gets asked in August.
    */
+  /**
+   * The billing half of a plan: what it costs, on which card, how often.
+   *
+   * `VendorDto` deliberately does not carry these — it is the shape the vendor
+   * screens read — so recording a payment asks for them by name rather than
+   * widening a DTO that twenty other callers already have.
+   */
+  async billingPlan(id: string) {
+    const [row] = await this.db.client
+      .select({
+        id: vendors.id,
+        name: vendors.name,
+        billingCycle: vendors.billingCycle,
+        billingAmount: vendors.billingAmount,
+        billingCurrency: vendors.billingCurrency,
+        billingAccountId: vendors.billingAccountId,
+        defaultCategoryId: vendors.defaultCategoryId,
+        nextRenewalOn: vendors.nextRenewalOn,
+      })
+      .from(vendors)
+      .where(and(eq(vendors.id, id), isNull(vendors.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Move the renewal date on, after a payment was recorded for this plan.
+   *
+   * A setter rather than letting the transactions side write to `vendors`
+   * directly: the renewal is this module's fact, and one door to it is what
+   * keeps a second caller from setting it a different way.
+   */
+  async setNextRenewal(id: string, on: string, actor: AuthenticatedUser) {
+    await this.db.client
+      .update(vendors)
+      .set({ nextRenewalOn: on, updatedAt: new Date(), updatedBy: actor.id })
+      .where(eq(vendors.id, id));
+  }
+
   async subscriptions(
     asked: { year?: number; month?: number } = {},
   ): Promise<SubscriptionSummary> {
@@ -421,6 +460,12 @@ const projection = {
   billingAmount: vendors.billingAmount,
   billingCurrency: vendors.billingCurrency,
   billingAccountId: vendors.billingAccountId,
+  /*
+   * In the projection as well as the schema. The columns kept storing and the
+   * screen kept reading N/A on accounts and on team members for exactly this
+   * reason, twice — this object is what the API actually answers with.
+   */
+  reference: vendors.reference,
   notes: vendors.notes,
   isActive: vendors.isActive,
   createdAt: vendors.createdAt,

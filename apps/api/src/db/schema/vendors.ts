@@ -70,6 +70,15 @@ export const vendors = pgTable(
     nextRenewalOn: date("next_renewal_on"),
     billingAccountId: uuid("billing_account_id"),
 
+    /**
+     * What the bank or card statement calls the charge. Theirs, not ours.
+     *
+     * The invoice is deliberately NOT here: it is a document and attaches
+     * through `files`. A column for an invoice number would be one nothing
+     * fills, now that the drawer asks for the bill rather than a reference to
+     * it.
+     */
+    reference: text("reference"),
     notes: text("notes"),
     isActive: boolean("is_active").notNull().default(true),
 

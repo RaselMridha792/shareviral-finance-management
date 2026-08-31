@@ -184,22 +184,8 @@ export function SubscriptionBodyCells({
       </td>
 
       <td className="num text-xs">
-        {row.invoiceNo ? (
-          handlers.onInvoice ? (
-            <button
-              type="button"
-              onClick={() => handlers.onInvoice?.(row)}
-              title="Show the invoice"
-              className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-            >
-              {row.invoiceNo}
-            </button>
-          ) : (
-            <span className="num">{row.invoiceNo}</span>
-          )
-        ) : (
-          <span className="text-muted-foreground">N/A</span>
-        )}
+        {/* The invoice is a document — the eye beside Reference opens it. */}
+        <span className="text-faint">—</span>
       </td>
 
       {/*
@@ -229,13 +215,17 @@ export function SubscriptionBodyCells({
         )}
       </td>
 
-      <td className="text-sm text-muted-foreground">{row.loginEmail ?? "N/A"}</td>
+      <td className="text-sm text-muted-foreground">
+        {row.loginEmail ?? "N/A"}
+      </td>
 
       <td className="text-sm">
         <SeatNames row={row} />
       </td>
 
-      <td className="text-sm text-muted-foreground">{row.boughtFor ?? "N/A"}</td>
+      <td className="text-sm text-muted-foreground">
+        {row.boughtFor ?? "N/A"}
+      </td>
 
       <td className="text-sm text-muted-foreground">
         {BILLING_CYCLE_LABELS[row.billingCycle]}
