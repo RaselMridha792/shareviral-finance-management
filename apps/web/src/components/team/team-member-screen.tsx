@@ -498,6 +498,74 @@ export function TeamMemberScreen({
             ) : null}
           </div>
 
+          {/*
+            What pay HAS been, not only what it is.
+
+            Nothing new is recorded here: every change already writes a row
+            with its own effective date and reason — that is what the "Since
+            2026-08-30" above is reading — and the whole list was already on
+            the wire. The card only stops throwing it away.
+
+            The current figure is left out: it is the large number directly
+            above, and printing it twice invites somebody to read two rows as
+            two raises. So this is the history BEFORE now, and it says nothing
+            at all when there is none rather than showing an empty table,
+            because a person hired last month has no history and that is not a
+            gap.
+          */}
+          {compensation.length > 1 ? (
+            <Card>
+              <CardHeader
+                title="Salary changes"
+                description="What they were paid before, and why it changed"
+              />
+              <CardBody className="p-0">
+                <TableScroll>
+                  <table className="table-data min-w-[620px] text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <SerialHead />
+                        <Th width="w-32">From</Th>
+                        <Th width="w-32">Until</Th>
+                        <Th align="right">Gross, monthly</Th>
+                        <Th>Why it changed</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compensation
+                        .filter((row) => row.id !== currentPay?.id)
+                        .map((row, index) => (
+                          <tr key={row.id} className="row-finance">
+                            <SerialCell n={index + 1} />
+                            <td className="num text-muted-foreground">
+                              {formatDate(row.effectiveFrom)}
+                            </td>
+                            <td className="num text-muted-foreground">
+                              {/* Blank rather than a dash: an open-ended row
+                                  here would be the current figure, which is
+                                  not in this list. */}
+                              {row.effectiveTo
+                                ? formatDate(row.effectiveTo)
+                                : "—"}
+                            </td>
+                            <td className="num text-right">
+                              <Amount
+                                value={row.grossAmount}
+                                showCounterpart={false}
+                              />
+                            </td>
+                            <td className="text-muted-foreground">
+                              {row.changeReason ?? "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </TableScroll>
+              </CardBody>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader
               title="Payslips"

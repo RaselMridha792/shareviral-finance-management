@@ -24,3 +24,8 @@ node .previewsweep.mjs  # every picker that holds a file offers to show it
 node .multidocqa.mjs    # several papers on one clip, and the slider
 node .nofxqa.mjs        # a report reads no exchange rate
 node .cardleakqa.mjs    # a card number appears in exactly one place
+
+node .teambankqa.mjs    # the six bank fields, and no Wallet
+node .payhistqa.mjs     # what pay has been, not only what it is
+node .dateqa.mjs        # every screen reads dates day first
+node .refqa.mjs         # one Reference, and an invoice that is a paper

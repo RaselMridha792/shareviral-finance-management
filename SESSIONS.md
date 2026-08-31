@@ -13,11 +13,11 @@ below is started unless it says so.
 | 5 | A card account asks for card fields, with the CVC behind a password | **done** — unpushed |
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | **done** — unpushed |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
-| 9 | A team member's bank section: holder name, branch and SWIFT | **next** |
+| 9 | A team member's bank section: holder name, branch and SWIFT | **done** — unpushed |
 | 14 | Team member: a Social media section, "add another", with icons | not started |
 | 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
-| 16 | Remove Wallet and Wallet number from "Where they are paid" | **with #9** |
-| 17 | Salary changes history on a person's profile | not started — the rows already exist |
+| 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
+| 17 | Salary changes history on a person's profile | **done** — unpushed |
 | 10 | Void allowed inside a locked period — the owner's decision | not started |
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | not started |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
