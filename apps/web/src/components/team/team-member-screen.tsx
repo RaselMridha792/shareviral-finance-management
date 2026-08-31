@@ -605,7 +605,13 @@ export function TeamMemberScreen({
                               !slip.paidOn && "text-muted-foreground",
                             )}
                           >
-                            {slip.paidOn ?? "N/A"}
+                            {/* #1 rewired the whole app to day/month/year and
+                                missed this one cell — the profile was not on
+                                the sweep, which walked seven list screens and
+                                no detail page. The owner found it by looking:
+                                Salary changes above reads 30/08/2026 and this
+                                read 2026-06-29. */}
+                            {slip.paidOn ? formatDate(slip.paidOn) : "N/A"}
                           </td>
                           <td>
                             {/* One link per row — see the note in

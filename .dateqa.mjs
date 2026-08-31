@@ -99,6 +99,30 @@ const readScreen = async (url) => {
   });
 };
 
+/*
+ * The list screens AND the detail pages.
+ *
+ * This walked seven list screens and no detail page, so it reported the whole
+ * app converted while `/team/[id]` was printing `2026-06-29` in its Payslips
+ * table — which is where the owner found it, by looking, a fortnight later.
+ * Salary changes directly above it read `30/08/2026`, so the two panels on one
+ * screen disagreed and nothing here could see it.
+ *
+ * The ids are looked up rather than written down: a hard-coded uuid rots the
+ * first time somebody reseeds, and a 404 renders no dates at all, which is a
+ * pass.
+ */
+const one = async (sql) => (await db.query(sql)).rows[0]?.id ?? null;
+const memberId = await one(
+  "select id from team_members where deleted_at is null order by created_at limit 1",
+);
+const runId = await one(
+  "select id from payroll_runs where deleted_at is null order by created_at limit 1",
+);
+const accountId = await one(
+  "select id from accounts where deleted_at is null order by created_at limit 1",
+);
+
 const screens = [
   ["Team", `${WEB}/team`],
   ["Accounts", `${WEB}/accounts`],
@@ -107,10 +131,42 @@ const screens = [
   ["Money transfer", `${WEB}/transfers`],
   ["AI tools and subscriptions", `${WEB}/subscriptions`],
   ["Bank statement", `${WEB}/statement`],
+  ["All transactions", `${WEB}/transactions`],
+  ["Expenses", `${WEB}/expenses`],
+  ["Payroll runs", `${WEB}/payroll`],
+  ["TDS", `${WEB}/tax/withholding`],
+  ["Reports", `${WEB}/reports`],
+  ["Settings", `${WEB}/settings`],
+  ...(memberId ? [["Team member profile", `${WEB}/team/${memberId}`]] : []),
+  ...(runId ? [["Salary sheet", `${WEB}/payroll/${runId}`]] : []),
+  ...(accountId
+    ? [
+        ["Account", `${WEB}/accounts/${accountId}`],
+        ["Account register", `${WEB}/accounts/${accountId}/register`],
+      ]
+    : []),
 ];
+check(
+  "the detail pages this sweep used to skip are reachable",
+  Boolean(memberId && runId && accountId),
+  `member ${Boolean(memberId)}, run ${Boolean(runId)}, account ${Boolean(accountId)}`,
+);
 
+/*
+ * A page that rendered nothing must FAIL, not pass.
+ *
+ * A JSX comment placed between two attributes is a compile error, and in dev
+ * that 500s every route in the app. This loop then walked seventeen blank
+ * screens and reported every one of them as carrying no ISO date — seventeen
+ * ticks, in a run where the site was down. "No bad dates found" and "no dates
+ * found" have to be different answers.
+ */
 for (const [label, url] of screens) {
   const text = await readScreen(url);
+  if (text.trim().length < 40) {
+    check(`${label}: the screen rendered at all`, false, `only ${text.trim().length} characters — the page is blank or erroring`);
+    continue;
+  }
   const iso = ISO.exec(text);
   check(
     `${label}: no date is printed as YYYY-MM-DD`,

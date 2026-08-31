@@ -40,7 +40,7 @@ below is started unless it says so.
 | 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | not started — arrived 1 Sep |
 | 35 | An attached file's NAME is barely readable — colour it | not started — arrived 1 Sep |
 | 36 | Salary changes: pagination, tick column, move to trash | not started — arrived 1 Sep |
-| 37 | The Payslips table still prints `2026-06-29` — #1 missed it | not started — spotted 1 Sep |
+| 37 | The Payslips table still prints `2026-06-29` — #1 missed it | **done** — and Reports had four more |
 | 33 | **Paying for a subscription 404s** — it looks a `subscriptions` id up in `vendors` | **fixed** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 
@@ -68,13 +68,30 @@ checked before wiring them, because this table is not like the six:
   sheet already built — those store their own gross — and that is the thing to
   prove rather than assume.
 
-## 37. The Payslips table still prints ISO dates
+## 37. The Payslips table printed ISO dates — and so did Reports
 
-Spotted in the same screenshot. Salary changes reads `30/08/2026`; the Payslips
-panel directly under it reads `2026-06-29`. #1 converted the app to
-day/month/year and missed this one table.
+Spotted by the owner: Salary changes reads `30/08/2026` and the Payslips panel
+directly under it read `2026-06-29`. Two panels on one screen disagreeing.
 
-Small, and worth doing with #36 since they are the same screen.
+**Why #1 missed it, which matters more than the fix.** `.dateqa.mjs` walked
+seven LIST screens and no detail page. `/team/[id]` was never opened, so the
+sweep reported the app converted while that table had never been touched.
+
+The sweep now walks seventeen screens — every list plus the profile, the salary
+sheet, an account, its register, Reports and Settings — and the widening
+immediately found a second miss nobody had reported: **Reports** printed
+`2026-09-01 → 2026-09-30` in its header, `2026-09-30` in two table cells, and
+carried **"as at"** in two places, which is the exact phrase #2 removed a
+fortnight ago. It survived because the sweep that checked for "as at" only ever
+opened an account drawer.
+
+**And the sweep learned to fail on a blank page.** Mid-fix a JSX comment was
+placed between two attributes — a compile error, which in dev 500s every route.
+The sweep then walked seventeen blank screens and ticked every one: seventeen
+passes in a run where the whole site was down. "No bad dates found" and "no
+dates found" are now different answers.
+
+`.dateqa.mjs` — 22 checks.
 
 ## 35. An attached file's name is the wrong colour
 

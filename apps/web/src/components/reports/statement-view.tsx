@@ -39,7 +39,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { ApiError } from "@/lib/api-client";
 import { exportUrl } from "@/lib/ledger";
 import { reportsApi, type AvailablePeriods } from "@/lib/reports";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 /**
  * The statement, on screen.
@@ -407,8 +407,11 @@ export function StatementView({
                 {company.name}
                 {company.counterparty ? ` · ${company.counterparty}` : ""}
               </p>
+              {/* Day/month/year, like the rest of the app. Reports was not on
+                  the date sweep, so it kept printing 2026-09-01 for a fortnight
+                  after #1 converted everything else. */}
               <p className="num mt-0.5 text-xs text-muted-foreground">
-                {period.start} → {period.end}
+                {formatDate(period.start)} → {formatDate(period.end)}
               </p>
             </div>
           </div>
@@ -521,9 +524,12 @@ export function StatementView({
 
       {/* --- the two figures the document exists to state --------------- */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* "as at" was #2's whole complaint — banking language nobody here
+            reads — and it survived on this screen because the sweep that
+            checked for it only ever opened an account drawer. */}
         <HeadlineCard
           label="Closing bank balance"
-          hint={`as at ${period.end}`}
+          hint={`on ${formatDate(period.end)}`}
           value={summary.closing.bank}
         />
         {summary.closing.card ? (
@@ -605,8 +611,8 @@ export function StatementView({
                   <span className="block font-semibold">Closing position</span>
                   <span className="block text-xs text-muted-foreground">
                     Bank
-                    {summary.closing.card ? " and card" : ""}, as at{" "}
-                    {period.end}
+                    {summary.closing.card ? " and card" : ""}, on{" "}
+                    {formatDate(period.end)}
                   </span>
                 </td>
                 <td className="text-xs text-muted-foreground">
@@ -653,7 +659,7 @@ export function StatementView({
                   <span className="block font-medium">Free cash</span>
                   <span className="cell-prose block text-xs text-muted-foreground">
                     Available to spend on{" "}
-                    <span className="num">{period.end}</span>
+                    <span className="num">{formatDate(period.end)}</span>
                   </span>
                   {composition.committedForward ? (
                     <span className="cell-prose mt-1.5 flex flex-col gap-0.5 rounded-md bg-surface-muted px-2 py-1.5 text-xs text-muted-foreground">
