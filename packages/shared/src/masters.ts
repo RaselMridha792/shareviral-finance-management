@@ -143,6 +143,63 @@ export const createAccountSchema = z.strictObject({
   openingBalanceOn: isoDateSchema,
   notes: optionalText(z.string().trim().max(500)),
   sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+
+  /* ---------------------------------------------------------------- card */
+  /*
+   * Asked for only when `type` is "card", and optional in the schema even
+   * then. The refinement below makes the holder's name and the card's own
+   * name required for a card, because those are what tell one card from
+   * another on the screen; the number, expiry and CVC stay optional, since a
+   * card can be recorded before anybody has it in their hand to read from.
+   */
+  cardHolderName: optionalText(z.string().trim().max(80)),
+  cardLabel: optionalText(z.string().trim().max(80)),
+
+  /**
+   * The number as typed, spaces and all.
+   *
+   * Never stored as given: the API strips it to digits, seals it, and keeps
+   * only the last four in the clear. Blank CLEARS what is stored — hence the
+   * union with null rather than `optionalText`, which would mean "leave it
+   * alone" and make a card impossible to un-record.
+   */
+  cardNumber: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(
+          /^[0-9 -]{12,25}$/,
+          "A card number is 12 to 19 digits, spaces allowed",
+        ),
+      z.literal(""),
+      z.null(),
+    ])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
+
+  /** MM/YYYY. A card expires at the end of a month, not on a day. */
+  cardExpiry: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(/^(0[1-9]|1[0-2])\/20\d{2}$/, "Write the expiry as MM/YYYY"),
+      z.literal(""),
+      z.null(),
+    ])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
+
+  /** Three or four digits. Sealed, on the owner's explicit decision. */
+  cardCvc: z
+    .union([
+      z.string().trim().regex(/^\d{3,4}$/, "A CVC is three or four digits"),
+      z.literal(""),
+      z.null(),
+    ])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
 });
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 

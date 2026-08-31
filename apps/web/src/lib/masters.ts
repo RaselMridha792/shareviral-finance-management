@@ -38,6 +38,23 @@ export type AccountDto = {
   /** The opening in the account's own currency, when somebody has stated it. */
   openingBalanceUsd: string | null;
   openingBalanceOn: string;
+
+  /*
+   * A card's readable half. The number and the CVC are NOT here and never
+   * will be: the API omits them from its own DTO at the type level, so they
+   * are not on the wire to omit. They are read one at a time through
+   * POST /accounts/:id/card-secrets, which asks for the card password.
+   *
+   * `cardLast4` is what the screen shows to tell one card from another.
+   */
+  cardHolderName: string | null;
+  cardLabel: string | null;
+  cardLast4: string | null;
+  /** MM/YYYY as typed. */
+  cardExpiry: string | null;
+  cardSecretsSetAt: string | null;
+  cardSecretsSetBy: string | null;
+
   sortOrder: number;
   isActive: boolean;
   notes: string | null;

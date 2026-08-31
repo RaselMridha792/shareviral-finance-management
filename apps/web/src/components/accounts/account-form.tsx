@@ -29,6 +29,15 @@ export function AccountForm({
   onSaved: () => Promise<void> | void;
 }) {
   const editing = Boolean(account);
+  /*
+   * The one controlled field in an otherwise uncontrolled form.
+   *
+   * The drawer's shape depends on it — a card has a holder and a number and no
+   * branch or SWIFT — so it cannot be read only at submit. Everything else
+   * stays uncontrolled and keeps its defaultValue.
+   */
+  const [type, setType] = useState(account?.type ?? "bank");
+  const isCard = type === "card";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -53,6 +62,20 @@ export function AccountForm({
       openingBalanceOn: String(data.get("openingBalanceOn") ?? ""),
       notes: String(data.get("notes") ?? ""),
       sortOrder: Number(data.get("sortOrder") ?? 0),
+      /*
+       * Only for a card. On anything else these are not rendered, and sending
+       * "" would CLEAR what a card holds — blank clears, by the union in the
+       * schema — so an account switched to bank and back would lose its number.
+       */
+      ...(isCard
+        ? {
+            cardHolderName: String(data.get("cardHolderName") ?? ""),
+            cardLabel: String(data.get("cardLabel") ?? ""),
+            cardNumber: String(data.get("cardNumber") ?? ""),
+            cardExpiry: String(data.get("cardExpiry") ?? ""),
+            cardCvc: String(data.get("cardCvc") ?? ""),
+          }
+        : {}),
     } as Parameters<typeof accountsApi.create>[0];
 
     try {
@@ -102,7 +125,11 @@ export function AccountForm({
         </Field>
 
         <Field label="Type" required>
-          <Select name="type" defaultValue={account?.type ?? "bank"}>
+          <Select
+            name="type"
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
+          >
             {ACCOUNT_TYPES.map((type) => (
               <option key={type} value={type}>
                 {ACCOUNT_TYPE_LABELS[type]}
@@ -111,45 +138,152 @@ export function AccountForm({
           </Select>
         </Field>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Bank" error={fieldErrors.bankName}>
-            <Input name="bankName" defaultValue={account?.bankName ?? ""} />
-          </Field>
-          <Field label="Branch" error={fieldErrors.branch}>
-            <Input name="branch" defaultValue={account?.branch ?? ""} />
-          </Field>
-        </div>
+        {/*
+          The bank's name doubles as the card company's — one column, two
+          readings — so it stays for both and only the label changes. Branch,
+          account number, routing and SWIFT are hidden for a card, which has
+          none of them; a row of empty boxes reads as missing data.
 
+          HIDING DOES NOT CLEAR. Anything stored on an account switched to card
+          stays in its column, because a field that is not rendered sends
+          nothing and the patch leaves absent keys alone. Switching a type by
+          mistake must not destroy the bank details.
+        */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Account number" error={fieldErrors.accountNumber}>
+          <Field
+            label={isCard ? "Card company" : "Bank"}
+            error={fieldErrors.bankName}
+          >
             <Input
-              name="accountNumber"
-              className="num"
-              defaultValue={account?.accountNumber ?? ""}
+              name="bankName"
+              defaultValue={account?.bankName ?? ""}
+              placeholder={isCard ? "Payoneer" : undefined}
             />
           </Field>
-          <Field label="Routing number" error={fieldErrors.routingNumber}>
-            <Input
-              name="routingNumber"
-              className="num"
-              defaultValue={account?.routingNumber ?? ""}
-            />
-          </Field>
+          {isCard ? (
+            <Field label="Card holder" error={fieldErrors.cardHolderName}>
+              <Input
+                name="cardHolderName"
+                defaultValue={account?.cardHolderName ?? ""}
+                placeholder="The name embossed on it"
+              />
+            </Field>
+          ) : (
+            <Field label="Branch" error={fieldErrors.branch}>
+              <Input name="branch" defaultValue={account?.branch ?? ""} />
+            </Field>
+          )}
         </div>
 
-        <Field
-          label="SWIFT / BIC"
-          error={fieldErrors.swiftCode}
-          hint="8 or 11 characters, like SCBLBDDX — needed for transfers from abroad"
-        >
-          <Input
-            name="swiftCode"
-            className="num uppercase"
-            maxLength={11}
-            placeholder="SCBLBDDX"
-            defaultValue={account?.swiftCode ?? ""}
-          />
-        </Field>
+        {isCard ? (
+          <>
+            <Field
+              label="Card name"
+              error={fieldErrors.cardLabel}
+              hint="What you call it, so one card is told apart from another"
+            >
+              <Input
+                name="cardLabel"
+                defaultValue={account?.cardLabel ?? ""}
+                placeholder="Platinum Business"
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field
+                label="Card number"
+                error={fieldErrors.cardNumber}
+                hint={
+                  account?.cardLast4
+                    ? "On file. Leave blank to keep the stored one."
+                    : "Encrypted. Only the last four are ever shown."
+                }
+              >
+                <Input
+                  name="cardNumber"
+                  className="num"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={25}
+                  placeholder={
+                    account?.cardLast4
+                      ? "**** **** **** " + account.cardLast4
+                      : "4111 1111 1111 1111"
+                  }
+                />
+              </Field>
+              <Field label="Expires" error={fieldErrors.cardExpiry}>
+                <Input
+                  name="cardExpiry"
+                  className="num"
+                  placeholder="09/2028"
+                  maxLength={7}
+                  defaultValue={account?.cardExpiry ?? ""}
+                />
+              </Field>
+              <Field
+                label="CVC"
+                error={fieldErrors.cardCvc}
+                hint="Encrypted, and never shown without the card password"
+              >
+                <Input
+                  name="cardCvc"
+                  className="num"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  placeholder="123"
+                />
+              </Field>
+            </div>
+
+            {/*
+              Said out loud, once, where the decision is being acted on. The
+              owner chose to store these; nobody reading the drawer later should
+              have to guess whether that was thought about.
+            */}
+            <p className="-mt-1 text-xs text-muted-foreground">
+              The number and CVC are encrypted before they are stored, never
+              sent to any screen, and read back only by someone who knows the
+              card password.
+            </p>
+          </>
+        ) : null}
+
+        {isCard ? null : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Account number" error={fieldErrors.accountNumber}>
+                <Input
+                  name="accountNumber"
+                  className="num"
+                  defaultValue={account?.accountNumber ?? ""}
+                />
+              </Field>
+              <Field label="Routing number" error={fieldErrors.routingNumber}>
+                <Input
+                  name="routingNumber"
+                  className="num"
+                  defaultValue={account?.routingNumber ?? ""}
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="SWIFT / BIC"
+              error={fieldErrors.swiftCode}
+              hint="8 or 11 characters, like SCBLBDDX — needed for transfers from abroad"
+            >
+              <Input
+                name="swiftCode"
+                className="num uppercase"
+                maxLength={11}
+                placeholder="SCBLBDDX"
+                defaultValue={account?.swiftCode ?? ""}
+              />
+            </Field>
+          </>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field

@@ -14,6 +14,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
+import { seal } from "../../common/crypto/secret-box";
 import { DbService } from "../../db/db.service";
 import { overdraftWatch } from "../../common/money/overdraft";
 import {
@@ -343,7 +344,8 @@ export class AccountsService {
         const [row] = await tx
           .insert(accounts)
           .values({
-            ...input,
+            ...withoutCardSecrets(input),
+            ...cardColumns(input, actor.id),
             createdBy: actor.id,
             updatedBy: actor.id,
           })
@@ -415,7 +417,12 @@ export class AccountsService {
       run: async (tx) => {
         const [row] = await tx
           .update(accounts)
-          .set({ ...input, updatedAt: new Date(), updatedBy: actor.id })
+          .set({
+            ...withoutCardSecrets(input),
+            ...cardColumns(input, actor.id),
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
           .where(eq(accounts.id, id))
           .returning(projection);
         /*
@@ -659,6 +666,62 @@ export class AccountsService {
       });
     }
   }
+}
+
+/**
+ * Turns what the form sends into what the columns hold.
+ *
+ * `cardNumber` and `cardCvc` are input names, not columns — the columns are
+ * sealed, and there is a fifth derived from the first. Doing this in one place
+ * rather than at both call sites is what stops `create` and `update` drifting:
+ * the pattern this codebase keeps re-learning is that a rule written twice is
+ * right once.
+ *
+ * Three states per field, and the middle one is the one that is easy to lose:
+ *   undefined  the form did not mention it   → leave what is stored
+ *   null / ""  the box was emptied            → clear it
+ *   a value    → seal it
+ *
+ * `patchOf` maps "" to null before it reaches here, so null is the clear.
+ */
+function cardColumns(
+  input: Partial<CreateAccountInput>,
+  actorId: string,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  let touched = false;
+
+  if (input.cardNumber !== undefined) {
+    touched = true;
+    const digits = input.cardNumber?.replace(/[^0-9]/g, "") ?? "";
+    out.cardNumberSealed = digits ? seal(digits) : null;
+    // The only part kept in the clear, and only enough to tell cards apart.
+    out.cardLast4 = digits ? digits.slice(-4) : null;
+  }
+
+  if (input.cardCvc !== undefined) {
+    touched = true;
+    out.cardCvcSealed = input.cardCvc ? seal(input.cardCvc) : null;
+  }
+
+  if (touched) {
+    out.cardSecretsSetAt = new Date();
+    out.cardSecretsSetBy = actorId;
+  }
+
+  return out;
+}
+
+/**
+ * The same input with the two secret fields taken out.
+ *
+ * They must never reach the spread that builds the row — `cardNumber` is not a
+ * column, and letting it through would either be dropped silently or written
+ * somewhere it must not be.
+ */
+function withoutCardSecrets<T extends Partial<CreateAccountInput>>(input: T) {
+  const { cardNumber: _n, cardCvc: _c, ...rest } = input;
+  return rest;
 }
 
 const projection = {
