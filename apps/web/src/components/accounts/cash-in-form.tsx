@@ -168,8 +168,27 @@ export function CashInForm({
     return (usd * rate).toFixed(2);
   })();
 
-  /** Computed until somebody types in the box, then theirs. */
-  const amount = amountTyped ? typedAmount : derivedAmount;
+  /**
+   * Whether the taka figure is being worked out right now.
+   *
+   * Only then is the box read-only. Two cases would otherwise be broken by
+   * locking it outright, and both are ordinary:
+   *
+   *   - a LOCAL receipt has no dollars at all, so `derivedAmount` is "" and a
+   *     locked box would leave no way to record the amount that arrived;
+   *   - EDITING an entry whose stored taka does not equal dollars x rate —
+   *     which is what a bank charge looks like — would silently rewrite the
+   *     figure to the product the moment the drawer opened.
+   *
+   * So: dollars and a rate present means the arithmetic owns the box; anything
+   * else means the person does.
+   */
+  const isDerived = derivedAmount !== "";
+  const amount = isDerived
+    ? derivedAmount
+    : amountTyped
+      ? typedAmount
+      : (transaction?.amount ?? "");
   const realised = realisedRate(amount, usdSent);
 
   /**
@@ -521,6 +540,44 @@ export function CashInForm({
             />
           </Field>
 
+          {/*
+            Which account it landed in, FIRST.
+
+            It used to sit below the amounts, and the owner's objection is
+            arithmetic rather than taste: this choice decides whether the form
+            asks for dollars at all — a USD-primary account puts the dollar
+            boxes in front — so it cannot be the last question on the page. A
+            control whose answer changes the questions above it has to come
+            before them.
+          */}
+          {/* Our side, not the sender's. The advice does not decide which of
+            our accounts a transfer lands in, and it can land in any of them. */}
+          <Field
+            label="Received Bank Name"
+            required
+            error={fieldErrors.accountId}
+            hint={
+              editing
+                ? "Fixed once recorded. Landing it in the wrong account is corrected by voiding this entry and recording it again, which leaves a trail — an edit that moved money between two balances would not."
+                : "The account of ours the money landed in"
+            }
+          >
+            <SearchableSelect
+              name="accountId"
+              value={accountId}
+              onChange={setAccountId}
+              disabled={editing}
+              invalid={Boolean(fieldErrors.accountId?.length)}
+              options={accounts.map((account) => ({
+                value: account.id,
+                label: account.name,
+                hint: account.bankName ?? undefined,
+              }))}
+              placeholder="Choose an account"
+              searchPlaceholder="Type to find an account…"
+            />
+          </Field>
+
           {/* The dollar side and the rate first, then the taka they come to.
             The sheet reads taka-first, but this box fills itself in from the
             two beside it, and an answer printed above its own inputs is a box
@@ -571,25 +628,47 @@ export function CashInForm({
             </Field>
           </div>
 
+          {/*
+            Worked out, and not typed over.
+
+            The owner: "je field ta auto fill hobe rate bosanor por oi field ta
+            edit kora jawa ucit na karon oita calculation korei to asteche" —
+            and he is right. The box said "Worked out from the two above" and
+            then accepted typing, so a figure could sit there disagreeing with
+            the two numbers printed beside it, and nothing on the screen would
+            say which was true.
+
+            It is read-only now. The dollars and the rate are the two facts;
+            the taka is what they come to. If the bank credited something else,
+            the honest edit is the RATE — that is what the difference actually
+            was — and the working underneath shows it.
+          */}
           <Field
             label="Amount (BDT)"
             required
             error={fieldErrors.amount}
             hint={
-              amountTyped
-                ? "What landed, in taka — as you typed it"
-                : "Worked out from the two above. Change it to what the bank actually credited."
+              isDerived
+                ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
+                : "What landed, in taka"
             }
           >
             <MoneyInput
               name="amount"
-              defaultValue={transaction?.amount}
               required
               placeholder="0.00"
               value={amount}
+              readOnly={isDerived}
+              tabIndex={isDerived ? -1 : undefined}
+              aria-readonly={isDerived || undefined}
+              className={
+                isDerived
+                  ? "cursor-not-allowed text-muted-foreground"
+                  : undefined
+              }
               onChange={(event) => {
+                if (isDerived) return;
                 setTypedAmount(event.target.value);
-                // From here on this box is the person's, not the arithmetic's.
                 setAmountTyped(true);
               }}
             />
@@ -621,34 +700,6 @@ export function CashInForm({
               ) : null}
             </p>
           ) : null}
-
-          {/* Our side, not the sender's. The advice does not decide which of
-            our accounts a transfer lands in, and it can land in any of them. */}
-          <Field
-            label="Received Bank Name"
-            required
-            error={fieldErrors.accountId}
-            hint={
-              editing
-                ? "Fixed once recorded. Landing it in the wrong account is corrected by voiding this entry and recording it again, which leaves a trail — an edit that moved money between two balances would not."
-                : "The account of ours the money landed in"
-            }
-          >
-            <SearchableSelect
-              name="accountId"
-              value={accountId}
-              onChange={setAccountId}
-              disabled={editing}
-              invalid={Boolean(fieldErrors.accountId?.length)}
-              options={accounts.map((account) => ({
-                value: account.id,
-                label: account.name,
-                hint: account.bankName ?? undefined,
-              }))}
-              placeholder="Choose an account"
-              searchPlaceholder="Type to find an account…"
-            />
-          </Field>
 
           {/* Optional, as every sender field on this form has always been. The
             sheet fills it in every time, but a receipt whose sender nobody
