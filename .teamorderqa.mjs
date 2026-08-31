@@ -238,31 +238,64 @@ await page.setViewport({ width: 1600, height: 1200 });
 await page.goto(`${WEB}/team`, { waitUntil: "networkidle0", timeout: 120000 });
 await new Promise((r) => setTimeout(r, 3000));
 
+/*
+ * Read the directory as a table rather than as the whole document: scope to
+ * the table that actually holds the fixtures, so a second table appearing on
+ * the page later cannot silently supply the header row this file measures.
+ */
 const screen = await page.evaluate(() => {
-  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+  const table =
+    [...document.querySelectorAll("table")].find((t) =>
+      (t.textContent ?? "").includes("TOQA "),
+    ) ?? document.querySelector("table");
+  const heads = [...(table?.querySelectorAll("thead th") ?? [])].map((h) =>
     (h.textContent ?? "").trim(),
   );
-  const rows = [...document.querySelectorAll("tbody tr")]
+  const rows = [...(table?.querySelectorAll("tbody tr") ?? [])]
     .map((r) => [...r.querySelectorAll("td")].map((t) => (t.textContent ?? "").trim()))
     .filter((cells) => cells.some((c) => c.includes("TOQA ")));
   return { heads, rows };
 });
+/*
+ * Columns are located by their heading, never by a counted index.
+ *
+ * The old checks read heads[1] and cells[1], written when SL was the first
+ * column on this table. "Tick several rows, trash them once" put a bulk-select
+ * checkbox in front of SL, so every column on the screen moved one to the
+ * right and both checks failed while the screen was correct. Both ends of this
+ * header row are now blank cells — the tick on the left, RowActions on the
+ * right — so only a named heading identifies a column safely. The body's cells
+ * line up one-to-one with the header, tick cell included.
+ */
+const colAt = (label) => screen.heads.indexOf(label);
+const slAt = colAt("SL");
+const idAt = colAt("Employee ID");
+const nameAt = colAt("Name");
+const shownHeads = screen.heads
+  .map((h, i) => h || (i === 0 ? "(tick)" : "(actions)"))
+  .join(" | ");
+// Was: heads[1] === "Employee ID". The rule the owner asked for has not
+// changed — the company's own identifier sits immediately after the serial the
+// app made up — only the number of columns in front of it has.
 check(
-  "the table carries an Employee ID column, second after SL",
-  screen.heads[1] === "Employee ID",
-  screen.heads.slice(0, 4).join(" | "),
+  "the table carries an Employee ID column, immediately after SL",
+  slAt !== -1 && idAt === slAt + 1,
+  shownHeads,
 );
+// Was: cells[1] === "N/A", the same fixed-index assumption.
 check(
   "a person with no ID reads N/A rather than a blank cell",
-  screen.rows.some((cells) => cells[1] === "N/A"),
-  JSON.stringify(screen.rows.map((c) => c.slice(1, 4))),
+  idAt !== -1 && screen.rows.some((cells) => cells[idAt] === "N/A"),
+  JSON.stringify(screen.rows.map((c) => c[idAt])),
 );
 check(
   "and the rows on screen run oldest first",
   screen.rows.length === 5 &&
     screen.rows[0].some((c) => c.includes("Zed Oldest")) &&
     screen.rows[4].some((c) => c.includes("Alice Newest")),
-  screen.rows.map((c) => c[2]).join(" | "),
+  // Detail prints the Name column; it used to print c[2], which the extra
+  // column turned into the employee ID and made unreadable as an ordering.
+  screen.rows.map((c) => (nameAt === -1 ? c.join("/") : c[nameAt])).join(" | "),
 );
 
 await browser.close();

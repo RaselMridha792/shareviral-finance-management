@@ -137,10 +137,28 @@ check(
 
 /* --------- the rate moves, and the dollars must not move with it -------- */
 
-await db.query(
-  "update app_settings set fx_fixed_usd_bdt = '122.500000'",
-);
+/*
+ * Read the rate before moving it, and put THAT back at the end.
+ *
+ * The line at the bottom of this file used to "restore" by writing
+ * 122.500000 — the moved value — so every run left the app's governing rate
+ * permanently changed. Harmless to the checks below and not harmless to the
+ * app: `reports.service.ts` still prints this column as the funding report's
+ * market rate. Saved and restored the way `.reportsfxqa.mjs` does it.
+ */
+const originalRate =
+  (await db.query("select fx_fixed_usd_bdt::text r from app_settings limit 1"))
+    .rows[0]?.r ?? null;
+await db.query("update app_settings set fx_fixed_usd_bdt = '122.500000'");
 const afterRateMove = await read();
+/*
+ * Still the rule, and now a guard rather than a reproduction. #8 took the
+ * global rate out of the last place that fell back to it (a6681f4, Reports),
+ * and the accounts card never had it: `ownCurrencyBalance` sums the dollars a
+ * row carries, or divides by the row's OWN rate, and contributes 0 otherwise.
+ * So this can only fail if somebody reintroduces the fallback — which is
+ * exactly what it is here to catch.
+ */
 check(
   "THE BUG: the rate changes to 122.50 and the dollars stay $14,000.00",
   Number(afterRateMove.own) === 14000,
@@ -257,7 +275,53 @@ await page.goto("http://localhost:3000/transfers", {
   waitUntil: "networkidle0",
   timeout: 120000,
 });
-await new Promise((r) => setTimeout(r, 2600));
+
+/*
+ * Waited for, not slept through. This is the whole of what was wrong with
+ * this file: the four checks below used to read the page 2600ms and 1400ms
+ * after `goto`, and in the battery of 2026-09-01 all four failed together
+ * (`.battery.log`: "row not found", one with no detail at all, then "not
+ * listed" twice) on a screen that is correct and passes when the machine is
+ * idle. The check that reported nothing is why both now say what they saw.
+ *
+ * `networkidle0` is not "the page is ready" here. `TransfersScreen` is a
+ * client component: `rows` starts null and is filled by a `useEffect` fetch,
+ * so until React has hydrated and that request has landed there is no
+ * `<tbody>` at all — the card says "Loading…" — and the New transfer button,
+ * though it is in the server-rendered HTML, has no click handler attached
+ * yet, so `button.click()` does nothing and no drawer opens. Both are silent,
+ * and both look exactly like a broken screen. Under a battery that had just
+ * run twenty-two harnesses, hydration outlasted the sleeps.
+ *
+ * So each wait now names the thing it is waiting for, and a genuine failure
+ * reports what the page actually showed instead of an empty selector.
+ */
+const waitFor = async (fn, arg, ms = 30000) => {
+  try {
+    await page.waitForFunction(fn, { timeout: ms, polling: 120 }, arg);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const pageState = () =>
+  page.evaluate(() => ({
+    at: location.pathname,
+    rows: document.querySelectorAll("tbody tr").length,
+    newTransferButton: [...document.querySelectorAll("button")].some((b) =>
+      /New transfer/.test(b.textContent ?? ""),
+    ),
+    showing: (document.body.innerText ?? "").replace(/\s+/g, " ").slice(0, 120),
+  }));
+
+const rowArrived = await waitFor(
+  (needle) =>
+    [...document.querySelectorAll("tbody tr")].some((r) =>
+      (r.textContent ?? "").includes(needle),
+    ),
+  "USQA seven thousand",
+);
+const whenRowRead = rowArrived ? null : JSON.stringify(await pageState());
 
 const table = await page.evaluate(() => {
   const row = [...document.querySelectorAll("tbody tr")].find((r) =>
@@ -273,20 +337,56 @@ const table = await page.evaluate(() => {
 check(
   "the transfer row leads with the dollars that were recorded on it",
   table.found && /\$7,000\.00/.test(table.amountCell),
-  table.amountCell || "row not found",
+  table.amountCell || `row not found — page showed ${whenRowRead}`,
 );
 check(
   "and keeps the taka underneath rather than instead",
   /8,40,000|840,000/.test(table.amountCell),
-  table.amountCell,
+  table.amountCell || `row not found — page showed ${whenRowRead}`,
 );
 
-await page.evaluate(() => {
-  [...document.querySelectorAll("button")]
-    .find((b) => /New transfer/.test(b.textContent ?? ""))
-    ?.click();
-});
-await new Promise((r) => setTimeout(r, 1400));
+/*
+ * Clicked until it opens, because the first click can land before React has
+ * attached the handler — see the note above. Six attempts, each given its own
+ * short wait; re-opening an open drawer is `setCreating(true)` again, so a
+ * repeated click cannot close what the earlier one opened.
+ *
+ * The condition is the one the two checks below actually read: the picker is
+ * on screen AND it has been given the accounts. Waiting for the <select> to
+ * merely exist would be the same bug one layer down.
+ */
+const openPicker = async () => {
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const clicked = await page.evaluate(() => {
+      const button = [...document.querySelectorAll("button")].find((b) =>
+        /New transfer/.test(b.textContent ?? ""),
+      );
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    if (
+      clicked &&
+      (await waitFor(
+        () => {
+          const sel = document.querySelector('select[name="fromAccountId"]');
+          return (
+            Boolean(sel) &&
+            [...sel.options].some((o) => (o.textContent ?? "").includes("USQA"))
+          );
+        },
+        undefined,
+        2500,
+      ))
+    ) {
+      return attempt;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  return 0;
+};
+const opened = await openPicker();
+const pickerState = opened ? null : JSON.stringify(await pageState());
 const picker = await page.evaluate(() => {
   const sel = document.querySelector('select[name="fromAccountId"]');
   return [...(sel?.options ?? [])].map((o) => o.textContent?.trim() ?? "");
@@ -296,17 +396,26 @@ const takaOption = picker.find((o) => o.startsWith("USQA Taka Bank"));
 check(
   "the picker states a dollar account in dollars, not taka",
   Boolean(dollarOption) && dollarOption.includes("$") && !dollarOption.includes("৳"),
-  dollarOption ?? "not listed",
+  dollarOption ?? `not listed — drawer never opened, page showed ${pickerState}`,
 );
 check(
   "and a taka account still in taka",
   Boolean(takaOption) && takaOption.includes("৳"),
-  takaOption ?? "not listed",
+  takaOption ?? `not listed — drawer never opened, page showed ${pickerState}`,
 );
 
 await browser.close();
 
-await db.query("update app_settings set fx_fixed_usd_bdt = '122.500000'");
+/* Put the rate back where it was found, whatever happened above. */
+await db.query("update app_settings set fx_fixed_usd_bdt = $1", [originalRate]);
+const restoredRate =
+  (await db.query("select fx_fixed_usd_bdt::text r from app_settings limit 1"))
+    .rows[0]?.r ?? null;
+check(
+  "the governing rate is put back where it was found",
+  String(restoredRate) === String(originalRate),
+  `${restoredRate} vs ${originalRate}`,
+);
 await wipe();
 await db.end();
 

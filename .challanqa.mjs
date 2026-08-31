@@ -16,6 +16,14 @@
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
+// The same three helpers the nightly sweep decides with. Read from the built
+// `dist`, exactly as the API reads them, so the month this file drives can
+// never disagree with the month the product looks at.
+import {
+  deadlineStatus,
+  tdsDepositDeadlineForMonth,
+  todayInDhaka,
+} from "@finance/shared";
 
 const API = "http://localhost:4001/api";
 
@@ -89,6 +97,22 @@ const wipe = async () => {
     `delete from payroll_runs where label like 'CQA %'
        or (period_year = $1 and period_month = $2)`,
     [YEAR, MONTH],
+  );
+  // The reminder fixture at the foot of this file hangs its line off whatever
+  // run already owns the month the sweep is reading — which is usually a real
+  // one, because `payroll_runs` is unique per period and a real month already
+  // has its run. Such a line cannot be found by run label, so it is cleared by
+  // its person instead; without this a crashed run left a line behind and the
+  // `team_members` delete below failed on the foreign key.
+  await db.query(
+    `delete from tds_allocations where payroll_line_id in
+       (select l.id from payroll_lines l
+          join team_members t on t.id = l.team_member_id
+         where t.full_name like 'CQA %')`,
+  );
+  await db.query(
+    `delete from payroll_lines where team_member_id in
+       (select id from team_members where full_name like 'CQA %')`,
   );
   await db.query("delete from team_members where full_name like 'CQA %'");
 };
@@ -252,80 +276,192 @@ check(
  * nightly sweep sums *allocations*, not challans, so a trashed challan went on
  * covering its payroll lines and the bell said nothing about tax nobody had
  * paid. Driven rather than asserted, which means using a month the sweep
- * actually looks at — it reads last month and this one, so July 2026 against a
- * clock sitting in August.
+ * actually looks at.
+ *
+ * WAS: July 2026, written down as a constant "against a clock sitting in
+ * August". The sweep reads last month and this one, so at midnight on 1
+ * September July fell out of the window entirely: "stays quiet" then passed
+ * for the wrong reason — nobody was looking at July at all — and "chases the
+ * unpaid tax" failed with the product perfectly correct. The month is now
+ * computed from the same helpers the sweep computes it with, so it moves with
+ * the clock instead of rotting once a month.
+ *
+ * The sweep has a second gate the fixture cannot argue with, and it is a rule
+ * in its own right: it looks at a period only once that period's deposit
+ * deadline is within seven days or already past, so that a bell nobody needs
+ * yet does not teach people to ignore the one that matters. A month's deadline
+ * is the 14th of the month after it, which means that on the 1st to the 6th
+ * neither month the sweep reads is due yet and no data of any shape can make
+ * it ring. On those days the expectation flips — trash the challan and the
+ * bell must *hold* — which is the same rule read from the other side, and is
+ * asserted rather than skipped.
  */
-const JULY = 7;
-const wipeJuly = async () => {
+const pad = (n) => String(n).padStart(2, "0");
+const dhakaToday = todayInDhaka();
+const [nowYear, nowMonth] = dhakaToday.split("-").map(Number);
+// Exactly the two periods NotificationEventsService.tdsDeadline() walks.
+const sweepWindow = [
+  nowMonth === 1 ? { y: nowYear - 1, m: 12 } : { y: nowYear, m: nowMonth - 1 },
+  { y: nowYear, m: nowMonth },
+];
+const seasonOf = (p) =>
+  deadlineStatus(tdsDepositDeadlineForMonth(p.y, p.m), 7, dhakaToday);
+// The month the sweep will actually act on today; last month when neither is
+// due yet, because that is the one whose deadline arrives first.
+const period = sweepWindow.find((p) => seasonOf(p) !== "upcoming") ?? sweepWindow[0];
+const deadline = tdsDepositDeadlineForMonth(period.y, period.m);
+const inSeason = seasonOf(period) !== "upcoming";
+const KEY = `tds:${period.y}-${pad(period.m)}`;
+const SWEEP_CHALLAN = `CQA-SWEEP-${period.y}-${pad(period.m)}`;
+const SWEEP_LABEL = `CQA sweep ${period.y}-${pad(period.m)}`;
+
+console.log(
+  `\n  the sweep is reading ${deadline.periodLabel} (due ${deadline.dueOn}, ` +
+    `${seasonOf(period)} on ${dhakaToday})`,
+);
+if (!inSeason) {
+  console.log(
+    "  OUT OF SEASON — nothing in the sweep's window is due within seven days,\n" +
+      "  so the bell cannot ring for any data today. The trashed-challan case\n" +
+      `  returns on ${nowYear}-${pad(nowMonth)}-07, seven days before ${deadline.dueOn}; until then\n` +
+      "  the sweep's half of the rule is held by the source check at the foot of this file.",
+  );
+}
+
+/*
+ * A period may hold only one payroll run (`payroll_runs_period_idx`), and a
+ * real month already has its run — so the fixture line joins whatever run owns
+ * the month and is removed again afterwards, rather than inserting a second
+ * one and failing on the unique index. Its own person is what keeps it
+ * separable from every real line in that run, and from the October fixture
+ * above when the two land in the same month.
+ */
+const sweepMember = (
+  await db.query(
+    `insert into team_members (full_name, engagement_type, designation, status, joined_on, created_by, updated_by)
+     values ('CQA Sweep Person', 'employee', 'Tester', 'active', '2020-01-01', $1, $1) returning id`,
+    [person.id],
+  )
+).rows[0].id;
+
+const wipeSweep = async () => {
   await db.query(
     `delete from tds_allocations where deposit_id in
-       (select id from tds_deposits where challan_number = 'CQA-2026-07')`,
+       (select id from tds_deposits where challan_number = $1)`,
+    [SWEEP_CHALLAN],
   );
-  await db.query("delete from tds_deposits where challan_number = 'CQA-2026-07'");
+  await db.query("delete from tds_deposits where challan_number = $1", [SWEEP_CHALLAN]);
   await db.query(
-    `delete from payroll_lines where payroll_run_id in
-       (select id from payroll_runs where label = 'CQA July')`,
+    `delete from tds_allocations where payroll_line_id in
+       (select id from payroll_lines where team_member_id = $1)`,
+    [sweepMember],
   );
-  await db.query("delete from payroll_runs where label = 'CQA July'");
-  await db.query("delete from notifications where dedupe_key = 'tds:2026-07'");
+  await db.query("delete from payroll_lines where team_member_id = $1", [sweepMember]);
+  await db.query("delete from payroll_runs where label = $1", [SWEEP_LABEL]);
+  await db.query("delete from notifications where dedupe_key = $1", [KEY]);
 };
-await wipeJuly();
+await wipeSweep();
 
-const julyRun = (
-  await db.query(
-    `insert into payroll_runs (period_year, period_month, label, status, total_gross, total_additions, total_tds, total_deductions, total_net, created_by, updated_by)
-     values ($1, $2, 'CQA July', 'finalized', '90000.00','0.00','5000.00','0.00','85000.00', $3, $3) returning id`,
-    [YEAR, JULY, person.id],
-  )
-).rows[0].id;
-const julyLine = (
-  await db.query(
-    `insert into payroll_lines (payroll_run_id, team_member_id, gross_amount, tds_amount, updated_by)
-     values ($1, $2, '90000.00', '5000.00', $3) returning id`,
-    [julyRun, member, person.id],
-  )
-).rows[0].id;
-const julyChallan = (
-  await db.query(
-    `insert into tds_deposits (challan_number, challan_date, deposit_date, amount, bank_name, period_year, period_month, deposit_type, account_id, created_by, updated_by)
-     values ('CQA-2026-07', '2026-08-10', '2026-08-10', '5000.00', 'Sonali Bank', $1, $2, 'salary', $3, $4, $4) returning id`,
-    [YEAR, JULY, account.id, person.id],
-  )
-).rows[0].id;
-await db.query(
-  `insert into tds_allocations (deposit_id, payroll_line_id, amount) values ($1, $2, '5000.00')`,
-  [julyChallan, julyLine],
-);
-
-const sweepRaisesJuly = async () => {
+let lastSweepStatus = null;
+const sweepRings = async () => {
   // The sweep raises one notification per period and then dedupes, so the
   // previous verdict is cleared before asking again.
-  await db.query("delete from notifications where dedupe_key = 'tds:2026-07'");
-  await call("POST", "/notifications/run");
+  await db.query("delete from notifications where dedupe_key = $1", [KEY]);
+  lastSweepStatus = (await call("POST", "/notifications/run")).status;
   const rows = await db.query(
-    "select count(*)::int as n from notifications where dedupe_key = 'tds:2026-07'",
+    "select count(*)::int as n from notifications where dedupe_key = $1",
+    [KEY],
   );
   return rows.rows[0].n > 0;
 };
 
+/*
+ * The month is a real one now rather than a made-up one, so it has to be asked
+ * whether it is quiet before anything is added to it: a period that already
+ * owes tax of its own would ring on every reading below and the trashed
+ * challan would prove nothing. A failure here is the fixture month, not the
+ * product.
+ */
 check(
-  "with July's challan in place the reminder stays quiet",
-  (await sweepRaisesJuly()) === false,
+  `the sweep's month starts with nothing outstanding of its own`,
+  (await sweepRings()) === false,
+  `${deadline.periodLabel} — if this fails, that month has undeposited tax already`,
+);
+// Every reading below is "the bell said nothing", and a job that never ran
+// says nothing too. So the job is made to prove it ran at all.
+check(
+  "and the nightly job actually ran when asked",
+  lastSweepStatus === 200,
+  `POST /notifications/run — HTTP ${lastSweepStatus}`,
+);
+
+const existingRun = (
+  await db.query(
+    "select id from payroll_runs where period_year = $1 and period_month = $2 limit 1",
+    [period.y, period.m],
+  )
+).rows[0];
+const sweepRun =
+  existingRun?.id ??
+  (
+    await db.query(
+      `insert into payroll_runs (period_year, period_month, label, status, total_gross, total_additions, total_tds, total_deductions, total_net, created_by, updated_by)
+       values ($1, $2, $3, 'finalized', '90000.00','0.00','5000.00','0.00','85000.00', $4, $4) returning id`,
+      [period.y, period.m, SWEEP_LABEL, person.id],
+    )
+  ).rows[0].id;
+const sweepLine = (
+  await db.query(
+    `insert into payroll_lines (payroll_run_id, team_member_id, gross_amount, tds_amount, updated_by)
+     values ($1, $2, '90000.00', '5000.00', $3) returning id`,
+    [sweepRun, sweepMember, person.id],
+  )
+).rows[0].id;
+const sweepChallan = (
+  await db.query(
+    `insert into tds_deposits (challan_number, challan_date, deposit_date, amount, bank_name, period_year, period_month, deposit_type, account_id, created_by, updated_by)
+     values ($1, $2, $2, '5000.00', 'Sonali Bank', $3, $4, 'salary', $5, $6, $6) returning id`,
+    [SWEEP_CHALLAN, deadline.dueOn, period.y, period.m, account.id, person.id],
+  )
+).rows[0].id;
+await db.query(
+  `insert into tds_allocations (deposit_id, payroll_line_id, amount) values ($1, $2, '5000.00')`,
+  [sweepChallan, sweepLine],
+);
+
+check(
+  `with ${deadline.periodLabel}'s challan in place the reminder stays quiet`,
+  (await sweepRings()) === false,
   "",
 );
-await call("POST", `/trash/tds-deposit/${julyChallan}`, { reason: "Challan QA" });
-check(
-  "trash it and the reminder chases the unpaid tax",
-  (await sweepRaisesJuly()) === true,
-  "",
-);
-await call("POST", `/trash/tds-deposit/${julyChallan}/restore`);
+
+await call("POST", `/trash/tds-deposit/${sweepChallan}`, { reason: "Challan QA" });
+const rangAfterTrash = await sweepRings();
+if (inSeason) {
+  check(
+    "trash it and the reminder chases the unpaid tax",
+    rangAfterTrash === true,
+    `${deadline.periodLabel} is ${seasonOf(period)} — due ${deadline.dueOn}`,
+  );
+} else {
+  // The same rule from the other side, on the days the deadline gate is shut:
+  // 5,000 is undeposited and the sweep must still say nothing, because the
+  // deadline decides whether to look before the ledger decides what to say.
+  check(
+    "out of season — trash it and the reminder holds until the deadline is near",
+    rangAfterTrash === false,
+    `${deadline.periodLabel} is not due until ${deadline.dueOn}; nothing in the sweep's window is within seven days of ${dhakaToday}`,
+  );
+}
+
+await call("POST", `/trash/tds-deposit/${sweepChallan}/restore`);
 check(
   "restore it and the reminder goes quiet again",
-  (await sweepRaisesJuly()) === false,
+  (await sweepRings()) === false,
   "",
 );
-await wipeJuly();
+await wipeSweep();
+await db.query("delete from team_members where id = $1", [sweepMember]);
 
 /* ------------------------------ the rule lives in one place, not six ---- */
 

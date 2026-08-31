@@ -2,7 +2,9 @@
  * The three fixes that only a browser can vouch for.
  *
  *   1. Table links are visibly links: blue, underlined — measured off the
- *      computed style, not read off the class list.
+ *      computed style, not read off the class list. The Entry No. cell is a
+ *      link only where a document hangs off the entry; where none does it is
+ *      plain text reading N/A (c4590a1).
  *   2. The dashboard heading carries the bank's name under it, not the type
  *      label beside it, and untouched zero accounts are not on the page.
  *   3. Deleting a payroll run removes the row without a reload.
@@ -45,8 +47,11 @@ const token = jwt.sign(
 
 /* ------------------------------------------------------------- fixtures */
 
-// An account with a bank name and one movement this month, so the dashboard
-// has something to draw; a payroll run to delete.
+// An account with a bank name and two movements, so the dashboard has
+// something to draw and the Entry No. column has both of its cases; a payroll
+// run to delete. Files go first — the seeded bank slip hangs off an entry, and
+// the entry cannot go while it is there.
+await db.query(`delete from files where transaction_id in (select id from transactions where account_id in (select id from accounts where name = 'QA UI Bank'))`);
 await db.query(`delete from transactions where account_id in (select id from accounts where name = 'QA UI Bank')`);
 await db.query(`delete from accounts where name in ('QA UI Bank', 'QA UI Sleeper')`);
 const admin = person.id;
@@ -66,9 +71,34 @@ await db.query(
 const catOut = (
   await db.query("select id from categories where kind='out' and deleted_at is null limit 1")
 ).rows[0].id;
+const withDoc = (
+  await db.query(
+    `insert into transactions (ref_no, account_id, direction, txn_date, amount, currency, category_id, description, invoice_no, created_by, updated_by)
+     values ('TXN-UIQA-1', $1, 'out', '2026-08-15', '750.00', 'BDT', $2, 'QA UI link row', 'INV-UIQA-7', $3, $3) returning id`,
+    [acct.id, catOut, admin],
+  )
+).rows[0];
+/*
+ * A document on the entry.
+ *
+ * The Entry No. cell used to be a link on every row — an empty drawer on the
+ * common case, with an amber triangle marking the exception that was most of
+ * the table. Since c4590a1 the cell is a link only when something is actually
+ * attached, so a row that is to be measured as a link has to have a file.
+ */
 await db.query(
-  `insert into transactions (ref_no, account_id, direction, txn_date, amount, currency, category_id, description, invoice_no, created_by, updated_by)
-   values ('TXN-UIQA-1', $1, 'out', '2026-08-15', '750.00', 'BDT', $2, 'QA UI link row', 'INV-UIQA-7', $3, $3)`,
+  `insert into files (storage_key, original_name, mime_type, size_bytes, checksum, kind, transaction_id)
+   values ('qa/fivefix-' || $1::text, 'qa-bank-slip.pdf', 'application/pdf', 100, 'qa-checksum', 'bank_statement', $1::uuid)`,
+  [withDoc.id],
+);
+/*
+ * And the other half of that rule: an entry with nothing attached. It keeps
+ * its own number and the bank's, and reads N/A instead of pretending to open
+ * something.
+ */
+await db.query(
+  `insert into transactions (ref_no, account_id, direction, txn_date, amount, currency, category_id, description, reference, created_by, updated_by)
+   values ('TXN-UIQA-2', $1, 'out', '2026-08-15', '250.00', 'BDT', $2, 'QA UI paperless row', 'FT26UIQA0091', $3, $3)`,
   [acct.id, catOut, admin],
 );
 await db.query("delete from payroll_runs where period_year = 2033");
@@ -154,10 +184,17 @@ check(
   Boolean(invoiceCell?.underlined),
   invoiceCell ? `color ${invoiceCell.color}` : "no invoice cell",
 );
+/*
+ * Was: "the transaction id is underlined", asserted on a row with no document
+ * attached. Until c4590a1 the Entry No. cell rendered as a link on every row;
+ * now it is a link only when something is attached to the entry, so the row
+ * under test carries a file (see the fixtures) and the paperless case is
+ * checked below instead of expected to be a link.
+ */
 check(
-  "the transaction id is underlined",
+  "the Entry No. is a link when a document is attached",
   Boolean(refCell?.underlined),
-  refCell ? `color ${refCell.color}` : "no refNo cell",
+  refCell ? `color ${refCell.color}` : "no Entry No. cell",
 );
 check(
   "the account name link is underlined",
@@ -180,6 +217,47 @@ check(
   "and they are blue, not the brand lime",
   isBlue(invoiceCell?.color) && isBlue(accountCell?.color),
   `invoice ${invoiceCell?.color}, account ${accountCell?.color}`,
+);
+
+/*
+ * The other branch of the same cell: nothing attached, so nothing to press.
+ * Read off the <td> that carries our number rather than off a control, because
+ * the point of the check is that there is no control.
+ */
+const paperless = await links.evaluate(() => {
+  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
+    (r.textContent ?? "").includes("TXN-UIQA-2"),
+  );
+  if (!row) return { missing: true };
+  const cell = [...row.querySelectorAll("td")].find((td) =>
+    (td.textContent ?? "").includes("TXN-UIQA-2"),
+  );
+  if (!cell) return { missing: true };
+  return {
+    missing: false,
+    text: (cell.textContent ?? "").replace(/\s+/g, " ").trim(),
+    clickable: Boolean(cell.querySelector("a, button")),
+    underlined: [cell, ...cell.querySelectorAll("*")].some((el) =>
+      getComputedStyle(el).textDecorationLine.includes("underline"),
+    ),
+  };
+});
+check(
+  "the paperless row is on the screen",
+  !paperless.missing,
+  paperless.missing ? "seeded paperless row not found" : "",
+);
+check(
+  "an Entry No. with no document is not a link",
+  !paperless.missing && !paperless.clickable && !paperless.underlined,
+  `clickable ${paperless.clickable}, underlined ${paperless.underlined}`,
+);
+check(
+  "it reads N/A, and still shows our number and the bank's",
+  /N\/A/.test(paperless.text ?? "") &&
+    (paperless.text ?? "").includes("TXN-UIQA-2") &&
+    (paperless.text ?? "").includes("FT26UIQA0091"),
+  `cell: ${JSON.stringify(paperless.text)}`,
 );
 await links.close();
 
@@ -298,6 +376,9 @@ await browser.close();
 
 /* ---------------------------------------------------------------- tidy up */
 await db.query("delete from payroll_runs where period_year = 2033");
+// Files first: the seeded bank slip hangs off the entry, and the row it
+// hangs off cannot go while it is there.
+await db.query(`delete from files where transaction_id in (select id from transactions where account_id in (select id from accounts where name = 'QA UI Bank'))`);
 await db.query(`delete from transactions where account_id in (select id from accounts where name = 'QA UI Bank')`);
 await db.query(`delete from accounts where name in ('QA UI Bank', 'QA UI Sleeper')`);
 await db.end();

@@ -183,9 +183,36 @@ export function SubscriptionBodyCells({
         )}
       </td>
 
+      {/*
+        The number, the click that opens the bill, or N/A.
+
+        This printed a fixed em dash on every row — the cell had been emptied
+        when the form stopped asking for an invoice NUMBER, on the reading that
+        there was nothing to render. There was: the column exists, the service
+        selects it, and rows carry values from before the change and from the
+        importer. Meanwhile the screen was passing an `onInvoice` handler that
+        nothing called, and the comment here claimed the eye beside Reference
+        opened the invoice, which it does not — that handler is scoped to
+        bank_statement, receipt and other.
+
+        Plain text where no handler was passed: `member-tools` renders these
+        same cells read-only, and a link that opens nothing is worse than none.
+      */}
       <td className="num text-xs">
-        {/* The invoice is a document — the eye beside Reference opens it. */}
-        <span className="text-faint">—</span>
+        {!row.invoiceNo ? (
+          <span className="text-muted-foreground">N/A</span>
+        ) : handlers.onInvoice ? (
+          <button
+            type="button"
+            onClick={() => handlers.onInvoice?.(row)}
+            title="Show the invoice"
+            className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+          >
+            {row.invoiceNo}
+          </button>
+        ) : (
+          <span>{row.invoiceNo}</span>
+        )}
       </td>
 
       {/*

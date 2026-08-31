@@ -125,30 +125,53 @@ const novRun = await run(2026, 11, "TQA Nov");
 await line(sepRun, sepPerson, "A-CHALLAN-SEP");
 await line(novRun, novPerson, null);
 
+/* ------------------------------------------------- reading a register page */
+/*
+ * This database is shared — other harnesses seed their own finalised runs in
+ * this same fiscal year while this one runs (July and October 2026, ৳5,000
+ * and ৳4,000, belong to .challanqa.mjs). So nothing below asks what the
+ * WHOLE register totals; every claim is about the rows this fixture owns, or
+ * about how a total MOVES when this fixture's data moves. Both say exactly
+ * what the original absolute figures said, and neither can be knocked over by
+ * a run that has nothing to do with us.
+ */
+const ours = (res) =>
+  (res.body?.rows ?? []).filter((r) => (r.fullName ?? "").startsWith("TQA "));
+// Paisa, as integers: these are numeric(14,2) strings, and adding them up as
+// floats is how 3000 + 3000 arrives at 6000.000000000001.
+const ourTax = (res) =>
+  ours(res).reduce((sum, r) => sum + Math.round(Number(r.tdsAmount) * 100), 0);
+const total = (res) => Math.round(Number(res.body?.periodTotal) * 100);
+
 /* ---------------------------------- 1. a trashed run leaves the register */
 
 const sepQuery = "/tds/salary-deductions?granularity=month&fiscalYear=2026&index=3";
 const before = await call("GET", sepQuery);
 check(
   "September lists its taxed person",
-  (before.body?.rows ?? []).some((r) => r.fullName === "TQA September Person") &&
-    before.body?.periodTotal === "3000.00",
-  `total ${before.body?.periodTotal}`,
+  ourTax(before) === 300000 &&
+    ours(before).some((r) => r.fullName === "TQA September Person"),
+  `our rows ${ourTax(before) / 100}, period total ${before.body?.periodTotal}`,
 );
 await call("POST", `/trash/payroll-run/${sepRun}`, { reason: "TDS QA" });
 const trashed = await call("GET", sepQuery);
+/*
+ * Old rule: after the trash the register had to be empty and the total exactly
+ * "0.00". That is the same claim only while nothing else is in September; the
+ * claim itself is that OUR run's rows and OUR run's ৳3,000 both leave, so the
+ * row count is now ours and the total is read as a movement.
+ */
 check(
   "a run in the trash leaves the register AND the period total",
-  (trashed.body?.rows ?? []).length === 0 && trashed.body?.periodTotal === "0.00",
-  `rows ${trashed.body?.rows?.length}, total ${trashed.body?.periodTotal}`,
+  ours(trashed).length === 0 && total(before) - total(trashed) === 300000,
+  `our rows ${ours(trashed).length}, total ${before.body?.periodTotal} → ${trashed.body?.periodTotal}`,
 );
 await call("POST", `/trash/payroll-run/${sepRun}/restore`);
 const restored = await call("GET", sepQuery);
 check(
   "and both come back on restore",
-  (restored.body?.rows ?? []).length === 1 &&
-    restored.body?.periodTotal === "3000.00",
-  "",
+  ours(restored).length === 1 && total(restored) === total(before),
+  `our rows ${ours(restored).length}, total ${restored.body?.periodTotal}`,
 );
 
 /* ------------------------------- 4. the fiscal year echoed back is fiscal */
@@ -174,20 +197,54 @@ check(
 
 /* ---------------------------------------- 2. the tabs disagree, as they must */
 
-const monthly = await call("GET", sepQuery);
-const quarterly = await call(
-  "GET",
-  "/tds/salary-deductions?granularity=quarter&fiscalYear=2026&index=1",
-);
-const yearly = await call(
-  "GET",
-  "/tds/salary-deductions?granularity=year&fiscalYear=2026&index=1",
-);
+/*
+ * Fetched together, so the three answers describe one moment: another
+ * harness's fixture appearing between two sequential reads would show up here
+ * as a period that shrank.
+ */
+const [monthly, quarterly, yearly] = await Promise.all([
+  call("GET", sepQuery),
+  call("GET", "/tds/salary-deductions?granularity=quarter&fiscalYear=2026&index=1"),
+  call("GET", "/tds/salary-deductions?granularity=year&fiscalYear=2026&index=1"),
+]);
+/*
+ * Old rule: month "3000.00", quarter "3000.00", year "6000.00" — the whole
+ * register's totals, which only read that way while this fixture is the only
+ * taxed payroll in fiscal 2026. It is not, and the day another harness held
+ * July (৳5,000) and October (৳4,000) this said quarter 8000 / year 15000 with
+ * every window correct: Q1 really is Jul–Sep, and the year really does hold
+ * October. The disagreement being tested — coarse and fine tabs must NOT show
+ * the same rows — is now read off this fixture's own two people, who sit one
+ * period apart on purpose: September is in the month, in its quarter and in
+ * the year; November is in the year alone.
+ */
+const names = (res) =>
+  ours(res)
+    .map((r) => r.fullName)
+    .sort()
+    .join(" + ");
 check(
-  "a month, its quarter and its year give different totals",
-  monthly.body?.periodTotal === "3000.00" &&
-    quarterly.body?.periodTotal === "3000.00" &&
-    yearly.body?.periodTotal === "6000.00",
+  "a month, its quarter and its year cover different spans",
+  ourTax(monthly) === 300000 &&
+    ourTax(quarterly) === 300000 &&
+    ourTax(yearly) === 600000 &&
+    names(monthly) === "TQA September Person" &&
+    names(quarterly) === "TQA September Person" &&
+    names(yearly) === "TQA November Person + TQA September Person",
+  `month [${names(monthly)}], quarter [${names(quarterly)}], year [${names(yearly)}]`,
+);
+/*
+ * And the totals under those tables move the same way. Absolute figures are
+ * somebody else's business, but a period cannot total less than a period
+ * inside it, and the year is ahead of the month by at least the ৳3,000
+ * November holds — which is what "all three tabs are showing me July" could
+ * never satisfy.
+ */
+check(
+  "the figure under each table nests the way the periods do",
+  total(monthly) <= total(quarterly) &&
+    total(quarterly) <= total(yearly) &&
+    total(yearly) - total(monthly) >= 300000,
   `month ${monthly.body?.periodTotal}, quarter ${quarterly.body?.periodTotal}, year ${yearly.body?.periodTotal}`,
 );
 

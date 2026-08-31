@@ -2,7 +2,10 @@
  * Working days drive the pay, against the month's own length.
  *
  * The owner's rules, each with the check that would catch its violation:
- *   - one number (Working days) — Paid days is gone from contract and drawer;
+ *   - one number (Working Days) — Paid days is gone from the contract, and
+ *     from the screen: the count is typed in a column on the salary sheet
+ *     itself now, the Breakdown drawer that used to hold it having been
+ *     removed (a8d5518, 422a22e);
  *   - the divisor is the month's real calendar length: 28, 29, 30 or 31;
  *   - gross = salary x days / length, the earnings lines scale with it and
  *     still sum to it exactly (rounding pinned, not hoped about);
@@ -277,7 +280,46 @@ check(
   `HTTP ${paid.status}`,
 );
 
-/* ------------------------------- the drawer ----------------------------- */
+/* --------------------- the days box, on the sheet itself ---------------- */
+/*
+ * WAS: a Breakdown link on the row opened a drawer, and the Working days box
+ * lived inside it. This section clicked the link and asserted the drawer
+ * offered Working days alone, out of "the month's real length".
+ *
+ * The link, the drawer and that duplicate box were all removed today
+ * (a8d5518 "Salary sheet: no Breakdown link"; 422a22e deleted BreakdownDrawer
+ * along with it, dead since the link went). Working Days is a column typed
+ * straight on the sheet now, headed with the month's own length underneath —
+ * so the same rules are put to the column instead: one number and no Paid
+ * days, the month's real length named where the person typing can see it, and
+ * a figure typed there that really does re-figure the gross.
+ */
+
+/*
+ * Put the fixture back on 31,000 before driving the screen.
+ *
+ * The fiscal-2026 section above raised this person to 150,000, and pro-rata
+ * reads the salary ON RECORD FOR THE MONTH (compensation_history, latest row
+ * effective on or before the month's end) rather than the line's own gross —
+ * so a day count typed on the February 2032 sheet after that raise re-figures
+ * against 150,000, which the first run of this section read as the screen
+ * being wrong. Same effective date, so this amends that raise rather than
+ * stacking a third row on it.
+ */
+await call("PATCH", `/team-members/${memberId}`, { currentSalary: "31000.00" });
+const applies = (
+  await db.query(
+    `select gross_amount from compensation_history
+      where team_member_id = $1 and deleted_at is null
+        and effective_from <= date '2032-02-29'
+      order by effective_from desc limit 1`,
+    [memberId],
+  )
+).rows[0];
+if (applies?.gross_amount !== "31000.00") {
+  console.log("fixture not restored to 31,000 —", JSON.stringify(applies));
+  process.exit(1);
+}
 
 const chrome = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const browser = await puppeteer.launch({
@@ -296,36 +338,157 @@ await page.goto(`${WEB}/payroll/${feb.runId}`, {
   timeout: 120000,
 });
 await settle(3000);
-const opened = await page.evaluate(() => {
-  const btn = [...document.querySelectorAll("button")].find((b) =>
-    /payslip breakdown|Breakdown/i.test(b.getAttribute("title") ?? b.textContent ?? ""),
+
+/*
+ * The column is found by its heading and the row's cell taken at that
+ * heading's index — not by nth-child, which the FX Rate column added today
+ * would have shifted under us, and not by a class five money columns share.
+ * The box is marked as it is found, so the click that follows lands on the
+ * element that was just measured; it is re-marked before every interaction
+ * because saving re-keys the input on the stored day count, which mounts a
+ * new node and leaves the marked one detached.
+ */
+const readSheet = () => {
+  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+    (h.textContent ?? "").replace(/\s+/g, " ").trim(),
   );
-  if (!btn) return false;
-  btn.click();
-  return true;
-});
-await settle(1400);
-const drawer = await page.evaluate(() => {
-  const d = [...document.querySelectorAll('[role="dialog"]')].find((x) =>
-    /payslip breakdown/i.test(x.textContent ?? ""),
-  );
-  const text = (d?.textContent ?? "").replace(/\s+/g, " ");
-  return {
-    found: Boolean(d),
-    paidDays: /Paid days/.test(text),
-    workingDays: /Working days/.test(text),
-    saysMonthLength: /month's real length/.test(text),
-    oldFooter: /do not change/.test(text),
+  const row = document.querySelector("tbody tr");
+  const cellAt = (test) => {
+    const i = heads.findIndex(test);
+    return i === -1 ? { i, td: null } : { i, td: row?.querySelectorAll("td")[i] ?? null };
   };
-});
+  const days = cellAt((h) => /^Working Days/i.test(h));
+  const gross = cellAt((h) => /^Gross$/i.test(h));
+  const input = days.td?.querySelector("input") ?? null;
+  if (input) input.setAttribute("data-prqa-days", "1");
+  const shown = (td) => {
+    const box = td?.querySelector("input") ?? null;
+    return box ? box.value : ((td?.textContent ?? "").trim() || null);
+  };
+  /* What the four earnings columns add up to on screen — read-only cells, so
+     they say what the last fetch returned whatever the input boxes do. */
+  const parts = heads
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => /^(Basic|House Rent|Medical|Conveyance)/i.test(h))
+    .map(({ i }) => Number((row?.querySelectorAll("td")[i]?.textContent ?? "").replace(/[^\d.-]/g, "")))
+    .filter((n) => Number.isFinite(n));
+  return {
+    loaded: heads.length > 0 && Boolean(row),
+    columns: heads.length,
+    col: days.i,
+    heading: days.i === -1 ? "" : heads[days.i],
+    typed: Boolean(input),
+    days: shown(days.td),
+    gross: shown(gross.td),
+    grossAttr: gross.td?.querySelector("input")?.getAttribute("value") ?? null,
+    partsSum: parts.length
+      ? parts.reduce((t, n) => t + n, 0).toFixed(2)
+      : null,
+    // Paid days went from the contract and the screen together; the whole
+    // page is searched because it must be nowhere, not merely not in a cell.
+    paidDays: /Paid days/i.test(document.body.textContent ?? ""),
+  };
+};
+
+const sheet = await page.evaluate(readSheet);
 check(
-  "the drawer offers Working days alone, and says what it now does",
-  drawer.found &&
-    !drawer.paidDays &&
-    drawer.workingDays &&
-    drawer.saysMonthLength &&
-    !drawer.oldFooter,
-  JSON.stringify(drawer),
+  "Working Days is a column on the sheet — no drawer to open — headed out of February's own 29",
+  sheet.loaded &&
+    sheet.col !== -1 &&
+    sheet.typed &&
+    // "Working Daysof 29" with no space in textContent: the month's length is
+    // a block <span> under the heading, and textContent joins without one.
+    /Working Days\s*of\s*29\b/i.test(sheet.heading) &&
+    !sheet.paidDays,
+  `${sheet.columns} columns, heading "${sheet.heading}", typed ${sheet.typed}, "Paid days" on page ${sheet.paidDays}`,
+);
+check(
+  "  and the box reads the 10 days this line was saved with",
+  sheet.days === "10",
+  `box reads ${JSON.stringify(sheet.days)}, gross cell ${JSON.stringify(sheet.gross)}`,
+);
+
+/*
+ * Poll the row rather than sleep a fixed 1.4s: the save leaves on blur and
+ * lands when it lands, and a sleep long enough on a warm machine is a false
+ * failure on a cold one — the rot this suite has been bitten by before.
+ */
+const waitRow = async (lineId, ok, ms = 15000) => {
+  const stop = Date.now() + ms;
+  let row = await lineNow(lineId);
+  while (!ok(row) && Date.now() < stop) {
+    await settle(250);
+    row = await lineNow(lineId);
+  }
+  return row;
+};
+const typeDays = async (text) => {
+  const found = await page.evaluate(readSheet);
+  if (!found.typed) return false;
+  // Click to focus, then select what is in the box and type over it. A
+  // triple-click does not select inside this input — the first run of this
+  // typed 15 in front of the 10 already there and sent 1510, which the API
+  // rightly refused, and the harness then read the unchanged row as a
+  // product failure. select() leaves nothing to interpret.
+  await page.click('[data-prqa-days="1"]');
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-prqa-days="1"]');
+    el?.focus();
+    el?.select();
+  });
+  await page.keyboard.type(text);
+  // Blur is what saves — the box has an onBlur, not an onChange.
+  await page.keyboard.press("Tab");
+  return true;
+};
+/*
+ * The same patience for the screen: saving calls router.refresh(), which
+ * refetches on its own schedule, so the row is polled until it has redrawn
+ * rather than read once. Reading it a moment after the blur is how a harness
+ * calls a screen stale when it was only early — and the days box is no
+ * witness on its own, since it holds what was typed into it either way.
+ */
+const waitScreen = async (ok, ms = 20000) => {
+  const stop = Date.now() + ms;
+  let seen = await page.evaluate(readSheet);
+  while (!ok(seen) && Date.now() < stop) {
+    await settle(300);
+    seen = await page.evaluate(readSheet);
+  }
+  return seen;
+};
+
+const expect15 = ((31000 * 15) / 29).toFixed(2);
+const typed15 = await typeDays("15");
+const after = await waitRow(feb.lineId, (r) => String(r.working_days) === "15");
+check(
+  "typing 15 in that box pro-rates the gross against the month's 29",
+  typed15 &&
+    String(after.working_days) === "15" &&
+    after.gross_amount === expect15,
+  `days ${after.working_days}, gross ${after.gross_amount}`,
+);
+const redrawn = await waitScreen(
+  (s) => s.partsSum === expect15 && s.gross === expect15,
+);
+check(
+  "  and the row redraws on it — the earnings columns and the Gross box both",
+  redrawn.partsSum === expect15 && redrawn.gross === expect15,
+  `earnings columns ${redrawn.partsSum}, gross box ${JSON.stringify(redrawn.gross)} (attribute ${JSON.stringify(redrawn.grossAttr)}), days box ${JSON.stringify(redrawn.days)}, stored ${after.gross_amount}`,
+);
+
+/*
+ * The box has no clear button, so the month's own number is how a full month
+ * is put back from the sheet: the screen sends 29-of-29 as null, the same
+ * thing an emptied box sends. That translation lives only in the screen —
+ * the API check above proves what null does, this proves the sheet says null.
+ */
+const typedFull = await typeDays("29");
+const full = await waitRow(feb.lineId, (r) => r.working_days === null);
+check(
+  "typing the month's own 29 puts the full month back, stored as no day count at all",
+  typedFull && full.working_days === null && full.gross_amount === "31000.00",
+  `days ${full.working_days}, gross ${full.gross_amount}`,
 );
 
 await browser.close();

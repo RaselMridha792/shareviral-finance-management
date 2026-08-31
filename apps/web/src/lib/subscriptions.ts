@@ -54,11 +54,21 @@ export type SubscriptionDto = {
   loginEmail: string | null;
   websiteUrl: string | null;
   /*
-   * Gone. An invoice is a document now, attached through `files` — the drawer
-   * asks for the bill rather than a number for it, and the API never had a
-   * column to answer with. Declaring it here made the form post a key that
-   * `strictObject` refused, which is what "Could not save that" was.
+   * The bill's own number, when the plan carries one.
+   *
+   * This was removed when the form stopped asking for it, on the reading that
+   * the API had no column to answer with — and that reading was already out of
+   * date: `2026-08-31-subscription-reference.sql` had added the column and
+   * `subscriptions.service.ts` selects it. The consequence was small and
+   * invisible: the table's Invoice cell had nothing to render, so it printed a
+   * fixed dash on every row while every other money table in the app printed
+   * the number or N/A.
+   *
+   * Read-only from here. The FORM does not ask for it — an invoice is a
+   * document, attached — but a number recorded before that, or by the importer,
+   * still has to show.
    */
+  invoiceNo: string | null;
   reference: string | null;
   /** Derived from the file that points at this row, not a column here. */
   screenshotFileId: string | null;
