@@ -14,6 +14,11 @@ below is started unless it says so.
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | **done** — unpushed |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
 | 9 | A team member's bank section: holder name, branch and SWIFT | **done** — unpushed |
+| 18 | **A subscription that is paid takes money out of the bank** | **API done** — the button on the screen is next |
+| 20 | Subscription drawer: "Could not save that" on Invoice/Reference | **done** — the columns never existed |
+| 21 | Renewal date computed from the cycle, not typed | not started |
+| 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
+| 19 | A monthly date filter on AI tools and subscriptions | with #18 |
 | 14 | Team member: a Social media section, "add another", with icons | not started |
 | 15 | Team member Tax: e-TIN, and one E-Return per fiscal year with its document | not started |
 | 16 | Remove Wallet and Wallet number from "Where they are paid" | **done** — with #9 |
@@ -90,6 +95,65 @@ From the Add/Edit person drawer. Three of the six the owner listed are missing:
 | 6 | **SWIFT Code** | **missing** |
 
 Three new nullable columns. Migration travels alone.
+
+## 18. A subscription that is paid takes money out of the bank
+
+The owner: *"ai tools and subscription ta kaj korena thik vabe. ekhane kichu
+kinle eta taka katena bank theke kono history thakena eta puro fix koro perfect
+vabe."*
+
+**He is right, and the gap is structural rather than a bug.** A subscription is
+a row in `vendors` with billing fields — cycle, amount, currency, next renewal,
+billing account. It never writes a transaction. The "paid this period" figure
+on that screen is computed by summing transactions that happen to carry the
+vendor's id, so money only appears there if somebody separately recorded an
+expense and remembered to tag it. Nothing about adding or renewing a plan
+touches an account balance.
+
+So: a plan is a plan, and a payment is a payment, and the app only had the
+first.
+
+**The shape, and the one rule it must not break.** A payment gets recorded from
+the subscription — an action on the row that writes a real `transactions` entry
+against the billing account, tagged with the vendor and its category, for the
+plan's amount, and rolls `next_renewal_on` forward by the billing cycle.
+
+It must NEVER happen by itself. Money leaving a bank has to be somebody's act,
+with a date they chose: a scheduler that quietly created expenses would put
+figures in the books that nobody typed, and the first time a card was declined
+the app and the bank would disagree with no way to tell which was right.
+
+Everything else follows from that entry existing: the balance moves because it
+is an ordinary expense, the history is the ledger's own, the overdraft rule
+applies, the trash and the audit log work, and "paid this period" stops being a
+guess.
+
+Still to settle before building: whether a payment may be recorded for a month
+already paid (probably yes, with a warning — a plan can be charged twice), and
+what happens when the card's currency is not the plan's.
+
+## 20-22. The rest of that screen
+
+**20 — the save error, fixed.** The drawer posted `invoiceNo` and `reference`
+to a `strictObject` schema that knew neither, and neither column existed. See
+`deploy/sql/2026-08-31-subscription-reference.sql` for what was measured.
+
+**21 — the renewal date is computed.** The owner: *"If select Monthly hoy tahole
+renews date auto calculation hobe ekhane notun kore renewal date dite hobena oi
+field ta remove korte hobe."* Started on + cycle gives it. `advanceCycle()` in
+transactions.service.ts already does the arithmetic for a payment; the drawer
+should show the answer rather than a box. Keep the column — a plan whose renewal
+was typed before today still has it, and some cycles ("none") have no answer.
+
+**22 — the table carries the important columns only.** The owner's list: SL,
+date, account, invoice, transaction/reference, login account, username,
+department, billing cycle, next renewal date, status. Everything else moves to a
+single view page for one plan. That page does not exist yet.
+
+## 19. A monthly date filter on that screen
+
+The status tabs and the search filter it; a period does not. Same shape as the
+Expenses screens' month picker, which already exists.
 
 ## 14. Social media accounts on a person
 
