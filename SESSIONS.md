@@ -34,7 +34,7 @@ below is started unless it says so.
 | 17 | Salary changes history on a person's profile | **done** — unpushed |
 | 10 | Void allowed inside a locked period — the owner's decision | **done** — unpushed |
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | **superseded by #29** — the owner changed it to per line |
-| 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
+| 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | **hole CLOSED**; the ticks need a decision, below |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 32 | **Cash In: the amount fields follow the chosen account's own currency** | **done** — unpushed |
 | 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | **done** — and the two numbers got two names |
@@ -282,6 +282,66 @@ reaches every form that attaches a document — cash in, transactions, other
 expenses, subscriptions, team member, TDS challans. That is the ask-first list.
 
 Not started.
+
+## 12a. The lock-out hole — found, proven, and shut
+
+**It was real, and it was open on the live site.**
+
+Two guards already existed and both were correct: `UsersService.update` refuses
+to demote or disable the last super admin, and the trash registry's `user` entry
+refuses to delete the last one.
+
+**The bulk path went round both.** `trash.service.ts` evaluates `blockedWhen`
+once per row, BEFORE anything is written, from a plain client rather than the
+transaction. Tick two super admins together and each row's subquery sees a table
+that still holds the other: count is 2, neither is blocked, and both go out in
+one statement. **Zero active super admins**, no error, no warning — and with
+nobody able to reach Settings, add a sign-in, restore anybody or promote
+anybody, the way back is a hand-written UPDATE on the production database.
+
+`assertSuperAdminRemains` in `common/auth/last-super-admin.ts` states the
+invariant once and asserts it **after the write and inside the transaction**, on
+all three paths: the bulk delete, the single delete, and demote/disable. Two
+things about how it is written matter:
+
+- **It is an absolute post-condition, not a delta.** "At least one active super
+  admin exists" — so it catches a table that was already empty as well as one
+  this request emptied. Every guard before it asked a question whose answer was
+  still the old one.
+- **It takes `for update` on the super-admin rows.** Postgres is read-committed,
+  so two concurrent transactions each deleting a DIFFERENT super admin cannot
+  see each other's uncommitted work: both would count one survivor and both
+  would commit. The lock makes the second wait and count what actually remains.
+
+`.lockoutqa.mjs` — 11 checks. It builds two throwaway super admins, sends the
+exact request a "select all on this page" tick would produce, and requires a
+refusal AND that not one row moved. Then it deletes down to one and proves the
+three single paths still refuse. The last check is the one that matters: after
+every refusal, `GET /auth/me` still answers 200 — a guard that refuses and
+leaves the table half-emptied would pass everything above it.
+
+## 12b. The tick columns — NOT built, and here is why
+
+The owner asked for tick columns on Users, FX rate history and Payroll runs.
+The hole above had to be shut first and now is. The ticks themselves were left,
+deliberately, because each of the three raises a question that is his to answer:
+
+- **FX rate history is unreachable.** `RateHistory` is rendered only by
+  `FxPanel`, and `FxPanel` is imported by nothing — there is no route in the app
+  that opens it. A tick column on a screen nobody can reach is work that cannot
+  be seen. Worth asking whether that panel should come back at all, since #8 has
+  now removed the global rate it managed.
+- **`.bulkuiqa.mjs` asserts Payroll runs must NOT have a tick.** That harness
+  loops over the screens that were deliberately excluded and fails if one grows
+  one. Adding it to Payroll means changing a rule somebody wrote down on
+  purpose, which is his call and not a silent edit.
+- **A tick column on Users puts self-delete back in reach.** The panel withholds
+  the Delete button on your own row, but there is no server-side guard —
+  `POST /trash/user/:me` succeeds today. A header tick meaning "every row on
+  this page" includes yours. That needs its own guard first, the same shape as
+  the one above.
+
+Each is small. None should be guessed at overnight on a live payroll system.
 
 ## 15. e-TIN, and one E-Return per income year
 

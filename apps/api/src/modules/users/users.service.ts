@@ -8,6 +8,7 @@ import { ROLE_LABELS, type Paginated } from "@finance/shared";
 import bcrypt from "bcryptjs";
 import { and, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
+import { assertSuperAdminRemains } from "../../common/auth/last-super-admin";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -190,6 +191,25 @@ export class UsersService {
           })
           .where(eq(users.id, id))
           .returning(projection);
+
+        /*
+         * The pre-check above is right and is not enough on its own.
+         *
+         * It counts before the write and outside the transaction, so two
+         * concurrent requests demoting two DIFFERENT super admins both see one
+         * survivor, both pass, and both commit — Postgres is read-committed and
+         * neither can see the other's uncommitted work. This asks after the
+         * write, holding a lock, about the state that will actually exist.
+         *
+         * It also catches the case the pre-check cannot reach at all: a demote
+         * arriving while a bulk trash is deleting the other one.
+         */
+        if (roleChanged || deactivated) {
+          await assertSuperAdminRemains(
+            tx,
+            deactivated ? "deactivate" : "change",
+          );
+        }
         return row;
       },
     });

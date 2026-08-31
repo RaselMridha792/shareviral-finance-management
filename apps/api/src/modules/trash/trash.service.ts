@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
+import { assertSuperAdminRemains } from "../../common/auth/last-super-admin";
 import { overdraftWatch } from "../../common/money/overdraft";
 
 import {
@@ -302,6 +303,17 @@ export class TrashService {
                 sql`, `,
               )})`,
         );
+        /*
+         * The single path has a `blockedWhen` that already refuses this, and it
+         * is still right to check again here. That one runs before the write,
+         * outside the transaction, so two concurrent deletes of two DIFFERENT
+         * super admins both pass it — Postgres is read-committed and neither
+         * sees the other's uncommitted work. This one takes a lock and counts
+         * what will actually remain.
+         */
+        if (entry.table === "users") {
+          await assertSuperAdminRemains(tx, "delete");
+        }
         if (watch) await watch.assert(tx);
       },
     });
@@ -439,6 +451,20 @@ export class TrashService {
                 sql`, `,
               )})`,
         );
+
+        /*
+         * After the write, inside the transaction.
+         *
+         * Every guard before this one asks its question at a moment when the
+         * answer is still the old one — `blockedWhen` runs per row, before
+         * anything is written, from a plain client. Two super admins ticked
+         * together each see the other still there, neither is blocked, and both
+         * go out in one statement. This asks once the write has happened, about
+         * the state that will actually be committed.
+         */
+        if (entry.table === "users") {
+          await assertSuperAdminRemains(tx, "delete");
+        }
 
         /* One line per ticked row, so each entry's own history still reads. */
         for (const [id, row] of rows) {
