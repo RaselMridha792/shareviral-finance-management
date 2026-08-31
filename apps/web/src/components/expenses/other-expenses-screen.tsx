@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatMoney,
   fromMinorUnits,
   PAYMENT_METHOD_LABELS,
   toMinorUnits,
@@ -23,12 +24,22 @@ import { Pagination } from "@/components/ui/pagination";
 import { SummaryBar } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
-import { ApiError } from "@/lib/api-client";
+import {
+  SerialCell,
+  SerialHead,
+  TableScroll,
+  Th,
+  TickCell,
+  TickHead,
+} from "@/components/ui/table";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { formatDate, cn } from "@/lib/utils";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { MonthPicker, type Range } from "./month-picker";
 
 /**
@@ -240,6 +251,16 @@ export function OtherExpensesScreen({
   const current = Math.min(page, totalPages);
   const visible = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
+  /* Ticking, and the one act it leads to. Declared after the rows it
+     prunes itself to. */
+  const bulk = useBulkSelect(visible);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const bulkTotal = bulk.selected
+    .reduce((sum, r) => sum + Number(r.amount), 0)
+    .toFixed(2);
+
   return (
     <>
       {error ? (
@@ -340,6 +361,18 @@ export function OtherExpensesScreen({
               its edit and void.
             */
             <TableScroll>
+              {/* Only when something is ticked; otherwise the screen is unchanged. */}
+              <BulkBar
+                count={bulk.count}
+                total={bulkTotal}
+                noun="expense"
+                pending={bulkPending}
+                onClear={bulk.clear}
+                onTrash={() => {
+                  setBulkError(null);
+                  setBulkAsking(true);
+                }}
+              />
               <table className="table-data min-w-[1408px] text-sm">
                 <thead>
                   <tr className="text-left">
@@ -348,6 +381,12 @@ export function OtherExpensesScreen({
                         second identity that renumbers itself when the month
                         changes is one people would quote at each other and get
                         wrong. */}
+                    {bulk ? (
+                      <TickHead
+                        state={bulk.headerState}
+                        onChange={bulk.allOnPage}
+                      />
+                    ) : null}
                     <SerialHead />
                     <Th width="w-24">Date</Th>
                     <Th>Description</Th>
@@ -397,8 +436,17 @@ export function OtherExpensesScreen({
                             one: `index + 1` restarts at 1 on page two, and two
                             rows of one table answering to the same number is
                             the number somebody reads out to somebody else. */}
+                        {bulk ? (
+                          <TickCell
+                            checked={bulk.isTicked(row.id)}
+                            onChange={() => bulk.toggle(row.id)}
+                            label={row.description}
+                          />
+                        ) : null}
                         <SerialCell n={serial(current, index)} />
-                        <td className="num whitespace-nowrap">{formatDate(row.txnDate)}</td>
+                        <td className="num whitespace-nowrap">
+                          {formatDate(row.txnDate)}
+                        </td>
                         <td className="cell-prose">
                           <span
                             className={cn(
@@ -627,6 +675,48 @@ export function OtherExpensesScreen({
         onVoided={load}
       />
       {del.dialog}
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="expense"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((row) => row.description)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+            {" — "}
+            {formatMoney(bulkTotal)}
+          </>
+        }
+        consequences="They come out of every total and every report. The trash can put them back."
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "transaction",
+              bulk.selected.map((row) => row.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void load();
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }

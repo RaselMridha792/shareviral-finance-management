@@ -9,7 +9,7 @@ below is started unless it says so.
 | 1 | Dates read day/month/year everywhere | **done** `a3a9a5a` — unpushed |
 | 2 | "As at" renamed to something readable | **done** — same commit |
 | 3 | Remove the "Record" button from an account's register | **done** — unpushed |
-| 4 | Multi-select rows in tables, and move the selection to trash in one go | **part done** — API + machinery + Team and All transactions; 7 tables left |
+| 4 | Multi-select rows in tables, and move the selection to trash in one go | **done for the six money/list tables**; users, FX history and payroll runs left |
 | 5 | A card account asks for card fields, with the CVC behind a password | **done** — unpushed |
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | not started |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
@@ -32,10 +32,12 @@ transaction, N+1 audit rows under one request), `useBulkSelect`, `BulkBar`,
 tick column live on **Team** and **All transactions**. `.bulktrashqa.mjs` (20)
 and `.bulkuiqa.mjs` (12) drive both.
 
-**Still to adopt** — the machinery is built, each is the same three edits
-(pass `bulk`, render `TickHead`/`TickCell`, add the bar and the dialog):
-cash-in, other expenses, transfers, subscriptions, users, FX rate history,
-payroll runs. The register and category screens come free with
+**Adopted:** Team, All transactions, Cash in, Other expenses, AI tools and
+subscriptions — six tables over eight screens (transaction-table serves three).
+
+**Still to adopt**, same three edits each: Settings > Users, Settings > FX rate
+history, Payroll runs, and Money transfer. None is a money screen the owner
+works in daily, which is why they are last. The register and category screens come free with
 `transaction-table.tsx` once their screens pass `bulk` down.
 
 **Deliberately excluded**, each for a reason in the code rather than a

@@ -213,10 +213,41 @@ check(
  * screens without one must render as they did: SL first, and no vertical rule
  * to its left.
  */
+/* The screens that DO get one, checked for the tick and the header tick. */
 for (const [label, url] of [
+  ["All transactions", `${WEB}/transactions`],
+  ["Cash in", `${WEB}/accounts/cash-in`],
   ["Other expenses", `${WEB}/expenses/other`],
+  ["AI tools and subscriptions", `${WEB}/subscriptions`],
+]) {
+  await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
+  await settle(2400);
+  const shape = await page.evaluate(() => {
+    const table = document.querySelector("table.table-data");
+    if (!table) return { table: false };
+    return {
+      table: true,
+      headTick: Boolean(table.querySelector('th.tick input[type="checkbox"]')),
+      rowTicks: table.querySelectorAll('td.tick input[type="checkbox"]').length,
+      bodyRows: table.querySelectorAll("tbody tr").length,
+    };
+  });
+  check(
+    `${label}: has a tick on the header and on every row`,
+    shape.table &&
+      shape.headTick &&
+      (shape.bodyRows === 0 || shape.rowTicks > 0),
+    shape.table
+      ? `head ${shape.headTick}, ${shape.rowTicks} row ticks of ${shape.bodyRows} rows`
+      : "no table on this screen",
+  );
+}
+
+/* And the ones that must NOT, each excluded for a reason in the code. */
+for (const [label, url] of [
   ["Bank statement", `${WEB}/statement`],
   ["Payroll", `${WEB}/payroll`],
+  ["TDS withholding", `${WEB}/tax/withholding`],
 ]) {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
   await settle(2200);

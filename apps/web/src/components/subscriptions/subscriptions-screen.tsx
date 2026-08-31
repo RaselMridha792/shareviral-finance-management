@@ -33,12 +33,18 @@ import {
   SerialHead,
   TableMessageRow,
   TableScroll,
+  TickCell,
+  TickHead,
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { subscriptionsApi, type SubscriptionDto } from "@/lib/subscriptions";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
+import { ApiError, trashApi } from "@/lib/api-client";
 
 /**
  * The register of paid tools — one row per plan, not per payment.
@@ -175,6 +181,13 @@ export function SubscriptionsScreen({
     ),
     onDone: () => void load(),
   });
+
+  /* Ticking, and the one act it leads to. Declared after the rows it
+     prunes itself to. */
+  const bulk = useBulkSelect(rows);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -331,9 +344,26 @@ export function SubscriptionsScreen({
             {/* SL, then fourteen columns in the order the owner reads them,
               then the unnamed cell the row's two buttons live in. Sixteen,
               which is what the message row below spans. */}
+            {/* Only when something is ticked; otherwise the screen is unchanged. */}
+            <BulkBar
+              count={bulk.count}
+              noun="subscription"
+              pending={bulkPending}
+              onClear={bulk.clear}
+              onTrash={() => {
+                setBulkError(null);
+                setBulkAsking(true);
+              }}
+            />
             <table className="table-data w-full min-w-[2064px]">
               <thead>
                 <tr>
+                  {bulk ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <SubscriptionHeadCells />
                   <RowActionsHead deletable={canWrite} />
@@ -344,38 +374,45 @@ export function SubscriptionsScreen({
                   <TableMessageRow colSpan={19}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => (
-                      <tr key={row.id} className="row-finance">
-                        <SerialCell n={serial(page, index)} />
-                        <SubscriptionBodyCells
-                          row={row}
-                          numberFormat={settings.numberFormat}
-                          handlers={{
-                            onInvoice: (r) =>
-                              setDocumentsFor({ row: r, kinds: ["invoice"] }),
-                            onReference: (r) =>
-                              setDocumentsFor({
-                                row: r,
-                                kinds: ["bank_statement", "receipt", "other"],
-                              }),
-                            onScreenshot: setScreenshotOf,
-                          }}
+                    <tr key={row.id} className="row-finance">
+                      {bulk ? (
+                        <TickCell
+                          checked={bulk.isTicked(row.id)}
+                          onChange={() => bulk.toggle(row.id)}
+                          label={row.toolName}
                         />
-                        {/* Both buttons render for everybody. A reader
+                      ) : null}
+                      <SerialCell n={serial(page, index)} />
+                      <SubscriptionBodyCells
+                        row={row}
+                        numberFormat={settings.numberFormat}
+                        handlers={{
+                          onInvoice: (r) =>
+                            setDocumentsFor({ row: r, kinds: ["invoice"] }),
+                          onReference: (r) =>
+                            setDocumentsFor({
+                              row: r,
+                              kinds: ["bank_statement", "receipt", "other"],
+                            }),
+                          onScreenshot: setScreenshotOf,
+                        }}
+                      />
+                      {/* Both buttons render for everybody. A reader
                           without write access gets them disabled: a blank
                           cell where every other row has controls reads as a
                           rendering fault, not as a permission. */}
-                        <RowActions
-                          onEdit={canWrite ? () => setEditing(row) : undefined}
-                          second="status"
-                          onSecond={
-                            canWrite && cycling !== row.id
-                              ? () => void cycleStatus(row)
-                              : undefined
-                          }
-                          onDelete={canWrite ? () => del.ask(row) : undefined}
-                        />
-                      </tr>
-                    ))
+                      <RowActions
+                        onEdit={canWrite ? () => setEditing(row) : undefined}
+                        second="status"
+                        onSecond={
+                          canWrite && cycling !== row.id
+                            ? () => void cycleStatus(row)
+                            : undefined
+                        }
+                        onDelete={canWrite ? () => del.ask(row) : undefined}
+                      />
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -460,6 +497,46 @@ export function SubscriptionsScreen({
         />
       ) : null}
       {del.dialog}
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="subscription"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((row) => row.toolName)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+          </>
+        }
+        consequences="They come off the list. The tools stay in the register and the trash can put them back."
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "subscription",
+              bulk.selected.map((row) => row.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void load();
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }

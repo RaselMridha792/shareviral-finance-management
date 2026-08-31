@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  formatMoney,
   fiscalYearOf,
   monthIndexInFiscalYear,
   monthRange,
@@ -20,8 +21,15 @@ import { Pagination } from "@/components/ui/pagination";
 import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
-import { ApiError } from "@/lib/api-client";
+import {
+  SerialCell,
+  SerialHead,
+  TableScroll,
+  Th,
+  TickCell,
+  TickHead,
+} from "@/components/ui/table";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
@@ -32,6 +40,9 @@ import { VoidDialog } from "@/components/ledger/void-dialog";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { CashInForm } from "./cash-in-form";
 import { formatDate } from "@/lib/utils";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 
 /**
  * Money arriving from abroad, month by month.
@@ -256,6 +267,16 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
     currentPage * PAGE_SIZE,
   );
 
+  /* Ticking, and the one act it leads to. Declared after the rows it
+     prunes itself to. */
+  const bulk = useBulkSelect(visible);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const bulkTotal = bulk.selected
+    .reduce((sum, r) => sum + Number(r.amount), 0)
+    .toFixed(2);
+
   return (
     <>
       {/*
@@ -371,6 +392,18 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
             {/* 1320 was the eleven columns of data. The actions column adds
                 its own w-24, so the floor moves with it instead of letting the
                 browser crush Description to keep an old number true. */}
+            {/* Only when something is ticked; otherwise the screen is unchanged. */}
+            <BulkBar
+              count={bulk.count}
+              total={bulkTotal}
+              noun="receipt"
+              pending={bulkPending}
+              onClear={bulk.clear}
+              onTrash={() => {
+                setBulkError(null);
+                setBulkAsking(true);
+              }}
+            />
             <table className="table-data min-w-[1416px] text-sm">
               <thead>
                 <tr className="text-left">
@@ -378,6 +411,12 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                       Every entry already carries `ref_no`, and a second
                       identity that renumbers itself when a row is voided would
                       be one people quote at each other and get wrong. */}
+                  {bulk ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <Th width="w-28">Date</Th>
                   <Th>Description</Th>
@@ -409,6 +448,13 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                   const voided = Boolean(row.voidedAt);
                   return (
                     <tr key={row.id} className="row-finance">
+                      {bulk ? (
+                        <TickCell
+                          checked={bulk.isTicked(row.id)}
+                          onChange={() => bulk.toggle(row.id)}
+                          label={row.description}
+                        />
+                      ) : null}
                       <SerialCell n={serial(currentPage, index)} />
                       <td className="num">{formatDate(row.txnDate)}</td>
                       <td className="cell-prose">
@@ -598,6 +644,48 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
         onVoided={refresh}
       />
       {del.dialog}
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="receipt"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((row) => row.description)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+            {" — "}
+            {formatMoney(bulkTotal)}
+          </>
+        }
+        consequences="They come out of every total and every report. The trash can put them back."
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "transaction",
+              bulk.selected.map((row) => row.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void refresh();
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }
