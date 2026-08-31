@@ -645,6 +645,11 @@ export class TeamMembersService {
           .where(
             and(
               eq(compensationHistory.teamMemberId, teamMemberId),
+              /* Not a row somebody has thrown away. Without this, recording a
+                 raise stamps an end date onto a trashed row, and restoring it
+                 later hands back a row closed against a change made after it
+                 was deleted. */
+              isNull(compensationHistory.deletedAt),
               isNull(compensationHistory.effectiveTo),
               sql`${compensationHistory.effectiveFrom} < ${input.effectiveFrom}`,
             ),
@@ -665,11 +670,32 @@ export class TeamMembersService {
               compensationHistory.teamMemberId,
               compensationHistory.effectiveFrom,
             ],
+            /*
+              The conflict can land on a row that is in the trash, and it must
+              bring that row back out.
+
+              `compensation_effective_idx` is on (team_member_id,
+              effective_from) and is NOT partial — a deleted row still occupies
+              its date. So recording pay effective on the same day as a trashed
+              row takes this branch, and without the three nulls below the
+              figure is written INTO the trashed row: the request answers 200,
+              the screen refreshes, and nothing appears. The person keeps the
+              older salary and the amount nobody meant to type sits in the
+              trash.
+
+              Un-deleting is the right answer rather than an error: somebody
+              recording a figure for a date is saying that is the figure for
+              that date, and the row they are overwriting is one they had
+              already decided was wrong.
+            */
             set: {
               grossAmount: input.grossAmount,
               components,
               changeReason: input.changeReason,
               createdBy: actor.id,
+              deletedAt: null,
+              deletedBy: null,
+              deleteReason: null,
             },
           })
           .returning();

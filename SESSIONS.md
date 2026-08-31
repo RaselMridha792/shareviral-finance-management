@@ -39,34 +39,76 @@ below is started unless it says so.
 | 32 | **Cash In: the amount fields follow the chosen account's own currency** | not started — arrived 1 Sep |
 | 34 | **Reference becomes upload-only, everywhere** — no typed box, exactly like Invoice | not started — arrived 1 Sep |
 | 35 | An attached file's NAME is barely readable — colour it | not started — arrived 1 Sep |
-| 36 | Salary changes: pagination, tick column, move to trash | not started — arrived 1 Sep |
+| 36 | Salary changes: pagination, tick column, move to trash | **done** — and it closed two traps |
 | 37 | The Payslips table still prints `2026-06-29` — #1 missed it | **done** — and Reports had four more |
 | 33 | **Paying for a subscription 404s** — it looks a `subscriptions` id up in `vendors` | **fixed** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 
-## 36. Salary changes needs a pager and a tick column
+## 36. Salary changes - a pager, a tick column, and two traps it opened
 
-Arrived 1 Sep, from a team member's profile. The **Salary changes** panel shows
-two rows and stops: no pager, so a person with a longer history has the rest of
-it nowhere, and no way to remove a row typed by mistake — the screenshot's own
-first row reads *"just test"*.
+Asked for from a team member's profile: *"ekhane pagination add koro and aro
+beshi data rakhte parbo. also ekhane multiple select and trash a felar option
+tao diyo ei table a."* The screenshot's own first row read *"just test"*, which
+is the case for wanting a delete.
 
-The owner: *"ekhane pagination add koro and aro beshi data rakhte parbo. also
-ekhane multiple select and trash a felar option tao diyo ei table a."*
+The panel now pages at twenty with the serial counting across pages, carries a
+tick column and a bulk **Move to trash**, and a trash button per row. The
+**current** salary is not in this list and cannot be reached from it - it is the
+row every future payroll sheet reads, and the app has no notion of a person with
+no current salary.
 
-Both pieces exist and are the same ones #4 used on six tables — `useBulkSelect`,
-`BulkBar`, `TickHead`/`TickCell`, `POST /trash/:kind/bulk`. What has to be
-checked before wiring them, because this table is not like the six:
+**The delete was the dangerous part.** A search of every reader of
+`compensation_history` found two traps waiting for whoever performed the first
+one. Neither was reachable before, because nothing in the app could delete one
+of these rows. Both are closed here.
 
-- **`compensation_history` may have no trash entry yet.** `trash.service.ts`
-  keys off a `kind`; if `compensation` is not one of them the bulk route
-  refuses, and a single-row delete has to exist before a bulk one is offered —
-  that is the rule #4 set and it holds here.
-- **Deleting a salary row is not like deleting an expense.** The payroll sheet
-  reads `compensation_history` to work out what somebody is paid in a month.
-  Removing a row changes what a FUTURE sheet computes. It must not change a
-  sheet already built — those store their own gross — and that is the thing to
-  prove rather than assume.
+**Trap 1 - a figure typed in, saved, and invisible.**
+`compensation_effective_idx` is on `(team_member_id, effective_from)` and is NOT
+partial, so a trashed row still occupies its date. Recording pay effective on
+that same date takes the `onConflictDoUpdate` branch, whose `set` wrote the
+amount and never cleared `deleted_at`: the request answered 200, the screen
+refreshed, and nothing appeared. The person kept the older salary and the new
+figure sat in the trash. It now un-deletes the row it lands on - somebody
+recording a figure for a date is saying that IS the figure for that date. The
+same fix stops a raise stamping an end date onto a row that is in the trash.
+
+**Trap 2 - the table saying one thing and the money doing another.**
+Nothing in this app resolves a salary through `effective_to`; payroll and the
+directory both take the newest row starting on or before the date they want
+(`payroll.service.ts:1120`, `:451`, `:1196`, `team-members.service.ts:559`,
+`:692`). That column is written once, by the change that closes the row, and
+nothing repairs it. So deleting a row out of the MIDDLE left its predecessor
+stamped with an end date from a row nobody can see: the money quietly carried on
+paying the predecessor's figure while this column claimed it had stopped months
+earlier. The **Until** cell is now derived from the row that follows, so the two
+cannot disagree.
+
+**What deliberately does not change**, and the confirmation says so: a finalised
+or paid sheet keeps its figures - `payroll_lines.gross_amount` is frozen when
+the sheet is built. The one live edge is a DRAFT sheet, whose pro-rata path
+re-reads this table, so a draft keeps its figure until somebody edits that
+person's working days.
+
+**Left standing, and worth the owner's decision** - none of it reachable from
+this screen, all of it reachable by a deliberate API call:
+
+- `compensation_effective_idx` should be partial (`where deleted_at is null`).
+  That is a migration and travels alone.
+- Restoring a compensation row from Settings > Trashed only nulls `deleted_at`.
+  It does not check for an overlapping open row, so a restore can in principle
+  leave two rows with no end date.
+- `backfillCompensationFromJoining` tests `not exists (...)` without filtering
+  `deleted_at`, so a person whose only salary row was trashed is invisible to
+  the repair action - neither offered nor listed as skipped.
+
+`.salaryhistoryqa.mjs` - 17 checks, built on a twenty-two-raise history so the
+pager has a second page to get wrong. Three of its first failures were the
+harness: the pager text sits past the slice it was reading, a two-piece date
+substring matched the wrong row, and the delete dialog arms on TWO gates (a tick
+AND the word "trash" typed out) where the harness had filled only the reason -
+it clicked a disabled button and reported the product as deleting nothing. A
+fourth read the row count while the request was still in flight; it now waits
+for the fact rather than for a clock.
 
 ## 37. The Payslips table printed ISO dates — and so did Reports
 

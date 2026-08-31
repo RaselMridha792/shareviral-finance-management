@@ -8,6 +8,7 @@ import {
   GENDER_LABELS,
   PAYROLL_STATUS_LABELS,
   PSR_STATUS_LABELS,
+  formatMoney,
   todayInDhaka,
   type EmploymentStatus,
 } from "@finance/shared";
@@ -18,6 +19,7 @@ import {
   Plus,
   Printer,
   SquarePen,
+  Trash2,
   UserCog,
 } from "lucide-react";
 import Link from "next/link";
@@ -43,14 +45,23 @@ import {
   MoneyInput,
   Select,
 } from "@/components/ui/field";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
+import { Pagination } from "@/components/ui/pagination";
+import { RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
   TableMessageRow,
   TableScroll,
   Th,
+  TickCell,
+  TickHead,
 } from "@/components/ui/table";
-import { ApiError, fileHref } from "@/lib/api-client";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { useRowDelete } from "@/components/ui/use-row-delete";
+import { ApiError, fileHref, trashApi } from "@/lib/api-client";
+import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import {
   teamApi,
   type CompensationDto,
@@ -119,6 +130,96 @@ export function TeamMemberScreen({
     : member.photoUrl;
   const currentPay =
     compensation.find((c) => c.effectiveTo === null) ?? compensation[0];
+
+  /* ------------------------------------------------------------------ */
+  /*  Salary changes: the history, paged, and removable                  */
+  /* ------------------------------------------------------------------ */
+
+  /*
+   * The owner: "ekhane pagination add koro and aro beshi data rakhte parbo.
+   * also ekhane multiple select and trash a felar option tao diyo ei table a."
+   * The screenshot showed two rows and one of them read "just test".
+   *
+   * `currentPay` is deliberately not in this list and therefore cannot be
+   * ticked or deleted. That is not a UI nicety: it is the row every future
+   * payroll sheet reads to work out what this person is paid, and the app has
+   * no concept of a person with no current salary. The history behind it is
+   * safe to remove — a sheet already built stores its own gross and does not
+   * re-read this table.
+   */
+  const history = compensation.filter((row) => row.id !== currentPay?.id);
+
+  /*
+   * When a figure stopped: the day before the next one started.
+   *
+   * `compensation` arrives newest first, so the row that superseded any given
+   * one is its predecessor in the array. Counted over the WHOLE list, not over
+   * the page, so paging cannot change what a row says it ran until.
+   */
+  const untilOf = (row: CompensationDto): string | null => {
+    const at = compensation.findIndex((c) => c.id === row.id);
+    const next = at > 0 ? compensation[at - 1] : null;
+    if (!next) return null;
+    const d = new Date(`${next.effectiveFrom}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return formatDate(d.toISOString().slice(0, 10));
+  };
+  const [payPage, setPayPage] = useState(1);
+  const payPages = pageCount(history.length);
+  const payCurrent = Math.min(payPage, payPages);
+  const payVisible = history.slice(
+    (payCurrent - 1) * PAGE_SIZE,
+    payCurrent * PAGE_SIZE,
+  );
+  /* Ticks belong to the page that is showing, like everywhere else. */
+  const payBulk = useBulkSelect(payVisible);
+  const [payBulkPending, setPayBulkPending] = useState(false);
+  const [payBulkAsking, setPayBulkAsking] = useState(false);
+  const [payBulkError, setPayBulkError] = useState<string | null>(null);
+
+  const payDelete = useRowDelete<CompensationDto>({
+    kind: "compensation",
+    subject: "salary record",
+    describe: (row) => (
+      <div className="flex flex-col">
+        <span className="font-medium">
+          {formatMoney(row.grossAmount, {
+            currency: settings.baseCurrency,
+            format: settings.numberFormat,
+          })}{" "}
+          from {formatDate(row.effectiveFrom)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {row.changeReason ?? "No reason was recorded"}
+        </span>
+      </div>
+    ),
+    consequences: (
+      <>
+        <p>
+          It leaves this history and the trash can put it back. What they are
+          paid <span className="font-medium text-foreground">now</span> is not
+          in this list and does not change.
+        </p>
+        <p className="mt-2">
+          {/*
+            Measured, not assumed: a payroll line stores its own gross when the
+            sheet is built (`payroll_lines.gross_amount`), so nothing that has
+            been finalised or paid can move. The one live edge is a DRAFT
+            sheet, whose pro-rata path re-reads this table — so a draft built
+            before the delete keeps its figure until somebody edits Working
+            days on that line, and then it rebases.
+          */}
+          Salary sheets already finalised or paid keep their figures — they
+          store their own. A{" "}
+          <span className="font-medium text-foreground">draft</span> sheet keeps
+          what it has too, until somebody edits that person&rsquo;s working
+          days, which works the pay out from this history again.
+        </p>
+      </>
+    ),
+    onDone: refresh,
+  });
   // The sheet has an Age column. Storing it would be storing something that is
   // wrong by the next birthday, so it is counted from the date of birth.
   const age = member.dateOfBirth ? ageInYears(member.dateOfBirth) : null;
@@ -513,7 +614,7 @@ export function TeamMemberScreen({
             because a person hired last month has no history and that is not a
             gap.
           */}
-          {compensation.length > 1 ? (
+          {history.length > 0 ? (
             <Card>
               <CardHeader
                 title="Salary changes"
@@ -521,48 +622,141 @@ export function TeamMemberScreen({
               />
               <CardBody className="p-0">
                 <TableScroll>
-                  <table className="table-data min-w-[620px] text-sm">
+                  {/* Only once something is ticked; otherwise the panel is
+                      exactly as it was. */}
+                  {/*
+                    No money on this bar, deliberately. Everywhere else it
+                    states the total the selection is worth, because those are
+                    entries in a ledger and their sum is a real figure. Three
+                    historical monthly salaries added together is not a figure
+                    at all — it is not what anybody was paid, or owed, or is
+                    about to lose. So the bar says how many, and stops.
+                  */}
+                  <BulkBar
+                    count={payBulk.count}
+                    noun="salary record"
+                    pending={payBulkPending}
+                    onClear={payBulk.clear}
+                    onTrash={() => {
+                      setPayBulkError(null);
+                      setPayBulkAsking(true);
+                    }}
+                  />
+                  <table className="table-data min-w-[760px] text-sm">
                     <thead>
                       <tr className="text-left">
+                        {canSetPay ? (
+                          <TickHead
+                            state={payBulk.headerState}
+                            onChange={payBulk.allOnPage}
+                          />
+                        ) : null}
                         <SerialHead />
                         <Th width="w-32">From</Th>
                         <Th width="w-32">Until</Th>
                         <Th align="right">Gross, monthly</Th>
                         <Th>Why it changed</Th>
+                        {/* The same unlabelled heading every other table's
+                            action column uses, at its narrow width — one
+                            button, not three. */}
+                        {canSetPay ? <RowActionsHead /> : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {compensation
-                        .filter((row) => row.id !== currentPay?.id)
-                        .map((row, index) => (
-                          <tr key={row.id} className="row-finance">
-                            <SerialCell n={index + 1} />
-                            <td className="num text-muted-foreground">
-                              {formatDate(row.effectiveFrom)}
+                      {payVisible.map((row, index) => (
+                        <tr key={row.id} className="row-finance">
+                          {canSetPay ? (
+                            <TickCell
+                              checked={payBulk.isTicked(row.id)}
+                              onChange={() => payBulk.toggle(row.id)}
+                              label={`${row.grossAmount} from ${row.effectiveFrom}`}
+                            />
+                          ) : null}
+                          {/* Counted across pages, so the twenty-first row is
+                              21 rather than a second 1. */}
+                          <SerialCell n={serial(payCurrent, index)} />
+                          <td className="num text-muted-foreground">
+                            {formatDate(row.effectiveFrom)}
+                          </td>
+                          <td className="num text-muted-foreground">
+                            {/*
+                              Read from the row that follows, not from the
+                              stored `effective_to`.
+
+                              Nothing in this app resolves a salary through
+                              `effective_to` — payroll and the directory both
+                              take the newest row whose `effective_from` is on
+                              or before the date they want. The column is
+                              written once, when the NEXT change closes this
+                              row, and nothing repairs it afterwards. So
+                              deleting a row out of the middle of a history
+                              leaves its predecessor stamped with an end date
+                              that came from a row nobody can see any more:
+                              the money quietly carries on at the predecessor's
+                              figure while this column claims it stopped months
+                              ago. Display and money disagreeing, with only the
+                              display wrong.
+
+                              Derived here, they cannot disagree.
+                            */}
+                            {untilOf(row) ?? "—"}
+                          </td>
+                          <td className="num text-right">
+                            <Amount
+                              value={row.grossAmount}
+                              showCounterpart={false}
+                            />
+                          </td>
+                          <td className="text-muted-foreground">
+                            {row.changeReason ?? "—"}
+                          </td>
+                          {canSetPay ? (
+                            /*
+                              One button, written here rather than through
+                              `RowActions`.
+
+                              That component takes a REQUIRED second verb —
+                              void, deactivate, archive, delete, status — and
+                              renders Edit beside it. This row supports
+                              neither: a historical salary cannot be edited
+                              (the API only ever appends a new one, which is
+                              what makes the history a history), and it has no
+                              second act. Passing a verb to satisfy the type
+                              would put two dead icons on every row, and making
+                              `second` optional is a change to the nineteen
+                              screens that use it — which is the owner's call,
+                              not this page's.
+                            */
+                            <td>
+                              <div className="flex items-center justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => payDelete.ask(row)}
+                                  aria-label="Move to trash"
+                                  title="Move to trash"
+                                  className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-negative"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
                             </td>
-                            <td className="num text-muted-foreground">
-                              {/* Blank rather than a dash: an open-ended row
-                                  here would be the current figure, which is
-                                  not in this list. */}
-                              {row.effectiveTo
-                                ? formatDate(row.effectiveTo)
-                                : "—"}
-                            </td>
-                            <td className="num text-right">
-                              <Amount
-                                value={row.grossAmount}
-                                showCounterpart={false}
-                              />
-                            </td>
-                            <td className="text-muted-foreground">
-                              {row.changeReason ?? "—"}
-                            </td>
-                          </tr>
-                        ))}
+                          ) : null}
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </TableScroll>
               </CardBody>
+              {/* A sibling of the table, not inside it — it renders nothing at
+                  all while the history fits on one page. */}
+              <Pagination
+                page={payCurrent}
+                totalPages={payPages}
+                total={history.length}
+                noun="salary record"
+                nounPlural="salary records"
+                onPage={setPayPage}
+              />
             </Card>
           ) : null}
 
@@ -701,6 +895,57 @@ export function TeamMemberScreen({
         memberName={member.fullName}
         onClose={() => setSettingPay(false)}
         onSaved={refresh}
+      />
+
+      {/* One row at a time, and the whole ticked page. Both outside the card,
+          so neither disappears with the branch that renders the table. */}
+      {payDelete.dialog}
+      <DeleteDialog
+        open={payBulkAsking}
+        subject="salary record"
+        count={payBulk.count}
+        summary={
+          <>
+            {payBulk.selected
+              .slice(0, 5)
+              .map((row) => `${formatDate(row.effectiveFrom)}`)
+              .join(", ")}
+            {payBulk.count > 5 ? ` and ${payBulk.count - 5} more` : ""}
+          </>
+        }
+        consequences={
+          <p>
+            They leave this history and the trash can put them back. What this
+            person is paid{" "}
+            <span className="font-medium text-foreground">now</span> is not in
+            this list and does not change, and no salary sheet already built
+            moves — a sheet stores its own figures.
+          </p>
+        }
+        pending={payBulkPending}
+        error={payBulkError}
+        onCancel={() => setPayBulkAsking(false)}
+        onConfirm={(reason) => {
+          setPayBulkPending(true);
+          setPayBulkError(null);
+          void trashApi
+            .removeMany(
+              "compensation",
+              payBulk.selected.map((row) => row.id),
+              reason,
+            )
+            .then(() => {
+              setPayBulkAsking(false);
+              payBulk.clear();
+              refresh();
+            })
+            .catch((err: unknown) =>
+              setPayBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setPayBulkPending(false));
+        }}
       />
     </>
   );
