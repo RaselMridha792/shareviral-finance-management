@@ -10,7 +10,7 @@ below is started unless it says so.
 | 2 | "As at" renamed to something readable | **done** — same commit |
 | 3 | Remove the "Record" button from an account's register | **done** — unpushed |
 | 4 | Multi-select rows in tables, and move the selection to trash in one go | **part done** — API + machinery + Team and All transactions; 7 tables left |
-| 5 | A card account asks for card fields, with the CVC behind a password | **blocked on the owner** — see below |
+| 5 | A card account asks for card fields, with the CVC behind a password | **decided; migration shipped** — see below |
 | 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | not started |
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | not started |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | not started, and the largest |
@@ -128,7 +128,40 @@ What this disturbs, and why it is not a small change:
 - Same shape appears in the transaction drawer, the transfer drawer and the
   cash-in drawer, all three of which carry the duplicated `Attach`.
 
-## 5. Card accounts ask for card fields
+## 5. Card accounts — THE OWNER'S DECISION, recorded as his
+
+Asked on 31 Aug which of three shapes to build. His answer, verbatim:
+
+> **"card er puro number save hobe, cvc encrypted hobe"**
+
+So: the whole card number is kept, and the CVC is encrypted. Option C of the
+three that were put to him, with the consequence stated at the time — that
+PCI-DSS forbids storing a CVC after authorisation, that this is a company
+recording its own cards rather than a processor holding customers', and that
+the liability is his to weigh. He weighed it.
+
+**One step further than asked, deliberately:** the NUMBER is sealed too, not
+only the CVC. A number in an ordinary column would be served by `GET /accounts`
+(it is in `projection`), written into the Accounts spreadsheet, and copied into
+`audit_logs.before` by every mutation on that table — three leaks from one
+column. Sealed, all three close for free. `card_last4` stays plain because it
+is what the screen shows to tell one card from another.
+
+**Still unanswered, and needed before the reveal is built:** what "password
+diye protect" means — the person's own login password re-entered, or a separate
+shared card password. Nothing like the second exists (no table, no column, no
+hashing path) and it cannot be revoked when somebody leaves. The first reuses
+`assertPassword`, which is `private` on `TwoFactorService` and would have to be
+exported — auth code, so its own push.
+
+**Shipped so far:** `deploy/sql/2026-08-31-card-fields.sql`, alone, as the rule
+requires. Seven nullable columns, no backfill, applied twice locally with
+`.dataintact.mjs` proving 32 tables and 2,591 rows unmoved.
+
+**Next, in order:** the reveal gate (auth, alone) → shared schema + API with
+`seal()` on write and the sealed columns kept OUT of `projection` → the drawer.
+
+## 5b. The original note
 
 The account drawer, when **Type** is `Card`. The owner's list, in order:
 
