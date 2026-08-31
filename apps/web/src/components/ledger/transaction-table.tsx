@@ -181,12 +181,20 @@ export function TransactionTable({
                 the position the eye lands on after the date.
               */}
               <Th>Description</Th>
-              <Th width="w-40">Category</Th>
-              <Th align="right" width="w-28">
-                Amount (BDT)
-              </Th>
-              <Th align="right" width="w-28">
-                Amount (USD)
+              {/*
+                No Category column, on the owner's word: "ekhane theke category
+                row ta remove korte hobe all transaction a etar dorkar nai".
+
+                It read N/A on most rows — a transfer has no category, and the
+                ones that do have one are read on the Expenses screens, which
+                are grouped by it. A column that is mostly N/A is a column that
+                pushes the ones carrying facts off the right-hand edge.
+
+                The DATA is untouched: `categoryName` is still on every row and
+                still drives the category filter above the table.
+              */}
+              <Th align="right" width="w-32">
+                Amount
               </Th>
               {/* "Rate" on its own did not say a rate between what and what. */}
               <Th align="right" width="w-20">
@@ -245,7 +253,28 @@ export function TransactionTable({
               return (
                 <tr
                   key={row.id}
-                  className={cn("row-finance", voided && "opacity-55")}
+                  /*
+                    The whole row carries the direction, not four coloured
+                    cells. The owner: "je je table a money in oikhaner puro row
+                    green thakbe r jetay money out oitar puro row red hobe
+                    karon eirokom multiple color text ektu ogochalo lage."
+                    Direction is a fact about the ROW; scattering it across the
+                    amount, the sign and the type chip said it four times.
+
+                    A tint rather than a fill, so the text keeps its contrast
+                    in both themes and the figures stay the loudest thing on
+                    the row. A voided row loses the tint entirely — it is out of
+                    every total, and colouring it in or out would say it still
+                    counts.
+                  */
+                  className={cn(
+                    "row-finance",
+                    voided
+                      ? "opacity-55"
+                      : row.direction === "in"
+                        ? "bg-positive/[0.06]"
+                        : "bg-negative/[0.05]",
+                  )}
                 >
                   {/*
                     A position in the list, not a stored number. The sheets
@@ -272,7 +301,18 @@ export function TransactionTable({
                     >
                       {row.description}
                     </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {/*
+                      Only what a reader cannot get from a column.
+
+                      The owner: "description er nicer choto text ta lagbena".
+                      What went: the payment method (its own column when the
+                      screen asks for one) and the "transfer" chip (the row's
+                      colour and its Type cell both say it). What stays: the
+                      party, which has no column of its own, the tax-withheld
+                      mark, and the voided reason — each a fact that appears
+                      nowhere else on the row.
+                    */}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground empty:hidden">
                       {/*
                         Party used to be a column. It moved here when the
                         sketches asked for SL, Type, USD and Rate — thirteen
@@ -280,10 +320,7 @@ export function TransactionTable({
                         belongs beside what it was for. Nothing is lost.
                       */}
                       {row.vendorName ?? row.counterparty ?? null}
-                      {!showPaymentMethod ? (
-                        <span>{PAYMENT_METHOD_LABELS[row.paymentMethod]}</span>
-                      ) : null}
-                      {row.transferGroupId ? <Badge>transfer</Badge> : null}
+
                       {Number(row.withheldTaxAmount) > 0 ? (
                         <Badge tone="warning">
                           tax withheld{" "}
@@ -309,19 +346,7 @@ export function TransactionTable({
                       ) : null}
                     </span>
                   </td>
-                  <td>
-                    {row.categoryName ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ background: row.categoryColor ?? undefined }}
-                        />
-                        {row.categoryName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">N/A</span>
-                    )}
-                  </td>
+
                   {/*
                     Three cells where there was one, and the third is what
                     makes the second readable.
@@ -330,20 +355,33 @@ export function TransactionTable({
                     column of their own — leaving it on would print them twice,
                     once under the taka and once beside it.
                   */}
+                  {/*
+                    One Amount cell, with the dollars small underneath.
+
+                    The owner: "USD thakte hobe cash inflow outflow etc te USD
+                    ta choto kore likhe diyo onno card a jevabe thake
+                    equivalent akare" — the shape the account cards already use.
+                    Two columns for one figure cost the table 28 characters of
+                    width and made the taka and the dollars look like separate
+                    facts.
+
+                    `tone` is gone with the row's own colour: the row says which
+                    direction this is, and the amount saying it again in a
+                    different green was the clutter being complained about. The
+                    SIGN stays, because a minus is arithmetic rather than
+                    decoration.
+                  */}
                   <td className="col-amount">
                     <Amount
                       value={row.signedAmount}
                       showSign
                       currency={row.currency}
                       showCounterpart={false}
-                      tone={row.direction === "in" ? "in" : "out"}
                       className={cn(
                         "block font-semibold",
                         voided && "line-through",
                       )}
                     />
-                  </td>
-                  <td className="col-amount">
                     {usd ? (
                       <Amount
                         value={usd}
@@ -351,18 +389,14 @@ export function TransactionTable({
                         currency="USD"
                         approximate={!recordedInUsd}
                         showCounterpart={false}
-                        tone={row.direction === "in" ? "in" : "out"}
-                        className={cn("block", voided && "line-through")}
+                        className={cn(
+                          "block text-xs text-muted-foreground",
+                          voided && "line-through",
+                        )}
                       />
-                    ) : (
-                      <span
-                        className="num text-xs text-muted-foreground"
-                        title="No rate is recorded for this entry, so there is nothing to convert at. A figure here would be invented rather than approximate."
-                      >
-                        —
-                      </span>
-                    )}
+                    ) : null}
                   </td>
+
                   <td className="num text-right text-xs text-muted-foreground">
                     {rate ?? "N/A"}
                   </td>
@@ -443,19 +477,38 @@ export function TransactionTable({
                     rows.
                   */}
                   <td>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDocumentsFor({
-                          row,
-                          kinds: ["bank_statement", "receipt", "other"],
-                          label: "payment",
-                        })
-                      }
-                      title="Show the bank's record of this payment"
-                      className="group cursor-pointer text-left"
-                    >
-                      {/*
+                    {/*
+                      A link only when there is something behind it.
+
+                      The owner: "Jodi document na thake tahole N/A hobe." It
+                      used to render as a link on every row, with an amber
+                      warning triangle when nothing was attached — so clicking
+                      the commonest case opened an empty drawer, and a mark
+                      meant to flag the exception was on most of the table.
+
+                      The reference number itself still shows, because it is how
+                      an entry is quoted to a bank. What goes is the pretence
+                      that it opens something.
+                    */}
+                    {row.documentCount === 0 ? (
+                      <span className="num text-xs text-muted-foreground">
+                        {row.refNo}
+                        <span className="ml-1.5 text-faint">N/A</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDocumentsFor({
+                            row,
+                            kinds: ["bank_statement", "receipt", "other"],
+                            label: "payment",
+                          })
+                        }
+                        title="Show the bank's record of this payment"
+                        className="group cursor-pointer text-left"
+                      >
+                        {/*
                         The count, and a warning when it is zero.
 
                         The Cash In and expense screens insist on documents, but
@@ -465,44 +518,25 @@ export function TransactionTable({
                         nothing attached. Without this the gap is invisible and
                         the form's insistence is theatre.
                       */}
-                      <span
-                        className={cn(
-                          /*
-                            Underlined either way — it opens the documents
-                            drawer either way — but the colour keeps saying
-                            what it always said: link-blue when paperwork is
-                            attached, amber when the entry has nothing behind
-                            it. Making both blue would have bought consistency
-                            with the cost of the one warning this column
-                            carries.
-                          */
-                          "num flex items-center gap-1 text-xs font-medium underline decoration-current/40 underline-offset-2 group-hover:decoration-current",
-                          row.documentCount > 0 ? "text-link" : "text-warning",
-                        )}
-                        title={
-                          row.documentCount > 0
-                            ? `${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`
-                            : "Nothing is attached to this entry"
-                        }
-                      >
-                        {row.documentCount > 0 ? (
+                        <span
+                          className="num flex items-center gap-1 text-xs font-medium text-link underline decoration-current/40 underline-offset-2 group-hover:decoration-current"
+                          title={`${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`}
+                        >
                           <Paperclip className="size-3" />
-                        ) : (
-                          <TriangleAlert className="size-3" />
-                        )}
-                        {row.refNo}
-                        {row.documentCount > 1 ? (
-                          <span className="text-muted-foreground">
-                            ×{row.documentCount}
+                          {row.refNo}
+                          {row.documentCount > 1 ? (
+                            <span className="text-muted-foreground">
+                              ×{row.documentCount}
+                            </span>
+                          ) : null}
+                        </span>
+                        {row.reference ? (
+                          <span className="num block text-xs text-muted-foreground">
+                            {row.reference}
                           </span>
                         ) : null}
-                      </span>
-                      {row.reference ? (
-                        <span className="num block text-xs text-muted-foreground">
-                          {row.reference}
-                        </span>
-                      ) : null}
-                    </button>
+                      </button>
+                    )}
                   </td>
                   {showBalance ? (
                     <td className="col-amount">

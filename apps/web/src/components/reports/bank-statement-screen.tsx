@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { formatMoney } from "@finance/shared";
 
@@ -58,20 +58,22 @@ export function BankStatementScreen({
   const [page, setPage] = useState(1);
 
   /**
-   * Newest first on screen, oldest first in the arithmetic.
+   * Oldest first, the way a bank's own paper reads.
    *
-   * The API orders this account's rows by date ascending because the balance
-   * column is a window function over exactly that order — turn the query round
-   * and every figure in it changes. So the reversal happens here, after each
-   * row already carries the balance it left behind, and the Balance column is
-   * untouched: the top row is the most recent movement and the number beside it
-   * is the account's closing balance, which is what somebody opening this page
-   * has come to see. It cost a scroll to the foot of 704 rows before.
+   * This screen used to reverse the API's order to put the newest movement on
+   * top. The owner asked for it back — "bank statement er ordering oldest first
+   * kore diyo" — and he is right for the reason the Balance column exists: that
+   * figure is a running total, and a running total read downwards from the
+   * newest counts backwards. Every statement a bank issues, and every one this
+   * page is reconciled against, starts at the brought-forward figure and works
+   * down.
    *
-   * A copy, not `register.rows.reverse()` — that reverses the array the props
-   * hold, so a re-render on the same data would turn the statement back round.
+   * So the rows are taken as the API sends them. The API orders ascending
+   * because the balance is a window function over exactly that order — which is
+   * now also the order they are shown in, and the two agreeing is the point.
+   * The SL column already counts oldest = 1.
    */
-  const ordered = useMemo(() => [...register.rows].reverse(), [register.rows]);
+  const ordered = register.rows;
 
   const totalPages = pageCount(ordered.length);
   /*
@@ -121,7 +123,7 @@ export function BankStatementScreen({
       <PageHeader
         title="Bank statement"
         icon="description"
-        description="One account's movements, newest first, with the balance after each."
+        description="One account's movements, oldest first, with the balance after each."
       />
 
       {/*
@@ -247,7 +249,22 @@ export function BankStatementScreen({
                 visible.map((row, index) => (
                   <tr
                     key={row.id}
-                    className={cn("row-finance", row.voidedAt && "opacity-60")}
+                    /*
+                      The whole row carries the direction, the same as the
+                      transactions table — the owner asked for both screens to
+                      read alike. A tint rather than a fill so the figures stay
+                      the loudest thing; a voided row loses it entirely, since
+                      it is out of every total and colouring it would say it
+                      still counts.
+                    */
+                    className={cn(
+                      "row-finance",
+                      row.voidedAt
+                        ? "opacity-60"
+                        : row.direction === "in"
+                          ? "bg-positive/[0.06]"
+                          : "bg-negative/[0.05]",
+                    )}
                   >
                     {/* Counted across the statement rather than within the
                         page: `index + 1` restarts at 1 on page two, so the

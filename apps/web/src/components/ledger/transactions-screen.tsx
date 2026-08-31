@@ -415,7 +415,19 @@ function FilterRow({
           value={filters.accountId ?? ""}
           onChange={(next) => set({ accountId: next || undefined })}
         >
-          <option value="">All accounts</option>
+          {/*
+            No "All accounts", on the owner's word.
+
+            The screen opens on one account and stays there. A combined view of
+            every account is what the Reports screens are for, and the two
+            answer different questions: this one reconciles against a bank's own
+            paper, and a bank does not issue a statement for four accounts at
+            once.
+
+            The empty option stays as a PROMPT rather than a filter, so the
+            select has something to show before a choice is made.
+          */}
+          <option value="">Choose an account</option>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
               {account.name}
@@ -461,15 +473,18 @@ function FilterRow({
         ]}
       />
 
-      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={filters.includeVoided ?? false}
-          onChange={(event) => set({ includeVoided: event.target.checked })}
-          className="size-4 accent-primary"
-        />
-        Show voided
-      </label>
+      {/*
+        No "Show voided" tick.
+
+        A voided entry is shown struck through, in place, out of every total —
+        that IS the treatment, and it is what makes a correction auditable. A
+        checkbox that hid them offered a second answer to the same question and
+        a view of the books that quietly disagreed with the bank.
+
+        `includeVoided` stays on the filter type and on the API: the exports
+        and the account register both ask for it, and this screen simply stops
+        being the place it is toggled.
+      */}
 
       {/* Last, and the one thing here that is allowed to wrap: it is drawn only
           once a filter is set, and under a 1440px window with the sidebar open

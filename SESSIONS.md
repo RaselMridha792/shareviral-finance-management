@@ -16,14 +16,14 @@ below is started unless it says so.
 | 9 | A team member's bank section: holder name, branch and SWIFT | **done** — unpushed |
 | 18 | **A subscription that is paid takes money out of the bank** | **API done** — the button on the screen is next |
 | 23 | **Expenses: a real overview page** — rename the category grid, six dynamic boxes, Other expenses off the menu | not started |
-| 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | not started |
+| 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | **done** — unpushed |
 | 28 | Salary sheet: the TDS cell opens its working | already built — **verify only** |
 | 29 | Salary sheet: an FX rate typed per LINE | not started — needs a column |
 | 30 | Salary sheet: the Breakdown link goes | **done** — unpushed |
-| 31 | Bank statement: oldest first, and whole-row colour | not started |
-| 26 | All transactions: no Category column, no small line under the description | not started |
-| 27 | A reference with no document reads N/A, not a link | not started |
-| 25 | All transactions: a money-in row reads green, a money-out row red — the whole row | not started |
+| 31 | Bank statement: oldest first, and whole-row colour | **done** — unpushed |
+| 26 | All transactions: no Category column, no small line under the description | **done** — unpushed |
+| 27 | A reference with no document reads N/A, not a link | **done** — unpushed |
+| 25 | All transactions: a money-in row reads green, a money-out row red — the whole row | **done** — unpushed |
 | 20 | Subscription drawer: "Could not save that" on Invoice/Reference | **done** — the columns never existed |
 | 21 | Renewal date computed from the cycle, not typed | not started |
 | 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
@@ -37,6 +37,54 @@ below is started unless it says so.
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
+
+## 24-27, 31. Two tables, read the way the owner reads them
+
+Five items, done together because they are five edits to two files and one
+verification pass — `.tabletidyqa.mjs`, 15 checks, all passing.
+
+**All transactions** (`ledger/transaction-table.tsx`, `transactions-screen.tsx`):
+
+- the **Category** column is gone. It read N/A on most rows — a transfer has no
+  category — and the screens that group BY category are the Expenses ones. The
+  data is untouched: `categoryName` still arrives on every row and still drives
+  the category filter above the table.
+- the **dollars moved under the taka** in one Amount cell, the shape the account
+  cards already use. Two columns for one figure cost the table width and made
+  the taka and the dollars read as separate facts.
+- the **whole row carries the direction** — a green tint for money in, red for
+  out — and the amount stopped colouring itself, because saying it twice in two
+  different greens was the clutter being complained about. A voided row gets no
+  tint at all: it is out of every total, and a colour would say it still counts.
+- the **small line under the description** lost the payment method and the
+  transfer chip, both of which have columns. What stays is the party, the
+  tax-withheld mark and the voided reason — facts with nowhere else to appear.
+- **"All accounts" and "Show voided" are gone** from the filter row.
+
+**A reference with nothing attached is not a link.** It used to render as one on
+every row with an amber warning triangle when there was no document — so the
+commonest case opened an empty drawer, and a mark meant for the exception sat on
+most of the table. The number still shows, because it is how an entry is quoted
+to a bank; what goes is the pretence that it opens something.
+
+**Bank statement** (`reports/bank-statement-screen.tsx`) reads **oldest first**,
+which is how a bank's own paper reads and the direction the running balance is
+computed in. Same row colours.
+
+The harness earns its keep here twice, and both times it was the HARNESS that
+was wrong while the screen was right:
+
+- `getComputedStyle` answers **`oklab(...)`**, not `rgb(...)`, because the tints
+  are alpha shades of tokens that are `oklch`. An rgb-only parser called every
+  colour on the page "none". In oklab the second number is the green-red axis.
+- the statement page reads **`?account=`**; the harness asked for `?accountId=`,
+  so it fell back to whichever account sorts first and measured somebody else's
+  money while reporting confidently on this one.
+
+It also checks the two things most likely to be broken BY this work: that the
+headings and the cells still agree on how many columns there are, and that the
+running balance still ends at the account's closing figure now that the rows are
+the other way round (100,000 + 50,000 - 9,000 = 141,000).
 
 ## 3. The register's "Record" button
 
