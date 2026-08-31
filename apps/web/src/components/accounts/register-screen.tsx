@@ -1,7 +1,7 @@
 "use client";
 
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
-import { ArrowLeft, Plus, TriangleAlert } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -45,7 +45,6 @@ export function RegisterScreen({
   const router = useRouter();
   const canWrite = useCan("transactions.write");
 
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | null>(null);
   const [voiding, setVoiding] = useState<TransactionDto | null>(null);
   const [page, setPage] = useState(1);
@@ -126,20 +125,17 @@ export function RegisterScreen({
         ]
           .filter(Boolean)
           .join(" · ")}
-        actions={
-          <>
-            {canWrite ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => setCreating(true)}
-              >
-                <Plus className="size-4" />
-                Record
-              </Button>
-            ) : null}
-          </>
-        }
+        /*
+         * No "Record" button, on the owner's word: "ekhane kono record manually
+         * add korbona". This page is a register — it shows what reached the
+         * account, and every one of those entries is made where the money is
+         * actually recorded (an expense, a cash-in, a transfer). A button here
+         * offered a second door to the same act, and an entry made through it
+         * looked like a correction to the account's own history.
+         *
+         * Editing a row and voiding one stay: those act on what is already
+         * here, which is what a register is for.
+         */
       />
 
       {/*
@@ -244,14 +240,6 @@ export function RegisterScreen({
         onPage={setPage}
       />
 
-      <TransactionForm
-        open={creating}
-        defaultAccountId={account.id}
-        accounts={accounts}
-        categories={categories}
-        onClose={() => setCreating(false)}
-        onSaved={refresh}
-      />
       <TransactionForm
         key={editing?.id}
         open={Boolean(editing)}

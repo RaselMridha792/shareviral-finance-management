@@ -1,3 +1,70 @@
+# The owner's list — one at a time, in this order
+
+These arrived together on 31 Aug. The owner's instruction: keep them here as a
+list, do **one**, report, wait to be told to push, then take the next. Nothing
+below is started unless it says so.
+
+| # | What | State |
+|---|---|---|
+| 1 | Dates read day/month/year everywhere | **done** `a3a9a5a` — unpushed |
+| 2 | "As at" renamed to something readable | **done** — same commit |
+| 3 | Remove the "Record" button from an account's register | **done** — unpushed |
+| 4 | Multi-select rows in tables, and move the selection to trash in one go | not started |
+| 5 | A card account asks for card fields, with the CVC behind a password | not started |
+
+## 3. The register's "Record" button
+
+`/accounts/[id]/register` — the page reached from **Entries and balance** on an
+account. The owner: *"jotogula account ache ekhane add record name ekta button
+ache jetar dorkar nai ekhane karon ekhane kono record manually add korbona"*.
+Nothing is entered by hand on this screen; the button is `+ Record` at the top
+right of `accounts/register-screen.tsx`. It goes, along with whatever drawer it
+opened if nothing else opens that.
+
+## 4. Multi-select and bulk trash
+
+The owner: *"table gulate multiple select option rakho. karon ami multiple
+select kore trash a falate cai. akhon to prottekta one by one trash a felte
+hoy"*.
+
+Every `.table-data` table gets a tick column, a "select all on this page" tick
+in the header, and — once something is ticked — a bar offering **Move to
+trash** for the whole selection.
+
+Three things this must get right, because a bulk delete is the one control
+where being careless is expensive:
+
+- it can only ever offer what that table's single-row action already offers.
+  A table whose rows cannot be trashed does not grow a tick column.
+- the confirmation names the count and the money, not "3 items".
+- the API needs a real bulk path, or one request per row with a single audit
+  entry — deleting 40 rows must not write 40 unexplained audit lines.
+
+## 5. Card accounts ask for card fields
+
+The account drawer, when **Type** is `Card`. The owner's list, in order:
+
+1. Card Holder Name
+2. Type
+3. Bank Name / Card Company Name
+4. Card Name, **Card 16 digit, EXP Date, CVC — behind a password**
+5. Opening Balance
+6. Opening balance date
+7. Primary currency
+8. Order
+9. Notes
+
+The middle group is the whole difficulty. A card number and CVC are not
+ordinary fields: storing them is a decision about liability, not a schema
+change. What "password protect" means has to be settled with the owner before
+anything is built — who may see them, what is stored, and whether the CVC is
+stored at all. `secret-box.ts` already seals values at rest and is the obvious
+tool; the harder question is who may unseal.
+
+Schema and migration travel alone, so this is at least two pushes.
+
+---
+
 # What each session changed
 
 Newest first. **Add an entry when you finish a piece of work** — this is the only way another
