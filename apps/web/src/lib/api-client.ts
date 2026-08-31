@@ -566,6 +566,30 @@ export type TrashItem = {
   deleteReason: string | null;
 };
 
+/**
+ * A subscription's payments.
+ *
+ * On its own object rather than folded into `vendorsApi`, because a payment is
+ * not a change to the plan — it is an entry in the ledger that happens to be
+ * addressed by the plan's id.
+ */
+export const subscriptionsApi = {
+  pay: (
+    id: string,
+    body: {
+      txnDate: string;
+      amount?: string;
+      accountId?: string;
+      note?: string | null;
+      advanceRenewal?: boolean;
+    },
+  ) =>
+    apiFetch<{ id: string; refNo: string }>(`/subscriptions/${id}/pay`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
 export const trashApi = {
   summary: () =>
     apiFetch<TrashKindSummary[]>("/trash/summary", { cache: "no-store" }),

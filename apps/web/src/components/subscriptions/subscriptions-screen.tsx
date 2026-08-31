@@ -35,6 +35,7 @@ import {
   TableScroll,
   TickCell,
   TickHead,
+  Th,
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";
@@ -45,6 +46,7 @@ import { useBulkSelect } from "@/components/ui/use-bulk-select";
 import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { ApiError, trashApi } from "@/lib/api-client";
+import { PayDialog } from "./pay-dialog";
 
 /**
  * The register of paid tools — one row per plan, not per payment.
@@ -184,6 +186,7 @@ export function SubscriptionsScreen({
 
   /* Ticking, and the one act it leads to. Declared after the rows it
      prunes itself to. */
+  const [paying, setPaying] = useState<SubscriptionDto | null>(null);
   const bulk = useBulkSelect(rows);
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkAsking, setBulkAsking] = useState(false);
@@ -366,6 +369,10 @@ export function SubscriptionsScreen({
                   ) : null}
                   <SerialHead />
                   <SubscriptionHeadCells />
+                  {/* The act that makes a plan cost money. Its own column
+                      rather than a fourth slot in RowActions, which is shared
+                      with twenty other tables. */}
+                  <Th width="w-28">Payment</Th>
                   <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>
@@ -401,6 +408,18 @@ export function SubscriptionsScreen({
                           without write access gets them disabled: a blank
                           cell where every other row has controls reads as a
                           rendering fault, not as a permission. */}
+                      <td>
+                        {canWrite ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setPaying(row)}
+                          >
+                            Record payment
+                          </Button>
+                        ) : null}
+                      </td>
                       <RowActions
                         onEdit={canWrite ? () => setEditing(row) : undefined}
                         second="status"
@@ -485,6 +504,12 @@ export function SubscriptionsScreen({
           onChanged={() => void load()}
         />
       ) : null}
+
+      <PayDialog
+        plan={paying}
+        onClose={() => setPaying(null)}
+        onPaid={() => void load()}
+      />
 
       {documentsFor ? (
         <DocumentsDialog

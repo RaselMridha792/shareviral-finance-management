@@ -15,6 +15,11 @@ below is started unless it says so.
 | 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | **done** — unpushed |
 | 9 | A team member's bank section: holder name, branch and SWIFT | **done** — unpushed |
 | 18 | **A subscription that is paid takes money out of the bank** | **API done** — the button on the screen is next |
+| 23 | **Expenses: a real overview page** — rename the category grid, six dynamic boxes, Other expenses off the menu | not started |
+| 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | not started |
+| 26 | All transactions: no Category column, no small line under the description | not started |
+| 27 | A reference with no document reads N/A, not a link | not started |
+| 25 | All transactions: a money-in row reads green, a money-out row red — the whole row | not started |
 | 20 | Subscription drawer: "Could not save that" on Invoice/Reference | **done** — the columns never existed |
 | 21 | Renewal date computed from the cycle, not typed | not started |
 | 22 | The subscriptions table: a few important columns, the rest on a view page | not started |
@@ -131,6 +136,55 @@ guess.
 Still to settle before building: whether a payment may be recorded for a month
 already paid (probably yes, with a warning — a plan can be charged twice), and
 what happens when the card's currency is not the plan's.
+
+## 23. Expenses: an overview that is actually an overview
+
+The owner: *"expenses er overview page tay akhon category item gula asteche. er
+name change kore operational expenses kore daw. also overview er jonne new ekta
+page banao ... minimum 6ta rakho overview te jegula dynamic asbe. ekhane salary
+ta thakte pare jehetu oitao ekta expenses. menu theke other expenses ta remove
+kore diyo jehetu oita overview tei thakbe."*
+
+So: what is on `/expenses` today is the CATEGORY grid, and it should be called
+**Operational expenses**. A new overview sits above it with the six or so
+figures somebody actually opens the page for — and they must be computed, not
+typed. The obvious six, each of which the app can already answer:
+
+  AI tools and subscriptions · Salary paid · Tax withheld · Operational
+  expenses (the category grid's own total) · Tools and card spend · Other
+  expenses
+
+Salary belongs there and is the owner's own point: payroll IS an expense, and
+leaving it off the expenses page is why the page never matched the bank.
+
+"Other expenses" comes off the rail because it becomes a box on the overview.
+
+## 24. All transactions: three things off that screen
+
+- **"All accounts" goes.** The filter offers only individual accounts; a
+  combined view is what the Reports screens are for.
+- **USD reads small under the taka**, the way the account cards do, instead of
+  its own column.
+- **"Show voided" goes.** A voided row is struck through in place; a checkbox
+  that hides them is a second way to ask the same question.
+
+## 26-27. The transactions table, tidied
+
+**26 — two things off it.** The Category column (every row reads N/A because a
+transfer has none, and the categorised ones are read on the Expenses screens),
+and the small grey line under each description carrying the payment method and
+a "transfer" chip.
+
+**27 — a reference with nothing attached says N/A.** The Transaction number cell
+renders a link and a warning triangle even when no document is on the entry, so
+clicking it opens an empty viewer. No paper, no link.
+
+## 25. A row is one colour
+
+The owner: *"je je table a money in oikhaner puro row green thakbe r jetay
+money out oitar puro row red hobe karon eirokom multiple color text ektu
+ogochalo lage."* Direction is the row's fact, not the amount cell's. Green and
+red tints on the row, and the per-cell colouring goes.
 
 ## 20-22. The rest of that screen
 
