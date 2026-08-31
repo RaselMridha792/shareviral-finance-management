@@ -309,6 +309,159 @@ export class TrashService {
     return { deleted: ids.length };
   }
 
+  /**
+   * The same act, on a ticked list.
+   *
+   * The owner's complaint was arithmetic: "akhon to prottekta one by one trash
+   * a felte hoy". Forty rows meant forty confirmations. What this must NOT do
+   * is become a softer delete than the single one — every refusal `remove`
+   * makes, this makes too, and it makes them BEFORE writing anything.
+   *
+   * All-or-nothing, in one transaction. The alternative — delete what we can
+   * and report the rest — reads as success and leaves the owner to work out
+   * which of forty rows are still there. `imports.service.ts` already answers
+   * this question the same way for the same reason.
+   *
+   * The audit trail is N + 1 rows, all sharing one `request_id`: one per
+   * deleted id, keeping its own `entity_id` and before-image so that row's own
+   * history still reads, and one envelope naming the act. A single row with
+   * `entity_id = null` would be unreachable from `GET /audit/:table/:id`, which
+   * is where somebody looks when they ask what happened to *this* entry.
+   */
+  async removeMany(
+    kind: string,
+    ids: string[],
+    reason: string | null,
+    actor: AuthenticatedUser,
+  ) {
+    const entry = this.entryFor(kind, actor);
+    const wanted = [...new Set(ids)];
+    if (wanted.length === 0) {
+      throw new BadRequestException("Nothing was selected");
+    }
+
+    /*
+     * Read every row first, and refuse the whole request naming what is wrong
+     * with it. A partial answer here is the thing this is trying to avoid.
+     */
+    const rows = new Map<string, StoredRow>();
+    const refusals: string[] = [];
+    for (const id of wanted) {
+      const row = await this.readRow(entry, id);
+      if (row.deleted_at) {
+        refusals.push(`"${row.__title ?? id}" is already in the trash`);
+        continue;
+      }
+      rows.set(id, row);
+    }
+
+    if (entry.blockedWhen && rows.size > 0) {
+      const live = [...rows.keys()];
+      const check = await this.db.client.execute(
+        sql`${sql.raw(`select r.id::text as id, (${entry.blockedWhen.sql}) as blocked, (${entry.title})::text as __title from ${entry.table} r where r.id`)} in (${sql.join(
+          live.map((one) => sql`${one}::uuid`),
+          sql`, `,
+        )})`,
+      );
+      for (const found of check.rows as unknown as {
+        id: string;
+        blocked: boolean;
+        __title: string | null;
+      }[]) {
+        if (found.blocked) {
+          refusals.push(
+            `"${found.__title ?? found.id}" — ${entry.blockedWhen.message}`,
+          );
+          rows.delete(found.id);
+        }
+      }
+    }
+
+    if (refusals.length > 0) {
+      throw new BadRequestException(
+        `Nothing was deleted. ${refusals.length} of ${wanted.length} cannot be: ` +
+          refusals.slice(0, 5).join("; ") +
+          (refusals.length > 5 ? ` and ${refusals.length - 5} more` : ""),
+      );
+    }
+
+    /*
+     * Expand each through its siblings — a transfer's other half, a heading's
+     * children — then dedupe, because two ticked halves of one transfer must
+     * not be counted twice.
+     */
+    const expanded = new Set<string>();
+    for (const [id, row] of rows) {
+      for (const sibling of await this.siblingIds(entry, id, row)) {
+        expanded.add(sibling);
+      }
+    }
+    const all = [...expanded];
+
+    /* One watch over every account any of them touches, not one per row. */
+    const watch =
+      entry.kind === "transaction"
+        ? await overdraftWatch(this.db.client, await this.accountIdsOf(all))
+        : null;
+
+    const alsoCount = all.length - rows.size;
+    await this.audit.mutate({
+      action: "delete",
+      entityTable: entry.table,
+      /*
+       * The envelope names no single row on purpose — it is the act, not an
+       * entry. The per-row rows below carry the entity ids.
+       */
+      entityId: null,
+      module: entry.module,
+      summary:
+        `Moved ${rows.size} ${rows.size === 1 ? entry.label : entry.label + "s"} to the trash` +
+        (alsoCount > 0
+          ? ` (${all.length} rows including what had to go with them)`
+          : "") +
+        (reason ? `: ${reason}` : ""),
+      read: () => Promise.resolve({ ids: all }),
+      run: async (tx) => {
+        await tx.execute(
+          sql`${sql.raw(`update ${entry.table} set`)}
+                deleted_at = now(),
+                deleted_by = ${actor.id}::uuid,
+                delete_reason = ${reason}
+                ${
+                  entry.alsoVoids
+                    ? sql`, voided_at = coalesce(voided_at, now()),
+                          voided_by = coalesce(voided_by, ${actor.id}::uuid),
+                          void_reason = coalesce(void_reason, 'Deleted')`
+                    : sql``
+                }
+              where id in (${sql.join(
+                all.map((one) => sql`${one}::uuid`),
+                sql`, `,
+              )})`,
+        );
+
+        /* One line per ticked row, so each entry's own history still reads. */
+        for (const [id, row] of rows) {
+          await this.audit.record(tx, {
+            action: "delete",
+            entityTable: entry.table,
+            entityId: id,
+            module: entry.module,
+            summary:
+              `Deleted ${entry.label} "${row.__title ?? id}"` +
+              (reason ? `: ${reason}` : ""),
+            before: row,
+          });
+        }
+
+        if (watch) await watch.assert(tx);
+        return { ticked: rows.size, deleted: all.length };
+      },
+    });
+
+    return { ticked: rows.size, deleted: all.length };
+  }
+
   /** The accounts a set of transaction rows sits on. */
   private async accountIdsOf(ids: string[]): Promise<string[]> {
     const found = await this.db.client.execute(

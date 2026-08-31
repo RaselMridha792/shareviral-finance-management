@@ -1,6 +1,7 @@
 "use client";
 
 import type { TxnDirection } from "@finance/shared";
+import { formatMoney } from "@finance/shared";
 import { LoaderCircle, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,7 +18,7 @@ import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { SearchField } from "@/components/ui/search-field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useTransactionDelete } from "./use-transaction-delete";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, trashApi } from "@/lib/api-client";
 import {
   ledgerApi,
   type LedgerSummary,
@@ -25,6 +26,9 @@ import {
 } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { PAGE_SIZE } from "@/lib/pagination";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { TransactionForm } from "./transaction-form";
 import { TransactionTable } from "./transaction-table";
 import { VoidDialog } from "./void-dialog";
@@ -103,6 +107,15 @@ export function TransactionsScreen({
   }, [filters, page]);
 
   const del = useTransactionDelete(() => void load());
+
+  /* Ticking, and the one act it leads to. */
+  const bulk = useBulkSelect(rows);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const bulkTotal = bulk.selected
+    .reduce((sum, r) => sum + Number(r.amount), 0)
+    .toFixed(2);
 
   useEffect(() => {
     // Fetching from the API when the filters or page change — the rule's own
@@ -183,20 +196,34 @@ export function TransactionsScreen({
           Loading…
         </Card>
       ) : (
-        <TransactionTable
-          rows={rows}
-          onEdit={setEditing}
-          onVoid={setVoiding}
-          onDelete={del.ask}
-          // Both directions appear here, so which one a row is has to be
-          // readable rather than inferred from a colour.
-          showType
-          emptyMessage={
-            Object.keys(filters).length
-              ? "Nothing matches these filters."
-              : "No entries yet. Record the first movement to get started."
-          }
-        />
+        <>
+          <BulkBar
+            count={bulk.count}
+            total={bulkTotal}
+            noun="entry"
+            pending={bulkPending}
+            onClear={bulk.clear}
+            onTrash={() => {
+              setBulkError(null);
+              setBulkAsking(true);
+            }}
+          />
+          <TransactionTable
+            rows={rows}
+            bulk={bulk}
+            onEdit={setEditing}
+            onVoid={setVoiding}
+            onDelete={del.ask}
+            // Both directions appear here, so which one a row is has to be
+            // readable rather than inferred from a colour.
+            showType
+            emptyMessage={
+              Object.keys(filters).length
+                ? "Nothing matches these filters."
+                : "No entries yet. Record the first movement to get started."
+            }
+          />
+        </>
       )}
 
       {totalPages > 1 ? (
@@ -244,6 +271,48 @@ export function TransactionsScreen({
         onVoided={load}
       />
       {del.dialog}
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="entry"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((r) => `${r.refNo ?? r.description}`)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+            {" — "}
+            {formatMoney(bulkTotal)}
+          </>
+        }
+        consequences="They come out of every total and every report. A transfer takes its other half with it. The trash can put them back."
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "transaction",
+              bulk.selected.map((r) => r.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void load();
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }

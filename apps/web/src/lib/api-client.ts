@@ -588,6 +588,18 @@ export const trashApi = {
       method: "POST",
       body: JSON.stringify({ reason: reason || null }),
     }),
+  /**
+   * The same act, on a ticked list.
+   *
+   * All-or-nothing: the server refuses the whole request if any row cannot go,
+   * and names which. A partial delete reads as success and leaves the reader to
+   * work out which of forty rows survived.
+   */
+  removeMany: (kind: string, ids: string[], reason: string) =>
+    apiFetch<{ ticked: number; deleted: number }>(`/trash/${kind}/bulk`, {
+      method: "POST",
+      body: JSON.stringify({ ids, reason: reason || null }),
+    }),
   restore: (kind: string, id: string) =>
     apiFetch<{ restored: number }>(`/trash/${kind}/${id}/restore`, {
       method: "POST",

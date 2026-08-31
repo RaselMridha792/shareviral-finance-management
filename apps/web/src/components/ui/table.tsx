@@ -52,6 +52,79 @@ export function SerialCell({ n }: { n: number }) {
   return <td className="num text-xs text-faint">{n}</td>;
 }
 
+/**
+ * The tick that puts a row in the selection.
+ *
+ * A `<td className="tick">` rather than a styled checkbox, because the class is
+ * load-bearing: `globals.css` uses `.table-data .tick + *` to suppress the
+ * vertical rule that SL would otherwise grow the moment anything sits to its
+ * left. Every table without a tick column renders byte-identically.
+ *
+ * The whole cell is the target, not just the 14px box. Ticking forty rows with
+ * a mouse is the act being made cheaper here; a small target undoes the point.
+ */
+export function TickCell({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  /** What is being ticked, for somebody who cannot see the row. */
+  label: string;
+}) {
+  return (
+    <td className="tick w-9">
+      <label className="flex cursor-pointer items-center justify-center py-1">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          aria-label={`Select ${label}`}
+          className="size-3.5 cursor-pointer accent-primary"
+        />
+      </label>
+    </td>
+  );
+}
+
+/**
+ * The header tick: every row on THIS page.
+ *
+ * Not "everything matching the filter" — see `use-bulk-select.tsx` for why that
+ * is not buildable on eight of the nine tables and would make one control mean
+ * two different things. The label says which, so nobody has to guess.
+ */
+export function TickHead({
+  state,
+  onChange,
+}: {
+  state: "none" | "some" | "all";
+  onChange: () => void;
+}) {
+  return (
+    <th className="tick w-9">
+      <label className="flex cursor-pointer items-center justify-center">
+        <input
+          type="checkbox"
+          checked={state === "all"}
+          /*
+           * `indeterminate` is a DOM property, not an attribute — React will
+           * not set it from JSX, so it goes on through the ref. Nothing else in
+           * this app uses one, which is why it is worth saying out loud.
+           */
+          ref={(el) => {
+            if (el) el.indeterminate = state === "some";
+          }}
+          onChange={onChange}
+          aria-label="Select every row on this page"
+          className="size-3.5 cursor-pointer accent-primary"
+        />
+      </label>
+    </th>
+  );
+}
+
 /** The SL heading, so no table has to remember how wide it is. */
 export function SerialHead() {
   return <Th width="w-12">SL</Th>;

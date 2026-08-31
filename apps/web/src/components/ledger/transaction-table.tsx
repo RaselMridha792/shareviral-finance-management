@@ -10,7 +10,14 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
+import {
+  SerialCell,
+  SerialHead,
+  TableScroll,
+  Th,
+  TickCell,
+  TickHead,
+} from "@/components/ui/table";
 import type { TransactionDto } from "@/lib/ledger";
 import { serial } from "@/lib/pagination";
 import { formatDate, cn } from "@/lib/utils";
@@ -43,6 +50,7 @@ export function TransactionTable({
   onEdit,
   onVoid,
   onDelete,
+  bulk,
   showAccount = true,
   showBalance = false,
   showType = false,
@@ -72,6 +80,17 @@ export function TransactionTable({
    * the second is a fair thing to conclude about a row already struck through.
    */
   onDelete?: (row: TransactionDto) => void;
+  /*
+   * Selection, when the screen offers it. Undefined renders exactly as before,
+   * which is what lets the bank statement — same component, no delete — keep
+   * its shape.
+   */
+  bulk?: {
+    isTicked: (id: string) => boolean;
+    toggle: (id: string) => void;
+    allOnPage: () => void;
+    headerState: "none" | "some" | "all";
+  };
   /**
    * The account as its own column. Off, because the sheet this table is read
    * from lists nine columns and the account is not one of them. With it off a
@@ -149,6 +168,9 @@ export function TransactionTable({
         <table className="table-data text-sm" style={{ minWidth }}>
           <thead>
             <tr>
+              {bulk ? (
+                <TickHead state={bulk.headerState} onChange={bulk.allOnPage} />
+              ) : null}
               <SerialHead />
               <Th width="w-24">Date</Th>
               {/*
@@ -235,6 +257,13 @@ export function TransactionTable({
                     is 1 unless the screen sliced the rows itself, so this is
                     `index + 1` for everybody who hands over the whole list.
                   */}
+                  {bulk ? (
+                    <TickCell
+                      checked={bulk.isTicked(row.id)}
+                      onChange={() => bulk.toggle(row.id)}
+                      label={row.refNo ?? row.description}
+                    />
+                  ) : null}
                   <SerialCell n={serial(page, index)} />
                   <td className="num">{formatDate(row.txnDate)}</td>
                   <td className="cell-prose">

@@ -488,6 +488,22 @@ tr.row-finance > th {
   border-left: 1px solid var(--border-strong);
 }
 
+/**
+ * A tick column adds no rule of its own.
+ *
+ * The moment a table grows a leading tick, SL stops being the first cell and
+ * becomes a `td + td` — so the rule above would give it a vertical hairline it
+ * has never had, on that table only, and the two tables would stop matching.
+ *
+ * Written against `.tick` rather than `:first-child` so it reaches exactly the
+ * tables that opted in: every `.table-data` is in the selector's blast radius
+ * and none is in its effect's.
+ */
+.table-data .tick + th,
+.table-data .tick + td {
+  border-left: 0;
+}
+
 .table-data .cell-prose {
   white-space: normal;
 }

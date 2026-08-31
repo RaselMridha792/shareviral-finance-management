@@ -9,8 +9,11 @@ below is started unless it says so.
 | 1 | Dates read day/month/year everywhere | **done** `a3a9a5a` — unpushed |
 | 2 | "As at" renamed to something readable | **done** — same commit |
 | 3 | Remove the "Record" button from an account's register | **done** — unpushed |
-| 4 | Multi-select rows in tables, and move the selection to trash in one go | not started |
-| 5 | A card account asks for card fields, with the CVC behind a password | not started |
+| 4 | Multi-select rows in tables, and move the selection to trash in one go | **part done** — API + machinery + Team and All transactions; 7 tables left |
+| 5 | A card account asks for card fields, with the CVC behind a password | **blocked on the owner** — see below |
+| 6 | Reference replaces Transaction ID; invoices become uploads; many documents per entry | not started |
+| 7 | Cash In: the account moves above the amounts; the computed taka figure stops being typeable | not started |
+| 8 | **Remove the global FX rate entirely** — every transaction already carries its own | not started, and the largest |
 
 ## 3. The register's "Record" button
 
@@ -21,7 +24,29 @@ Nothing is entered by hand on this screen; the button is `+ Record` at the top
 right of `accounts/register-screen.tsx`. It goes, along with whatever drawer it
 opened if nothing else opens that.
 
-## 4. Multi-select and bulk trash
+## 4. Multi-select and bulk trash — where it stands
+
+**Done and measured.** `POST /trash/:kind/bulk` (all-or-nothing, one
+transaction, N+1 audit rows under one request), `useBulkSelect`, `BulkBar`,
+`TickHead`/`TickCell`, one scoped CSS rule, `DeleteDialog` counting, and the
+tick column live on **Team** and **All transactions**. `.bulktrashqa.mjs` (20)
+and `.bulkuiqa.mjs` (12) drive both.
+
+**Still to adopt** — the machinery is built, each is the same three edits
+(pass `bulk`, render `TickHead`/`TickCell`, add the bar and the dialog):
+cash-in, other expenses, transfers, subscriptions, users, FX rate history,
+payroll runs. The register and category screens come free with
+`transaction-table.tsx` once their screens pass `bulk` down.
+
+**Deliberately excluded**, each for a reason in the code rather than a
+judgement: the bank statement (no delete path at all), TDS withholding (its
+"delete" clears a challan number, it does not delete), the salary sheet and
+report ledgers (no row identity), audit and email logs (records of what
+happened), the importer (already has checkboxes meaning the opposite), and the
+trash panel itself (same control, different verbs — the obvious follow-on,
+since undoing a 40-row delete is currently 40 clicks).
+
+## 4b. The original note
 
 The owner: *"table gulate multiple select option rakho. karon ami multiple
 select kore trash a falate cai. akhon to prottekta one by one trash a felte
@@ -39,6 +64,69 @@ where being careless is expensive:
 - the confirmation names the count and the money, not "3 items".
 - the API needs a real bulk path, or one request per row with a single audit
   entry — deleting 40 rows must not write 40 unexplained audit lines.
+
+## 8. No global FX rate
+
+The owner: *"puro application er kono central or global currency rate ba fx rate
+rakhbona ... jehetu prottek transaction a sob jog biyog hocchei tai calculation
+ta transaction diyei hoye jabe ... eta setting thekeo remove kore diba"*.
+
+He is right about the principle, and it is the same one that fixed the dollar
+balances: a row knows what it was worth on its own day, and dividing a total by
+today's rate invents a figure. This finishes that argument.
+
+It is the biggest item on this list, and the reason is worth writing down
+before anybody starts:
+
+- `app_settings.fx_fixed_usd_bdt`, `fx_mode`, `fx_provider`, `fx_report_basis`
+  and the whole `fx_rates` table exist, with a Settings tab and a rate history.
+- `FxService.convert` and `fxForPeriod` are what every report uses to answer
+  "show me this period in dollars" — the currency toggle on Reports, the period
+  card, the bank stats, the funding report. Those all convert a PERIOD, and a
+  period has no single transaction to take a rate from.
+- So this is not a deletion; it is a decision about what a dollar column MEANS
+  once there is no governing rate. The honest answer is the one the account
+  balances already use: sum the dollars each row carries, and mark the total
+  approximate where a row carries none. Anything that cannot be summed that way
+  loses its dollar view rather than showing an invented one.
+- Schema, and it touches settings and every report. Several pushes.
+
+## 7. Cash In: the account first, and no typing over the arithmetic
+
+Two things on that drawer:
+
+- **Received Bank Name moves above the amounts.** Which account it is decides
+  whether the form asks for dollars at all, so it cannot be the last question.
+- **Amount (BDT) is computed and must stop being typeable.** It already reads
+  "Worked out from the two above"; a box that says that and accepts typing is
+  a box that will disagree with its own arithmetic. Read-only, with the working
+  shown beside it.
+
+## 6. Reference, not Transaction ID — and many documents per entry
+
+The owner, on the Cash In drawer and every drawer like it:
+
+- **"transaction id dorkar nai ekhane only reference lekha thakbe"** — the
+  Transaction ID / Reference-only pair goes; one field, called Reference.
+- **"Invoice a sudhu upload system thakbe field lagbena"** — the invoice number
+  box goes entirely. An invoice is a document, not a number to type.
+- **Several documents per entry**, on both, not one.
+- **In the tables, an eye** to open what is attached.
+- **When there are several, a slider** (or some other way of moving between
+  them) rather than a list.
+
+What this disturbs, and why it is not a small change:
+
+- `invoiceNo` and `refNo` are columns, and both are *shown* in tables and
+  *searched*. Dropping the invoice number from the form is not the same as
+  dropping the column — existing rows have numbers in it, and CLAUDE.md's rule
+  about the owner's data means the column stays and the form stops asking.
+- Files already attach to a transaction (`files.transaction_id`), so several
+  per entry needs no migration — but the drawer's `Attach` helper holds exactly
+  one `File`, and so does every caller.
+- The viewer opens one document. A slider over several is new.
+- Same shape appears in the transaction drawer, the transfer drawer and the
+  cash-in drawer, all three of which carry the duplicated `Attach`.
 
 ## 5. Card accounts ask for card fields
 

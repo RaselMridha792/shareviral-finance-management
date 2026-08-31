@@ -67,6 +67,7 @@ export function DeleteDialog({
   mode = "trash",
   title,
   intro,
+  count = 1,
   askForReason = true,
   pending = false,
   error,
@@ -86,6 +87,15 @@ export function DeleteDialog({
   title?: string;
   /** Overrides the line under the heading. */
   intro?: ReactNode;
+  /**
+   * How many rows this is about. Omitted means one.
+   *
+   * It changes the words rather than adding a line: the box to tick says "move
+   * those 12 to the trash" instead of "move that one", and the button agrees.
+   * A confirmation that says "that one" over twelve rows is a confirmation
+   * nobody can check before agreeing to it.
+   */
+  count?: number;
   askForReason?: boolean;
   pending?: boolean;
   error?: string | null;
@@ -93,6 +103,23 @@ export function DeleteDialog({
   onCancel: () => void;
 }) {
   const ceremony = CEREMONY[mode];
+  const many = count > 1;
+  /* The same ceremony, counted. */
+  const acknowledge = many
+    ? `${ceremony.word === "trash" ? "move" : "delete"} those ${count}${ceremony.word === "trash" ? " to the trash" : " for good"}`
+    : ceremony.acknowledge;
+  const heading =
+    title ??
+    (many
+      ? ceremony.word === "trash"
+        ? `Move those ${count} ${subject}s to the trash?`
+        : `Delete those ${count} ${subject}s for good?`
+      : ceremony.title(subject));
+  const confirmLabel = many
+    ? ceremony.word === "trash"
+      ? `Yes, trash those ${count}`
+      : `Yes, delete those ${count}`
+    : ceremony.confirm(subject);
   const [acknowledged, setAcknowledged] = useState(false);
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
@@ -136,7 +163,7 @@ export function DeleteDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={title ?? ceremony.title(subject)}
+      aria-label={heading}
       className="fixed inset-0 z-[92] flex items-center justify-center bg-black/60 p-4"
       onClick={onCancel}
     >
@@ -149,9 +176,7 @@ export function DeleteDialog({
             <TriangleAlert className="size-5" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold">
-              {title ?? ceremony.title(subject)}
-            </h2>
+            <h2 className="text-base font-semibold">{heading}</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
               {intro ??
                 (mode === "trash"
@@ -197,9 +222,7 @@ export function DeleteDialog({
             />
             <span>
               I have read the row above and I mean to{" "}
-              <span className="font-medium text-foreground">
-                {ceremony.acknowledge}
-              </span>
+              <span className="font-medium text-foreground">{acknowledge}</span>
               .
             </span>
           </label>
@@ -263,7 +286,7 @@ export function DeleteDialog({
             disabled={!armed}
             onClick={confirm}
           >
-            {pending ? ceremony.working : ceremony.confirm(subject)}
+            {pending ? ceremony.working : confirmLabel}
           </Button>
         </div>
       </div>

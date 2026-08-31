@@ -25,6 +25,17 @@ const deleteBodySchema = z.object({
   reason: z.string().trim().max(500).nullish(),
 });
 
+const bulkBodySchema = z.object({
+  /*
+   * Capped at the same 200 the pager caps a page at. A tick column can only
+   * select what is on the screen, so anything larger did not come from the
+   * screen — and a request that could sweep a table wants a different
+   * conversation than this one.
+   */
+  ids: z.array(idSchema).min(1, "Nothing was selected").max(200),
+  reason: z.string().trim().max(500).nullish(),
+});
+
 const listQuerySchema = z.object({
   kind: z.string().trim().min(1).max(40).optional(),
   page: z.coerce.number().int().min(1).optional(),
@@ -32,6 +43,7 @@ const listQuerySchema = z.object({
 });
 
 type DeleteBody = z.infer<typeof deleteBodySchema>;
+type BulkBody = z.infer<typeof bulkBodySchema>;
 type ListQuery = z.infer<typeof listQuerySchema>;
 
 /**
@@ -73,6 +85,29 @@ export class TrashController {
    * there, still readable by id, and still in the audit log. `DELETE` on this
    * same path is the one that really removes it.
    */
+  /**
+   * The same act, on a ticked list.
+   *
+   * DECLARED ABOVE `:kind/:id`, and that is not tidiness. Nest matches routes
+   * in declaration order, so below it "bulk" would arrive as `:id` and
+   * `idSchema.parse` would answer "That is not an id this app would have
+   * issued" — a confusing 400 for a route that exists.
+   */
+  @Post(":kind/bulk")
+  @RequirePermission("settings.read")
+  removeMany(
+    @Param("kind") kind: string,
+    @ZodBody(bulkBodySchema) body: BulkBody,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.trash.removeMany(
+      kind,
+      body.ids,
+      body.reason?.trim() || null,
+      actor,
+    );
+  }
+
   @Post(":kind/:id")
   @RequirePermission("settings.read")
   remove(

@@ -11,6 +11,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +26,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SearchField } from "@/components/ui/search-field";
-import { SerialCell, SerialHead, Th } from "@/components/ui/table";
+import {
+  SerialCell,
+  SerialHead,
+  Th,
+  TickCell,
+  TickHead,
+} from "@/components/ui/table";
 import { serial } from "@/lib/pagination";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { TeamMemberForm } from "./team-member-form";
@@ -216,6 +226,13 @@ export function TeamScreen({
    */
   const shown = tab === "current" ? current : past;
 
+  /* Ticking, and the one act it leads to. Declared after `shown`, because the
+     selection is pruned to the rows actually on screen. */
+  const bulk = useBulkSelect(shown);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   return (
     <>
       <PageHeader
@@ -338,22 +355,35 @@ export function TeamScreen({
               employees and the contractors are one list now. The description
               is what varies with the tab, because that is what varies.
             */
-            <Section
-              title="Employees and contractors"
-              subtitle={
-                tab === "past"
-                  ? "No longer on the salary sheet, and no longer billing"
-                  : "Everyone drawing a salary or billing right now"
-              }
-              members={shown}
-              page={page}
-              past={tab === "past"}
-              showPay={canSeePay}
-              salaries={salaries}
-              onEdit={canWrite ? setEditing : undefined}
-              onStatus={canWrite ? goToProfile : undefined}
-              onDelete={canWrite ? del.ask : undefined}
-            />
+            <>
+              <BulkBar
+                count={bulk.count}
+                noun="person"
+                pending={bulkPending}
+                onClear={bulk.clear}
+                onTrash={() => {
+                  setBulkError(null);
+                  setBulkAsking(true);
+                }}
+              />
+              <Section
+                title="Employees and contractors"
+                subtitle={
+                  tab === "past"
+                    ? "No longer on the salary sheet, and no longer billing"
+                    : "Everyone drawing a salary or billing right now"
+                }
+                members={shown}
+                page={page}
+                past={tab === "past"}
+                showPay={canSeePay}
+                salaries={salaries}
+                onEdit={canWrite ? setEditing : undefined}
+                onStatus={canWrite ? goToProfile : undefined}
+                onDelete={canWrite ? del.ask : undefined}
+                bulk={canWrite ? bulk : undefined}
+              />
+            </>
           )}
         </>
       )}
@@ -397,6 +427,46 @@ export function TeamScreen({
         />
       ) : null}
       {del.dialog}
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="team member"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 6)
+              .map((m) => m.fullName)
+              .join(", ")}
+            {bulk.count > 6 ? ` and ${bulk.count - 6} more` : ""}
+          </>
+        }
+        consequences="They come off the team list and the salary sheet. Their pay history, payslips and documents stay, and the trash can put them back."
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "team-member",
+              bulk.selected.map((m) => m.id),
+              reason,
+            )
+            .then(async () => {
+              setBulkAsking(false);
+              bulk.clear();
+              await reload();
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }
@@ -412,6 +482,7 @@ function Section({
   onEdit,
   onStatus,
   onDelete,
+  bulk,
 }: {
   /** Which page these rows came from — the SL column counts from it. */
   page: number;
@@ -431,6 +502,17 @@ function Section({
   onEdit?: (member: TeamMemberDto) => void;
   onStatus?: (member: TeamMemberDto) => void;
   onDelete?: (member: TeamMemberDto) => void;
+  /*
+   * Selection, when the screen offers it. Undefined renders the table exactly
+   * as it was — no tick column, no change to any width — which is what lets
+   * the past tab and a read-only role share this component untouched.
+   */
+  bulk?: {
+    isTicked: (id: string) => boolean;
+    toggle: (id: string) => void;
+    allOnPage: () => void;
+    headerState: "none" | "some" | "all";
+  };
 }) {
   if (members.length === 0) return null;
 
@@ -472,6 +554,9 @@ function Section({
               than fetched as itself. A gap is honest about that; a repeat
               would not be.
             */}
+            {bulk ? (
+              <TickHead state={bulk.headerState} onChange={bulk.allOnPage} />
+            ) : null}
             <SerialHead />
             {/* The company's own identifier, beside the serial the app made
                 up. Most people have none, and the column says so rather than
@@ -514,11 +599,20 @@ function Section({
         <tbody>
           {members.map((member, index) => (
             <tr key={member.id} className="row-finance">
+              {bulk ? (
+                <TickCell
+                  checked={bulk.isTicked(member.id)}
+                  onChange={() => bulk.toggle(member.id)}
+                  label={member.fullName}
+                />
+              ) : null}
               <SerialCell n={serial(page, index)} />
               <td className="num text-muted-foreground">
                 {member.employeeCode ?? "N/A"}
               </td>
-              <td className="num text-muted-foreground">{formatDate(member.joinedOn)}</td>
+              <td className="num text-muted-foreground">
+                {formatDate(member.joinedOn)}
+              </td>
               <td>
                 {/*
                       prefetch={false} on every link that repeats per row.

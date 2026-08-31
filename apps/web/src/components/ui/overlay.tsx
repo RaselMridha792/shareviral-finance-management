@@ -232,7 +232,6 @@ function ViewerShell({
   const framed = attempt?.url ?? null;
   const failed = attempt !== null && attempt.url === null;
 
-
   return (
     <div
       role="dialog"
