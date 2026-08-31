@@ -429,8 +429,8 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                       one is. */}
                   <Th>Received Bank Name</Th>
                   <Th>Sender</Th>
-                  <Th>Invoice No.</Th>
-                  <Th>Transaction ID</Th>
+                  <Th>Invoice</Th>
+                  <Th>Reference</Th>
                   <Th>Note</Th>
                   <RowActionsHead deletable />
                 </tr>

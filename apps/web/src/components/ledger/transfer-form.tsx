@@ -316,17 +316,19 @@ export function TransferForm({
             clip beside it: the invoice number is ours, the transaction id is
             the bank's. */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Invoice No." error={fieldErrors.invoiceNo}>
+          <Field
+            label="Invoice"
+            error={fieldErrors.invoiceNo}
+            hint="Attach the invoice itself — there is no number to type"
+          >
             <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
-              <Input
-                name="invoiceNo"
-                className="num min-w-0 flex-1"
-                placeholder="INV-002"
-              />
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                {invoiceFile ? "" : "No invoice attached"}
+              </span>
             </Attach>
           </Field>
           <Field
-            label={refKind === "id" ? "Transaction ID" : "Reference"}
+            label="Reference"
             error={fieldErrors.reference}
             hint={
               refKind === "paper"
@@ -334,11 +336,8 @@ export function TransferForm({
                 : undefined
             }
           >
-            <ReferenceKindToggle value={refKind} onChange={setRefKind} />
             <Attach kind="bank_statement" file={bankFile} onPick={setBankFile}>
-              <ReferenceInput kind={refKind}>
-                <Input name="reference" className="num min-w-0 flex-1" />
-              </ReferenceInput>
+              <Input name="reference" className="num min-w-0 flex-1" />
             </Attach>
           </Field>
         </div>

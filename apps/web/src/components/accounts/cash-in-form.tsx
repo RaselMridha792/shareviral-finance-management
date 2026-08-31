@@ -493,40 +493,34 @@ export function CashInForm({
             because it reads as a fact. The contract has always allowed both
             to be empty; this screen was the only thing insisting. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Invoice No." error={fieldErrors.invoiceNo}>
+            <Field
+              label="Invoice"
+              error={fieldErrors.invoiceNo}
+              hint="Attach the invoice itself — there is no number to type"
+            >
               <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
-                <Input
-                  name="invoiceNo"
-                  defaultValue={transaction?.invoiceNo ?? undefined}
-                  className="num min-w-0 flex-1"
-                  placeholder="INV-002"
-                />
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {invoiceFile ? "" : "No invoice attached"}
+                </span>
               </Attach>
             </Field>
 
             <Field
-              label={refKind === "id" ? "Transaction ID" : "Reference"}
+              label="Reference"
               error={fieldErrors.reference}
-              hint={
-                refKind === "paper"
-                  ? "No number from the bank — attach the slip and it becomes the reference."
-                  : undefined
-              }
+              hint="The bank's own number, if it gave one — otherwise attach the slip"
             >
-              <ReferenceKindToggle value={refKind} onChange={setRefKind} />
               <Attach
                 kind="bank_statement"
                 file={screenshotFile}
                 onPick={setScreenshotFile}
               >
-                <ReferenceInput kind={refKind}>
-                  <Input
-                    name="reference"
-                    defaultValue={transaction?.reference ?? undefined}
-                    className="num min-w-0 flex-1"
-                    placeholder="FT26081200412"
-                  />
-                </ReferenceInput>
+                <Input
+                  name="reference"
+                  defaultValue={transaction?.reference ?? undefined}
+                  className="num min-w-0 flex-1"
+                  placeholder="FT26081200412"
+                />
               </Attach>
             </Field>
           </div>

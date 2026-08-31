@@ -62,8 +62,8 @@ export function SubscriptionHeadCells() {
       <Th>Account/Card</Th>
       {/* The same pair every other money table carries, in the same place:
           ours, then theirs. */}
-      <Th width="w-32">Invoice No.</Th>
-      <Th width="w-32">Transaction ID</Th>
+      <Th width="w-32">Invoice</Th>
+      <Th width="w-32">Reference</Th>
       <Th>Notes</Th>
       <Th>Login accounts</Th>
       <Th>User Name</Th>

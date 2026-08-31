@@ -181,8 +181,8 @@ export function TransfersScreen({
                   <Th align="right" width="w-24">
                     USD rate
                   </Th>
-                  <Th>Invoice No.</Th>
-                  <Th>Transaction ID</Th>
+                  <Th>Invoice</Th>
+                  <Th>Reference</Th>
                   <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>

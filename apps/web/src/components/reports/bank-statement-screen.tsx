@@ -227,7 +227,7 @@ export function BankStatementScreen({
                 {/* The bank's own number for the line — what you quote back to
                     them, not what you read the statement by, so it sits after
                     the figures. It still opens the row's documents. */}
-                <Th>Transaction ID</Th>
+                <Th>Reference</Th>
                 {/* The paper behind the movement. Every entry can carry one,
                     and the two references sit together because a reader
                     matching this statement against a file is looking for

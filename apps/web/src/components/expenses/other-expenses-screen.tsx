@@ -406,8 +406,8 @@ export function OtherExpensesScreen({
                         invoice, theirs on the bank's record of the movement.
                         One column held whichever was typed, and the other fact
                         had nowhere to be. */}
-                    <Th width="w-32">Invoice No.</Th>
-                    <Th width="w-32">Transaction ID</Th>
+                    <Th width="w-32">Invoice</Th>
+                    <Th width="w-32">Reference</Th>
                     {/* Eleventh column. It is not on the owner's sheet, but
                         the pair sits in the same place on every table in the
                         app, and riding inside Description made the widest

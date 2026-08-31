@@ -762,22 +762,19 @@ export function TransactionForm({
         */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="Invoice No."
+              label="Invoice"
               error={fieldErrors.invoiceNo}
-              hint="The document this was against — INV-002, SAL-JUL. Ours."
+              hint="Attach the invoice itself — there is no number to type"
             >
               <Attach kind="invoice" file={invoiceFile} onPick={setInvoiceFile}>
-                <Input
-                  name="invoiceNo"
-                  className="num min-w-0 flex-1"
-                  placeholder="INV-002"
-                  defaultValue={transaction?.invoiceNo ?? ""}
-                />
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {invoiceFile ? "" : "No invoice attached"}
+                </span>
               </Attach>
             </Field>
 
             <Field
-              label={refKind === "id" ? "Transaction ID" : "Reference"}
+              label="Reference"
               error={fieldErrors.reference}
               hint={
                 refKind === "id"
@@ -785,20 +782,17 @@ export function TransactionForm({
                   : "No number from the bank — attach the slip and it becomes the reference."
               }
             >
-              <ReferenceKindToggle value={refKind} onChange={setRefKind} />
               <Attach
                 kind="bank_statement"
                 file={screenshotFile}
                 onPick={setScreenshotFile}
               >
-                <ReferenceInput kind={refKind}>
-                  <Input
-                    name="reference"
-                    className="num min-w-0 flex-1"
-                    placeholder="FT26081200412"
-                    defaultValue={transaction?.reference ?? ""}
-                  />
-                </ReferenceInput>
+                <Input
+                  name="reference"
+                  className="num min-w-0 flex-1"
+                  placeholder="FT26081200412"
+                  defaultValue={transaction?.reference ?? ""}
+                />
               </Attach>
             </Field>
           </div>
