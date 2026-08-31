@@ -26,7 +26,7 @@ import {
 import type { RegisterResult, TransactionDto } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 /**
  * The bank's own ledger, in the shape the owner's sheet has it.
@@ -184,11 +184,11 @@ export function BankStatementScreen({
             {range.from ? (
               <span className="text-muted-foreground">
                 {" · "}
-                <span className="num">{range.from}</span>
+                <span className="num">{formatDate(range.from)}</span>
                 {range.to ? (
                   <>
                     {" → "}
-                    <span className="num">{range.to}</span>
+                    <span className="num">{formatDate(range.to)}</span>
                   </>
                 ) : null}
               </span>
@@ -196,7 +196,9 @@ export function BankStatementScreen({
           </span>
           <span className="text-sm text-muted-foreground">
             Brought forward at{" "}
-            <span className="num">{register.account.openingBalanceOn}</span>
+            <span className="num">
+              {formatDate(register.account.openingBalanceOn)}
+            </span>
             {" — "}
             <span className="num font-medium text-ink">
               {formatMoney(register.openingBalance, { currency: "BDT" })}
@@ -254,7 +256,9 @@ export function BankStatementScreen({
                         a phone to a bank. Number 1 is the newest line, and
                         every page continues where the last one stopped. */}
                     <SerialCell n={serial(current, index)} />
-                    <td className="num whitespace-nowrap">{row.txnDate}</td>
+                    <td className="num whitespace-nowrap">
+                      {formatDate(row.txnDate)}
+                    </td>
                     <td className="cell-prose">
                       <span className={cn(row.voidedAt && "line-through")}>
                         {row.description}

@@ -21,7 +21,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { type RegisterResult, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { PAGE_SIZE, pageCount } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 /**
  * The bank register: one account's entries, newest first, with the balance
@@ -205,7 +205,7 @@ export function RegisterScreen({
           hint={
             range.from
               ? `Everything up to ${range.from}`
-              : `Since ${account.openingBalanceOn}`
+              : `Since ${formatDate(account.openingBalanceOn)}`
           }
         />
         <Figure label="Money in" value={register.totalIn} tone="in" />

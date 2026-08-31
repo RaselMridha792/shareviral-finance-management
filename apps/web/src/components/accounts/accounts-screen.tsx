@@ -35,6 +35,7 @@ import {
   type AccountWithBalance,
 } from "@/lib/masters";
 import { AccountForm } from "./account-form";
+import { formatDate } from "@/lib/utils";
 
 /** The handoff's own four, by name. */
 const ICONS: Record<AccountType, string> = {
@@ -483,7 +484,7 @@ function AccountCard({
           currency={base}
           showCounterpart={false}
         />{" "}
-        on {account.openingBalanceOn}
+        on {formatDate(account.openingBalanceOn)}
       </p>
 
       {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}

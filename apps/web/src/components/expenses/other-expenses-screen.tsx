@@ -28,7 +28,7 @@ import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import { MonthPicker, type Range } from "./month-picker";
 
 /**
@@ -398,7 +398,7 @@ export function OtherExpensesScreen({
                             rows of one table answering to the same number is
                             the number somebody reads out to somebody else. */}
                         <SerialCell n={serial(current, index)} />
-                        <td className="num whitespace-nowrap">{row.txnDate}</td>
+                        <td className="num whitespace-nowrap">{formatDate(row.txnDate)}</td>
                         <td className="cell-prose">
                           <span
                             className={cn(

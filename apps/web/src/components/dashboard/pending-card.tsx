@@ -5,7 +5,7 @@ import { CircleCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 /**
  * Statutory deadlines, closest first.
@@ -38,7 +38,7 @@ export function PendingCard({ items }: { items: PendingItem[] }) {
         ) : (
           items.map((item) => (
             <Link
-              key={`${item.kind}-${item.dueOn}-${item.title}`}
+              key={`${item.kind}-${formatDate(item.dueOn)}-${item.title}`}
               href={item.href}
               className="row-finance flex items-center gap-3 rounded-lg px-2 transition hover:bg-surface-muted"
             >
@@ -71,7 +71,7 @@ export function PendingCard({ items }: { items: PendingItem[] }) {
                   )}
                 >
                   {item.status === "overdue" ? "was due " : "due "}
-                  {item.dueOn}
+                  {formatDate(item.dueOn)}
                 </span>
               </span>
             </Link>

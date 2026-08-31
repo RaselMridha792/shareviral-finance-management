@@ -16,7 +16,7 @@ import { Fragment } from "react";
 
 import { Th } from "@/components/ui/table";
 import type { SubscriptionDto } from "@/lib/subscriptions";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 /**
  * The fourteen columns of a subscription, written once.
@@ -90,7 +90,7 @@ export function SubscriptionBodyCells({
   return (
     <>
       <td className="text-sm">
-        <span className="num">{row.startDate}</span>
+        <span className="num">{formatDate(row.startDate)}</span>
       </td>
 
       <td>
@@ -243,7 +243,7 @@ export function SubscriptionBodyCells({
 
       <td className="text-sm">
         {row.nextRenewalOn ? (
-          <span className="num">{row.nextRenewalOn}</span>
+          <span className="num">{formatDate(row.nextRenewalOn)}</span>
         ) : (
           /* The note cannot be typed any more, but rows written while it could
              still carry one, and it is the only thing this column has to say

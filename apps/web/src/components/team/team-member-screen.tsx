@@ -57,7 +57,7 @@ import {
   type MemberPayslipDto,
   type TeamMemberDto,
 } from "@/lib/payroll";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import { TeamMemberForm } from "./team-member-form";
 
 /**
@@ -228,7 +228,7 @@ export function TeamMemberScreen({
               value={member.gender ? GENDER_LABELS[member.gender] : null}
             />
             <Row label="Blood Group" value={member.bloodGroup} />
-            <Row label="Date Of Birth" mono value={member.dateOfBirth} />
+            <Row label="Date Of Birth" mono value={formatDate(member.dateOfBirth)} />
             <Row label="NID Number" mono value={member.nid} />
           </CardBody>
         </Card>
@@ -250,7 +250,7 @@ export function TeamMemberScreen({
             description="Joining Salary is what was agreed at hire — what they are paid now is below"
           />
           <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="Date of Joining" mono value={member.joinedOn} />
+            <Row label="Date of Joining" mono value={formatDate(member.joinedOn)} />
             <Row label="Joining Salary">
               {member.joiningSalary ? (
                 <Amount value={member.joiningSalary} className="font-medium" />
@@ -293,7 +293,7 @@ export function TeamMemberScreen({
               date.
             */}
             {member.endedOn || !working ? (
-              <Row label="Last day" mono value={member.endedOn} />
+              <Row label="Last day" mono value={formatDate(member.endedOn)} />
             ) : null}
           </CardBody>
         </Card>
@@ -420,7 +420,7 @@ export function TeamMemberScreen({
                     className="mt-2 block text-2xl font-semibold"
                   />
                   <p className="num mt-1 text-xs text-muted-foreground">
-                    Since {currentPay.effectiveFrom}
+                    Since {formatDate(currentPay.effectiveFrom)}
                   </p>
 
                   {/* The four lines behind the one figure. On the person, not

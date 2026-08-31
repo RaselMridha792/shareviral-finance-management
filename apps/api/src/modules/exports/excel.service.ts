@@ -44,7 +44,13 @@ export class ExcelService {
    * group in lakhs.
    */
   private static readonly MONEY_FORMAT_BD = "#,##,##0.00";
-  private static readonly DATE_FORMAT = "dd mmm yyyy";
+  /*
+   * Day, month, year — the same reading as every screen, now that
+   * `formatIsoDate` decides that for the whole app. A number format rather
+   * than a string, so the cell stays a real date and Excel can still sort and
+   * filter it chronologically; only what the reader sees changes.
+   */
+  private static readonly DATE_FORMAT = "dd/mm/yyyy";
   /**
    * Rates and percentages: still a real number, but one that keeps the digits
    * it was given. Under the general format Excel drops trailing zeros, so a

@@ -156,7 +156,7 @@ export function AccountForm({
             label="Opening balance"
             required
             error={fieldErrors.openingBalance}
-            hint="What this account held on the date below"
+            hint="What the account held on the day below"
           >
             <MoneyInput
               name="openingBalance"
@@ -165,10 +165,16 @@ export function AccountForm({
             />
           </Field>
           <Field
-            label="As at"
+            /*
+             * "As at" is how a bank writes it and not how anybody reads it —
+             * the owner's words: "eta banking related kono nam eta amra
+             * bujhina". The pair now reads as one sentence: what it held, and
+             * the day it held it.
+             */
+            label="Opening balance date"
             required
             error={fieldErrors.openingBalanceOn}
-            hint="Your records start the next day"
+            hint="Entries you record start from the next day"
           >
             <DateInput
               name="openingBalanceOn"

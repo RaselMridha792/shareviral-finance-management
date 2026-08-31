@@ -7,6 +7,7 @@ import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api-client";
 import { accountsApi, type AccountAttachments } from "@/lib/masters";
+import { formatDate } from "@/lib/utils";
 
 /**
  * Deleting an archived account, and refusing to when it holds anything.
@@ -143,7 +144,7 @@ export function DeleteAccountDialog({
                         {held.firstTxnDate ? (
                           <span className="num text-muted-foreground">
                             {" "}
-                            · {held.firstTxnDate} → {held.lastTxnDate}
+                            · {formatDate(held.firstTxnDate)} → {formatDate(held.lastTxnDate)}
                           </span>
                         ) : null}
                       </span>

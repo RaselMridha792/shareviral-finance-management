@@ -20,6 +20,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { ApiError } from "@/lib/api-client";
 import { fxApi, type FxRateDto } from "@/lib/reports";
+import { formatDate } from "@/lib/utils";
 
 /**
  * The daily USD rate, kept as a history rather than one current number.
@@ -119,7 +120,7 @@ export function RateHistory() {
         <span className="font-medium">
           <span className="num">{Number(rate.rate).toFixed(2)}</span> per USD
         </span>
-        <span className="text-xs text-muted-foreground">{rate.rateDate}</span>
+        <span className="text-xs text-muted-foreground">{formatDate(rate.rateDate)}</span>
       </div>
     ),
     consequences: (
@@ -237,7 +238,7 @@ export function RateHistory() {
                 rates.map((rate, index) => (
                   <tr key={rate.id} className="row-finance">
                     <SerialCell n={index + 1} />
-                    <td className="num">{rate.rateDate}</td>
+                    <td className="num">{formatDate(rate.rateDate)}</td>
                     <td className="num text-right font-medium">
                       {Number(rate.rate).toFixed(2)}
                     </td>

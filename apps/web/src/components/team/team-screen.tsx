@@ -26,6 +26,7 @@ import { SerialCell, SerialHead, Th } from "@/components/ui/table";
 import { serial } from "@/lib/pagination";
 import { teamApi, type TeamMemberDto } from "@/lib/payroll";
 import { TeamMemberForm } from "./team-member-form";
+import { formatDate } from "@/lib/utils";
 
 export function TeamScreen({
   initialPage,
@@ -42,7 +43,7 @@ export function TeamScreen({
         <span className="font-medium">{member.fullName}</span>
         <span className="text-xs text-muted-foreground">
           {member.designation ?? member.engagementType} · joined{" "}
-          {member.joinedOn}
+          {formatDate(member.joinedOn)}
         </span>
       </div>
     ),
@@ -517,7 +518,7 @@ function Section({
               <td className="num text-muted-foreground">
                 {member.employeeCode ?? "N/A"}
               </td>
-              <td className="num text-muted-foreground">{member.joinedOn}</td>
+              <td className="num text-muted-foreground">{formatDate(member.joinedOn)}</td>
               <td>
                 {/*
                       prefetch={false} on every link that repeats per row.

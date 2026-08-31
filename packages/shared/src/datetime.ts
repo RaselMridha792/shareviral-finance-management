@@ -165,6 +165,47 @@ export function parseIsoDate(value: IsoDate): {
   };
 }
 
+/**
+ * A date as a person here reads it: day, then month, then year.
+ *
+ * The owner's instruction was "puro system er date format ta change koro. age
+ * day/month/year evabe koro" — so this is the one place that decides, and
+ * every screen, every PDF and every spreadsheet column goes through it.
+ *
+ * It lives in the shared package rather than in the web app because the API
+ * writes dates too — into the Excel exports and the payslip PDFs — and a
+ * report that disagrees with the screen it was printed from is worse than
+ * either format on its own.
+ *
+ * WHAT THIS DOES NOT REACH, and cannot: `<input type="date">`. The browser
+ * draws that control and picks its own order from the machine's locale, so a
+ * date being TYPED may still read differently from the same date being SHOWN.
+ * Changing that would mean replacing every date box with a hand-built one,
+ * which is a much larger change than was asked for and a worse one — people
+ * know their own browser's picker.
+ *
+ * Storage is untouched. Every value stays `YYYY-MM-DD` in the database, in the
+ * API, and in every URL; this is a reading of that value and never a
+ * replacement for it. Anything that sorts or compares must keep using the ISO
+ * string, because "14/05/2026" sorts before "02/06/2026" as text.
+ */
+export function formatIsoDate(value: IsoDate | null | undefined): string {
+  if (!value) return "";
+  /*
+   * Tolerant of a timestamp, because several columns are `timestamptz` and
+   * arrive as "2026-08-31T06:12:44.000Z". Taking the first ten characters
+   * reads the calendar day as stored, which is what the rest of this file
+   * means by a date.
+   */
+  const iso = value.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  // Anything that is not a date is handed back untouched rather than turned
+  // into "NaN/NaN/NaN", which is the shape a broken value should keep so it
+  // can be recognised.
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
 /** Days in a given month. `month` is 1-based. */
 export function daysInMonth(year: number, month: number): number {
   // Day 0 of the next month is the last day of this one.

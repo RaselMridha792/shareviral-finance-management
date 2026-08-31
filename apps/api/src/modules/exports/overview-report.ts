@@ -1,4 +1,5 @@
 import {
+  formatIsoDate,
   formatMoney,
   type NumberFormat,
   type OverviewReport,
@@ -220,7 +221,8 @@ export function buildOverviewReport(
         { header: "Amount", width: 16, align: "right" },
       ],
       rows: report.recent.map((entry) => [
-        entry.txnDate,
+        // Read the way every screen reads it — see `formatIsoDate`.
+        formatIsoDate(entry.txnDate),
         entry.refNo,
         entry.description,
         entry.categoryName ?? "—",

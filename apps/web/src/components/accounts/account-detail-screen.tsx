@@ -22,6 +22,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import type { AccountWithBalance } from "@/lib/masters";
 import { AccountForm } from "./account-form";
+import { formatDate } from "@/lib/utils";
 
 /**
  * One account, as the thing it is — not as a list of what happened to it.
@@ -76,7 +77,10 @@ export function AccountDetailScreen({
 
   const opening: Row[] = [
     { label: "Opening balance", value: account.openingBalance, money: true },
-    { label: "As at", value: account.openingBalanceOn },
+    {
+      label: "Opening balance date",
+      value: formatDate(account.openingBalanceOn),
+    },
   ];
 
   const missing = identity.filter((row) => !row.value);

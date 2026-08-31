@@ -1,3 +1,4 @@
+import { formatIsoDate } from "@finance/shared";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -60,15 +61,33 @@ export function formatPercent(value: number, fractionDigits = 1) {
   return `${sign}${Math.abs(value).toFixed(fractionDigits)}%`;
 }
 
+/**
+ * Day, then month, then year — the way it is read here.
+ *
+ * It used to be `Intl.DateTimeFormat("en-US")`, which prints "May 14": an
+ * American month-first reading, and one that dropped the year entirely in its
+ * short form. The owner asked for the whole system to read day/month/year, so
+ * the decision moved into `@finance/shared` where the API's PDFs and
+ * spreadsheets can obey the same rule, and this is the web app's door to it.
+ *
+ * The `style` argument is gone rather than kept and ignored. Nothing passed
+ * it, and a parameter that quietly does nothing is how a screen ends up
+ * looking different from the one beside it.
+ */
 export function formatDate(
-  input: string | Date,
-  style: "short" | "long" = "short",
-) {
-  const date =
-    typeof input === "string" ? new Date(`${input}T00:00:00`) : input;
-  return new Intl.DateTimeFormat("en-US", {
-    month: style === "long" ? "long" : "short",
-    day: "numeric",
-    year: style === "long" ? "numeric" : undefined,
-  }).format(date);
+  /*
+   * Null and undefined are accepted, not guarded against at each call site.
+   * Half the date columns in this app are nullable — an end date, a renewal, a
+   * date of birth nobody has typed — and thirty `? formatDate(x) : "—"` checks
+   * is thirty chances to write a different dash.
+   */
+  input: string | Date | null | undefined,
+): string {
+  if (input instanceof Date) {
+    // A Date has no timezone of its own; read the calendar day it points at
+    // rather than shifting it through a locale on the way out.
+    const iso = `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, "0")}-${String(input.getDate()).padStart(2, "0")}`;
+    return formatIsoDate(iso);
+  }
+  return formatIsoDate(input);
 }

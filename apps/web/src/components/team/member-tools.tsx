@@ -20,7 +20,7 @@ import {
   subscriptionsApi,
   type MemberSubscriptionDto,
 } from "@/lib/subscriptions";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 /**
  * Every paid tool this person is on, or has ever been on.
@@ -217,7 +217,7 @@ export function MemberTools({
                   />
                   {hasOwnDates ? (
                     <td>
-                      <OwnDates from={row.fromDate} until={row.untilDate} />
+                      <OwnDates from={formatDate(row.fromDate)} until={formatDate(row.untilDate)} />
                     </td>
                   ) : null}
                   <td>

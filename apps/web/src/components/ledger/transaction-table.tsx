@@ -13,7 +13,7 @@ import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import type { TransactionDto } from "@/lib/ledger";
 import { serial } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import { DocumentsDialog } from "./documents-dialog";
 
 /**
@@ -236,7 +236,7 @@ export function TransactionTable({
                     `index + 1` for everybody who hands over the whole list.
                   */}
                   <SerialCell n={serial(page, index)} />
-                  <td className="num">{row.txnDate}</td>
+                  <td className="num">{formatDate(row.txnDate)}</td>
                   <td className="cell-prose">
                     <span
                       className={cn("font-medium", voided && "line-through")}

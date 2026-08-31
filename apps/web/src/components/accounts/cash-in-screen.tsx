@@ -31,6 +31,7 @@ import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { MonthPicker } from "@/components/expenses/month-picker";
 import { CashInForm } from "./cash-in-form";
+import { formatDate } from "@/lib/utils";
 
 /**
  * Money arriving from abroad, month by month.
@@ -409,7 +410,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                   return (
                     <tr key={row.id} className="row-finance">
                       <SerialCell n={serial(currentPage, index)} />
-                      <td className="num">{row.txnDate}</td>
+                      <td className="num">{formatDate(row.txnDate)}</td>
                       <td className="cell-prose">
                         <span className="font-medium">{row.description}</span>
                       </td>

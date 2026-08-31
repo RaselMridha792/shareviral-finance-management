@@ -9,6 +9,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { Field, Textarea } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
+import { formatDate } from "@/lib/utils";
 
 /**
  * Voiding needs a reason. The row stays — struck through and out of every
@@ -74,7 +75,7 @@ export function VoidDialog({
       <div className="mb-5 rounded-lg border border-border bg-surface-muted p-4">
         <p className="text-sm font-medium">{transaction.description}</p>
         <p className="num mt-1 text-xs text-muted-foreground">
-          {transaction.txnDate} · {transaction.accountName}
+          {formatDate(transaction.txnDate)} · {transaction.accountName}
         </p>
         <Amount
           value={transaction.signedAmount}
