@@ -15,7 +15,6 @@ import {
   CircleCheck,
   LoaderCircle,
   Lock,
-  ListTree,
   Printer,
   RefreshCw,
   Save,
@@ -29,11 +28,9 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
-import { BreakdownDrawer } from "@/components/payroll/breakdown-drawer";
 import { MemberPicker } from "@/components/payroll/member-picker";
 import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
-import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
@@ -81,6 +78,23 @@ export function SalarySheetScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [reopening, setReopening] = useState(false);
+  /*
+   * Which line's tax working is open — held here, not on the row.
+   *
+   * It used to be a `useState` inside `LineRow`, so the drawer was rendered
+   * inside the `<td>` the figure sits in. A drawer is `position: fixed`, so it
+   * LOOKED right, and every diff read fine — but `white-space` inherits down
+   * the DOM regardless of where an element is painted, and
+   * `.table-data th, td { white-space: nowrap }` therefore reached the whole
+   * panel. Its labels could not wrap, so a line reading "Rebate — on
+   * investment 39,000.00, on income 12,000.00, ceiling 10,000.00" forced the
+   * panel's content to 833px inside a 447px drawer and the figures ran off the
+   * right-hand edge. That is the fault in the owner's screenshot.
+   *
+   * Out here the panel inherits the page, one drawer exists instead of one per
+   * row, and the next drawer somebody mounts inside a cell will not repeat it.
+   */
+  const [workingFor, setWorkingFor] = useState<PayrollLineDto | null>(null);
   const toast = useToast();
 
   const draft = run.status === "draft";
@@ -556,6 +570,7 @@ export function SalarySheetScreen({
                     usdRate={usdRate}
                     editable={canWrite && draft}
                     onSaved={refresh}
+                    onShowWorking={() => setWorkingFor(line)}
                   />
                 ))}
               </tbody>
@@ -607,6 +622,11 @@ export function SalarySheetScreen({
           </TableScroll>
         </Card>
       )}
+
+      <TdsWorkingDrawer
+        line={workingFor}
+        onClose={() => setWorkingFor(null)}
+      />
 
       <PayForm
         open={paying}
@@ -712,6 +732,7 @@ function LineRow({
   usdRate,
   editable,
   onSaved,
+  onShowWorking,
 }: {
   /** The row's place on the sheet — the number a figure gets read out by. */
   n: number;
@@ -723,10 +744,9 @@ function LineRow({
   usdRate: string | null;
   editable: boolean;
   onSaved: () => void;
+  /** Ask the sheet to open this line's tax working. */
+  onShowWorking: () => void;
 }) {
-  const settings = useSettings();
-  const [breakdown, setBreakdown] = useState(false);
-  const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -861,7 +881,7 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
-      <TdsCell line={line} onOpen={() => setWorking(true)} />
+      <TdsCell line={line} onOpen={onShowWorking} />
       <Cell
         value={line.otherDeductions}
         field="otherDeductions"
@@ -928,24 +948,13 @@ function LineRow({
           ) : null}
         </div>
 
-        {working ? (
-          <TdsWorkingDrawer
-            line={line}
-            open={working}
-            onClose={() => setWorking(false)}
-          />
-        ) : null}
-
-        {breakdown ? (
-          <BreakdownDrawer
-            line={line}
-            currency={settings.baseCurrency}
-            numberFormat={settings.numberFormat}
-            open={breakdown}
-            onClose={() => setBreakdown(false)}
-            onSaved={onSaved}
-          />
-        ) : null}
+        {/*
+          Both drawers have left this cell. The tax working is mounted once by
+          the sheet; the breakdown drawer went with the Breakdown link in #30
+          and its state had been sitting here unreachable ever since — nothing
+          called `setBreakdown(true)`, and the compiler could not say so
+          because `onClose` still referred to it.
+        */}
       </td>
     </tr>
   );
@@ -1008,11 +1017,22 @@ function TdsCell({
  */
 function TdsWorkingDrawer({
   line,
-  open,
+  onClose,
+}: {
+  /* Null when nothing is open — one prop rather than a line and a flag that
+     can disagree about which line is being shown. */
+  line: PayrollLineDto | null;
+  onClose: () => void;
+}) {
+  if (!line) return null;
+  return <TdsWorkingPanel line={line} onClose={onClose} />;
+}
+
+function TdsWorkingPanel({
+  line,
   onClose,
 }: {
   line: PayrollLineDto;
-  open: boolean;
   onClose: () => void;
 }) {
   const basis = line.tdsBasis;
@@ -1023,7 +1043,7 @@ function TdsWorkingDrawer({
 
   return (
     <Drawer
-      open={open}
+      open
       onClose={onClose}
       title={`${line.fullName} — how the tax was worked out`}
       description={

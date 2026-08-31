@@ -17,7 +17,7 @@ below is started unless it says so.
 | 18 | **A subscription that is paid takes money out of the bank** | **API done** — the button on the screen is next |
 | 23 | **Expenses: a real overview page** — rename the category grid, six dynamic boxes, Other expenses off the menu | not started |
 | 24 | All transactions: drop "All accounts", USD small under BDT, drop "Show voided" | **done** — unpushed |
-| 28 | Salary sheet: the TDS cell opens its working | already built — **verify only** |
+| 28 | Salary sheet: the TDS cell opens its working | **done** — it opened, but the panel was broken |
 | 29 | Salary sheet: an FX rate typed per LINE | not started — needs a column |
 | 30 | Salary sheet: the Breakdown link goes | **done** — unpushed |
 | 31 | Bank statement: oldest first, and whole-row colour | **done** — unpushed |
@@ -37,6 +37,43 @@ below is started unless it says so.
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
 | 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
+
+## 28. The tax working — it opened, and it was broken
+
+"Verify only" was the plan, because the code plainly had a `TdsWorkingDrawer`
+and the cell plainly called it. It did open. Then the harness measured the panel
+and found three elements crossing its right-hand edge by up to 201px — the fault
+in the owner's screenshot, still there.
+
+**Why, and it is worth remembering.** The drawer was rendered inside the `<td>`
+the tax figure sits in. A drawer is `position: fixed`, so it is painted at the
+edge of the window and looks completely independent of the table — but
+`white-space` INHERITS down the DOM regardless of where an element is painted,
+and `globals.css` has `.table-data th, td { white-space: nowrap }`. So every
+label in the panel was forbidden to wrap. "Rebate — on investment 39,000.00, on
+income 12,000.00, ceiling 10,000.00" then forced the content to 833px inside a
+447px drawer.
+
+Nothing in the diff of either file could show this. It took asking the browser
+for every element's bounding box.
+
+The fix is page-local and makes the sheet simpler: the open line lives on the
+screen, `LineRow` gets an `onShowWorking` callback, and ONE panel is mounted
+beside the other drawers instead of one per row. `BreakdownDrawer` went with it
+— dead since #30 removed the link that opened it, and invisible to the compiler
+because its `onClose` still mentioned `setBreakdown`.
+
+**A trap left standing, deliberately.** Any drawer mounted inside a table cell
+will inherit `nowrap` the same way. One line in `components/ui/drawer.tsx`
+(`whitespace-normal` on the panel) would end it for good, but that file is
+shared by nineteen screens and the rule here is to ask before touching those.
+Today only the salary sheet did it, and it no longer does.
+
+`.tdsdrawerqa.mjs` — 12 checks. It builds its own person, wage and March sheet,
+because this database has nobody with a salary, and deletes all three
+afterwards. Its first run reported the screen as broken twice when the harness
+was wrong: the heading reads "TDS" and it was looking for "Tax", and there were
+no lines to measure at all.
 
 ## 24-27, 31. Two tables, read the way the owner reads them
 
