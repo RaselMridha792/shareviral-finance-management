@@ -14,6 +14,8 @@ import {
   TableMessageRow,
   TableScroll,
   Th,
+  TickCell,
+  TickHead,
 } from "@/components/ui/table";
 import {
   ApiError,
@@ -22,6 +24,7 @@ import {
   type TrashKindSummary,
 } from "@/lib/api-client";
 import { cn, formatDate } from "@/lib/utils";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
 
 /**
  * Where deleted rows wait.
@@ -43,6 +46,20 @@ import { cn, formatDate } from "@/lib/utils";
 export function TrashPanel() {
   const [summary, setSummary] = useState<TrashKindSummary[] | null>(null);
   const [items, setItems] = useState<TrashItem[] | null>(null);
+  /*
+   * Ticking, keyed by kind AND id.
+   *
+   * This is the one table in the app whose rows are not all the same kind of
+   * thing — a transaction, a person and an exchange rate can sit in it
+   * together — and two kinds could in principle carry the same uuid. The
+   * selection therefore keys on "kind:id", and the request is grouped by kind
+   * on the way out, because the API's guards and permissions are per kind.
+   */
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState<null | "restore" | "purge">(
+    null,
+  );
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [kind, setKind] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -150,6 +167,14 @@ export function TrashPanel() {
   const waiting = summary === null || items === null;
   const anythingAtAll = summary?.some((k) => k.count > 0) ?? false;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  /*
+   * The hook wants rows with an `id`; the trash's identity is kind AND id, so
+   * the two are joined for the selection and split again on the way out.
+   */
+  const tickable = (items ?? []).map((item) => ({
+    id: `${item.kind}:${item.id}`,
+  }));
+  const bulk = useBulkSelect(tickable);
 
   return (
     <Card>
@@ -185,6 +210,61 @@ export function TrashPanel() {
       ) : (
         <>
           {/*
+            Two verbs, not one. Everything else in the app that ticks rows
+            offers "Move to trash"; here the rows are already in it, so the
+            pair is Restore and Delete for ever — and Restore comes first
+            because it is the one somebody reaches for in a hurry.
+          */}
+          {bulk.count > 0 ? (
+            <div
+              role="status"
+              className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2"
+            >
+              <p className="text-sm text-muted-foreground">
+                <span className="num font-medium text-foreground">
+                  {bulk.count}
+                </span>{" "}
+                {bulk.count === 1 ? "row" : "rows"} selected
+              </p>
+              <span className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={bulk.clear}
+                  disabled={bulkPending}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setBulkError(null);
+                    setBulkAsking("restore");
+                  }}
+                  disabled={bulkPending}
+                >
+                  Restore
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={() => {
+                    setBulkError(null);
+                    setBulkAsking("purge");
+                  }}
+                  disabled={bulkPending}
+                >
+                  Delete for ever
+                </Button>
+              </span>
+            </div>
+          ) : null}
+
+          {/*
             One chip per kind, with its count. A filter, not navigation — the
             all-kinds list stays the default because "what disappeared" rarely
             arrives with a table name attached.
@@ -217,6 +297,12 @@ export function TrashPanel() {
             <table className="table-data">
               <thead>
                 <tr>
+                  {bulk ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <Th>What</Th>
                   <Th>Deleted</Th>
@@ -229,12 +315,21 @@ export function TrashPanel() {
               </thead>
               <tbody>
                 {items.length === 0 ? (
-                  <TableMessageRow colSpan={6}>
+                  <TableMessageRow colSpan={bulk ? 7 : 6}>
                     Nothing of that kind is in the trash.
                   </TableMessageRow>
                 ) : (
                   items.map((item, index) => (
                     <tr key={`${item.kind}:${item.id}`}>
+                      {bulk ? (
+                        <TickCell
+                          checked={bulk.isTicked(`${item.kind}:${item.id}`)}
+                          onChange={() =>
+                            bulk.toggle(`${item.kind}:${item.id}`)
+                          }
+                          label={item.title ?? item.id}
+                        />
+                      ) : null}
                       <SerialCell n={(page - 1) * pageSize + index + 1} />
                       <td>
                         <div className="flex flex-col">
@@ -308,6 +403,92 @@ export function TrashPanel() {
         here — same checkbox, same typed word — because this step is the one
         with no way back at all.
       */}
+      {/*
+        The confirmation for a ticked list.
+        `mode` decides the words: "trash" is recoverable and "delete" is not,
+        and the ceremony differs accordingly — restoring asks far less of
+        somebody than purging, because restoring can be undone by trashing
+        again and purging cannot be undone at all.
+      */}
+      <DeleteDialog
+        open={bulkAsking !== null}
+        mode={bulkAsking === "purge" ? "delete" : "trash"}
+        subject="row"
+        count={bulk.count}
+        title={
+          bulkAsking === "purge"
+            ? `Delete those ${bulk.count} for good?`
+            : `Restore those ${bulk.count}?`
+        }
+        intro={
+          bulkAsking === "purge"
+            ? "They leave the trash and the database. Nothing brings them back."
+            : "They go back where they were, and appear on their own screens again."
+        }
+        summary={
+          <>
+            {(items ?? [])
+              .filter((i) => bulk.isTicked(`${i.kind}:${i.id}`))
+              .slice(0, 6)
+              .map((i) => i.title ?? i.id)
+              .join(", ")}
+            {bulk.count > 6 ? ` and ${bulk.count - 6} more` : ""}
+          </>
+        }
+        askForReason={false}
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(null)}
+        onConfirm={() => {
+          const chosen = (items ?? []).filter((i) =>
+            bulk.isTicked(`${i.kind}:${i.id}`),
+          );
+          /*
+           * Grouped by kind, because the API's guards and permissions are per
+           * kind — a batch spans one kind only. The trash is the one table
+           * whose rows are not all the same sort of thing.
+           */
+          const byKind = new Map<string, string[]>();
+          for (const item of chosen) {
+            byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item.id]);
+          }
+
+          setBulkPending(true);
+          setBulkError(null);
+          const purging = bulkAsking === "purge";
+          void Promise.all(
+            [...byKind].map(([k, ids]) =>
+              purging
+                ? trashApi.purgeMany(k, ids)
+                : trashApi.restoreMany(k, ids),
+            ),
+          )
+            .then(async (answers) => {
+              const failed = answers.flatMap((a) => a.failed);
+              if (failed.length > 0) {
+                /*
+                 * Said, not swallowed. Unlike a delete, a partial answer here
+                 * is not a trap — what did not move is still in the trash and
+                 * can be tried again — but it must not read as complete.
+                 */
+                setBulkError(
+                  `${failed.length} could not be ${purging ? "deleted" : "restored"}: ${failed[0]?.reason ?? ""}`,
+                );
+              } else {
+                setBulkAsking(null);
+              }
+              bulk.clear();
+              await load(kind, page);
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
+
       <DeleteDialog
         open={purging !== null}
         mode="delete"

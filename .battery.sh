@@ -31,3 +31,5 @@ node .dateqa.mjs        # every screen reads dates day first
 node .refqa.mjs         # one Reference, and an invoice that is a paper
 
 node .lockedqa.mjs      # a closed month can be corrected, not rewritten
+
+node .trashbulkqa.mjs   # restore and purge a ticked list, across kinds

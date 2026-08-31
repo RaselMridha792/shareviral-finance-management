@@ -86,6 +86,33 @@ export class TrashController {
    * same path is the one that really removes it.
    */
   /**
+   * Restore, or purge, a ticked list.
+   *
+   * Both DECLARED ABOVE the single-id routes, for the reason the bulk delete
+   * documents: Nest matches in declaration order, so below them "bulk-restore"
+   * would arrive as an :id and be refused as not an id.
+   */
+  @Post(":kind/bulk-restore")
+  @RequirePermission("settings.read")
+  restoreMany(
+    @Param("kind") kind: string,
+    @ZodBody(bulkBodySchema) body: BulkBody,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.trash.restoreMany(kind, body.ids, actor);
+  }
+
+  @Post(":kind/bulk-purge")
+  @RequirePermission("settings.read")
+  purgeMany(
+    @Param("kind") kind: string,
+    @ZodBody(bulkBodySchema) body: BulkBody,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.trash.purgeMany(kind, body.ids, actor);
+  }
+
+  /**
    * The same act, on a ticked list.
    *
    * DECLARED ABOVE `:kind/:id`, and that is not tidiness. Nest matches routes

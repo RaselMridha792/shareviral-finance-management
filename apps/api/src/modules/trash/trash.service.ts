@@ -509,6 +509,78 @@ export class TrashService {
   /* -------------------------------------------------------------- restoring */
 
   /** Puts it back exactly where it was. */
+  /**
+   * Restore, or purge, a ticked list.
+   *
+   * Bulk delete arrived without a bulk undo, which made the delete more
+   * dangerous than it needed to be: forty rows went in one click and came back
+   * in forty. So these two exist for the same reason the bulk delete does, and
+   * they are deliberately thin — each is the single act, in a loop, inside one
+   * transaction is NOT what happens here and that is worth saying.
+   *
+   * They loop over `restore`/`purge` as they are, one at a time, each with its
+   * own audit row. Two reasons, and the second is the one that decided it:
+   *
+   *   - restore has real per-row logic (a void it caused versus one that was
+   *     already there, a heading's children, a sibling still in the trash) and
+   *     re-implementing that in a set-based query is how the two would drift;
+   *   - unlike a delete, a PARTIAL restore is not a trap. Nothing is lost by
+   *     twelve of twenty coming back — the other eight are still in the trash,
+   *     visibly, and can be tried again. The all-or-nothing rule earned its
+   *     place on the delete because a half-delete looks like success; a
+   *     half-restore looks like a half-restore.
+   *
+   * So this reports what happened rather than refusing the lot, and the screen
+   * says so.
+   */
+  async restoreMany(kind: string, ids: string[], actor: AuthenticatedUser) {
+    /*
+     * The kind is checked ONCE, up front, and is allowed to throw.
+     *
+     * Without this a mistyped kind — or a role that may not touch this sort of
+     * row — came back as HTTP 201 with every id listed as an individual
+     * failure, which reads as "the rows are the problem" when the request was.
+     * A permission refusal in particular must not be reported as twenty
+     * separate mishaps.
+     */
+    this.entryFor(kind, actor);
+    return this.eachOf(ids, (id) => this.restore(kind, id, actor));
+  }
+
+  async purgeMany(kind: string, ids: string[], actor: AuthenticatedUser) {
+    this.entryFor(kind, actor);
+    return this.eachOf(ids, (id) => this.purge(kind, id, actor));
+  }
+
+  private async eachOf(
+    ids: string[],
+    act: (id: string) => Promise<unknown>,
+  ): Promise<{ done: number; failed: { id: string; reason: string }[] }> {
+    const wanted = [...new Set(ids)];
+    if (wanted.length === 0) {
+      throw new BadRequestException("Nothing was selected");
+    }
+    if (wanted.length > 200) {
+      throw new BadRequestException("Too many at once — 200 is the limit");
+    }
+
+    let done = 0;
+    const failed: { id: string; reason: string }[] = [];
+    for (const id of wanted) {
+      try {
+        await act(id);
+        done += 1;
+      } catch (caught) {
+        failed.push({
+          id,
+          reason:
+            caught instanceof Error ? caught.message : "That one did not work.",
+        });
+      }
+    }
+    return { done, failed };
+  }
+
   async restore(kind: string, id: string, actor: AuthenticatedUser) {
     const entry = this.entryFor(kind, actor);
     const row = await this.readRow(entry, id);

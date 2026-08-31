@@ -604,6 +604,24 @@ export const trashApi = {
     apiFetch<{ restored: number }>(`/trash/${kind}/${id}/restore`, {
       method: "POST",
     }),
+  /**
+   * Restore or purge a ticked list.
+   *
+   * These report what happened rather than refusing the lot, unlike
+   * `removeMany`. A half-restore is not a trap: what did not come back is
+   * still in the trash, visibly, and can be tried again — whereas a
+   * half-delete reads as success.
+   */
+  restoreMany: (kind: string, ids: string[]) =>
+    apiFetch<{ done: number; failed: { id: string; reason: string }[] }>(
+      `/trash/${kind}/bulk-restore`,
+      { method: "POST", body: JSON.stringify({ ids }) },
+    ),
+  purgeMany: (kind: string, ids: string[]) =>
+    apiFetch<{ done: number; failed: { id: string; reason: string }[] }>(
+      `/trash/${kind}/bulk-purge`,
+      { method: "POST", body: JSON.stringify({ ids }) },
+    ),
   /** Gone for good. Only answers for a row already in the trash. */
   purge: (kind: string, id: string) =>
     apiFetch<{ purged: number }>(`/trash/${kind}/${id}`, { method: "DELETE" }),

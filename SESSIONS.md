@@ -21,7 +21,7 @@ below is started unless it says so.
 | 10 | Void allowed inside a locked period — the owner's decision | **done** — unpushed |
 | 11 | A payroll month carries its own USD rate, typed when it is finalised | not started |
 | 12 | Tick columns on Users, FX history, Payroll — and the lock-out hole closed first | not started |
-| 13 | Tick column on Settings > Trashed: restore and purge in one go | not started |
+| 13 | Tick column on Settings > Trashed: restore and purge in one go | **done** — unpushed |
 | 8 | **Remove the global FX rate entirely** — every transaction already carries its own | **done for the dashboard and Settings**; Reports' own USD toggle still to move |
 
 ## 3. The register's "Record" button
