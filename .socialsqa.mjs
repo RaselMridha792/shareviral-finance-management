@@ -221,14 +221,30 @@ const readCard = async () => {
     return {
       entries: [...card.querySelectorAll("li")].map((li) => {
         const link = li.querySelector("a");
-        const chip = li.querySelector('[aria-hidden="true"]');
+        /*
+          Two shapes, one job. Seven platforms draw their real logo as an
+          <svg> with a brand fill; LinkedIn, website and other draw a lettered
+          chip, because simple-icons has no CC0 LinkedIn mark and the last two
+          have no brand at all. The check below wants each entry
+          DISTINGUISHABLE, whichever shape it is.
+        */
+        const svg = li.querySelector("svg[role='img']");
+        const chip = li.querySelector('span[aria-hidden="true"]');
         return {
           text: (li.textContent ?? "").replace(/\s+/g, " ").trim(),
           href: link?.getAttribute("href") ?? null,
           rel: link?.getAttribute("rel") ?? null,
           target: link?.getAttribute("target") ?? null,
-          mark: (chip?.textContent ?? "").trim(),
-          markColour: chip ? getComputedStyle(chip).backgroundColor : null,
+          kind: svg ? "logo" : chip ? "chip" : "none",
+          /* A logo is told apart by its path; a chip by its letters. */
+          mark: svg
+            ? (svg.querySelector("path")?.getAttribute("d") ?? "").slice(0, 24)
+            : (chip?.textContent ?? "").trim(),
+          markColour: svg
+            ? svg.getAttribute("fill")
+            : chip
+              ? getComputedStyle(chip).backgroundColor
+              : null,
         };
       }),
       hasButton: [...card.querySelectorAll("button")].some((b) =>
@@ -284,10 +300,28 @@ check(
  */
 const marks = (card?.entries ?? []).map((e) => e.mark);
 const colours = (card?.entries ?? []).map((e) => e.markColour);
+const kinds = (card?.entries ?? []).map((e) => e.kind);
+check(
+  "every account carries a mark of some kind",
+  kinds.length === 3 && kinds.every((k) => k !== "none"),
+  kinds.join(" "),
+);
+check(
+  "X and WhatsApp draw their REAL logo, not a lettered chip",
+  (card?.entries ?? [])
+    .filter((e) => /^(X|WhatsApp)/.test(e.text))
+    .every((e) => e.kind === "logo"),
+  (card?.entries ?? []).map((e) => `${e.text.slice(0, 10)}:${e.kind}`).join(" | "),
+);
+check(
+  "LinkedIn keeps its chip — simple-icons has no CC0 mark for it",
+  (card?.entries ?? []).find((e) => e.text.includes("LinkedIn"))?.kind === "chip",
+  (card?.entries ?? []).find((e) => e.text.includes("LinkedIn"))?.mark ?? "",
+);
 check(
   "each account carries its own mark, and no two are the same",
   marks.length === 3 && new Set(marks).size === 3,
-  marks.join(" "),
+  marks.map((m) => String(m).slice(0, 14)).join(" | "),
 );
 check(
   "and its own colour",

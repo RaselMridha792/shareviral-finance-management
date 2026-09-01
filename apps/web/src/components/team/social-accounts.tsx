@@ -15,6 +15,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { teamApi, type TeamSocialDto } from "@/lib/payroll";
+import { BRAND_MARKS } from "./brand-marks";
 
 /**
  * Where somebody can be found, on a team member's profile.
@@ -30,46 +31,56 @@ import { teamApi, type TeamSocialDto } from "@/lib/payroll";
  */
 
 /**
- * ABOUT THE ICONS, because this is the part somebody will want to change.
+ * ABOUT THE ICONS.
  *
- * The owner asked for icons and this app draws every icon from **lucide-react**,
- * which ships no brand marks at all — there is no Facebook, Instagram, LinkedIn
- * or X export in it, and `ls node_modules/lucide-react/dist/esm/icons` confirms
- * that across all 2,025 of them. Two honest options were open: add a
- * brand-icon dependency, or draw the platforms some other way.
+ * The owner asked for real logos, and lucide-react — which draws every other
+ * icon in this app — ships none: 2,000-odd icons and not one brand. So seven of
+ * the ten platforms draw their actual mark, inlined from simple-icons (CC0) in
+ * `brand-marks.ts`; see that file for why the paths are written down rather
+ * than imported.
  *
- * This is the second, because adding a package to a live finance app at three
- * in the morning without being asked is not a decision to make on somebody's
- * behalf. Each platform gets its own brand colour and its own short mark, which
- * is what the eye actually uses to pick LinkedIn out of a row — the blue and
- * the "in", not the rounded corners. It reads at a glance and it is honest
- * about being a chip rather than a slightly-wrong trademark.
+ * The other three keep the lettered chip:
  *
- * If the owner wants the real marks it is one dependency and one swap of this
- * table. Nothing else here has to change.
+ *   linkedin  simple-icons removed it after a trademark request, so there is no
+ *             CC0 mark. An approximation of a trademark is worse than none, and
+ *             the LinkedIn blue with "in" on it is what the eye uses to find it
+ *             in a row anyway.
+ *   website   has no brand by definition.
+ *   other     likewise.
+ *
+ * Both shapes are the same size and sit on the same baseline, so a row mixing
+ * them reads as one row rather than as two kinds of thing.
  */
-const MARK: Record<SocialPlatform, { short: string; bg: string; fg: string }> = {
+const CHIP: Record<string, { short: string; bg: string; fg: string }> = {
   linkedin: { short: "in", bg: "#0A66C2", fg: "#FFFFFF" },
-  facebook: { short: "f", bg: "#1877F2", fg: "#FFFFFF" },
-  instagram: { short: "ig", bg: "#E1306C", fg: "#FFFFFF" },
-  x: { short: "X", bg: "#0F1419", fg: "#FFFFFF" },
-  youtube: { short: "▶", bg: "#FF0000", fg: "#FFFFFF" },
-  github: { short: "gh", bg: "#24292F", fg: "#FFFFFF" },
-  whatsapp: { short: "wa", bg: "#25D366", fg: "#0B3D20" },
-  telegram: { short: "tg", bg: "#26A5E4", fg: "#FFFFFF" },
   website: { short: "web", bg: "#475569", fg: "#FFFFFF" },
   other: { short: "•", bg: "#64748B", fg: "#FFFFFF" },
 };
 
 function Mark({ platform }: { platform: SocialPlatform }) {
-  const mark = MARK[platform] ?? MARK.other;
+  const brand = BRAND_MARKS[platform];
+  if (brand) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        role="img"
+        className="size-5 shrink-0"
+        fill={brand.hex}
+      >
+        <path d={brand.path} />
+      </svg>
+    );
+  }
+
+  const chip = CHIP[platform] ?? CHIP.other;
   return (
     <span
       aria-hidden="true"
       className="inline-flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold leading-none"
-      style={{ background: mark.bg, color: mark.fg }}
+      style={{ background: chip.bg, color: chip.fg }}
     >
-      {mark.short}
+      {chip.short}
     </span>
   );
 }

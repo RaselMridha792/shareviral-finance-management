@@ -78,7 +78,7 @@ ticking all seventeen.
 | 34 | Reference is attach-only; our number is "Entry No." | |
 | 35 | An attached file's name reads as content | five places |
 | 37 | Payslip and Reports dates | |
-| 14 | Social media on a team member | **the icons need your word — see below** |
+| 14 | Social media on a team member | done, with the **real brand logos** he asked for |
 | 15 | e-TIN and one E-Return per income year | e-TIN already existed |
 | 12a | **The lock-out hole, found and shut** | it was open on the live site |
 
@@ -526,24 +526,32 @@ base (dropping the "@" people type out of habit), and returns **null** for a
 WhatsApp number or an "other" — those render as plain text, because a link that
 lands on the wrong profile is worse than no link.
 
-### The icons, which need the owner's decision
+### The icons — the real ones, inlined
 
-He asked for icons. This app draws every icon from **lucide-react**, and lucide
-ships **no brand marks at all** — there is no Facebook, Instagram, LinkedIn or X
-export in it. `ls node_modules/lucide-react/dist/esm/icons` confirms it.
+He asked for the real logos, so seven of the ten platforms draw their actual
+mark: Facebook, Instagram, X, YouTube, GitHub, WhatsApp and Telegram. The paths
+come from **simple-icons**, whose data is CC0.
 
-Two honest options: add a brand-icon dependency, or draw them another way. This
-took the second, because adding a package to a live finance app overnight
-without being asked is not a decision to make on somebody's behalf. Each
-platform gets **its own brand colour and its own short mark** — the LinkedIn
-blue and "in", the WhatsApp green and "wa" — which is what the eye actually uses
-to pick one out of a row, and which is honest about being a chip rather than a
-slightly-wrong trademark.
+**They are written into `brand-marks.ts` rather than imported, and there is no
+new dependency.** The package has no per-icon entry point — importing one name
+pulls the whole index, and the index is 3,457 icons. Seven are wanted and their
+path data is 5.4 KB; shipping half a megabyte of logos nobody asked for to a
+portal people open on phones is not a trade worth making for the convenience of
+an import. Refreshing them is a minute's work and is needed when a brand changes
+its logo, which is roughly never.
 
-**If the real marks are wanted it is one dependency and one swap of the `MARK`
-table in `social-accounts.tsx`. Nothing else changes.**
+**Three keep the lettered chip**, and it is not a shortcut:
 
-`.socialsqa.mjs` — 18 checks. The three that matter: sending a shorter list
+- **LinkedIn** — simple-icons removed it after a trademark request, so there is
+  no CC0 mark to use. Drawing an approximation of a trademark is worse than not
+  drawing one. Its chip is the LinkedIn blue with "in" on it, which is what the
+  eye uses to find it in a row anyway.
+- **Website** and **Other** have no brand by definition.
+
+Both shapes are the same size on the same baseline, so a row mixing them reads
+as one row rather than as two kinds of thing.
+
+`.socialsqa.mjs` — 21 checks. The three that matter: sending a shorter list
 REPLACES rather than appends (an append would quietly accumulate duplicates
 every time somebody removed one), removing a platform and adding it straight
 back is not refused (the partial index earning its keep), and the three chips
