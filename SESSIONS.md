@@ -34,27 +34,8 @@ ticking all seventeen.
 
 | # | What | Why it is not done |
 |---|---|---|
-| 19 + 22 | Subscriptions: a monthly date filter, and the table trimmed to the important columns with the rest on a per-plan page | **Two questions for you, below.** The spec is written and checked; both answers change what gets built |
 | 23 | Expenses: rename the grid "Operational expenses", a six-box overview including Salary, Other expenses off the menu | Specced and checked, not built — the night ran out here |
 | 12b | Tick columns on Users, FX history, Payroll runs | Each raises a question that is yours — see **12b** below. The lock-out hole they depended on is closed |
-
-### The two questions on 19 + 22
-
-**1. What does "monthly" filter ON?** The screen lists PLANS, not payments, so
-the only date it has is the plan's start date. "What did we pay this month"
-cannot be answered per plan today: `payForSubscription` writes an ordinary
-expense with the plan named in the description and no id on the row, so nothing
-ties a payment back to a plan. That would need a `transactions.subscription_id`
-column, its own migration and its own session. **The plan as written filters on
-start date and defaults to "Every month"** — a current-month default would open
-the register on an empty table, because plans are not started every month.
-
-**2. Trimming the table also trims the team profile.** `subscription-columns.tsx`
-is one file used by BOTH the subscriptions register and "Paid tools" on every
-team member's page — that is deliberate, so the two cannot drift. The six
-columns leave both, and the profile's row gains a link to the plan's own page so
-nothing is out of reach. Say if you want them kept on the profile and it becomes
-a different job.
 
 ### Three things I did not change, each yours to decide
 
@@ -646,6 +627,61 @@ every dollar figure off the page, moves the fallback rate to 250, reads them
 again, and requires all of them to be identical. A statement that passes every
 other check and fails that one is exactly the bug — it looks right until
 somebody opens Settings.
+
+## 19 + 22. The register opens on this month, and a plan has a page
+
+**#19, and the owner settled what "monthly" means:** *"ekhane sudhu current
+month dekhabe oi month a jodi kono subscription thake oigula dekhabe. r current
+month a new kena hole otao dekhabe."*
+
+So a plan is in a month if it **had started by the end of it** — everything
+running then, plus anything bought during it. The filter is on
+`subscriptions.start_date`, the table's own Date column, and the query key is
+called `startedBy` rather than `to` so nobody reads it as a ledger range.
+
+It deliberately does not mean "paid in this month", and that is worth knowing:
+nothing ties a payment back to a plan. `payForSubscription` writes an ordinary
+expense with the tool named in the description and no plan id on the row, and
+two plans from one vendor produce the same description. Answering that question
+needs a `transactions.subscription_id` column and its own migration.
+
+Whether a plan was still ALIVE that month is the status tabs' job, and they
+already exist — so the month and "Active" compose into "the plans running in
+September" without this filter having to invent a cancellation date the table
+does not hold.
+
+The register opens on this month. **Every month** is one row above it, because a
+plan runs across months and "show me all of them" is a question this screen gets
+constantly; what he asked for is where it starts.
+
+**#22:** the register went from seventeen columns to eleven — his list, and the
+eleven were already in his order once the six were deleted, so this was a
+deletion and not a reordering. Category, Equivalent (BDT), Cost (USD), USD Rate,
+Payment Method and Notes are on **`/subscriptions/[id]`**, a read-only page the
+tool's name now opens.
+
+Four things about that page:
+
+- **No API change was needed.** `GET /subscriptions/:id` already returned all 22
+  fields and attached the seats.
+- **The note is shown whole.** It was a table cell truncated at sixteen
+  characters, which is the one shape a note cannot survive.
+- **The seats are a table, with the footnote that matters most here**: the price
+  above is the WHOLE plan's. A page about one tool is exactly where somebody
+  reads a thirteen-seat plan's price as what one person costs.
+- **It is read-only.** Editing is the drawer the register already opens; a
+  second form would be a second place for the same fields to disagree.
+
+**The team profile changed too, and that was deliberate.**
+`subscription-columns.tsx` is one file used by both the register and "Paid
+tools" on every team member's page — it exists precisely so the two cannot
+drift, so the six columns left both. The trim also made `numberFormat` dead on
+that path, which cascaded out of four files.
+
+`.subsmonthqa.mjs` — 17 checks. The one that earns its keep: a filter wired to a
+query key the server ignores looks identical on screen — same rows, no error —
+so this creates a plan started in 2024 and one started this month and requires
+June 2024 to show the first and not the second.
 
 ## 23. The Expenses overview — specced, checked, and NOT built
 

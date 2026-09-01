@@ -2,11 +2,7 @@
 
 import {
   BILLING_CYCLE_LABELS,
-  SUBSCRIPTION_CATEGORY_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
-  formatMoney,
-  PAYMENT_METHOD_LABELS,
-  type PaymentMethod,
   type SubscriptionStatus,
 } from "@finance/shared";
 import { ImageIcon } from "lucide-react";
@@ -48,23 +44,29 @@ export type SubscriptionRowHandlers = {
   onScreenshot?: (row: SubscriptionDto) => void;
 };
 
-/** The fourteen headings, in the order the owner reads them. */
+/**
+ * The eleven headings the owner reads a register by.
+ *
+ * There were seventeen. His list of what matters — *"sl, date, account,
+ * invoice, transaction, login account, username, depertment, billing cycle,
+ * next renewal date, status aigula important and baki gula single page a
+ * jabe"* — leaves out six: Category, Equivalent (BDT), Cost (USD), USD Rate,
+ * Payment Method and Notes. All six are on the plan's own page, one click from
+ * the tool's name, so nothing is lost — the register stops being a wall.
+ *
+ * The eleven are already in his order once the six are deleted, so this is a
+ * deletion and not a reordering.
+ */
 export function SubscriptionHeadCells() {
   return (
     <>
       <Th>Start Date</Th>
       <Th>Tool Name</Th>
-      <Th>Category</Th>
-      <Th align="right">Equivalent (BDT)</Th>
-      <Th align="right">Cost (USD)</Th>
-      <Th align="right">USD Rate</Th>
-      <Th>Payment Method</Th>
       <Th>Account/Card</Th>
       {/* The same pair every other money table carries, in the same place:
           ours, then theirs. */}
       <Th width="w-32">Invoice</Th>
       <Th width="w-32">Reference</Th>
-      <Th>Notes</Th>
       <Th>Login accounts</Th>
       <Th>User Name</Th>
       <Th>User Department</Th>
@@ -77,16 +79,14 @@ export function SubscriptionHeadCells() {
 
 export function SubscriptionBodyCells({
   row,
-  numberFormat,
   handlers = {},
 }: {
   row: SubscriptionDto;
-  numberFormat: "bangladeshi" | "western";
   handlers?: SubscriptionRowHandlers;
 }) {
-  const money = (value: string, currency: string) =>
-    formatMoney(value, { currency, format: numberFormat });
-
+  /* No `numberFormat`. The three money columns moved to the plan's own page
+     with the trim, so nothing here formats a figure — and a prop every caller
+     had to pass for nothing is a prop that goes. */
   return (
     <>
       <td className="text-sm">
@@ -104,26 +104,25 @@ export function SubscriptionBodyCells({
           affordance rather than losing one.
         */}
         <span className="flex items-center gap-1.5">
-          {row.websiteUrl ? (
-            <a
-              href={row.websiteUrl}
-              target="_blank"
-              // Third-party addresses typed by whoever added the plan.
-              // `noopener` is worth ruling out once rather than per link.
-              rel="noreferrer noopener"
-              title={`Open ${row.toolName}`}
-              className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
-            >
-              {row.toolName}
-            </a>
-          ) : (
-            <span
-              className="font-medium"
-              title="No website recorded — add one when you edit this plan."
-            >
-              {row.toolName}
-            </span>
-          )}
+          {/*
+            The NAME goes to the plan's own page now, not to the vendor's site.
+
+            It used to open the tool's website, which was right while the table
+            held everything a plan knows: there was nowhere else to go. Six of
+            those columns have moved to `/subscriptions/[id]`, so the name has
+            somewhere of ours to lead — and a table whose only link leaves the
+            app is a table you cannot drill into.
+
+            The vendor's site keeps its own way through: the plan page has an
+            "Open <tool>" link at the top, next to the name.
+          */}
+          <Link
+            href={`/subscriptions/${row.id}`}
+            title={`Everything about ${row.toolName}`}
+            className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+          >
+            {row.toolName}
+          </Link>
           {row.screenshotFileId && handlers.onScreenshot ? (
             <button
               type="button"
@@ -143,25 +142,9 @@ export function SubscriptionBodyCells({
         </span>
       </td>
 
-      <td className="text-sm text-muted-foreground">
-        {SUBSCRIPTION_CATEGORY_LABELS[row.category]}
-      </td>
-
-      <td className="col-amount">
-        {row.costBdt ? money(row.costBdt, "BDT") : "N/A"}
-      </td>
-      <td className="col-amount">{money(row.costUsd, "USD")}</td>
-      <td className="col-amount text-sm text-muted-foreground">
-        {row.usdRate ? Number(row.usdRate).toFixed(2) : "N/A"}
-      </td>
-
-      <td className="text-sm text-muted-foreground">
-        {/* The method as typed — card, bank transfer… The account it names
-            has its own column beside this one; they answer different
-            questions and were once wrongly merged into one control. */}
-        {PAYMENT_METHOD_LABELS[row.paymentMethod as PaymentMethod] ??
-          row.paymentMethod}
-      </td>
+      {/* Category, the three money columns, and Payment Method are on the
+          plan's own page. Six columns of a seventeen-column table that the
+          owner does not read here. */}
 
       <td className="text-sm text-muted-foreground">
         {/* Opens the account itself — the card, its balance and what else it
@@ -232,15 +215,7 @@ export function SubscriptionBodyCells({
         </td>
       )}
 
-      <td className="text-sm text-muted-foreground">
-        {row.notes ? (
-          <span title={row.notes} className="block max-w-[16rem] truncate">
-            {row.notes}
-          </span>
-        ) : (
-          "N/A"
-        )}
-      </td>
+
 
       <td className="text-sm text-muted-foreground">
         {row.loginEmail ?? "N/A"}

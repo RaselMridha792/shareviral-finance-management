@@ -2,6 +2,8 @@
 
 import {
   SUBSCRIPTION_CATEGORY_LABELS,
+  monthRange,
+  todayInDhaka,
   SUBSCRIPTION_STATUS_TABS,
   SUBSCRIPTION_STATUS_LABELS,
   type SubscriptionCategory,
@@ -12,7 +14,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { useRowDelete } from "@/components/ui/use-row-delete";
-import { useSettings } from "@/components/settings-provider";
 import {
   SubscriptionBodyCells,
   SubscriptionHeadCells,
@@ -25,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { MonthFilter } from "@/components/expenses/month-picker";
 import { SearchField } from "@/components/ui/search-field";
 import { EmptyState } from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
@@ -73,11 +75,31 @@ export function SubscriptionsScreen({
      rather than the company's expense headings. */
   categories: CategoryNode[];
 }) {
-  const settings = useSettings();
   const canWrite = useCan("vendors.write");
 
   const [tab, setTab] = useState<SubscriptionStatus | "all">("active");
   const [category, setCategory] = useState<SubscriptionCategory | "">("");
+  /*
+   * The month the register opens on, and it opens on this one.
+   *
+   * The owner: "ekhane sudhu current month dekhabe oi month a jodi kono
+   * subscription thake oigula dekhabe. r current month a new kena hole otao
+   * dekhabe." A plan is in a month if it had STARTED by the end of it —
+   * everything running then, and anything bought during it.
+   *
+   * "Every month" is one row away, because a plan runs across months and "show
+   * me all of them" is a question this screen is asked constantly. What he
+   * asked for is where it starts, not that the whole list should go.
+   */
+  const [month, setMonth] = useState<{
+    from: string;
+    to: string;
+    label: string;
+  } | null>(() => {
+    const today = todayInDhaka();
+    const range = monthRange(Number(today.slice(0, 4)), Number(today.slice(5, 7)));
+    return { from: range.start, to: range.end, label: range.label };
+  });
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<SubscriptionDto[]>([]);
@@ -154,6 +176,8 @@ export function SubscriptionsScreen({
         status: tab === "all" ? undefined : tab,
         category: category || undefined,
         q: query || undefined,
+        /* The last day of the month, against the plan's start date. */
+        startedBy: month?.to,
         page,
       });
       setRows(result.items);
@@ -164,7 +188,7 @@ export function SubscriptionsScreen({
     } finally {
       setLoading(false);
     }
-  }, [tab, category, query, page]);
+  }, [tab, category, query, month, page]);
 
   const del = useRowDelete<SubscriptionDto>({
     kind: "subscription",
@@ -295,6 +319,22 @@ export function SubscriptionsScreen({
         />
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/*
+            Which month the register is being read for.
+
+            It filters the plan's own START DATE — the table's Date column — so
+            a month shows everything that had started by the end of it. Whether
+            a plan was still alive is the status tabs beside this, which is why
+            no cancellation date has to be invented: this and "Active" compose
+            into "the plans running in September".
+          */}
+          <MonthFilter
+            range={month}
+            onChange={(next) => {
+              setMonth(next);
+              setPage(1);
+            }}
+          />
           <SearchField
             value={search}
             onChange={setSearch}
@@ -398,7 +438,6 @@ export function SubscriptionsScreen({
                       <SerialCell n={serial(page, index)} />
                       <SubscriptionBodyCells
                         row={row}
-                        numberFormat={settings.numberFormat}
                         handlers={{
                           onInvoice: (r) =>
                             setDocumentsFor({ row: r, kinds: ["invoice"] }),

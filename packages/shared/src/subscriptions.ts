@@ -339,6 +339,31 @@ export const listSubscriptionsQuerySchema = paginationQuerySchema.extend({
   vendorId: z.uuid().optional(),
   teamMemberId: z.uuid().optional(),
   q: z.string().trim().max(120).optional(),
+
+  /**
+   * The last day of the month the register is being read for.
+   *
+   * The owner: *"ekhane sudhu current month dekhabe oi month a jodi kono
+   * subscription thake oigula dekhabe. r current month a new kena hole otao
+   * dekhabe."* A plan is in a month if it HAD STARTED by the end of it —
+   * everything running then, plus anything bought during it.
+   *
+   * **Named `startedBy`, not `to`.** Every other date range in this app is a
+   * ledger range, and a plain `to` here would be read as one by the next
+   * person — which is the one thing this cannot mean. It filters
+   * `subscriptions.start_date`, the column the table's own Date column shows.
+   *
+   * It deliberately does NOT mean "paid in this month". Nothing ties a payment
+   * back to a plan: `payForSubscription` writes an ordinary expense with the
+   * tool named in the description and no plan id on the row, and two plans from
+   * one vendor produce the same description. Answering that question needs a
+   * `transactions.subscription_id` column and its own migration.
+   *
+   * Whether a plan was still ALIVE that month is the status tabs' job, and they
+   * already exist: this filter and the Active tab compose into "the plans
+   * running in September".
+   */
+  startedBy: isoDateSchema.optional(),
 });
 export type ListSubscriptionsQuery = z.infer<
   typeof listSubscriptionsQuerySchema

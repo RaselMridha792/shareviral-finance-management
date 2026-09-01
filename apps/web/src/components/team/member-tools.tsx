@@ -34,13 +34,9 @@ import { formatDate, cn } from "@/lib/utils";
  * Five tabs, and the fifth is not a status — "All" is the absence of the
  * filter rather than a value of it.
  */
-export function MemberTools({
-  memberId,
-  numberFormat,
-}: {
-  memberId: string;
-  numberFormat: "bangladeshi" | "western";
-}) {
+/* No `numberFormat`. The three money columns moved to the plan's own page when
+   the register was trimmed, so this table has no figure to format. */
+export function MemberTools({ memberId }: { memberId: string }) {
   const [rows, setRows] = useState<MemberSubscriptionDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<SubscriptionStatus | "all">("active");
@@ -211,10 +207,7 @@ export function MemberTools({
                     the numbers they are rather than as links that open
                     nothing.
                   */}
-                  <SubscriptionBodyCells
-                    row={row}
-                    numberFormat={numberFormat}
-                  />
+                  <SubscriptionBodyCells row={row} />
                   {hasOwnDates ? (
                     <td>
                       <OwnDates

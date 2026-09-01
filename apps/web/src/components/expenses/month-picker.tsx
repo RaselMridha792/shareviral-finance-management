@@ -93,3 +93,56 @@ export function MonthPicker({
     </Select>
   );
 }
+
+/**
+ * The same list of months, with a way out of it.
+ *
+ * A NEW export beside `MonthPicker`, which is untouched — the three Expenses
+ * screens that use it keep exactly what they have.
+ *
+ * The difference is one row: **Every month**. The Expenses screens are about a
+ * month by nature, so a picker with no escape is right there. The subscriptions
+ * register is not: a plan runs across months, and "show me all of them" is a
+ * question somebody asks it constantly. The owner asked for the register to
+ * open on the current month — *"ekhane sudhu current month dekhabe"* — which is
+ * about the DEFAULT, not about taking the whole list away.
+ *
+ * `null` is the every-month answer, so a caller reads one value and not a
+ * boolean beside a range.
+ */
+export function MonthFilter({
+  range,
+  onChange,
+}: {
+  range: Range | null;
+  onChange: (next: Range | null) => void;
+}) {
+  const months = useMemo(() => monthsInBooks(), []);
+  const known =
+    range === null || months.some((month) => month.from === range.from);
+  const options = known || range === null ? months : [range, ...months];
+
+  return (
+    <Select
+      aria-label="Month"
+      className="w-auto shrink-0 font-medium"
+      value={range?.from ?? ""}
+      onChange={(event) => {
+        const value = event.target.value;
+        if (value === "") {
+          onChange(null);
+          return;
+        }
+        const picked = options.find((month) => month.from === value);
+        if (picked) onChange(picked);
+      }}
+    >
+      <option value="">Every month</option>
+      {options.map((month) => (
+        <option key={month.from} value={month.from}>
+          {month.label}
+        </option>
+      ))}
+    </Select>
+  );
+}

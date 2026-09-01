@@ -508,7 +508,6 @@ export function TeamMemberScreen({
           <CardBody>
             <MemberTools
               memberId={member.id}
-              numberFormat={settings.numberFormat}
             />
           </CardBody>
         </Card>
