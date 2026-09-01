@@ -5,6 +5,31 @@ deployed** — the "unpushed" notes this table used to carry were from earlier i
 the day and are gone. Each item's own section further down says what was built,
 what it broke, and what proved it.
 
+## The state of it, 1 Sep 2026, 05:00
+
+**Everything below is pushed and deployed.** The last deploy carries the lot;
+`api.hellonizam.com/api/health` answers 200 and the app redirects to sign-in as
+it should.
+
+**All 41 acceptance harnesses pass.** `.battery.sh` reported five failures on
+its first clean run — `.refkindqa`, `.navchk`, `.rolecheck`, `.linkcheck` and
+`.sweep`. Every one of them was the machine rather than the app: three could not
+resolve Neon (`ENOTFOUND` / `ENETUNREACH`) and one hit a detached Puppeteer
+frame. Re-run one at a time, all five pass.
+
+Worth writing down because it cost an hour twice tonight: **the battery must run
+alone.** Its own header says so, and both times something else was driving the
+same database the log filled with failures that were nothing but two harnesses
+seeding and deleting each other's fixtures. A run alongside anything else is not
+evidence.
+
+Two harness faults of the same family were fixed rather than worked around:
+`.refkindqa` had fixtures dated `2026-08-19` and Other expenses opens on the
+current month, so on the first of September every one of them fell off the
+screen and three checks blamed the product. And `.dateqa` now fails a blank
+page — a compile error mid-session had it walking seventeen empty screens and
+ticking all seventeen.
+
 ## What is LEFT
 
 | # | What | Why it is not done |

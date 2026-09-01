@@ -7,7 +7,7 @@ OUT=.battery.log
 for h in .trashqa.mjs .trashroles.mjs .trashui.mjs .delsweep.mjs .delwired.mjs \
          .overdraftqa.mjs .fivefixui.mjs .transferqa.mjs .payrollpickqa.mjs \
          .usdprimaryqa.mjs .refkindqa.mjs .tdsqa.mjs .challanqa.mjs .catdelqa.mjs .optionalref.mjs .sixqa.mjs .teamdocsqa.mjs .prorataqa.mjs .sheetqa.mjs .docviewqa.mjs .notspend.mjs .teamorderqa.mjs .resignqa.mjs .usdstableqa.mjs \
-         .sessionqa.mjs          .tabletidyqa.mjs .tdsdrawerqa.mjs .payrollfxqa.mjs .renewalqa.mjs          .salaryhistoryqa.mjs .attachnameqa.mjs .refuploadqa.mjs .dateqa.mjs \
+         .sessionqa.mjs          .tabletidyqa.mjs .tdsdrawerqa.mjs .payrollfxqa.mjs .renewalqa.mjs          .salaryhistoryqa.mjs .attachnameqa.mjs .refuploadqa.mjs .dateqa.mjs          .reportsfxqa.mjs .cashcurrencyqa.mjs .socialsqa.mjs \
          .sweep.mjs .pager.mjs .linkcheck.mjs .rolecheck.mjs .navchk.mjs; do
   if [ ! -f "$h" ]; then echo "MISSING $h" >> $OUT; continue; fi
   echo "===== $h =====" >> $OUT
