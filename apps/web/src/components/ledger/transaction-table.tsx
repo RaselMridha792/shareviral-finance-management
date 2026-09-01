@@ -267,8 +267,22 @@ export function TransactionTable({
                 <tr
                   key={row.id}
                   /*
-                    The whole row carries the direction, not four coloured
-                    cells. The owner: "je je table a money in oikhaner puro row
+                    The whole row carries the direction — its TEXT as well as
+                    its background.
+
+                    The owner, seeing the first version: "ekhane sudhu table bg
+                    color green caini also sathe text color and other column
+                    gulao green/red hobe." He is right that a tint alone is
+                    half a signal: the eye reads a row by its words, and a
+                    faintly green stripe under ordinary grey text is a
+                    decoration rather than a fact.
+
+                    `row-in` and `row-out` in globals.css tint the row AND
+                    colour every cell in it. They are written there rather than
+                    as utility classes here because `.table-data td` has to be
+                    outranked — a bare `text-positive` on a cell loses to it and
+                    silently does nothing, which is a mistake this file has made
+                    before with `text-right` on a heading. The owner: "je je table a money in oikhaner puro row
                     green thakbe r jetay money out oitar puro row red hobe
                     karon eirokom multiple color text ektu ogochalo lage."
                     Direction is a fact about the ROW; scattering it across the
@@ -285,8 +299,8 @@ export function TransactionTable({
                     voided
                       ? "opacity-55"
                       : row.direction === "in"
-                        ? "bg-positive/[0.06]"
-                        : "bg-negative/[0.05]",
+                        ? "row-in"
+                        : "row-out",
                   )}
                 >
                   {/*

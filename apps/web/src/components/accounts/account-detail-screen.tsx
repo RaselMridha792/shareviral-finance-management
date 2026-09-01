@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import type { AccountWithBalance } from "@/lib/masters";
+import { CardDetails } from "./card-details";
 import { AccountForm } from "./account-form";
 import { formatDate } from "@/lib/utils";
 
@@ -162,6 +163,10 @@ export function AccountDetailScreen({
             ))}
           </CardBody>
         </Card>
+
+        {/* A card's own details, on the card's own page. Only for a card:
+            a bank account has no number to print or CVC to hide. */}
+        {account.type === "card" ? <CardDetails account={account} /> : null}
 
         <Card>
           <CardHeader

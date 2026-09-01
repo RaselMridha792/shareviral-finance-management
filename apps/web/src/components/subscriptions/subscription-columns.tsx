@@ -167,36 +167,30 @@ export function SubscriptionBodyCells({
       </td>
 
       {/*
-        The number, the click that opens the bill, or N/A.
+        An eye, like its neighbour.
 
-        This printed a fixed em dash on every row — the cell had been emptied
-        when the form stopped asking for an invoice NUMBER, on the reading that
-        there was nothing to render. There was: the column exists, the service
-        selects it, and rows carry values from before the change and from the
-        importer. Meanwhile the screen was passing an `onInvoice` handler that
-        nothing called, and the comment here claimed the eye beside Reference
-        opened the invoice, which it does not — that handler is scoped to
-        bank_statement, receipt and other.
+        The owner: "ekhane table gulate ekta jaygay inv lekha arekta jaygay eye
+        button. duitai eye button rakho eta better hobe." He is right: the two
+        cells do the same thing — open what is attached — and wearing two
+        different shapes made them look like two different acts. The invoice
+        cell showed a truncated number that was really a button; the reference
+        cell showed an eye. The eye is the one that says what the click does.
 
-        Plain text where no handler was passed: `member-tools` renders these
-        same cells read-only, and a link that opens nothing is worse than none.
+        The invoice NUMBER is not lost. It is on the plan's own page, which the
+        tool name opens, and it is still what the search box matches on.
+
+        The count behind it is the plan's WHOLE paper count rather than its
+        invoices alone,
+        so this eye appears whenever the plan carries any paper — exactly as the
+        reference cell beside it does, from the same number. Two cells sharing
+        one imprecision is better than two cells disagreeing about when to offer
+        a control.
       */}
-      <td className="num text-xs">
-        {!row.invoiceNo ? (
-          <span className="text-muted-foreground">N/A</span>
-        ) : handlers.onInvoice ? (
-          <button
-            type="button"
-            onClick={() => handlers.onInvoice?.(row)}
-            title="Show the invoice"
-            className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-          >
-            {row.invoiceNo}
-          </button>
-        ) : (
-          <span>{row.invoiceNo}</span>
-        )}
-      </td>
+      <ReferenceCell
+        value={null}
+        documentCount={row.documentCount}
+        onOpen={() => handlers.onInvoice?.(row)}
+      />
 
       {/*
         Number, eye, or dash — see ledger/reference-kind.tsx. Only where a

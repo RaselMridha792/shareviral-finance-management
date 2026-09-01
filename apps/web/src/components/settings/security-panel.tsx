@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/field";
+import { CardPasswordPanel } from "./card-password-panel";
 import { ApiError } from "@/lib/api-client";
 import {
   twoFactorApi,
@@ -131,6 +132,11 @@ export function SecurityPanel() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* The card password lives here rather than on the Accounts screen: it is
+          one secret for the whole company, not a property of any one card, and
+          Security is where somebody looks for the locks. */}
+      <CardPasswordPanel />
+
       <Card>
         <CardHeader
           title="Two-step sign-in"

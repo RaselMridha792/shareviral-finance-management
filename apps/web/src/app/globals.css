@@ -314,6 +314,51 @@ tr.row-finance > th {
 }
 
 /* --------------------------------------------------------------------------
+   A money row's direction, in its colour
+   --------------------------------------------------------------------------
+   The owner: "ekhane sudhu table bg color green caini also sathe text color and
+   other column gulao green/red hobe." A tint alone is half a signal — the eye
+   reads a row by its words, and a faintly green stripe under ordinary grey text
+   is decoration rather than a fact.
+
+   WHY THIS IS CSS AND NOT TWO UTILITY CLASSES. `.table-data td` sets a colour
+   at specificity (0,1,1); a bare `text-positive` on a cell is (0,1,0) and loses
+   to it silently. The same trap cost this app a right-aligned heading that
+   never right-aligned. Written here, `tr.row-in > td` is (0,1,2) and wins.
+
+   The TINT stays faint and the TEXT is only shaded, not saturated: a table of
+   fully green and fully red rows is unreadable, and the amount — which carries
+   its own weight and sign — has to stay the loudest thing on the row.
+
+   Anything that sets its own colour keeps it. A link stays link-blue, a Badge
+   keeps its tone, a muted caption stays muted: those are facts about the cell
+   rather than about the row, and overriding them would make a voided reason
+   read as income. -------------------------------------------------------- */
+
+tr.row-in > td {
+  background-color: color-mix(in oklab, var(--positive) 6%, transparent);
+  color: color-mix(in oklab, var(--positive) 62%, var(--foreground));
+}
+
+tr.row-out > td {
+  background-color: color-mix(in oklab, var(--negative) 5%, transparent);
+  color: color-mix(in oklab, var(--negative) 58%, var(--foreground));
+}
+
+/* A cell that states its own colour outranks the row's. */
+tr.row-in > td .text-link,
+tr.row-out > td .text-link,
+tr.row-in > td a,
+tr.row-out > td a {
+  color: var(--link);
+}
+
+tr.row-in > td .text-muted-foreground,
+tr.row-out > td .text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+/* --------------------------------------------------------------------------
    Table columns
    --------------------------------------------------------------------------
    A column wraps only when what it holds is genuinely a sentence. Everything

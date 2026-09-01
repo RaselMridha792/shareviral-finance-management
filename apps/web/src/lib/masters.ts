@@ -138,7 +138,56 @@ export const settingsApi = {
     }),
 };
 
+/** Whether a card password has been set at all, and when. */
+export type CardPasswordStatus = {
+  isSet: boolean;
+  setAt: string | null;
+  setBy: string | null;
+};
+
+/** The card, read once, against the card password. Never stored client-side. */
+export type CardSecrets = {
+  cardNumber: string | null;
+  cardCvc: string | null;
+};
+
 export const accountsApi = {
+  /**
+   * The card's own digits, read one request at a time.
+   *
+   * `POST` rather than `GET`, and the password in the BODY: a query string is
+   * written to every access log it passes through. Nothing is created, so the
+   * API answers 200.
+   *
+   * The result is never put in state that outlives the drawer — see the note in
+   * `CardDetails`.
+   */
+  revealCard: (id: string, cardPassword: string) =>
+    apiFetch<CardSecrets>(`/accounts/${id}/card-secrets`, {
+      method: "POST",
+      ...json({ cardPassword }),
+    }),
+
+  cardPasswordStatus: () =>
+    apiFetch<CardPasswordStatus>("/accounts/card-password", {
+      cache: "no-store",
+    }),
+
+  /**
+   * Set it, or change it.
+   *
+   * `current` is required once one exists — the server enforces that, and this
+   * only carries what was typed. Behind `settings.write`, which is deliberately
+   * narrower than reading a card: the people who may USE the password are
+   * super_admin, admin and CFO; the person who may CHANGE it for everybody is
+   * one.
+   */
+  setCardPassword: (input: { current?: string | null; next: string }) =>
+    apiFetch<CardPasswordStatus>("/accounts/card-password", {
+      method: "POST",
+      ...json(input),
+    }),
+
   list: (includeInactive = false) =>
     apiFetch<AccountWithBalance[]>(
       `/accounts?includeInactive=${includeInactive}`,

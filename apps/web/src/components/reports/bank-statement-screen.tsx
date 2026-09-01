@@ -269,8 +269,11 @@ export function BankStatementScreen({
                       row.voidedAt
                         ? "opacity-60"
                         : row.direction === "in"
-                          ? "bg-positive/[0.06]"
-                          : "bg-negative/[0.05]",
+                          /* The row's text as well as its tint — the same pair
+                             the transactions table uses, so the two screens
+                             cannot drift into two ideas of what green means. */
+                          ? "row-in"
+                          : "row-out",
                     )}
                   >
                     {/* Counted across the statement rather than within the
