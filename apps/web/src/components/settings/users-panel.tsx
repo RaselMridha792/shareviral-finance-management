@@ -33,6 +33,8 @@ import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
 import { useRowDelete } from "@/components/ui/use-row-delete";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
@@ -41,9 +43,12 @@ import {
   TableMessageRow,
   TableScroll,
   Th,
+  TickCell,
+  TickHead,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api-client";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { pageCount, serial } from "@/lib/pagination";
 import { usersApi } from "@/lib/users";
 
@@ -82,6 +87,30 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
   const [resetting, setResetting] = useState<UserDto | null>(null);
   const [deactivating, setDeactivating] = useState<UserDto | null>(null);
   const [deactivatePending, setDeactivatePending] = useState(false);
+  /*
+   * Ticking, and the one row that never gets a tick.
+   *
+   * The owner: *"problem nai tick bosao super admin e to remove korbe r CFO and
+   * admin"* — the person doing the removing is a super admin, removing other
+   * people, so a tick column here is safe.
+   *
+   * `bulkRows` is everyone EXCEPT the signed-in account, because the Delete
+   * button on your own row is already withheld — deleting the sign-in you are
+   * using is a locked door with the key inside. #4's rule is that a bulk action
+   * can only ever offer what the single-row action already offers, so a header
+   * tick meaning "every row on this page" must not quietly include the one row
+   * whose button is missing.
+   *
+   * Nobody can empty the table either way: `assertSuperAdminRemains` refuses,
+   * after the write and inside the transaction, any request that would leave no
+   * active super admin at all.
+   */
+  const bulkRows = users.filter((user) => user.id !== me?.id);
+  const bulk = useBulkSelect(bulkRows);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   const del = useRowDelete<UserDto>({
     kind: "user",
     subject: "sign-in",
@@ -205,9 +234,21 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
 
       <Card className="overflow-hidden">
         <TableScroll>
+          {/* Only once something is ticked; otherwise the panel is unchanged. */}
+          <BulkBar
+            count={bulk.count}
+            noun="sign-in"
+            pending={bulkPending}
+            onClear={bulk.clear}
+            onTrash={() => {
+              setBulkError(null);
+              setBulkAsking(true);
+            }}
+          />
           <table className="table-data min-w-[820px] text-sm">
             <thead>
               <tr>
+                <TickHead state={bulk.headerState} onChange={bulk.allOnPage} />
                 <SerialHead />
                 <Th>Name</Th>
                 <Th>Role</Th>
@@ -221,11 +262,11 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
               {loadError ? (
                 // A request that failed and a company with nobody in it are
                 // different facts, and only one of them is reassuring.
-                <TableMessageRow colSpan={7} tone="error">
+                <TableMessageRow colSpan={8} tone="error">
                   {loadError}
                 </TableMessageRow>
               ) : users.length === 0 ? (
-                <TableMessageRow colSpan={7}>
+                <TableMessageRow colSpan={8}>
                   {loading
                     ? "Loading…"
                     : total === 0
@@ -235,6 +276,19 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
               ) : (
                 users.map((user, index) => (
                   <tr key={user.id} className="row-finance">
+                    {user.id === me?.id ? (
+                      /* Your own row has no tick, because it has no Delete
+                         button. An empty cell rather than a disabled tick: a
+                         control you can see and cannot use invites the click
+                         that teaches you it does nothing. */
+                      <td />
+                    ) : (
+                      <TickCell
+                        checked={bulk.isTicked(user.id)}
+                        onChange={() => bulk.toggle(user.id)}
+                        label={user.fullName}
+                      />
+                    )}
                     {/* Counted across pages: the first row of page two is 21,
                         not a second row wearing the number 1. */}
                     <SerialCell n={serial(page, index)} />
@@ -369,6 +423,62 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
         onCancel={() => setDeactivating(null)}
       />
       {del.dialog}
+
+      {/*
+        The ticked ones, together.
+
+        All-or-nothing, like every other bulk trash here — and with one refusal
+        the others do not have: `assertSuperAdminRemains` runs after the write
+        and inside the transaction, so a selection that would leave no active
+        super admin is refused and NOTHING moves. Before that guard, ticking two
+        super admins deleted both, because the per-row check ran before either
+        write and each still saw the other.
+      */}
+      <DeleteDialog
+        open={bulkAsking}
+        subject="sign-in"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((user) => user.fullName)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+          </>
+        }
+        consequences={
+          <p>
+            They can no longer sign in, and the trash can put them back. What
+            they recorded stays exactly where it is — an entry belongs to the
+            company, not to the account that typed it.
+          </p>
+        }
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "user",
+              bulk.selected.map((user) => user.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void load(page);
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </div>
   );
 }

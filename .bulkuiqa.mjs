@@ -213,12 +213,23 @@ check(
  * screens without one must render as they did: SL first, and no vertical rule
  * to its left.
  */
-/* The screens that DO get one, checked for the tick and the header tick. */
+/*
+ * The screens that DO get one, checked for the tick and the header tick.
+ *
+ * Two of these open on the CURRENT MONTH, and a month with nothing in it draws
+ * an empty state rather than a table — so on a database whose fixtures have
+ * just been cleaned up, "no table on this screen" was reported as a missing
+ * tick column. It is not: the tick column is drawn by the table, and there is
+ * no table to draw. The check below says which of the two it found, so the
+ * distinction survives in the log rather than in somebody's memory.
+ */
 for (const [label, url] of [
   ["All transactions", `${WEB}/transactions`],
   ["Cash in", `${WEB}/accounts/cash-in`],
   ["Other expenses", `${WEB}/expenses/other`],
   ["AI tools and subscriptions", `${WEB}/subscriptions`],
+  ["Users", `${WEB}/settings?tab=users`],
+  ["Payroll runs", `${WEB}/payroll`],
 ]) {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
   await settle(2400);
@@ -232,21 +243,36 @@ for (const [label, url] of [
       bodyRows: table.querySelectorAll("tbody tr").length,
     };
   });
+  if (!shape.table) {
+    check(
+      `${label}: has a tick on the header and on every row`,
+      false,
+      "the screen drew no table at all — an empty month shows an empty state, so seed a row for this month before reading anything into it",
+    );
+    continue;
+  }
   check(
     `${label}: has a tick on the header and on every row`,
-    shape.table &&
-      shape.headTick &&
-      (shape.bodyRows === 0 || shape.rowTicks > 0),
-    shape.table
-      ? `head ${shape.headTick}, ${shape.rowTicks} row ticks of ${shape.bodyRows} rows`
-      : "no table on this screen",
+    shape.headTick && (shape.bodyRows === 0 || shape.rowTicks > 0),
+    `head ${shape.headTick}, ${shape.rowTicks} row ticks of ${shape.bodyRows} rows`,
   );
 }
 
-/* And the ones that must NOT, each excluded for a reason in the code. */
+/*
+ * And the ones that must NOT, each excluded for a reason in the code.
+ *
+ * **Payroll runs has left this list**, on the owner's instruction — "etao tick
+ * dewar option rakho". The reason it was here is still true and still enforced,
+ * just not by absence: a PAID run has ledger entries behind it and the server
+ * refuses to trash one, so the tick offers exactly what the single-row Delete
+ * offers and a selection holding a paid run is refused whole.
+ *
+ * Two that remain, and why: the bank statement has no delete path at all, and
+ * TDS withholding's "delete" clears a challan number rather than deleting a
+ * row. A tick column can only ever offer what the single-row action offers.
+ */
 for (const [label, url] of [
   ["Bank statement", `${WEB}/statement`],
-  ["Payroll", `${WEB}/payroll`],
   ["TDS withholding", `${WEB}/tax/withholding`],
 ]) {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });

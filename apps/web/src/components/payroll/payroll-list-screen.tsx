@@ -14,7 +14,10 @@ import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
 import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
@@ -27,11 +30,13 @@ import { Pagination } from "@/components/ui/pagination";
 import {
   SerialCell,
   SerialHead,
+  TickCell,
+  TickHead,
   TableMessageRow,
   TableScroll,
   Th,
 } from "@/components/ui/table";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { serial } from "@/lib/pagination";
 import {
   payrollApi,
@@ -57,7 +62,9 @@ const MONTHS = [
 ];
 
 /** SL, Paid on, Month, Gross, Tax withheld, Net paid, Status. */
-const COLUMNS = 8;
+/* Nine with the tick column, which only a writer sees — the empty-state
+   row spans whatever is actually drawn. */
+const COLUMNS = 9;
 
 export function PayrollListScreen({
   initialPage,
@@ -118,6 +125,22 @@ export function PayrollListScreen({
       if (token === request.current) setLoading(false);
     }
   }
+
+  /*
+   * Ticking, on the owner's word — *"etao tick dewar option rakho"*.
+   *
+   * This table was left out of #4 deliberately, and the reason is worth
+   * keeping in view rather than deleting with the exclusion: a payroll run is
+   * not an expense row. A PAID run has ledger entries behind it and money that
+   * has left the bank, and the server refuses to trash one — `blockedWhen` on
+   * the registry's `payroll-run` entry. So the tick offers exactly what the
+   * single-row Delete offers, which is the rule: a run the server will not
+   * delete is refused here too, by name, and nothing in the selection moves.
+   */
+  const bulk = useBulkSelect(data?.items ?? []);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const del = useRowDelete<PayrollRunDto>({
     kind: "payroll-run",
@@ -231,8 +254,24 @@ export function PayrollListScreen({
                 loading && "opacity-60",
               )}
             >
+              <BulkBar
+                count={bulk.count}
+                noun="payroll run"
+                pending={bulkPending}
+                onClear={bulk.clear}
+                onTrash={() => {
+                  setBulkError(null);
+                  setBulkAsking(true);
+                }}
+              />
               <thead>
                 <tr className="text-left">
+                  {canWrite ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <Th width="w-28">Paid on</Th>
                   <Th width="w-40">Month</Th>
@@ -262,6 +301,13 @@ export function PayrollListScreen({
                         two, so the twenty-first run and the first one both
                         answered to "1".
                       */}
+                      {canWrite ? (
+                        <TickCell
+                          checked={bulk.isTicked(run.id)}
+                          onChange={() => bulk.toggle(run.id)}
+                          label={run.label}
+                        />
+                      ) : null}
                       <SerialCell n={serial(data.page, index)} />
                       <td className="num text-muted-foreground">
                         {run.paymentDate ?? "N/A"}
@@ -347,6 +393,70 @@ export function PayrollListScreen({
         onCreated={(id) => router.push(`/payroll/${id}`)}
       />
       {del.dialog}
+
+      {/*
+        The ticked runs, together — and all-or-nothing, which matters more here
+        than anywhere.
+
+        A PAID run has ledger entries behind it and money that has left the
+        bank; the server refuses to trash one. So a selection holding a paid run
+        is refused whole, naming it, and not one of the others moves either.
+        Deleting "the ones it could" would leave somebody looking at a half-done
+        act with no way to tell which half.
+      */}
+      <DeleteDialog
+        open={bulkAsking}
+        subject="payroll run"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((run) => run.label)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+          </>
+        }
+        consequences={
+          <p>
+            The sheets leave this list and the trash can put them back. A run
+            that has been <span className="font-medium text-foreground">paid</span>{" "}
+            cannot go at all — its entries are on the ledger — and if one is in
+            the selection the whole request is refused rather than half done.
+          </p>
+        }
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "payroll-run",
+              bulk.selected.map((run) => run.id),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              /* The same page the single delete returns to — and back one
+                 when the page just emptied, so a bulk delete does not leave the
+                 reader on a blank page 3. */
+              void goToPage(
+                bulk.count >= data.items.length && data.page > 1
+                  ? data.page - 1
+                  : data.page,
+              );
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }

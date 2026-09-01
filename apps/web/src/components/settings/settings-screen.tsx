@@ -129,10 +129,16 @@ export function SettingsScreen({
         set in one box that silently moved every historical report was the whole
         problem.
 
-        The rate HISTORY is not deleted. `fx_rates` holds figures the owner
-        typed, on days that have passed, and throwing away recorded history to
-        tidy a screen is not a trade this app makes. The table stays; nothing
-        reads it to decide a figure any more.
+        The rate HISTORY table is not deleted. `fx_rates` holds figures the
+        owner typed, on days that have passed, and throwing away recorded
+        history to tidy a screen is not a trade this app makes. The table stays;
+        nothing reads it to decide a figure any more.
+
+        The PANEL is gone, on his word — "patata bad daw". `fx-panel.tsx` and
+        `rate-history.tsx` sat in this folder with no route that opened them
+        from the moment this tab was removed, which is worse than either having
+        them or not: code nobody can reach is code nobody maintains and everyone
+        still has to read.
       */}
       {tab === "tax" && canReadTds ? <TaxPanel /> : null}
       {tab === "security" ? <SecurityPanel /> : null}
