@@ -112,6 +112,20 @@ export type LedgerSummary = {
   moneyOut: string;
   net: string;
   entries: number;
+  /**
+   * The same three in dollars, ADDED UP from the figures the rows carry.
+   *
+   * Null when no row in this view recorded one — a different answer from
+   * "$0.00", and shown as nothing rather than a figure nobody established.
+   * `exact` is false when only some rows carried one, so the totals are a
+   * floor and the screen marks them.
+   */
+  usd: {
+    moneyIn: string;
+    moneyOut: string;
+    net: string;
+    exact: boolean;
+  } | null;
 };
 
 export type ExpenseGroup = {
@@ -150,6 +164,18 @@ export type ExpenseOverview = {
   total: string;
   /** Held against a tax liability — deliberately NOT part of the total. */
   withheld: string;
+  /**
+   * The four and the total in dollars, ADDED UP from the figures the rows
+   * carry. Null when no row this month recorded one.
+   */
+  usd: {
+    salary: string;
+    tooling: string;
+    operational: string;
+    uncategorised: string;
+    total: string;
+    exact: boolean;
+  } | null;
   previous: {
     label: string;
     salary: string;

@@ -160,6 +160,8 @@ export function TransactionsScreen({
           icon="south_west"
           iconTone="text-positive"
           value={summary?.moneyIn}
+          usd={summary?.usd?.moneyIn}
+          approximate={summary?.usd ? !summary.usd.exact : false}
           tone="in"
         />
         <SummaryTile
@@ -167,6 +169,8 @@ export function TransactionsScreen({
           icon="north_east"
           iconTone="text-negative"
           value={summary?.moneyOut}
+          usd={summary?.usd?.moneyOut}
+          approximate={summary?.usd ? !summary.usd.exact : false}
           tone="out"
         />
         {/* The one that answers the question, so it sits on the raised surface
@@ -177,6 +181,8 @@ export function TransactionsScreen({
           icon="account_balance_wallet"
           iconTone="text-primary-text"
           value={summary?.net}
+          usd={summary?.usd?.net}
+          approximate={summary?.usd ? !summary.usd.exact : false}
           hint={summary ? `${summary.entries} entries in this view` : undefined}
         />
       </StatStrip>
@@ -515,6 +521,8 @@ function FilterRow({
 function SummaryTile({
   label,
   value,
+  usd,
+  approximate,
   tone = "neutral",
   hint,
   icon,
@@ -523,6 +531,16 @@ function SummaryTile({
 }: {
   label: string;
   value?: string;
+  /**
+   * The same figure in dollars, ADDED UP from what the rows themselves carry.
+   *
+   * Null when no row in this view recorded a dollar figure — which is a
+   * different answer from "$0.00" and is shown as nothing at all, because a
+   * zero here would read as a fact somebody established.
+   */
+  usd?: string | null;
+  /** Some rows carried no dollar figure, so the dollar total is a floor. */
+  approximate?: boolean;
   tone?: "in" | "out" | "neutral";
   hint?: string;
   icon?: string;
@@ -545,6 +563,26 @@ function SummaryTile({
             value={value}
             tone={tone === "neutral" ? "auto" : tone}
             showCounterpart={false}
+          />
+        )
+      }
+      secondary={
+        /*
+         * The dollars, small, under the taka — the shape the account cards
+         * already use, on the owner's word: "equivalant bdt or usd lekha
+         * thakte hobe".
+         *
+         * It is a SUM of the dollar figures the transactions carry, never a
+         * conversion: "aigula kono fx rate theke hobena. prottekta transaction
+         * er usd amount o save hoy oitai jog hobe."
+         */
+        usd == null ? null : (
+          <Amount
+            value={usd}
+            currency="USD"
+            approximate={approximate}
+            showCounterpart={false}
+            className="text-xs text-muted-foreground"
           />
         )
       }

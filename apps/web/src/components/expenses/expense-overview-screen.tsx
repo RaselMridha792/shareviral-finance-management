@@ -8,7 +8,6 @@ import { useSettings } from "@/components/settings-provider";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ledgerApi, type ExpenseOverview } from "@/lib/ledger";
-import { cn } from "@/lib/utils";
 import { MonthPicker, type Range } from "./month-picker";
 
 /**
@@ -73,42 +72,51 @@ export function ExpenseOverviewScreen() {
       format: settings.numberFormat,
     });
 
+  const usd = (value: string) =>
+    formatMoney(value, { currency: "USD", format: "western" });
+
+  /*
+   * Heading, amount, equivalent. Nothing else.
+   *
+   * The first version of this card carried a one-line note under every figure
+   * and a "vs August" line under that, and the owner's answer was immediate:
+   * *"ekhane ato beshi lekha thakar dorkar nai. sudhu heading. amount and
+   * equivalant amound usd/bdt thakbe."* He is right — a box somebody glances at
+   * cannot also be a paragraph, and four boxes each explaining themselves is a
+   * page nobody reads twice.
+   *
+   * What the notes said is not lost: each box is a link, and the screen behind
+   * it is where the detail belongs.
+   */
   const slices = data
     ? [
         {
           key: "salary",
           label: "Salary",
           value: data.salary,
-          was: data.previous.salary,
+          usd: data.usd?.salary ?? null,
           href: "/payroll",
-          note: "Net pay that left the bank",
         },
         {
           key: "tooling",
           label: "AI tools and subscriptions",
           value: data.tooling,
-          was: data.previous.tooling,
+          usd: data.usd?.tooling ?? null,
           href: "/subscriptions",
-          note: "Paid to a tool vendor, or on the card that buys tools",
         },
         {
           key: "operational",
           label: "Operational expenses",
           value: data.operational,
-          was: data.previous.operational,
+          usd: data.usd?.operational ?? null,
           href: "/expenses",
-          note: "Everything else with a heading on it",
         },
         {
           key: "uncategorised",
           label: "Uncategorised",
           value: data.uncategorised,
-          was: data.previous.uncategorised,
+          usd: data.usd?.uncategorised ?? null,
           href: "/expenses/other",
-          /* The one box that exists to be emptied. The category grid
-             inner-joins categories, so money with no heading appears nowhere
-             else in this app at all. */
-          note: "Money out with no heading — the grid cannot show these",
         },
       ]
     : [];
@@ -133,21 +141,18 @@ export function ExpenseOverviewScreen() {
 
       {/* The headline the four add to. */}
       <Card>
-        <CardBody className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Spent in {range.label}
+        <CardBody>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Spent in {range.label}
+          </p>
+          <p className="col-amount mt-1 text-2xl font-semibold">
+            {data ? money(data.total) : loading ? "…" : money("0")}
+          </p>
+          {data?.usd ? (
+            <p className="col-amount text-sm text-muted-foreground">
+              {data.usd.exact ? "" : "~ "}
+              {usd(data.usd.total)}
             </p>
-            <p className="col-amount mt-1 text-2xl font-semibold">
-              {data ? money(data.total) : loading ? "…" : money("0")}
-            </p>
-          </div>
-          {data ? (
-            <Change
-              now={data.total}
-              was={data.previous.total}
-              label={data.previous.label}
-            />
           ) : null}
         </CardBody>
       </Card>
@@ -157,7 +162,7 @@ export function ExpenseOverviewScreen() {
           <Link
             key={slice.key}
             href={slice.href}
-            className="group rounded-xl border border-border bg-surface p-4 transition hover:border-link"
+            className="rounded-xl border border-border bg-surface p-4 transition hover:border-link"
           >
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               {slice.label}
@@ -165,117 +170,55 @@ export function ExpenseOverviewScreen() {
             <p className="col-amount mt-1.5 text-xl font-semibold">
               {money(slice.value)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{slice.note}</p>
-            <div className="mt-2">
-              <Change
-                now={slice.value}
-                was={slice.was}
-                label={data?.previous.label ?? ""}
-              />
-            </div>
+            {slice.usd !== null ? (
+              <p className="col-amount text-xs text-muted-foreground">
+                {data?.usd?.exact ? "" : "~ "}
+                {usd(slice.usd)}
+              </p>
+            ) : null}
           </Link>
         ))}
       </div>
 
       {/*
-        The working, written out.
+        The sum, in one line rather than a paragraph.
 
-        A total nobody can check is a total people go on checking by hand. This
-        is the sentence that stops that — and it is also the page's own test: if
-        the four ever stop adding to the headline, it says so here rather than
-        looking plausible.
+        A total nobody can check is a total people go on checking by hand, so
+        the arithmetic stays — but as figures, not prose. It is also the page's
+        own test: if the four ever stop adding to the headline, it shows here.
       */}
       {data ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="col-amount text-xs text-muted-foreground">
           {money(data.salary)} + {money(data.tooling)} +{" "}
           {money(data.operational)} + {money(data.uncategorised)} ={" "}
           <span className="font-medium text-foreground">
             {money(data.total)}
           </span>
-          . Every taka the company spent this month is in exactly one of the
-          four — transfers between our own accounts are not spending and are not
-          counted.
         </p>
       ) : null}
 
-      {/*
-        Held, not spent — which is why it is outside the four and outside the
-        total. It is in the account and it is not the company's to spend.
-      */}
+      {/* Held, not spent — outside the four and outside the total. */}
       <Card>
-        <CardBody className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Tax withheld
-            </p>
-            <p className="col-amount mt-1 text-lg font-semibold">
-              {data ? money(data.withheld) : money("0")}
-            </p>
-          </div>
-          <p className="max-w-md text-xs text-muted-foreground">
-            Deducted from what was paid out and still to be deposited. It sits
-            in the account but it is not the company&rsquo;s to spend, so it is
-            not part of the figures above.{" "}
+        <CardBody>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Tax withheld
+          </p>
+          <p className="col-amount mt-1 text-lg font-semibold">
+            {data ? money(data.withheld) : money("0")}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Held against a tax liability, not spent.{" "}
             <Link
               href="/tax/withholding"
               className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
-              The withholding register
+              The register
             </Link>{" "}
             has it person by person.
           </p>
         </CardBody>
       </Card>
+
     </>
-  );
-}
-
-/**
- * How a figure compares with the month before.
- *
- * Percentages only where they mean something: from zero, every increase is
- * infinite, and "+∞%" on a finance screen is a number somebody will try to read.
- */
-function Change({
-  now,
-  was,
-  label,
-}: {
-  now: string;
-  was: string;
-  label: string;
-}) {
-  const a = Number(now);
-  const b = Number(was);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-
-  if (b === 0) {
-    return (
-      <span className="text-xs text-muted-foreground">
-        {a === 0 ? `Nothing in ${label} either` : `Nothing in ${label}`}
-      </span>
-    );
-  }
-
-  const percent = ((a - b) / b) * 100;
-  const rounded = Math.round(percent);
-  if (rounded === 0) {
-    return (
-      <span className="text-xs text-muted-foreground">Level with {label}</span>
-    );
-  }
-  return (
-    <span
-      className={cn(
-        "text-xs",
-        /* Up is not "bad" and down is not "good" — this is spending, and the
-           right amount depends on the month. Muted on purpose: the colour would
-           be an opinion the page has no basis for. */
-        "text-muted-foreground",
-      )}
-    >
-      {rounded > 0 ? "+" : ""}
-      {rounded}% vs {label}
-    </span>
   );
 }

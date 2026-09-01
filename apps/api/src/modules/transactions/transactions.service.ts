@@ -359,12 +359,67 @@ export class TransactionsService {
         moneyIn: sql<string>`coalesce(sum(${transactions.amount}) filter (where ${transactions.direction} = 'in'), 0)::text`,
         moneyOut: sql<string>`coalesce(sum(${transactions.amount}) filter (where ${transactions.direction} = 'out'), 0)::text`,
         net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
+
+        /*
+         * The same three, in the dollars the ROWS carry.
+         *
+         * The owner: "aigula kono fx rate theke hobena. prottekta transaction
+         * er usd amount o save hoy oitai jog hobe." Added up, never divided out
+         * of taka — a figure produced by division moves on its own the moment
+         * somebody edits a rate, which is what #8 took out of this app.
+         *
+         * A row with no dollar figure contributes nothing, which makes these a
+         * FLOOR rather than a wrong number. `usdExact` says which, and the
+         * screen marks it with a tilde — the same contract `ownBalanceExact`
+         * uses on an account, so the two cannot disagree about what a tilde
+         * means.
+         */
+        moneyInUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+          where ${transactions.direction} = 'in'
+            and ${transactions.originalCurrency} = 'USD'
+            and ${transactions.originalAmount} is not null
+        ), 0)::text`,
+        moneyOutUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+          where ${transactions.direction} = 'out'
+            and ${transactions.originalCurrency} = 'USD'
+            and ${transactions.originalAmount} is not null
+        ), 0)::text`,
+
+        /* How many rows carry one at all. Zero means this filter has no dollar
+           view — which is a different answer from "$0.00", and the screen shows
+           nothing rather than a figure nobody established. */
+        withUsd: sql<number>`count(*) filter (
+          where ${transactions.originalCurrency} = 'USD'
+            and ${transactions.originalAmount} is not null
+        )::int`,
+
         entries: count(),
       })
       .from(transactions)
       .where(where);
 
-    return { ...row, entries: Number(row.entries) };
+    const withUsd = Number(row.withUsd);
+    const inUsd = Number(row.moneyInUsd);
+    const outUsd = Number(row.moneyOutUsd);
+
+    return {
+      moneyIn: row.moneyIn,
+      moneyOut: row.moneyOut,
+      net: row.net,
+      entries: Number(row.entries),
+      usd:
+        withUsd === 0
+          ? null
+          : {
+              moneyIn: inUsd.toFixed(2),
+              moneyOut: outUsd.toFixed(2),
+              /* Derived from the two above rather than summed again, so
+                 in - out reads as a sentence that adds up. */
+              net: (inUsd - outUsd).toFixed(2),
+              /* Every row carried one, or only some did. */
+              exact: withUsd === Number(row.entries),
+            },
+    };
   }
 
   /**
@@ -517,9 +572,22 @@ export class TransactionsService {
       slice(range.previousFrom, range.previousTo),
     ]);
 
+    const withUsd = Number(now.withUsd);
     return {
       from: range.from,
       to: range.to,
+      usd:
+        withUsd === 0
+          ? null
+          : {
+              salary: now.salaryUsd,
+              tooling: now.toolingUsd,
+              operational: now.operationalUsd,
+              uncategorised: now.uncategorisedUsd,
+              total: now.totalUsd,
+              /* Every row carried one, or only some did. */
+              exact: withUsd === Number(now.rows),
+            },
       salary: now.salary,
       tooling: now.tooling,
       operational: now.operational,

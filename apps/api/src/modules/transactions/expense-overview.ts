@@ -64,6 +64,11 @@ function spendingIn(from: string, to: string): SQL[] {
  */
 const isSalary = (): SQL => eq(transactions.createdVia, "payroll");
 
+/** A row that recorded what it was in dollars, at the time somebody typed it. */
+const carriesDollars = (): SQL =>
+  sql`${transactions.originalCurrency} = 'USD'
+      and ${transactions.originalAmount} is not null`;
+
 export type ExpenseOverview = {
   from: string;
   to: string;
@@ -75,6 +80,20 @@ export type ExpenseOverview = {
   total: string;
   /** Held against a tax liability. Deliberately NOT part of the total. */
   withheld: string;
+  /**
+   * The four and the total in dollars, ADDED UP from what the rows carry.
+   *
+   * Null when no row this month recorded one. `exact` is false when only some
+   * did, so the dollar figures are a floor and the screen marks them.
+   */
+  usd: {
+    salary: string;
+    tooling: string;
+    operational: string;
+    uncategorised: string;
+    total: string;
+    exact: boolean;
+  } | null;
   /** How the four compare with the month before, for the "vs August" line. */
   previous: {
     label: string;
@@ -128,6 +147,44 @@ export function overviewSelect() {
     ), 0)::text`,
 
     total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
+
+    /*
+     * The same four, in the dollars the ROWS carry.
+     *
+     * The owner: "aigula kono fx rate theke hobena. prottekta transaction er
+     * usd amount o save hoy oitai jog hobe." Added up, never divided — a figure
+     * produced by division moves on its own the moment somebody edits a rate.
+     *
+     * They partition exactly as the taka slices do, because they are the same
+     * `filter` clauses over the same rows. A row with no dollar figure adds
+     * nothing to any of them, so the dollar total is a FLOOR of the taka total
+     * rather than a different reading of it.
+     */
+    salaryUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where ${isSalary()} and ${carriesDollars()}
+    ), 0)::text`,
+    toolingUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where not ${isSalary()} and ${isToolSpend()} and ${carriesDollars()}
+    ), 0)::text`,
+    operationalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where not ${isSalary()}
+        and not ${isToolSpend()}
+        and ${isNotNull(transactions.categoryId)}
+        and ${carriesDollars()}
+    ), 0)::text`,
+    uncategorisedUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where not ${isSalary()}
+        and not ${isToolSpend()}
+        and ${isNull(transactions.categoryId)}
+        and ${carriesDollars()}
+    ), 0)::text`,
+    totalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where ${carriesDollars()}
+    ), 0)::text`,
+    /* How many rows carry one at all. Zero means this month has no dollar view,
+       which is a different answer from "$0.00". */
+    withUsd: sql<number>`count(*) filter (where ${carriesDollars()})::int`,
+    rows: sql<number>`count(*)::int`,
 
     /* Withheld against a tax liability: in the account, not the company's to
        spend, and not part of the sum above. */

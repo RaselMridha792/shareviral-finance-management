@@ -271,40 +271,21 @@ export class OverviewService {
         ...entry,
         amount: convert(entry.amount),
       })),
-      groups: groups.map((group) => {
-        const opening = noDollarView();
-        const moneyIn = noDollarView();
-        const moneyOut = noDollarView();
-
-        return {
-          ...group,
-          usd: {
-            opening,
-            moneyIn,
-            moneyOut,
-            /**
-             * Derived from the other three, not converted on its own.
-             *
-             * Each conversion rounds to the paisa independently, so four
-             * separate divisions are not obliged to satisfy
-             * `opening + in − out = closing` — and at some rates they do not:
-             * 23,120.67 + 5,185.19 − 2,222.22 comes to 26,083.64 while
-             * dividing the taka closing gives 26,083.63. One paisa, on the
-             * four figures whose whole job is to read as a sentence that adds
-             * up. The taka closing is exact and stays exact; only its dollar
-             * translation is made to agree with the dollars above it.
-             */
-            closing:
-              opening !== null && moneyIn !== null && moneyOut !== null
-                ? (
-                    Number(opening) +
-                    Number(moneyIn) -
-                    Number(moneyOut)
-                  ).toFixed(2)
-                : noDollarView(),
-          },
-        };
-      }),
+      /*
+       * `groups` already carries its own dollars, summed from the rows.
+       *
+       * This used to null all four out — the `noDollarView()` #8 left behind
+       * when it removed the rate-based conversion — and the owner's answer to
+       * "then how" is the one this app already had for balances: add up what
+       * the transactions themselves recorded. "aigula kono fx rate theke
+       * hobena. prottekta transaction er usd amount o save hoy oitai jog hobe."
+       *
+       * So nothing is mapped here any more. `accountGroups` computes the four
+       * dollar figures beside the four taka ones, from one query, and the
+       * closing is derived from the other three so that opening + in - out
+       * reads as a sentence that adds up.
+       */
+      groups,
       expense: {
         salaryPaid,
         toolsAndSubscriptions: toolsSpend,
@@ -489,9 +470,9 @@ export class OverviewService {
    * stopped using still holds whatever it held, and a dashboard that quietly
    * drops a balance is worse than one carrying a block nobody looks at.
    */
-  private async accountGroups(
-    range: PeriodRange,
-  ): Promise<Array<Omit<AccountGroup, "usd">>> {
+  /* Returns the dollars with the taka now, rather than leaving a caller to
+     null them in — which is what the Omit here used to allow. */
+  private async accountGroups(range: PeriodRange): Promise<AccountGroup[]> {
     const rows = await this.db.client
       .select({
         id: accounts.id,
@@ -513,6 +494,26 @@ export class OverviewService {
         .select({
           accountId: transactions.accountId,
           net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
+          /*
+           * The same net, in the dollars the ROWS carry.
+           *
+           * The owner: "aigula kono fx rate theke hobena. prottekta transaction
+           * er usd amount o save hoy oitai jog hobe." So this is a sum, never a
+           * division — a figure divided out of taka changes on its own the
+           * moment somebody edits a rate, which is what #8 removed.
+           *
+           * Signed, so money in adds and money out subtracts, exactly as the
+           * taka net beside it does.
+           */
+          netUsd: sql<string>`coalesce(sum(
+            case
+              when ${transactions.originalCurrency} = 'USD'
+                   and ${transactions.originalAmount} is not null
+              then case when ${transactions.direction} = 'in'
+                        then ${transactions.originalAmount}
+                        else -${transactions.originalAmount} end
+              else 0
+            end), 0)::text`,
         })
         .from(transactions)
         .where(and(sql`${transactions.txnDate} < ${range.start}`, LIVE))
@@ -523,6 +524,32 @@ export class OverviewService {
           accountId: transactions.accountId,
           moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
           moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+          /* Each direction's dollars, summed from the rows that carry one. */
+          moneyInUsd: sql<string>`coalesce(sum(
+            case when ${transactions.direction} = 'in'
+                  and ${transactions.originalCurrency} = 'USD'
+                  and ${transactions.originalAmount} is not null
+                 then ${transactions.originalAmount} else 0 end), 0)::text`,
+          moneyOutUsd: sql<string>`coalesce(sum(
+            case when ${transactions.direction} = 'out'
+                  and ${transactions.originalCurrency} = 'USD'
+                  and ${transactions.originalAmount} is not null
+                 then ${transactions.originalAmount} else 0 end), 0)::text`,
+          /*
+           * Whether EVERY row in the period carried a dollar figure.
+           *
+           * False means the dollar totals are a floor rather than the whole,
+           * and the screen marks them with a tilde — the same contract
+           * `ownBalanceExact` uses on an account, so the two cannot disagree
+           * about what a tilde means.
+           *
+           * `coalesce(..., true)` because `bool_and` over no rows is NULL, and
+           * an account that saw no movement is not inexact.
+           */
+          allHaveUsd: sql<boolean>`coalesce(bool_and(
+            ${transactions.originalCurrency} = 'USD'
+            and ${transactions.originalAmount} is not null
+          ), true)`,
         })
         .from(transactions)
         .where(inPeriod(range))
@@ -530,20 +557,49 @@ export class OverviewService {
     ]);
 
     const before = new Map(
-      movedBefore.map((r) => [r.accountId, Number(r.net)]),
+      movedBefore.map((r) => [
+        r.accountId,
+        { net: Number(r.net), netUsd: Number(r.netUsd) },
+      ]),
     );
     const during = new Map(
       inPeriodRows.map((r) => [
         r.accountId,
-        { in: Number(r.moneyIn), out: Number(r.moneyOut) },
+        {
+          in: Number(r.moneyIn),
+          out: Number(r.moneyOut),
+          inUsd: Number(r.moneyInUsd),
+          outUsd: Number(r.moneyOutUsd),
+          exact: r.allHaveUsd,
+        },
       ]),
     );
 
     const groups = rows.map((account) => {
-      const opening = Number(account.opening) + (before.get(account.id) ?? 0);
+      const carried = before.get(account.id);
+      const opening = Number(account.opening) + (carried?.net ?? 0);
       const movement = during.get(account.id);
       const moneyIn = movement?.in ?? 0;
       const moneyOut = movement?.out ?? 0;
+
+      /*
+       * The dollars, added up.
+       *
+       * An account's OPENING has no dollar figure of its own — it is the
+       * account's opening balance, typed in taka, plus everything that moved
+       * before this month. Only the second half carries dollars, so the
+       * opening's dollar view is the dollars that moved before the period.
+       */
+      const openingUsd = carried?.netUsd ?? 0;
+      const moneyInUsd = movement?.inUsd ?? 0;
+      const moneyOutUsd = movement?.outUsd ?? 0;
+
+      /* Nothing at all in dollars is not the same as zero dollars: a taka-only
+         account shows no second line rather than "$0.00", which would read as a
+         fact somebody established. */
+      const anyDollars =
+        openingUsd !== 0 || moneyInUsd !== 0 || moneyOutUsd !== 0;
+      const usdOr = (value: number) => (anyDollars ? value.toFixed(2) : null);
 
       return {
         key: account.id,
@@ -556,6 +612,17 @@ export class OverviewService {
         moneyIn: moneyIn.toFixed(2),
         moneyOut: moneyOut.toFixed(2),
         closing: (opening + moneyIn - moneyOut).toFixed(2),
+        usd: {
+          opening: usdOr(openingUsd),
+          moneyIn: usdOr(moneyInUsd),
+          moneyOut: usdOr(moneyOutUsd),
+          /* Derived from the other three rather than summed again, so
+             opening + in - out reads as a sentence that adds up. */
+          closing: usdOr(openingUsd + moneyInUsd - moneyOutUsd),
+          /* False when some row in the period carried no dollar figure: the
+             totals are then a floor, and the screen says so with a tilde. */
+          exact: movement?.exact ?? true,
+        },
       };
     });
 
