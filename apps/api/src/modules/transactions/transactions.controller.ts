@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
   createTransactionSchema,
+  expenseOverviewQuerySchema,
   expenseSummaryQuerySchema,
   listTransactionsQuerySchema,
   recordCashInSchema,
@@ -10,6 +11,7 @@ import {
   updateTransactionSchema,
   voidTransactionSchema,
   type CreateTransactionInput,
+  type ExpenseOverviewQuery,
   type ExpenseSummaryQuery,
   type ListTransactionsQuery,
   type RecordCashInInput,
@@ -90,6 +92,42 @@ export class TransactionsController {
   @RequirePermission("transactions.read")
   summary(@ZodQuery(transactionFilterSchema) filter: TransactionFilter) {
     return this.transactions.summary(filter);
+  }
+
+  /**
+   * The overview's four slices, plus the month before, plus the tax held.
+   *
+   * Declared ABOVE `expenses/summary` only for readability — neither is a
+   * `:param` route, so order does not decide this one. It would if somebody
+   * added `expenses/:slug` beneath them, which is exactly how a literal route
+   * has gone missing on this codebase before.
+   */
+  @Get("expenses/overview")
+  @RequirePermission("transactions.read")
+  expenseOverview(
+    @ZodQuery(expenseOverviewQuerySchema) query: ExpenseOverviewQuery,
+  ) {
+    /* The month before, worked out here rather than asked for: a caller that
+       can name its own comparison month can name the wrong one. */
+    const start = new Date(`${query.from}T00:00:00Z`);
+    const prevEnd = new Date(start);
+    prevEnd.setUTCDate(0);
+    const prevStart = new Date(
+      Date.UTC(prevEnd.getUTCFullYear(), prevEnd.getUTCMonth(), 1),
+    );
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+    return this.transactions.expenseOverview({
+      from: query.from,
+      to: query.to,
+      previousFrom: iso(prevStart),
+      previousTo: iso(prevEnd),
+      previousLabel: prevStart.toLocaleString("en-GB", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      }),
+    });
   }
 
   /** Spend per heading, or per sub-category when `categorySlug` is given. */

@@ -19,6 +19,7 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { SummaryBar } from "@/components/ui/patterns";
@@ -117,6 +118,15 @@ export function OtherExpensesScreen({
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
+  /*
+   * This page names its own last crumb.
+   *
+   * The breadcrumb is built from the rail's hrefs, and Other expenses came off
+   * the rail on the owner's instruction — so without this the trail would stop
+   * at "Expenses" and the page you are on would be nameless.
+   */
+  useNameThisPage("Other expenses");
+
   const canWrite = useCan("transactions.write");
   const canVoid = useCan("transactions.void");
 

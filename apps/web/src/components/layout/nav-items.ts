@@ -106,10 +106,26 @@ export const NAV_GROUPS: NavGroup[] = [
         hue: 27,
         children: [
           {
+            /*
+             * The new overview: a month cut into slices that add up.
+             *
+             * It takes the name "Expense overview", and the category grid it
+             * used to point at becomes "Operational expenses" — which is what
+             * that grid actually holds now that salary and tooling have boxes
+             * of their own.
+             */
             key: "expenses-overview",
-            href: "/expenses",
+            href: "/expenses/overview",
             label: "Expense overview",
             icon: "grid_view",
+            hue: 27,
+            permission: "transactions.read",
+          },
+          {
+            key: "expenses-operational",
+            href: "/expenses",
+            label: "Operational expenses",
+            icon: "receipt_long",
             hue: 27,
             permission: "transactions.read",
           },
@@ -126,14 +142,19 @@ export const NAV_GROUPS: NavGroup[] = [
             hue: 295,
             permission: "vendors.read",
           },
-          {
-            key: "expenses-other",
-            href: "/expenses/other",
-            label: "Other expenses",
-            icon: "shopping_basket",
-            hue: 62,
-            permission: "transactions.read",
-          },
+          /*
+           * Other expenses is off the rail, on the owner's instruction — "menu
+           * theke other expenses ta remove kore diyo".
+           *
+           * Its ROUTE and its permission gate stay: things link to it, and the
+           * overview's Uncategorised box is one of them. What goes is the
+           * standing row, because the screen answers a question the overview
+           * now answers better — "what did we spend that is not tooling" was
+           * always a subtraction rather than a heading.
+           *
+           * The breadcrumb reads the rail's hrefs, so `/expenses/other` now
+           * names its own last crumb rather than inheriting one.
+           */
         ],
       },
       {

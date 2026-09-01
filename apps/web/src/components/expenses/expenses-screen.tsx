@@ -97,9 +97,18 @@ export function ExpensesScreen({
       {errorBanner}
 
       <PageHeader
-        title="Expenses"
+        /*
+          "Operational expenses", on the owner's word — "er name change kore
+          operational expenses kore daw".
+          
+          It is also more accurate than "Expenses" ever was: salary and tooling
+          are spending too, and both now have a box of their own on the
+          overview. What is left under these headings is what the company spends
+          to operate.
+        */
+        title="Operational expenses"
         icon="receipt_long"
-        description="What the company spent, grouped by heading."
+        description="What the company spent to operate, grouped by heading. Salary and tooling have their own boxes on the overview."
         // No "Add expense" here. Adding moved to the heading pages, where the
         // button names the heading it adds to — "add Office & premises" — so
         // nobody has to pick a category from a drawer to record a bill they

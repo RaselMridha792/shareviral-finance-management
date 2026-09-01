@@ -34,7 +34,6 @@ ticking all seventeen.
 
 | # | What | Why it is not done |
 |---|---|---|
-| 23 | Expenses: rename the grid "Operational expenses", a six-box overview including Salary, Other expenses off the menu | Specced and checked, not built — the night ran out here |
 | 12b | Tick columns on Users, FX history, Payroll runs | Each raises a question that is yours — see **12b** below. The lock-out hole they depended on is closed |
 
 ### Three things I did not change, each yours to decide
@@ -691,54 +690,63 @@ query key the server ignores looks identical on screen — same rows, no error �
 so this creates a plan started in 2024 and one started this month and requires
 June 2024 to show the first and not the second.
 
-## 23. The Expenses overview — specced, checked, and NOT built
+## 23. The Expenses overview — four slices that add up
 
-*"akhane expenses er overview page tay akhon category item gula asteche. er name
-change kore operational expenses kore daw. also overview er jonne new ekta page
-banao... minimum 6ta rakho overview te jegula dynamic asbe. ekhane salary ta
-thakte pare... menu theke other expenses ta remove kore diyo"*
+Asked for: rename the category grid **Operational expenses**, build a new
+overview with at least six dynamic boxes including Salary, and take Other
+expenses off the menu.
 
-A full implementation plan was written and then attacked by a second agent,
-which is why this is not built. **The six boxes it proposed count the same money
-five times.**
+**The first plan for it was wrong and was thrown away.** A review agent found
+that its six boxes counted the same money five times — salary sat inside
+Operational, inside Other and inside the headline, so "Other expenses" would
+have read HIGHER than "Operational expenses" beside it. Shown both shapes, the
+owner chose the one that adds up. So the arithmetic IS the design:
 
-Salary sits inside Operational expenses, and inside Other expenses, and inside
-the headline total. "Other expenses" — everything that is not tooling — would
-normally read HIGHER than "Operational expenses" sitting next to it, which on
-screen reads as a contradiction. And the page would put a third "Spent in
-August" figure under a sentence the two screens it links to already answer
-differently.
+```
+Salary + AI tools and subscriptions + Operational + Uncategorised = Spent this month
+```
 
-**Six boxes that overlap are worse than no overview**, on a screen whose whole
-job is to be glanced at. So this needs one decision, and it is a short one:
+Each slice is defined by excluding the ones before it, which is what makes the
+equality hold rather than nearly hold. **The page writes the sum out underneath
+the boxes**, in figures — a total nobody can check is a total people go on
+checking by hand, and this is also the page's own test: if the four ever stop
+adding to the headline it says so rather than looking plausible.
 
-> **Which six slices, such that they add up to the total and none contains
-> another?**
+**Tax withheld sits outside the sum**, in its own box, labelled as held. It is
+in the account and it is not the company's to spend. Folding it in would make
+the total wrong in the one direction that matters on a finance screen.
 
-A set that does partition the money, as a starting point to argue with:
+Four decisions worth their reasons:
 
-| Box | What it is |
-|---|---|
-| Salary | net pay actually disbursed, from payroll — not from the ledger |
-| AI tools and subscriptions | the tool-spend predicate the app already counts with |
-| Operational expenses | categorised spend that is NEITHER of the two above |
-| Uncategorised | money out with no heading — invisible on today's grid, which inner-joins |
-| Tax withheld | held, not spent. Shown apart, and labelled as held |
-| Total for the month | the headline the five add up to |
+- **Salary is the LEDGER's payroll rows, not the payroll tables.** Reading
+  `payroll_lines` would answer "what did we pay people" better — it knows about
+  a sheet finalised and not yet paid — but a figure that is not part of the
+  ledger cannot be a slice of the ledger's total. `created_via = 'payroll'` is
+  the money that actually left the bank.
+- **Uncategorised gets a box because it appears nowhere else.** The category
+  grid inner-joins categories, so money out with no heading is invisible on
+  every existing screen. It is exactly the expense somebody needs to go and
+  file.
+- **One query, four `filter` clauses.** Four queries over the same rows would be
+  four chances for the window to be written slightly differently, and the
+  equality would then fail for a reason nobody could see.
+- **The grid stays at `/expenses`** and the overview takes `/expenses/overview`.
+  Moving the grid would break `category-detail-screen`'s way back, every
+  `/expenses/{slug}?from=&to=` bookmark, and the crumb every heading page
+  inherits — for no gain, since a NEW page was what was asked for.
 
-Three smaller things the check also found, worth knowing whichever way it goes:
+**Other expenses is off the rail; its route, its permission gate and its links
+stay** — the Uncategorised box is one of them. The breadcrumb is built from the
+rail's hrefs, so that screen now names its own last crumb; without that the
+trail would have stopped at "Expenses" and the page you were on would have been
+nameless.
 
-- **Taking Other expenses off the rail breaks its BREADCRUMB**, not just the
-  sidebar highlight — the trail is built from the rail's own hrefs. The route
-  and its permission gate stay; the crumb needs its own name.
-- **`lib/ledger.ts` is shared**, and the plan's change modifies an existing
-  export rather than adding one. That is the ask-first list.
-- **Transfers**: `notATransfer()` in `transactions/own-money.ts` is the
-  predicate every existing aggregate uses, and every new box must use it too.
-  Transfers inflating a breakdown is a bug this app has already had once.
-
-The plan, the anchors and the SQL for all six aggregates are written and ready
-to apply once the shape is settled.
+`.overviewqa.mjs` — 22 checks. It seeds one row into each slice at four
+distinct figures, plus a 500,000 transfer between our own accounts and an 88,000
+voided expense, and requires: the four to add to the total exactly, salary NOT
+to be inside Operational, the transfer not to be counted, and the voided row not
+to be counted. Four boxes that each look plausible while double-counting is
+precisely the failure a screenshot cannot catch.
 
 ## 12a. The lock-out hole — found, proven, and shut
 

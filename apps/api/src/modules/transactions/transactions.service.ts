@@ -45,6 +45,11 @@ import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 import { isToolSpend } from "../vendors/tool-spend";
+import {
+  overviewSelect,
+  overviewWhere,
+  type ExpenseOverview,
+} from "./expense-overview";
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
 import { nextRefNo } from "./ref-no";
@@ -477,6 +482,61 @@ export class TransactionsService {
   }
 
   /** Spend per heading, or per sub-category when a heading is named. */
+  /**
+   * The Expenses overview: four slices that add up, and the tax held apart.
+   *
+   * See `expense-overview.ts` for why the slices are defined by exclusion. The
+   * previous month comes back with them so the page can say "vs August" without
+   * a second round trip, and so both months are measured by exactly the same
+   * predicate — two calls written a fortnight apart is how a comparison starts
+   * comparing two different questions.
+   */
+  async expenseOverview(range: {
+    from: string;
+    to: string;
+    previousFrom: string;
+    previousTo: string;
+    previousLabel: string;
+  }): Promise<ExpenseOverview> {
+    const slice = async (from: string, to: string) => {
+      const [row] = await this.db.client
+        .select(overviewSelect())
+        .from(transactions)
+        /* Both LEFT, because `isToolSpend()` reads a vendor's type and an
+           account's currency and a row can carry neither. That predicate is
+           written to be definitely-true-or-false through a LEFT JOIN; see the
+           long note on it. */
+        .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+        .leftJoin(vendors, eq(transactions.vendorId, vendors.id))
+        .where(overviewWhere(from, to));
+      return row;
+    };
+
+    const [now, before] = await Promise.all([
+      slice(range.from, range.to),
+      slice(range.previousFrom, range.previousTo),
+    ]);
+
+    return {
+      from: range.from,
+      to: range.to,
+      salary: now.salary,
+      tooling: now.tooling,
+      operational: now.operational,
+      uncategorised: now.uncategorised,
+      total: now.total,
+      withheld: now.withheld,
+      previous: {
+        label: range.previousLabel,
+        salary: before.salary,
+        tooling: before.tooling,
+        operational: before.operational,
+        uncategorised: before.uncategorised,
+        total: before.total,
+      },
+    };
+  }
+
   async expenseSummary(query: {
     from?: string;
     to?: string;

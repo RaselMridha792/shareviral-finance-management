@@ -139,6 +139,27 @@ export function toSearchParams(
 
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
+/** The Expenses overview: four slices that add up, and the tax held apart. */
+export type ExpenseOverview = {
+  from: string;
+  to: string;
+  salary: string;
+  tooling: string;
+  operational: string;
+  uncategorised: string;
+  total: string;
+  /** Held against a tax liability — deliberately NOT part of the total. */
+  withheld: string;
+  previous: {
+    label: string;
+    salary: string;
+    tooling: string;
+    operational: string;
+    uncategorised: string;
+    total: string;
+  };
+};
+
 export const ledgerApi = {
   list: (query: Partial<ListTransactionsQuery>) =>
     apiFetch<Paginated<TransactionDto>>(
@@ -160,6 +181,16 @@ export const ledgerApi = {
       { cache: "no-store" },
     ),
 
+  /**
+   * A month cut into slices that add up, plus the month before.
+   *
+   * A NEW method beside `expenseSummary`, which is untouched — the three
+   * screens reading that keep exactly what they have.
+   */
+  expenseOverview: (query: { from: string; to: string }) =>
+    apiFetch<ExpenseOverview>(`/expenses/overview?${toSearchParams(query)}`, {
+      cache: "no-store",
+    }),
   expenseSummary: (query: {
     from?: string;
     to?: string;

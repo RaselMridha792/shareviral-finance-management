@@ -496,3 +496,16 @@ export const expenseSummaryQuerySchema = z.object({
   categorySlug: z.string().trim().max(60).optional(),
 });
 export type ExpenseSummaryQuery = z.infer<typeof expenseSummaryQuerySchema>;
+
+/**
+ * The Expenses overview asks for a month, and gets the one before it too.
+ *
+ * Both months in one request so they are measured by the same predicate — two
+ * calls written a fortnight apart is how a comparison quietly starts comparing
+ * two different questions.
+ */
+export const expenseOverviewQuerySchema = z.object({
+  from: isoDateSchema,
+  to: isoDateSchema,
+});
+export type ExpenseOverviewQuery = z.infer<typeof expenseOverviewQuerySchema>;
