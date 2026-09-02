@@ -4,12 +4,15 @@ import {
   BILLING_CYCLE_LABELS,
   SUBSCRIPTION_STATUS_LABELS,
   type SubscriptionStatus,
+  hasCharge,
+  payableBdt,
 } from "@finance/shared";
 import { ImageIcon } from "lucide-react";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { Fragment } from "react";
 
+import { Amount } from "@/components/money/amount";
 import { Th } from "@/components/ui/table";
 import type { SubscriptionDto } from "@/lib/subscriptions";
 import { formatDate, cn } from "@/lib/utils";
@@ -68,6 +71,21 @@ export function SubscriptionHeadCells() {
           column, cannot be scanned down, and has no heading naming it. Two
           facts, two columns. */}
       <Th>Plan</Th>
+      {/*
+        What the plan actually costs per cycle — its taka price plus whatever
+        the card adds on top.
+
+        ONE column, not the three that were taken off this table. The owner had
+        Cost (USD), Equivalent (BDT) and USD Rate removed — *"baki gula single
+        page a jabe"* — and all three are still on the plan's own page. This is
+        not those three coming back: it is the single figure that leaves the
+        account, which is what he asked to see beside the charge. The split
+        sits under it in small type, and only on the rows that have one.
+
+        Placed after the subject and before the bank details, which is where
+        the standard column order puts an amount.
+      */}
+      <Th align="right">Total / cycle</Th>
       <Th>Account/Card</Th>
       {/* The same pair every other money table carries, in the same place:
           ours, then theirs. */}
@@ -148,9 +166,43 @@ export function SubscriptionBodyCells({
           with no heading to scan against. */}
       <td className="text-sm text-muted-foreground">{row.planName}</td>
 
-      {/* Category, the three money columns, and Payment Method are on the
-          plan's own page. Six columns of a seventeen-column table that the
-          owner does not read here. */}
+      {/*
+        The payable figure, with its parts underneath.
+
+        `payableBdt` rather than arithmetic here: the ledger takes the same
+        function's answer when a payment is recorded, so what this cell says
+        and what the account is debited cannot drift apart.
+
+        A plan with no charge prints the figure alone. A "+ 0.00" on every row
+        of an all-taka register is a mark on everything, which marks nothing —
+        the same reason the salary sheet's warning triangle came off.
+      */}
+      <td>
+        <div className="flex flex-col items-end">
+          {payableBdt(row) ? (
+            <Amount
+              value={payableBdt(row) ?? "0"}
+              tone="neutral"
+              showCounterpart={false}
+              className="block"
+            />
+          ) : (
+            <span className="text-sm text-muted-foreground">N/A</span>
+          )}
+          {hasCharge(row) ? (
+            <span
+              className="num text-[11px] leading-tight text-muted-foreground"
+              title={`Price ${row.costBdt} plus a ${row.chargeBdt} card charge`}
+            >
+              {row.costBdt} + {row.chargeBdt}
+            </span>
+          ) : null}
+        </div>
+      </td>
+
+      {/* Category, USD, the rate, and Payment Method are on the plan's own
+          page. Five columns of a seventeen-column table that the owner does
+          not read here. */}
 
       <td className="text-sm text-muted-foreground">
         {/* Opens the account itself — the card, its balance and what else it

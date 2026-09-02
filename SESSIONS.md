@@ -38,7 +38,7 @@ ticking all seventeen.
 | 51 | **Payroll: invoice and reference upload** when a run is created | **done** |
 | 56 | **Exports: a Windows CSV mail list, a data sheet, a bank statement PDF** | **done** |
 | 57 | **Salary sheet: the tax auto-fills AND can be typed over** | **done** |
-| 58 | **Subscriptions: a Charge added to the price** | **done** — one question open, see below |
+| 58 | **Subscriptions: a Charge added to the price** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -197,15 +197,23 @@ into the database. A plan saved with the box filled came back with a null in
 it. Nothing errored. Found by asserting the stored value rather than the
 response.
 
-**Still open, and it is the owner's call.** He asked for the charge to show
-*"table eo … + diye choto kore"*. The AI tools register has **no money column
-at all** — he had Cost (USD), Equivalent (BDT) and USD Rate removed from it
-himself (*"baki gula single page a jabe"*), so there is no price for a `+৳x` to
-sit beside. It is on the plan's own page, under the price, with a Total per
-cycle. Whether the register gets its price column back to carry the charge is a
-question, not an omission.
+**In the register, one column and not three.** He asked for the charge to show
+*"table eo … + diye choto kore"*, and the register had **no money column at
+all** — he had Cost (USD), Equivalent (BDT) and USD Rate taken off it himself
+(*"baki gula single page a jabe"*), so there was no price for a `+৳x` to sit
+beside. Asked which he wanted; he chose a single **Total / cycle** column with
+the split small underneath. So the three that were removed stay removed and are
+still on the plan's page; what came back is the one figure that actually leaves
+the account. `12,890.85` on the line, `12277.00 + 613.85` under it in 11px, and
+nothing under a plan that has no charge.
 
-Proved by `.chargeqa.mjs` — 15 checks. The money one records a payment and
+It sits after Plan and before Account/Card, where the standard column order
+puts an amount. `SubscriptionHeadCells` is shared with the **Paid tools** table
+on a team member's profile, so that screen gains the column too — which is what
+item 9.1 wanted there anyway. Both tables' min-widths went up by 152px and
+`.sweep` reports `/subscriptions` clean at 1440, 1180 and 900.
+
+Proved by `.chargeqa.mjs` — 20 checks. The money one records a payment and
 reads the **ledger** back rather than the label: ৳12,277.00 + ৳613.85 leaves
 the account, a plan with no charge still takes exactly its price, and a typed
 amount still beats both.

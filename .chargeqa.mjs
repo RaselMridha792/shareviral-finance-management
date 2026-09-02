@@ -287,6 +287,62 @@ check(
   JSON.stringify(plainPage),
 );
 
+/* ---- the register: one Total column, the split small underneath ---- */
+
+await page.goto(`${WEB}/subscriptions`, { waitUntil: "networkidle0", timeout: 120000 });
+await new Promise((r) => setTimeout(r, 2500));
+
+const table = await page.evaluate((mark) => {
+  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+    (h.textContent ?? "").trim(),
+  );
+  const col = heads.findIndex((h) => /^Total \/ cycle$/i.test(h));
+  const read = (needle) => {
+    const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+      (r.textContent ?? "").includes(needle),
+    );
+    if (!tr) return null;
+    const cell = [...tr.querySelectorAll("td")][col];
+    if (!cell) return null;
+    const box = cell.firstElementChild ?? cell;
+    return {
+      lines: [...box.children].map((el) => (el.textContent ?? "").trim()),
+      text: (cell.textContent ?? "").trim(),
+    };
+  };
+  return {
+    blank: document.body.innerText.length < 300,
+    heads,
+    col,
+    charged: read(`${mark} Charged`),
+    plain: read(`${mark} Plain`),
+  };
+}, MARK);
+
+check("the register rendered", !table.blank, table.blank ? "near-empty" : "content present");
+check(
+  "the register carries one Total / cycle column",
+  table.col >= 0,
+  table.heads.join(" | ").slice(0, 140),
+);
+check(
+  "a charged plan shows the total that leaves the account",
+  /12,?890\.85/.test(table.charged?.text ?? ""),
+  table.charged?.text ?? "row not found",
+);
+check(
+  "with the split under it, small",
+  (table.charged?.lines ?? []).length === 2 &&
+    /12277\.00\s*\+\s*613\.85/.test(table.charged.lines[1]),
+  JSON.stringify(table.charged?.lines),
+);
+check(
+  "and a plan with no charge shows the figure alone — no empty + line",
+  (table.plain?.lines ?? []).length === 1 &&
+    /12,?277\.00/.test(table.plain.lines[0]),
+  JSON.stringify(table.plain?.lines),
+);
+
 /* The form: the box, and the running total beside it. */
 await page.goto(`${WEB}/subscriptions`, { waitUntil: "networkidle0", timeout: 120000 });
 await new Promise((r) => setTimeout(r, 2000));

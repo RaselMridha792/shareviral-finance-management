@@ -186,7 +186,7 @@ export function MemberTools({ memberId }: { memberId: string }) {
             still has them, and the person's own access, which is the one thing
             on this table that is about them rather than about the plan.
           */}
-          <table className="table-data w-full min-w-[2200px]">
+          <table className="table-data w-full min-w-[2352px]">
             <thead>
               <tr>
                 <SerialHead />

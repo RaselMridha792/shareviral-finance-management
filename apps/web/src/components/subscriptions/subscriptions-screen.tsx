@@ -397,7 +397,7 @@ export function SubscriptionsScreen({
                 setBulkAsking(true);
               }}
             />
-            <table className="table-data w-full min-w-[2064px]">
+            <table className="table-data w-full min-w-[2216px]">
               <thead>
                 <tr>
                   {bulk ? (
@@ -429,7 +429,7 @@ export function SubscriptionsScreen({
               </thead>
               <tbody>
                 {loading ? (
-                  <TableMessageRow colSpan={18}>Loading…</TableMessageRow>
+                  <TableMessageRow colSpan={19}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => (
                     <tr key={row.id} className="row-finance">
