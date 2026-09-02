@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { MemberPicker } from "@/components/payroll/member-picker";
+import { RunDocuments } from "@/components/payroll/run-documents";
 import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
@@ -511,6 +512,27 @@ export function SalarySheetScreen({
         />
         <Figure label="Net to pay" value={run.totalNet} emphasis />
       </div>
+
+      {/*
+        This month's paperwork, beside this month's totals.
+
+        It sits above the table rather than under it because a sheet is twenty
+        rows long and anything below them is found by nobody. And it is on the
+        run rather than on the salary transaction the run writes when it is
+        paid, so that it can be filled while the sheet is still a draft — which
+        is when the owner asked for it: *"payroll toiri korar somoy invoice and
+        reference upload korar option tao diye diyo"*.
+      */}
+      <Card className="flex flex-col gap-3 p-5">
+        <div>
+          <h2 className="text-sm font-semibold">Documents</h2>
+          <p className="text-xs text-muted-foreground">
+            The invoice for this month and the bank&apos;s record of paying it.
+            Either can be added later.
+          </p>
+        </div>
+        <RunDocuments runId={run.id} canWrite={canWrite} />
+      </Card>
 
       {run.status === "draft" ? (
         <div className="flex items-start gap-3 rounded-lg bg-surface-muted px-4 py-3">

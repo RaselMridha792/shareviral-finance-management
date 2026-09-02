@@ -413,6 +413,26 @@ export function uploadTransactionFile(
 }
 
 /**
+ * A payroll run's own paperwork — the month's invoice and the bank's record.
+ *
+ * Owned by the run rather than by the salary transaction it eventually writes,
+ * because the slot has to be fillable while the sheet is still a draft. See
+ * `deploy/sql/2026-09-02-payroll-run-files.sql`.
+ */
+export function listPayrollRunFiles(runId: string) {
+  return apiFetch<StoredFile[]>(`/files/payroll-run/${runId}`, {
+    cache: "no-store",
+  });
+}
+
+export function uploadPayrollRunFile(runId: string, file: File, kind: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  return apiUpload<StoredFile>(`/files/payroll-run/${runId}`, form);
+}
+
+/**
  * The company's signature. No id in the path: there is one settings row, and a
  * 1 in a URL is an invitation to try a 2.
  */

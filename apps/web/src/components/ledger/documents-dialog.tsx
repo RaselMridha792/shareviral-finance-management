@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   fileHref,
+  listPayrollRunFiles,
   listTransactionFiles,
   type StoredFile,
 } from "@/lib/api-client";
@@ -142,7 +143,7 @@ export function DocumentsDialog({
    * means, and a required argument here would be four edits to say what was
    * already true.
    */
-  owner?: "transaction" | "subscription" | "payroll_line";
+  owner?: "transaction" | "subscription" | "payroll_line" | "payroll_run";
   refNo: string;
   /**
    * Which of the entry's documents this opening is about.
@@ -169,7 +170,9 @@ export function DocumentsDialog({
       ? listSubscriptionFiles(transactionId)
       : owner === "payroll_line"
         ? listLineChallanFiles(transactionId)
-        : listTransactionFiles(transactionId)
+        : owner === "payroll_run"
+          ? listPayrollRunFiles(transactionId)
+          : listTransactionFiles(transactionId)
     )
       .then((next) => {
         if (live) setFiles(next);

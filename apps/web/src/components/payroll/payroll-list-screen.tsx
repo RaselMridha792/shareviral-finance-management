@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState, type FormEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
@@ -61,10 +63,11 @@ const MONTHS = [
   "December",
 ];
 
-/** SL, Paid on, Month, Gross, Tax withheld, Net paid, Status. */
-/* Nine with the tick column, which only a writer sees — the empty-state
+/** SL, Paid on, Month, Gross, Tax withheld, Net paid, Invoice, Reference,
+    Status. */
+/* Eleven with the tick column, which only a writer sees — the empty-state
    row spans whatever is actually drawn. */
-const COLUMNS = 9;
+const COLUMNS = 11;
 
 export function PayrollListScreen({
   initialPage,
@@ -73,6 +76,11 @@ export function PayrollListScreen({
 }) {
   const router = useRouter();
   const canWrite = useCan("payroll.write");
+  const [documentsFor, setDocumentsFor] = useState<{
+    run: PayrollRunDto;
+    kinds: readonly string[];
+    label: string;
+  } | null>(null);
   const [creating, setCreating] = useState(false);
 
   /**
@@ -284,6 +292,12 @@ export function PayrollListScreen({
                   <Th width="w-32" align="right">
                     Net paid
                   </Th>
+                  {/* The month's own paperwork, the same pair every other
+                      money table on this site carries. A run has no typed
+                      number on either side — nobody issues us a salary
+                      invoice — so these cells are an eye or they are N/A. */}
+                  <Th width="w-24">Invoice</Th>
+                  <Th width="w-24">Reference</Th>
                   <Th width="w-28">Status</Th>
                   <RowActionsHead deletable={canWrite} />
                 </tr>
@@ -348,6 +362,34 @@ export function PayrollListScreen({
                           className="block font-medium"
                         />
                       </td>
+                      {/*
+                        Counted per kind, never on the row's total. A run with
+                        only an invoice attached would otherwise offer an eye
+                        on Reference as well, and a click into an empty drawer
+                        is the complaint this pattern exists to answer.
+                      */}
+                      <ReferenceCell
+                        value={null}
+                        documentCount={run.invoiceCount}
+                        onOpen={() =>
+                          setDocumentsFor({
+                            run,
+                            kinds: ["invoice"],
+                            label: "invoice",
+                          })
+                        }
+                      />
+                      <ReferenceCell
+                        value={null}
+                        documentCount={run.recordCount}
+                        onOpen={() =>
+                          setDocumentsFor({
+                            run,
+                            kinds: ["bank_statement", "receipt", "other"],
+                            label: "payment",
+                          })
+                        }
+                      />
                       <td>
                         <Badge
                           tone={
@@ -409,6 +451,23 @@ export function PayrollListScreen({
         Deleting "the ones it could" would leave somebody looking at a half-done
         act with no way to tell which half.
       */}
+      {/*
+        The run's own documents, opened from the eye that knows it has
+        something to show. `transactionId` is the prop's name and the run's id
+        is what it carries — the dialog reads four kinds of owner now, and the
+        name is older than three of them.
+      */}
+      {documentsFor ? (
+        <DocumentsDialog
+          transactionId={documentsFor.run.id}
+          owner="payroll_run"
+          refNo={documentsFor.run.label}
+          kinds={documentsFor.kinds}
+          title={`${documentsFor.label === "invoice" ? "Invoice" : "Reference"} — ${documentsFor.run.label}`}
+          onClose={() => setDocumentsFor(null)}
+        />
+      ) : null}
+
       <DeleteDialog
         open={bulkAsking}
         subject="payroll run"

@@ -35,7 +35,7 @@ ticking all seventeen.
 | # | What | State |
 |---|---|---|
 | 50 | Payslip: the company name printed twice | **done** |
-| 51 | **Payroll: invoice and reference upload** when a run is created | not started — two decisions needed first |
+| 51 | **Payroll: invoice and reference upload** when a run is created | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -161,19 +161,80 @@ words.
 *"ekhane payroll toiri korar somoy invoice and reference upload korar option tao
 diye diyo."*
 
-The same pair every other money screen carries, on the run. What has to be
-settled first, because payroll is not shaped like the others:
+**The three questions this was waiting on, and the owner's answers.**
 
-- **Which row does the file hang on?** `files` has one owner column per kind and
-  a `files_one_owner` constraint that three migrations have already fought over.
-  A payroll run has no file column today, so this needs one — a migration, and
-  it must be added to that constraint rather than beside it.
-- **The run, or the payment?** Paying a run writes ledger entries, and those
-  already take documents. If the paperwork belongs on the payment, most of this
-  exists; if it belongs on the RUN — which is what "payroll toiri korar somoy"
-  says, since a run is created before it is paid — it is new.
+1. *Which paper is it?* Nobody sends this company a salary invoice — it is the
+   payer. Answer: **leave the names alone for now.** *"tumi invoice name rakho
+   pore ami dekhe nibo ki upload korar dorkar hoy."* So the slots read
+   **Invoice** and **Reference**, which is what the pair is called on every
+   other money table here, and what actually goes in them is his to decide.
+2. *At creation, or at payment?* Answer: **at creation, fillable later.**
+   *"hea eta pore add kore dibo edit option to achei taina."*
+3. *One per run, or one per person?* Answer: **one for the whole run.**
+   *"puro run er jonne ektai."*
 
-Not started, and not guessed at.
+**Answer 2 decided the architecture, and it cost a ninth owner column.** The
+cheap version was to hang the file on the salary transaction a run writes when
+it is paid — no migration, and the paper would sit with the money. It is the
+wrong shape for what he asked: that row does not exist until the money moves,
+so a run in draft would have nowhere to put its invoice, which is precisely the
+moment he wants the slot. `payroll_line_id` was no better — a run-level
+document filed against one arbitrary person's line is a lie about whose paper
+it is.
+
+So `files` gained `payroll_run_id`, and `files_one_owner` was recreated
+counting nine. `2026-09-02-payroll-run-files.sql`, pushed alone as `eb6a97b`.
+**Six migrations have now fought over that constraint.** What keeps the
+directory safe is that the deploy records each file and never re-runs it, plus
+filename order; anything that touches it again must sort after this file and
+must count **ten**. The migration says so in its own header.
+
+**Where it lives.** The two slots are a Documents panel on the salary sheet —
+`/payroll/[runId]`, which is where the runs table's edit pencil already goes,
+which is what he meant by *"edit option to achei taina"*. Above the table, not
+below it: a sheet is twenty rows long and anything under them is found by
+nobody. Multiple files per slot (a bank advice is regularly several pages
+photographed separately), preview on the page rather than a download, and an
+empty slot that says **"Not on file"** rather than showing nothing — the same
+reasoning as the team member's document card, which is that the question being
+asked is "is this month's paper in yet", and a list can only show what is
+there.
+
+The runs table got the pair as columns too, with the eye that opens only where
+its own drawer has something. `RunDocuments` is a local component rather than a
+generalised `DocumentSlots`, because `components/files/` is shared and shared
+changes are the owner's call.
+
+**One thing outside payroll was touched, additively:**
+`ledger/documents-dialog.tsx` learned a fourth owner (`payroll_run`) — a new
+member on a union and a new branch on the fetch chain. No existing caller's
+path changes. Flagging it because that dialog is on five screens.
+
+**The bug this would have shipped with, which no diff would have shown.** The
+run list's document counts came back **0 for every run** while the files were
+sitting in the database. `documentCountOf` correlated the subquery with
+`${payrollRuns.id}` interpolated into a `sql` template — and **Drizzle renders
+a column inside `sql` unqualified, as `"id"`.** Inside `from files df`, `"id"`
+resolves to the file's own id, so the condition silently became
+`df.payroll_run_id = df.id`. It compiles, it runs, it raises nothing, and the
+table draws N/A on a run whose invoice is right there. The sibling helper in
+`transactions.service.ts` writes `transactions.id` as raw text and is fine,
+which is why the pattern looked safe to copy. Written out now, with the reason
+in a comment.
+
+Proved by `.runfilesqa.mjs` — 21 checks, all passing. The ones worth having:
+the constraint really counts nine; a file claiming two owners is still refused
+by the database, written straight past the service; the invoice goes on **while
+the run is a draft with zero salary transactions in existence**, which is the
+whole design in one assertion; the counts come back 1 and 0 rather than 0 and
+0; the eye appears on Invoice and **N/A on Reference**, so no click lands in an
+empty drawer; and HR — which holds `payroll.read` on purpose, since it reads
+the sheet — may see the paper but is refused `403` when it tries to attach one.
+
+That last check was wrong in the first draft of the harness: it asserted HR got
+a 403 on *reading*, which would have been a finding about the app and was
+actually a mistake about the permission matrix. Corrected to drive the half
+that is really the gate.
 
 ## 49. The payslip's two signatures, level
 

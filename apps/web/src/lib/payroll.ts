@@ -165,6 +165,10 @@ export type PayrollRunDto = {
   totalNet: string;
   notes: string | null;
   finalizedAt: string | null;
+  /* How many documents of each kind hang on the run. The table draws an eye
+     only where its own drawer has something in it. */
+  invoiceCount: number;
+  recordCount: number;
 };
 
 export type PayrollLineDto = {

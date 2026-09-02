@@ -30,6 +30,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   inArray,
   isNull,
   sql,
@@ -79,9 +80,43 @@ export class PayrollService {
     private readonly taxPolicy: TaxPolicyService,
   ) {}
 
-  async listRuns(
-    query: ListPayrollRunsQuery,
-  ): Promise<Paginated<typeof payrollRuns.$inferSelect>> {
+  /**
+   * How many documents of these kinds are on a run.
+   *
+   * A count and not a boolean, because the table draws an eye only where the
+   * drawer behind it has something in it. Two separate counts and not one
+   * total, for the reason the transactions table learned the hard way: a row
+   * with only an invoice would otherwise offer an eye on Reference too, and a
+   * click into an empty drawer is the complaint this pattern exists to avoid.
+   *
+   * `payroll_runs.id` is written out rather than interpolated as
+   * `${payrollRuns.id}`, and that is not a style choice. Drizzle renders a
+   * column inside a `sql` template UNQUALIFIED — as `"id"` — and `files` has
+   * an `id` of its own, so inside this subquery the correlation silently
+   * became `df.payroll_run_id = df.id`. It compiles, it runs, it raises
+   * nothing, and every count comes back 0: the table drew N/A on a run whose
+   * invoice was sitting right there in the database.
+   */
+  private static documentCountOf(kinds: readonly string[]) {
+    return sql<number>`(
+      select count(*)::int
+        from files df
+       where df.payroll_run_id = payroll_runs.id
+         and df.deleted_at is null
+         and df.kind in (${sql.join(
+           kinds.map((k) => sql`${k}`),
+           sql`, `,
+         )}))`;
+  }
+
+  async listRuns(query: ListPayrollRunsQuery): Promise<
+    Paginated<
+      typeof payrollRuns.$inferSelect & {
+        invoiceCount: number;
+        recordCount: number;
+      }
+    >
+  > {
     const filters: SQL[] = [isNull(payrollRuns.deletedAt)];
     if (query.status) filters.push(eq(payrollRuns.status, query.status));
     if (query.year) filters.push(eq(payrollRuns.periodYear, query.year));
@@ -89,7 +124,21 @@ export class PayrollService {
 
     const [items, [{ total }]] = await Promise.all([
       this.db.client
-        .select()
+        /*
+         * Spread rather than a written-out list. Naming the columns by hand is
+         * how this codebase has three times shipped a screen missing a field
+         * that was added to the schema and never to the projection; spreading
+         * makes a new column arrive on its own.
+         */
+        .select({
+          ...getTableColumns(payrollRuns),
+          invoiceCount: PayrollService.documentCountOf(["invoice"]),
+          recordCount: PayrollService.documentCountOf([
+            "bank_statement",
+            "receipt",
+            "other",
+          ]),
+        })
         .from(payrollRuns)
         .where(where)
         .orderBy(desc(payrollRuns.periodYear), desc(payrollRuns.periodMonth))

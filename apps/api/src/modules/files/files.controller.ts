@@ -231,6 +231,43 @@ export class FilesController {
     );
   }
 
+  /**
+   * A payroll run's own paperwork — the invoice, and the bank's record.
+   *
+   * `payroll.read` / `payroll.write` rather than the tax pair its neighbour
+   * above uses: this is the salary sheet's document, not the withholding
+   * register's. Write is `payroll.write` and not `payroll.pay`, because the
+   * invoice is filed while the run is still a draft — before there is any
+   * payment to authorise.
+   */
+  @Get("payroll-run/:id")
+  @RequirePermission("payroll.read")
+  listForPayrollRun(
+    @Param("id") id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.files.listFor("payroll_run", uuidSchema.parse(id), actor);
+  }
+
+  @Post("payroll-run/:id")
+  @RequirePermission("payroll.write")
+  @upload()
+  uploadForPayrollRun(
+    @Param("id") id: string,
+    @ZodBody(uploadFileSchema) body: UploadFileInput,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose a file to upload");
+    return this.files.upload(
+      "payroll_run",
+      uuidSchema.parse(id),
+      body,
+      file,
+      actor,
+    );
+  }
+
   @Get("import-batch/:id")
   @RequirePermission("imports.run")
   listForImportBatch(

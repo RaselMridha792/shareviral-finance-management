@@ -92,6 +92,11 @@ const OWNER_PERMISSIONS: Record<
   // that screen — `payroll.read` guards the payslip, which is a different
   // document answering a different question.
   payroll_line: { read: "tds.read", write: "tds.write" },
+  // The run's own pair, exactly as `PayrollController` gates the sheet.
+  // Whoever may read a salary sheet may see the paper behind it, and whoever
+  // may edit one may attach it — deliberately not `payroll.pay`, because the
+  // invoice is filed while the run is still a draft.
+  payroll_run: { read: "payroll.read", write: "payroll.write" },
   // The statement's own pair, exactly as `ReportsController` gates the page:
   // `reports.view` to read it, `transactions.write` to change it. Whoever may
   // reconcile a period may say who signed it and attach their hand; whoever
@@ -141,6 +146,7 @@ export class FilesService {
     if (row.tdsDepositId) return { owner: "tds_deposit", id: row.tdsDepositId };
     if (row.payrollLineId)
       return { owner: "payroll_line", id: row.payrollLineId };
+    if (row.payrollRunId) return { owner: "payroll_run", id: row.payrollRunId };
     if (row.statementId) return { owner: "statement", id: row.statementId };
     // The table has a check constraint making this unreachable. If it is ever
     // reached, refusing is the only safe reading of a file owned by nothing.
@@ -210,6 +216,7 @@ export class FilesService {
       settings: files.settingsId,
       tds_deposit: files.tdsDepositId,
       payroll_line: files.payrollLineId,
+      payroll_run: files.payrollRunId,
       statement: files.statementId,
     } satisfies Record<FileOwner, unknown>;
     return columns[owner];
@@ -467,6 +474,7 @@ export class FilesService {
               subscriptionId: owner === "subscription" ? ownerId : null,
               tdsDepositId: owner === "tds_deposit" ? ownerId : null,
               payrollLineId: owner === "payroll_line" ? ownerId : null,
+              payrollRunId: owner === "payroll_run" ? ownerId : null,
               statementId: owner === "statement" ? ownerId : null,
               // The one owner keyed by a number rather than a uuid.
               settingsId: owner === "settings" ? Number(ownerId) : null,

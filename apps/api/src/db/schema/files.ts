@@ -18,7 +18,7 @@ import { appSettings } from "./settings";
 import { statements } from "./statements";
 import { subscriptions } from "./subscriptions";
 import { tdsDeposits } from "./tax";
-import { payrollLines, teamMembers } from "./team";
+import { payrollLines, payrollRuns, teamMembers } from "./team";
 import { transactions } from "./transactions";
 import { users } from "./users";
 import { deletion } from "./shared-columns";
@@ -114,6 +114,20 @@ export const files = pgTable(
       onDelete: "cascade",
     }),
     /**
+     * One month's payroll run — the sheet, not a person's row on it.
+     *
+     * The bill we were sent for the month's salaries and the bank's record of
+     * paying them are one document each for the whole run, so they hang here
+     * rather than on a line. The obvious alternative was the salary
+     * transaction the run writes when it is paid, which would have needed no
+     * column at all; it is the wrong shape, because that row does not exist
+     * until the money moves and the slot has to be fillable while the run is
+     * still a draft.
+     */
+    payrollRunId: uuid("payroll_run_id").references(() => payrollRuns.id, {
+      onDelete: "cascade",
+    }),
+    /**
      * The financial statement one signatory signed.
      *
      * The signature block on the closing page carries up to four people, and
@@ -165,6 +179,7 @@ export const files = pgTable(
     index("files_settings_idx").on(t.settingsId),
     index("files_tds_deposit_idx").on(t.tdsDepositId),
     index("files_payroll_line_idx").on(t.payrollLineId),
+    index("files_payroll_run_idx").on(t.payrollRunId),
     index("files_statement_idx").on(t.statementId),
     index("files_checksum_idx").on(t.checksum),
     check("files_size_positive", sql`${t.sizeBytes} > 0`),
@@ -183,7 +198,8 @@ export const files = pgTable(
          + case when ${t.settingsId} is not null then 1 else 0 end
          + case when ${t.tdsDepositId} is not null then 1 else 0 end
          + case when ${t.payrollLineId} is not null then 1 else 0 end
-         + case when ${t.statementId} is not null then 1 else 0 end) = 1`,
+         + case when ${t.statementId} is not null then 1 else 0 end
+         + case when ${t.payrollRunId} is not null then 1 else 0 end) = 1`,
     ),
   ],
 );

@@ -126,6 +126,16 @@ export const FILE_OWNERS = [
    */
   "payroll_line",
   /**
+   * One month's payroll run — the sheet itself, not a person's row on it.
+   *
+   * The bill for a month's salaries and the bank's record of paying them are
+   * one document each for the whole run, and the run is the only thing that
+   * exists early enough to hold them: the salary transaction is not written
+   * until the money moves, and the slot has to be fillable while the sheet is
+   * still a draft.
+   */
+  "payroll_run",
+  /**
    * One period's financial statement — the document the signature block is on.
    *
    * The signatures hang here rather than on `settings` for a permissions
@@ -210,6 +220,11 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   // is the challan its tax was deposited under. A payslip is generated rather
   // than uploaded, and anything else filed on a salary row is misfiled.
   payroll_line: ["challan"],
+  // The same money pair every other paid thing in this app carries: the bill
+  // we were sent, and the bank's record of the payment. Deliberately not
+  // "other" — a payslip is generated rather than uploaded, and a challan
+  // belongs on the line whose tax it deposited, not on the sheet.
+  payroll_run: ["invoice", "bank_statement"],
   // One kind, and up to four of them: the marks of the people who signed this
   // period off. Nothing else belongs on a statement — the figures are
   // recomputed from the ledger on every request, so there is no attachment a
