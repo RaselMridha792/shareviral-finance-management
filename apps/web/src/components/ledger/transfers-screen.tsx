@@ -204,7 +204,12 @@ export function TransfersScreen({
                       >
                         <SerialCell n={serial(page, index)} />
                         <td className="num whitespace-nowrap text-muted-foreground">
-                          {row.txnDate}
+                          {/* Day/month/year, like the rest of the app. This was
+                              the last table still printing the raw ISO date,
+                              and it survived #1 and #37 because the sweep that
+                              hunts for them could not see a date sitting
+                              against a serial number. */}
+                          {formatDate(row.txnDate)}
                         </td>
                         <td>
                           <div className="flex flex-col">

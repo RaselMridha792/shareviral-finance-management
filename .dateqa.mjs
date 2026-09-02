@@ -82,7 +82,24 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
  * and \"0\", so \b matched nothing and this file reported the Team table as
  * showing no dates at all while the browser was showing them correctly.
  */
-const ISO = /(?<!\d)(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?!\d)/;
+/*
+ * NO lookbehind on the year, and that is the whole point.
+ *
+ * Reading a table's textContent runs the cells together, so a row whose serial
+ * is 1 and whose date is 2026-08-25 reads as `12026-08-25`. With `(?<!\d)` in
+ * front, the `1` from the SL column made the year "preceded by a digit" and the
+ * match was thrown away — so this file reported EVERY table that has a serial
+ * column as carrying no ISO dates at all, which is every table in the app. The
+ * Money transfer screen printed `2026-07-02` on the live site for a fortnight
+ * while this said it was clean.
+ *
+ * It is the same failure the comment below describes, in a new costume: ``
+ * was replaced with a lookbehind, and the lookbehind was wrong the same way.
+ *
+ * A false POSITIVE here is a loud failure somebody investigates. A false
+ * negative is a bug shipping. Given the choice, take the noise.
+ */
+const ISO = /(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?!\d)/;
 const DMY = /(?<!\d)(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/20\d{2}(?!\d)/;
 
 const readScreen = async (url) => {

@@ -32,9 +32,64 @@ ticking all seventeen.
 
 ## What is LEFT
 
-| # | What | Why it is not done |
+| # | What | State |
 |---|---|---|
-| — | Nothing outstanding | The three that arrived this morning are done and pushed |
+| 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
+| 44 | **Money transfer**: eye buttons on Invoice and Reference, file preview in the drawer, multiple upload, tick column + trash | not started |
+| 45 | **All transactions**: Invoice and Reference as on the others, Entry No. off, eye buttons, tick + trash, the edit drawer showing everything, upload preview, multiple upload | not started |
+| 46 | **All transactions**: one red, not two. A red row's text is all one red, and a link inside it is underlined rather than blue | not started |
+
+## 43. The date on Money transfer, and why nothing caught it
+
+The owner: *"money transfer table er akhono date formatting change hoynai."* He
+was right, and it had been wrong since #1 — through #1, through #37's widening,
+through every green run of `.dateqa.mjs`.
+
+**The sweep was blind, and the reason is worth keeping.** Reading a table's
+textContent runs the cells together, so a row whose serial is 1 and whose date
+is 2026-08-25 reads as `12026-08-25`. The pattern carried `(?<!\d)` in front of
+the year — "not preceded by a digit" — so the `1` from the SL column made every
+date look like part of a longer number and every match was thrown away. **Every
+table in this app has a serial column.** The sweep has been reporting seventeen
+screens clean while it could not see a single one of their dates.
+
+It is the same failure the file's own older comment describes — `` matched
+nothing between "A" and "0" — wearing a new costume: `` was replaced by a
+lookbehind, and the lookbehind was wrong the same way.
+
+The lookbehind is gone. A false positive is a loud failure somebody looks at; a
+false negative is a bug shipping. With it gone the sweep immediately found the
+Money transfer date, which is now `formatDate`d like everywhere else, and
+nothing else — so the other sixteen screens really were clean.
+
+## 44, 45, 46. The next batch — Money transfer and All transactions
+
+Written down as asked, not started. Three of them are the same work on two
+screens, which is worth doing together rather than twice.
+
+**44 — Money transfer.** The Invoice and Reference columns get the eye button
+the other money tables have; the drawer previews what is attached; more than one
+file can be attached; and the table gets a tick column with Move to trash.
+
+**45 — All transactions.** The same Invoice and Reference treatment, **Entry
+No. comes off**, the edit drawer opens carrying every field the row holds,
+uploads preview, and multiple files can go on one entry.
+
+Worth settling before either is built, because #34 has just been through this:
+"Reference" on these screens is the BANK's number and it is now attach-only,
+while "Entry No." is the app's own `TXN-2026-000038`. Taking Entry No. off All
+transactions removes the app's own handle for a row from the screen that lists
+every row — which is fine if nothing quotes it, and a problem if the bank
+statement or a report does. That is one grep, and it goes first.
+
+**46 — one red, not two.** On a money-out row the text is dark red in some
+cells and light red in others, and a link inside it is blue. The owner: *"sob
+color red hobe jei row red hobe kono extra kore blue korar dorkar nai link er
+khetre. sudhu underline holei colbe."* So a red row is red throughout, and a
+link inside one is told apart by its underline rather than by a second colour.
+That is a change to how links look inside `transaction-table.tsx`, and it should
+be checked against the money-in rows too — green has the same problem.
+
 
 ## 41. Adding a subscription takes the money out
 
