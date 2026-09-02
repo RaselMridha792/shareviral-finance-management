@@ -41,7 +41,6 @@ import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 import {
   subscriptionsApi,
   uploadSubscriptionFile,
-  uploadSubscriptionScreenshot,
   type SubscriptionDto,
 } from "@/lib/subscriptions";
 
@@ -185,18 +184,34 @@ export function SubscriptionForm({
    */
   const [toolName, setToolName] = useState(subscription?.toolName ?? "");
 
-  /**
-   * The plan screenshot, chosen while typing and posted once there is a row to
-   * hang it on. A file needs the subscription's id, which does not exist until
-   * the save returns — that is the only reason it is not uploaded here.
+  /*
+   * There is no plan-screenshot state here any more.
+   *
+   * The owner, looking at this drawer: "Ai and subscription er ekhane tools
+   * name er paser upload option ta soriye daw" — the paperclip that sat
+   * against the Tool name box comes off. Its file state, its hidden input's
+   * ref and the preview hook that opened the chosen image came off with it,
+   * because a picker no button can reach is a field that still runs, still
+   * holds a file and still uploads it, with nothing on screen to say so.
+   *
+   * The screenshot itself is NOT gone from the app: `subscription_screenshot`
+   * is still uploaded, replaced and deleted by ScreenshotDialog, which opens
+   * from the small picture beside a tool's name on the register. That button
+   * is drawn only when `row.screenshotFileId` is set (subscription-columns
+   * .tsx), so with this clip removed a plan that has never had a screenshot
+   * has no route left to a first one. Written down here rather than left for
+   * a later reader to rediscover as a bug — see the two notes at the foot of
+   * this drawer, which still send somebody to the list to attach one.
    */
-  const [screenshot, setScreenshot] = useState<File | null>(null);
-  const planPreview = useFilePreview();
-  const screenshotPicker = useRef<HTMLInputElement>(null);
 
   /**
-   * The paperwork, on the same terms as the screenshot: chosen while typing,
-   * posted once the row exists.
+   * The paperwork: chosen while typing, posted once the row exists. A file
+   * needs the subscription's id, which does not exist until the save returns,
+   * and that is the only reason it is not uploaded at the moment it is picked.
+   * (This paragraph used to say "on the same terms as the screenshot" and
+   * lean on the block above it for the reason; the screenshot's clip has since
+   * been taken off this drawer, so the reason is spelled out here instead of
+   * pointing at something no longer in the file.)
    *
    * Two numbers because the paperwork has two — our bill, and what the bank
    * calls the charge — and each gets the paper it refers to on the clip beside
@@ -389,25 +404,6 @@ export function SubscriptionForm({
         ? await subscriptionsApi.update(subscription.id, body)
         : await subscriptionsApi.create(body);
 
-      /**
-       * The plan is saved by here, so a screenshot that will not upload is not
-       * a failed save. Said out loud rather than swallowed, and rather than
-       * reported as the whole thing having failed.
-       */
-      if (screenshot) {
-        try {
-          await uploadSubscriptionScreenshot(saved.id, screenshot);
-        } catch (caught) {
-          onSaved();
-          setError(
-            `The plan is saved, but the screenshot did not upload: ${
-              caught instanceof ApiError ? caught.message : "try it again"
-            }. Click the tool's name on the list to attach it.`,
-          );
-          return;
-        }
-      }
-
       /*
        * The paperwork, after the row exists for the same reason the screenshot
        * does. A failure here is reported and does not claim the plan was lost
@@ -479,37 +475,17 @@ export function SubscriptionForm({
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Tool name" required error={fieldErrors.toolName}>
-            <div className="flex items-center gap-2">
-              <Input
-                value={toolName}
-                maxLength={160}
-                placeholder="Claude, Figma, Github…"
-                onChange={(e) => setToolName(e.target.value)}
-                list="subscription-tool-names"
-              />
-              {/* The plan screenshot, beside the name it belongs to — and the
-                  same picture the tool's name opens on the list. */}
-              <input
-                ref={screenshotPicker}
-                type="file"
-                accept="image/*,application/pdf"
-                className="sr-only"
-                onChange={(event) => {
-                  setScreenshot(event.target.files?.[0] ?? null);
-                  // Cleared so picking the same file twice still fires.
-                  event.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => screenshotPicker.current?.click()}
-                title="Attach a screenshot of the plan"
-                aria-label="Attach a screenshot of the plan"
-                className="shrink-0 cursor-pointer rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
-              >
-                <Paperclip className="size-4" />
-              </button>
-            </div>
+            {/* The box takes the whole row again. It was in a flex wrapper
+                only so the paperclip could sit against its right edge, and
+                with the clip gone the wrapper would have left the name field
+                narrower than the Plan field beside it for no reason. */}
+            <Input
+              value={toolName}
+              maxLength={160}
+              placeholder="Claude, Figma, Github…"
+              onChange={(e) => setToolName(e.target.value)}
+              list="subscription-tool-names"
+            />
 
             {/* Names already in the register, offered rather than imposed —
                 the field is still free text, so a new tool is typed and not
@@ -522,36 +498,6 @@ export function SubscriptionForm({
                 <option key={name} value={name} />
               ))}
             </datalist>
-
-            {screenshot ? (
-              <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                {/* The fifth copy of this row, and the one the harness caught:
-                    it inherits the muted tone from the paragraph, so the name
-                    read like the caption it sits in. Same treatment as the
-                    other four. */}
-                <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                  {screenshot.name}
-                </span>
-                {/*
-                  This picker is written inline rather than through the small
-                  component above it, so it needed its own eye — which is the
-                  argument for the shared hook: one screen out of five had a
-                  second copy, and it was the one that would have shipped
-                  without.
-                */}
-                <PreviewButton
-                  name={screenshot.name}
-                  onClick={() => planPreview.show(screenshot)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setScreenshot(null)}
-                  className="shrink-0 cursor-pointer font-medium text-negative hover:underline"
-                >
-                  Remove
-                </button>
-              </p>
-            ) : null}
           </Field>
 
           <Field label="Plan" required error={fieldErrors.planName}>
@@ -898,8 +844,6 @@ export function SubscriptionForm({
           </p>
         )}
       </div>
-
-      {planPreview.overlay}
     </Drawer>
   );
 }

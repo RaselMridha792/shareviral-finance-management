@@ -5,6 +5,7 @@ import {
   PAYMENT_METHOD_LABELS,
   formatMoney,
   fromMinorUnits,
+  monthRange,
   toMinorUnits,
 } from "@finance/shared";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -96,6 +97,18 @@ export function PayslipView({
   const deductionTotal = sum([payslip.tdsAmount, payslip.otherDeductions]);
 
   const payDate = payslip.paidOn ?? payslip.paymentDate;
+
+  /**
+   * The days the salary is for, which is not the day it was paid.
+   *
+   * The owner asked for "'pay period' hobe jekhane kon tarikh theke kon tarikh
+   * er salary take dibo" — two dates, so the run's own label ("August 2026")
+   * would not answer the question he asked. `monthRange` is the same helper
+   * the rest of the app uses to turn a payroll period into a span, so the
+   * payslip cannot disagree with the salary sheet it came from about which
+   * days were paid for.
+   */
+  const period = monthRange(payslip.periodYear, payslip.periodMonth);
 
   return (
     <>
@@ -268,16 +281,32 @@ export function PayslipView({
                 ] ?? payslip.paymentMethod}
               </dd>
             </div>
+            {/* The bank account used to be repeated here as "Credited to".
+                It is already printed against the employee's name at the top of
+                the sheet, and the owner's objection was that saying it twice on
+                a one-page document earns nothing: "Bank details to upore ekbar
+                achei..repeat kora lagbena". The period the salary covers is the
+                fact that was missing, so it takes the slot. */}
             <div>
-              <dt>Credited to</dt>
+              <dt>Pay period</dt>
+              {/* `longDate`, not the app's `formatDate`.
+
+                  This block prints "31 August 2026" for the payment date
+                  immediately beside it, and the file's own header explains why:
+                  a payslip is a document that gets printed and signed, so it
+                  carries document-grade dates rather than the table format the
+                  screens use. Two slashed dates sitting next to a spelled-out
+                  one, inside one three-column block, would read as two different
+                  kinds of fact. */}
               <dd>
-                {[payslip.snapshotBankName, payslip.snapshotBankAccount]
-                  .filter(Boolean)
-                  .join(", A/C ") || "N/A"}
+                {longDate(period.start)} to {longDate(period.end)}
               </dd>
             </div>
             <div>
-              <dt>Value date</dt>
+              {/* "Value date" is what a bank calls the day money settles, and
+                  the owner's point was that nobody in this office reads it that
+                  way. The figure behind the label has not changed. */}
+              <dt>Payment Date</dt>
               <dd>{payDate ? longDate(payDate) : "Not yet paid"}</dd>
             </div>
             {payslip.remarks ? (

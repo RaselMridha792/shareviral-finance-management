@@ -170,20 +170,42 @@ export class TeamMembersService {
         .from(teamMembers)
         .where(where)
         /*
-         * Seniority, not the alphabet — the owner's rule: the list is ordered by
-         * joining date, so SL 1 is the company's first hire.
+         * Employee ID first, and this one line is the whole fix. The owner, on
+         * a screenshot of the list reading SVBE-06, SVBE-03, SVBE-04, SVBE-05:
+         * "Team a ekhane ordering hobe Employee id hisebe ekhon may be A, b, c,
+         * d ei serail dhorteche..eita data intact rekhei fix kora possible?"
          *
-         * Three keys, and the third is not decoration. `joined_on` is a DATE, so
-         * two people hired the same day have no defined order between them, and
-         * this list is paged with OFFSET: without a unique final key one of them
-         * can appear on two pages and the other on none. Name then id gives a
-         * total order that offset paging can rely on.
+         * It was possible, and nothing was written to do it. Everybody on the
+         * books joined the same day, so the old leading key separated nobody and
+         * the sort fell through to `full_name` — the alphabet he was seeing. No
+         * row held a wrong value; only the ORDER BY was wrong.
          *
-         * Every place that lists people carries the same three keys. Change one
-         * alone and the salary sheet disagrees with the directory about who row
-         * one is — on a document that gets printed and signed.
+         * `employee_code` is NULLABLE, and somebody without one must neither
+         * vanish nor lead the list. Postgres puts NULLs last on ASC by default,
+         * so an uncoded person keeps their place at the bottom of the list in
+         * whatever order the keys below give them. Checked against this database
+         * rather than assumed, because a wrong guess here hides a person.
+         *
+         * Plain text order, deliberately no natural sort. The codes in use are
+         * `SVBE-` followed by two zero-padded digits, one width for everybody,
+         * and padded numbers already sort correctly as text: `SVBE-09` does come
+         * before `SVBE-10`. A natural sort would be machinery earning nothing.
+         * It is the padding doing the work, so the padding is what has to hold —
+         * an unpadded `SVBE-9` would sort after `SVBE-10`.
+         *
+         * The three keys that used to lead are kept behind it as tiebreaks, and
+         * the last of them is not decoration: this list is paged with OFFSET, so
+         * without a unique final key a row can appear on two pages and another
+         * on none. While a code is still missing on some rows those three are
+         * the entire order for those people.
+         *
+         * Payroll deliberately does not follow this. `eligibleMembers` and the
+         * salary sheet stay on seniority — the sheet, its Excel and every
+         * payslip trace to that one order — so this screen and that document are
+         * now allowed to disagree about who row one is.
          */
         .orderBy(
+          asc(teamMembers.employeeCode),
           asc(teamMembers.joinedOn),
           asc(teamMembers.fullName),
           asc(teamMembers.id),
@@ -675,8 +697,11 @@ export class TeamMembersService {
           )`,
         ),
       )
-      // The same order the directory shows, so the confirmation list and
-      // the audit rows read in the order somebody is looking at.
+      // Seniority, so the confirmation list and the audit rows read in the
+      // order payroll does. This used to say "the same order the directory
+      // shows" and that stopped being true when the directory moved to employee
+      // ID above; the order here is left alone because what this writes is pay,
+      // and everything else that touches pay is on seniority.
       .orderBy(
         asc(teamMembers.joinedOn),
         asc(teamMembers.fullName),

@@ -34,7 +34,66 @@ ticking all seventeen.
 
 | # | What | Why it is not done |
 |---|---|---|
-| 38 | **The payslip: three label and content changes** — see below | Arrived 1 Sep, mid-morning. Not started |
+| — | Nothing outstanding | The three that arrived this morning are done and pushed |
+
+## 39. A deleted person stops holding their employee ID
+
+The owner: *"kono ekta data upload diye delete korar por abar upload dite gele
+nicchena..erokom error dekay"* — add somebody, delete them, add them again,
+**Internal server error**.
+
+`team_members_employee_code_idx` was UNIQUE on `(entity, employee_code)` and NOT
+partial. Deleting a person is a SOFT delete: the row stays so it can be restored
+and so payslips keep pointing at somebody real — but it kept its code, so the
+code stayed taken and re-adding collided with a row nobody can see. Postgres
+raised 23505, nothing caught it, and the browser got a 500.
+
+**Third time this shape has bitten.** The same non-partial unique index over
+soft-deleted rows swallowed a salary figure on `compensation_history` this week,
+and `team_socials` was written partial from the start because of it.
+
+Safe alone, unlike the compensation one: nothing writes to `team_members` with
+an `ON CONFLICT` naming this index. Migration `2026-09-01-employee-code-partial`,
+pushed on its own. Driven end to end: add 201, delete 201, add again **201**
+where it used to be a 500 — and two LIVE people with one code still refused, now
+with a readable 400 rather than a crash.
+
+## 38, 39b, 40. Three asks, done in parallel and proved afterwards
+
+Three agents worked disjoint files at once. **Two lost their connection before
+proving anything**, so none of it was taken on trust — `.threeasksqa.mjs` drives
+all three against the running app, 15 checks.
+
+**38 — the payslip.** "Value date" is a bank's word for the day money settles
+and nobody here reads it that way, so it is **Payment Date**. "Credited to" is
+now **Pay period**, showing the month's first day to its last — the run already
+carries the year and month, so no new column and no parsing of a label. And the
+bank account comes out of the foot, because the header already prints it: the
+header was checked before anything was removed. One file, so the PDF follows.
+
+One thing corrected after the agent finished: it used the app's `formatDate`
+(01/05/2026) for the pay period, sitting beside a payment date the same block
+prints as "31 May 2026". A payslip carries document-grade dates on purpose —
+its own header comment says so — so the period matches the block.
+
+**39b — the Team list is ordered by employee ID.** The owner asked whether it
+could be done with the data untouched. It could: everybody on the books joined
+the same day, so the old leading key separated nobody and the sort fell through
+to the NAME. Nothing was wrong with a single row — only the ORDER BY. Somebody
+with no code sorts last, which was measured rather than assumed. **Payroll is
+deliberately left on seniority**: the sheet, its Excel and every payslip trace to
+that one order, and a document that gets printed and signed does not follow a
+directory's sort.
+
+**40 — one paperclip off the subscription drawer.** The clip beside Tool name
+attached the plan screenshot; its state, its ref, its preview hook and its upload
+call went with it, because dead state is how a form grows a field nobody can
+reach. **A consequence worth knowing:** the only other way to attach a screenshot
+is the small picture button on the register, and that button only appears when a
+plan ALREADY has one. So an existing screenshot can still be replaced, and a
+plan with none can no longer be given a first one. Reported, not decided.
+
+
 
 **#12b is done** — `9a38c30`. You answered all three questions: the FX rate
 history page was deleted rather than given a tick, Payroll runs got one, and
