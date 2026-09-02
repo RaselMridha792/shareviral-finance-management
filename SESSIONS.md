@@ -36,6 +36,9 @@ ticking all seventeen.
 |---|---|---|
 | 50 | **Payslip: the company name printed twice** in the header — the boxed line under the logo comes off | not started |
 | 51 | **Payroll: invoice and reference upload** when a run is created | not started |
+| 52 | **Payslip: Working days as a number** — 30, not "Full month" | not started |
+| 53 | **Payslip: drop the "Gross … · Deductions …" line** under Net payable | not started |
+| 54 | **Payslip: drop the leading "BDT"** from the amount in words | not started |
 | 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
@@ -81,6 +84,32 @@ Worth checking with it: the name appears twice more further down, at
 `:359` ("Accounts & Finance, {companyName}") and `:388` (the signatory
 fallback). Those are not duplicates — each says who, in a block about who — but
 they should be read once with fresh eyes while this is open.
+
+## 52, 53, 54. Three more on the payslip
+
+All three are in `payslip-view.tsx`, and with #50 that makes four — worth doing
+in one pass rather than four visits to one document.
+
+**52 — Working days reads a number.** *"ekhane full month lekha thakbena day
+hisebe lekha thakbe 30 hole 30."* Line 219 prints `"Full month"` whenever
+`workingDays` is null, which is the common case: null MEANS the whole month, and
+the slip currently says so in words. He wants the count.
+
+The number is derivable — the run knows its year and month, and `monthRange`
+already gives the last day — so this is a render change and needs no column. The
+one thing to get right is that null and a typed 30 must then print identically,
+because they mean the same thing; if they ever should not, it is the pro-rata
+gross that says so, and that is already its own column on the sheet.
+
+**53 — the check line under Net payable goes.** Lines 269–273 print
+`Gross 1,00,000.00 · Deductions 1,750.00` under the amount in words. Both
+figures are already on the slip, in the two totals directly above it.
+
+**54 — the amount in words loses its "BDT".** Line 266 prints
+`{settings.baseCurrency} {inWords(...)}`, so it reads "BDT Ninety Eight
+Thousand…". The currency is stated twice more in that same black band — above
+the figure on the right, and on both column headings — so the words can be
+words.
 
 ## 51. Payroll: attaching the invoice and the bank record
 
