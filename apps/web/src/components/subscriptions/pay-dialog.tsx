@@ -3,12 +3,10 @@
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { CategorySelect } from "@/components/ledger/category-select";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
 import { ApiError, subscriptionsApi } from "@/lib/api-client";
-import type { CategoryNode } from "@/lib/masters";
 import { formatDate } from "@/lib/utils";
 import type { SubscriptionDto } from "@/lib/subscriptions";
 
@@ -32,19 +30,15 @@ import type { SubscriptionDto } from "@/lib/subscriptions";
  */
 export function PayDialog({
   plan,
-  categories,
   onClose,
   onPaid,
 }: {
   plan: SubscriptionDto | null;
-  /** The whole tree; the picker takes the spending side of it. */
-  categories: CategoryNode[];
   onClose: () => void;
   onPaid: () => void | Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState("");
 
   if (!plan) return null;
 
@@ -55,16 +49,10 @@ export function PayDialog({
     setError(null);
 
     const data = new FormData(event.currentTarget);
-    if (!categoryId) {
-      setPending(false);
-      setError("Choose which expense heading this charge belongs under.");
-      return;
-    }
     try {
       await subscriptionsApi.pay(plan.id, {
         txnDate: String(data.get("txnDate") ?? ""),
         amount: String(data.get("amount") ?? "") || undefined,
-        categoryId,
         note: String(data.get("note") ?? "") || null,
         advanceRenewal: data.get("advanceRenewal") === "on",
       });
@@ -109,29 +97,14 @@ export function PayDialog({
         </Field>
 
         {/*
-          Asked for, not guessed.
+          No Expense heading here.
 
-          The ledger refuses an expense with no heading, and it is right to: an
-          uncategorised entry appears on no Expenses screen, which is the exact
-          complaint this whole feature exists to answer. A plan's own category
-          — "AI tool", "Hosting" — is this register's vocabulary and not the
-          company's expense headings, so there is nothing here to derive it
-          from.
+          The owner: "akoi vabe recoed payment drawer eo ei expense heading
+          option ta rakcho oitao tule diyo." Every payment recorded through this
+          drawer is a subscription payment, so the heading was the same answer
+          every time — being asked it on each renewal is being asked to confirm
+          something the app already knows. The server resolves it.
         */}
-        <Field
-          label="Expense heading"
-          required
-          hint="Where this charge shows up under Expenses"
-        >
-          <CategorySelect
-            name="categoryId"
-            value={categoryId}
-            onChange={setCategoryId}
-            categories={categories}
-            kind="out"
-          />
-        </Field>
-
         <Field
           label="Note"
           hint="Anything that makes this charge recognisable later"

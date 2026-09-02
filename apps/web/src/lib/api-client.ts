@@ -580,10 +580,9 @@ export const subscriptionsApi = {
       txnDate: string;
       amount?: string;
       accountId?: string;
-      /* Required. The ledger will not write an expense with no heading, and an
-         entry that appears on no Expenses screen is not the history that was
-         asked for. */
-      categoryId: string;
+      /* Optional. The server works it out — every payment through this door is
+         a subscription payment, so the heading was always the same answer. */
+      categoryId?: string;
       note?: string | null;
       advanceRenewal?: boolean;
     },

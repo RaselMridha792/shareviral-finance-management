@@ -1035,7 +1035,9 @@ export class TransactionsService {
       txnDate: string;
       amount?: string;
       accountId?: string;
-      categoryId: string;
+      /* Optional, and resolved when absent — the drawers stopped asking for it
+         because it was the same answer every time. */
+      categoryId?: string;
       note?: string | null;
       advanceRenewal?: boolean;
     },
@@ -1075,6 +1077,21 @@ export class TransactionsService {
     }
 
     /*
+     * The heading is WORKED OUT, not asked for.
+     *
+     * The owner: "ekhane alada kore field rakhar dorkar nai expense heading er
+     * jonne. eta by default Ai tools and subscriptions er under a jabe." He is
+     * right — every payment through this door is a subscription payment, so a
+     * picker on the drawer asked a question whose answer was already known, and
+     * asked it twice: once when the plan was added and again on every renewal.
+     *
+     * A caller may still name one, and the AI intake does. Only when nothing is
+     * given does this resolve.
+     */
+    const categoryId =
+      input.categoryId ?? (await this.subscriptionCategoryId());
+
+    /*
      * The category is asked for, not guessed.
      *
      * `createTransactionSchema` requires one and is right to: an uncategorised
@@ -1093,7 +1110,7 @@ export class TransactionsService {
         txnDate: input.txnDate,
         accountId,
         amount,
-        categoryId: input.categoryId,
+        categoryId,
         /* The fact that makes this tooling, rather than the guess about which
            card it was on. */
         subscriptionId: plan.id,
@@ -1117,6 +1134,60 @@ export class TransactionsService {
     }
 
     return created;
+  }
+
+  /**
+   * Which expense heading a subscription payment belongs under.
+   *
+   * Resolved rather than configured, because a setting for it would be a second
+   * place to keep something the category tree already says. Preference order,
+   * and each step is a narrower guess than the one before:
+   *
+   *   1. the slug `ai-tools`, which is what the seed creates
+   *   2. a name that reads like AI tools, subscriptions or software — installs
+   *      rename their headings, and this company's live one is called
+   *      "Ai Tools and Subscriptions"
+   *
+   * If neither matches it REFUSES, with a sentence naming what to do. Writing
+   * the expense uncategorised instead would put it on no Expenses screen at
+   * all, which is the complaint this whole feature exists to answer — a silent
+   * wrong answer is worse than a loud refusal.
+   */
+  private async subscriptionCategoryId(): Promise<string> {
+    const bySlug = await this.db.client
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          isNull(categories.deletedAt),
+          eq(categories.kind, "out"),
+          eq(categories.slug, "ai-tools"),
+        ),
+      )
+      .limit(1);
+    if (bySlug[0]) return bySlug[0].id;
+
+    const byName = await this.db.client
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          isNull(categories.deletedAt),
+          eq(categories.kind, "out"),
+          sql`(${categories.name} ilike '%ai tool%'
+               or ${categories.name} ilike '%subscription%'
+               or ${categories.name} ilike '%software%')`,
+        ),
+      )
+      .orderBy(asc(categories.name))
+      .limit(1);
+    if (byName[0]) return byName[0].id;
+
+    throw new BadRequestException(
+      "There is no expense heading for tools and subscriptions yet. " +
+        "Add one under Settings → Categories — call it AI tools — and this will " +
+        "find it.",
+    );
   }
 
   /**

@@ -102,6 +102,90 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const ISO = /(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?!\d)/;
 const DMY = /(?<!\d)(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/20\d{2}(?!\d)/;
 
+/* ------------------------------------------------------------------------
+   The source, before the browser.
+
+   Twice now a raw ISO date has shipped and this file has reported the screen
+   clean, and neither time was the pattern at fault. Both times the LOCAL
+   DATABASE had nothing to draw: the transfers table was showing dates the
+   pattern could not see, and the payroll table's "Paid on" column was N/A on
+   every row because no run on this machine has been paid. A browser sweep can
+   only ever see what today's data happens to produce, so a column that is empty
+   here is a column nobody is checking.
+
+   So the components are read as text as well. It is crude on purpose — no
+   parser, just JSX text children of the form `{something.someDate}` that are
+   not wrapped in a formatter — and crude is the point: it does not care what is
+   in the database.
+
+   A LOOKBEHIND on the single character before the brace, not a class with
+   `\s*` in front of it. JSX children sit on their own indented line, so the
+   character before the whitespace is a newline — which a `[^=\s$]` class
+   rejects, and the check then found nothing at all while reporting itself
+   green. Twice in one sitting this file has been the thing that was wrong.
+
+   Two things are skipped, and both had to be learned by running it.
+   `value={row.txnDate}` on a DateInput is CORRECT — the control wants an ISO
+   string — so a `{` preceded by `=` is an attribute and is left alone. And
+   `${...}` inside a template literal is not JSX at all, so a `{` preceded by
+   `$` is skipped too; without that, `new Date(\`${row.effectiveFrom}T00:00:00Z\`)`
+   read as a raw date on screen.
+
+   What follows the field is allowed to be anything up to the closing brace, so
+   `{run.paymentDate ?? "N/A"}` is caught. The first version required the brace
+   immediately after and missed exactly that shape — which is the one the
+   payroll table was printing.
+   ------------------------------------------------------------------------ */
+
+const DATE_FIELDS =
+  "(txnDate|paymentDate|paidOn|effectiveFrom|effectiveTo|startDate|endDate|joinedOn|endedOn|nextRenewalOn|rateDate|dateOfBirth|openingBalanceOn|depositDate|challanDate|renewalDate|periodStart|periodEnd|occurredAt|deletedAt|createdAt|updatedAt)";
+const FORMATTERS = /formatDate|longDate|formatIsoDate|toLocale|slice\(/;
+
+const walk = (dir, out = []) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) walk(full, out);
+    else if (entry.name.endsWith(".tsx")) out.push(full);
+  }
+  return out;
+};
+
+/* Line numbers without embedding a newline literal in this file — the first
+   attempt wrote a real line break inside a string and the harness would not
+   parse. */
+const countLines = (upto) => upto.split(String.fromCharCode(10)).length;
+
+const rawDates = [];
+for (const file of walk("apps/web/src")) {
+  const text = fs.readFileSync(file, "utf8");
+  /* String.raw, so the backslashes survive into the pattern — a plain
+     template literal eats them and the class becomes [^=s]. */
+  const re = new RegExp(
+    String.raw`(?<![=$])\{\s*([A-Za-z_$][\w$]*\??\.` +
+      DATE_FIELDS +
+      String.raw`)[^}]*\}`,
+    "g",
+  );
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    /*
+      Only what is INSIDE the braces counts as formatting it.
+      This looked at sixty characters either side, and the money cell next door
+      calls `toLocaleString` — so the payroll table's `{run.paymentDate ?? "N/A"}`
+      was excused by its neighbour and the check reported the file clean. A
+      formatter three cells away is not formatting this one.
+    */
+    if (FORMATTERS.test(m[0])) continue;
+    const line = countLines(text.slice(0, m.index));
+    rawDates.push(`${file.replace("apps/web/src/", "")}:${line} ${m[1]}`);
+  }
+}
+check(
+  "no component prints a date field raw — checked in the source, not on screen",
+  rawDates.length === 0,
+  rawDates.slice(0, 6).join(" | ") || "none",
+);
+
 const readScreen = async (url) => {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 120000 });
   await settle(2400);

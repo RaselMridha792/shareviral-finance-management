@@ -32,11 +32,10 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
-import { CategorySelect } from "@/components/ledger/category-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
-import type { AccountDto, CategoryNode } from "@/lib/masters";
+import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 import { subscriptionsApi as payApi } from "@/lib/api-client";
@@ -156,7 +155,6 @@ export function SubscriptionForm({
   subscription,
   toolNames,
   accounts,
-  categories,
   members,
   open,
   onClose,
@@ -166,9 +164,6 @@ export function SubscriptionForm({
   /** Every tool name already on the list behind this drawer — see below. */
   toolNames: string[];
   accounts: AccountDto[];
-  /** The spending side of the tree, for the heading the first payment lands
-      under. The whole tree is passed; the picker takes the `out` side. */
-  categories: CategoryNode[];
   members: TeamMemberDto[];
   open: boolean;
   onClose: () => void;
@@ -234,21 +229,7 @@ export function SubscriptionForm({
    */
   const [reference] = useState(subscription?.reference ?? "");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
-  /*
-   * Which expense heading the charge lands under.
-   *
-   * New, and it is here because adding a plan now takes the money out. The
-   * owner: "ami already add subscription er somoy tools er dam koto oita likhe
-   * felchi ... ekhane jate price tai perfectly kaj kore and account theke jeno
-   * taka kate properly hiseb hoy."
-   *
-   * The ledger refuses an expense with no heading and it is right to: an
-   * uncategorised entry appears on no Expenses screen, which is the very
-   * complaint being answered. A plan's own category — "AI Tool", "Hosting" —
-   * is this register's vocabulary, not the company's expense headings, so
-   * there is nothing here to derive it from.
-   */
-  const [categoryId, setCategoryId] = useState("");
+
   /*
    * A transaction id, or only the paper. Read back from the plan being
    * edited rather than stored — see components/ledger/reference-kind.tsx.
@@ -375,6 +356,8 @@ export function SubscriptionForm({
   async function save() {
     setPending(true);
     setError(null);
+    /* Set only when everything that can fail has succeeded. */
+    let done = false;
     setFieldErrors({});
     try {
       // Said here as well as by the API, which refuses a blank name in the
@@ -434,11 +417,6 @@ export function SubscriptionForm({
           setError("Choose the card or account this is paid from — the price comes out of it when you save.");
           return;
         }
-        if (!categoryId) {
-          setPending(false);
-          setError("Choose the expense heading, or the charge will not appear on any Expenses screen.");
-          return;
-        }
       }
 
       const saved = subscription
@@ -469,7 +447,6 @@ export function SubscriptionForm({
         try {
           await payApi.pay(saved.id, {
             txnDate: startDate,
-            categoryId,
             note: "First payment, recorded when the plan was added",
             /* The renewal date is already the first one AFTER today; advancing
                it here would skip a month. */
@@ -510,17 +487,42 @@ export function SubscriptionForm({
         }
       }
 
-      onSaved();
+      /*
+        OUTSIDE the try, deliberately.
+        `onSaved` closes the drawer and reloads the list, and anything it threw
+        landed in the catch below and was reported as "Could not save that." —
+        on a plan that had just been saved. The owner hit that while switching
+        an account: the save went through and the screen told him it had not,
+        so the obvious next move is to try again.
+      */
+      done = true;
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
         setFieldErrors(caught.fieldErrors ?? {});
       } else {
-        setError("Could not save that.");
+        /*
+          Say what happened. "Could not save that." is what this printed for
+          every failure that was not an ApiError — a dropped connection, a
+          parse error, anything at all — and it told the owner nothing about
+          which of those it was, or whether his plan had saved.
+        */
+        setError(
+          caught instanceof Error && caught.message
+            ? `Could not save that: ${caught.message}`
+            : "Could not save that — the request did not reach the server.",
+        );
       }
     } finally {
       setPending(false);
     }
+
+    /*
+      The drawer closes and the list reloads only once, and only out here.
+      Inside the try, anything `onSaved` threw was caught below and reported as
+      a failed save — on a plan that had just been written.
+    */
+    if (done) onSaved();
   }
 
   return (
@@ -726,27 +728,21 @@ export function SubscriptionForm({
           </Field>
 
           {/*
-            Required now, both of them, because adding a plan takes the money
-            out. Without an account there is nothing to take it FROM, and
-            without a heading the expense lands where no Expenses screen shows
-            it — which is the complaint this whole change answers. A form that
-            accepted a plan and then quietly failed to charge it would be the
-            same bug wearing a different face.
-          */}
-          <Field
-            label="Expense heading"
-            required={!subscription}
-            hint="Where the charge shows up under Expenses"
-          >
-            <CategorySelect
-              name="categoryId"
-              value={categoryId}
-              onChange={setCategoryId}
-              categories={categories}
-              kind="out"
-            />
-          </Field>
+            No Expense heading field.
 
+            The owner: "ekhane alada kore field rakhar dorkar nai expense
+            heading er jonne. eta by default Ai tools and subscriptions er under
+            a jabe." Every plan on this register is a tool or a subscription, so
+            the heading was the same answer every time and the picker asked a
+            question with one available answer.
+
+            The server resolves it, and REFUSES with a sentence if the company
+            has no such heading — rather than filing the charge nowhere, which
+            is the state that started all of this.
+
+            The account stays required, because there is genuinely nothing to
+            take the money from without it.
+          */}
           <Field
             label="Account/Card"
             required={!subscription}

@@ -158,12 +158,28 @@ check("a plan is added", Boolean(plan?.id), `HTTP, id ${String(plan?.id).slice(0
  * makes it too, because what is being proved is that the payment LANDS
  * everywhere — the form doing it automatically is checked on screen separately.
  */
+/*
+ * NO categoryId, deliberately. The owner had the heading picker taken off both
+ * drawers — every payment through this door is a subscription payment, so it
+ * was the same answer every time — and the server resolves it. Sending one here
+ * would test a path the screens no longer use.
+ */
 const paid = await call("POST", `/subscriptions/${plan.id}/pay`, {
   txnDate: month + "02",
-  categoryId: cat.id,
   note: "PAYQA first payment",
   advanceRenewal: false,
 });
+const landedUnder = (
+  await db.query(
+    "select c.name from transactions t join categories c on c.id=t.category_id where t.id=$1",
+    [paid.body?.id],
+  )
+).rows[0]?.name;
+check(
+  "the heading is worked out, not asked for — and it is a tooling one",
+  Boolean(landedUnder) && /ai tool|subscription|software/i.test(landedUnder),
+  landedUnder ?? "the expense landed with NO heading",
+);
 check(
   "the payment goes through",
   paid.status === 201,

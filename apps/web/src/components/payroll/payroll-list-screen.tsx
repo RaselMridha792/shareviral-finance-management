@@ -44,7 +44,7 @@ import {
   type PayrollRunDto,
 } from "@/lib/payroll";
 import { MemberPicker } from "./member-picker";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 const MONTHS = [
   "January",
@@ -310,7 +310,12 @@ export function PayrollListScreen({
                       ) : null}
                       <SerialCell n={serial(data.page, index)} />
                       <td className="num text-muted-foreground">
-                        {run.paymentDate ?? "N/A"}
+                        {/* Day/month/year, like everywhere else. This one
+                            escaped both sweeps: no run on the development
+                            database has been paid, so the column reads N/A
+                            here and the browser check had nothing to see. It is
+                            the source check that catches it now. */}
+                        {run.paymentDate ? formatDate(run.paymentDate) : "N/A"}
                       </td>
                       <td>
                         {/* One link per row — see the note in team-screen.tsx. */}

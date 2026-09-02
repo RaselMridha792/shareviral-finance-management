@@ -62,6 +62,77 @@ false negative is a bug shipping. With it gone the sweep immediately found the
 Money transfer date, which is now `formatDate`d like everywhere else, and
 nothing else — so the other sixteen screens really were clean.
 
+## 47. "Could not save that", and the heading nobody had to choose
+
+**The save that failed, and the message that said nothing.** The owner switched
+a plan's bank account and got *"Could not save that."* That string is what this
+form printed for anything that was **not** an ApiError — a dropped connection, a
+parse error, anything — so it could not say which, or whether the plan had
+saved.
+
+Worse: `onSaved()` was INSIDE the try. It closes the drawer and reloads the
+list, and anything it threw landed in the same catch and was reported as a
+failed save — on a plan that had just been written. The obvious next move on
+seeing that is to save again. It now runs after the try, only when everything
+that can fail has succeeded, and the fallback message carries the real error
+text instead of a shrug.
+
+**The heading picker is gone from both drawers.** *"ekhane alada kore field
+rakhar dorkar nai expense heading er jonne. eta by default Ai tools and
+subscriptions er under a jabe ... akoi vabe recoed payment drawer eo ei expense
+heading option ta rakcho oitao tule diyo."*
+
+He is right, and it was my overcorrection. The ledger refuses an uncategorised
+expense — that is still true and still the reason the field appeared — but every
+payment through this door is a subscription payment, so the answer was the same
+every time and the question was asked twice: once when a plan was added, again
+on every renewal.
+
+`subscriptionCategoryId()` resolves it: the slug `ai-tools` first, then a name
+reading like AI tools, subscriptions or software — because installs rename their
+headings and this company's live one is called "Ai Tools and Subscriptions". If
+neither matches it **refuses with a sentence** naming what to add. Writing the
+expense uncategorised instead would put it on no Expenses screen at all, which
+is the complaint the whole feature exists to answer: a silent wrong answer is
+worse than a loud refusal.
+
+The subscriptions page stopped fetching the category tree with it — nothing on
+that screen reads it now.
+
+## 48. Two more raw dates, and the sweep that could not see either
+
+Payroll's **Paid on** column printed `2026-09-02`. That is the second raw date
+in a day, and the second time `.dateqa.mjs` reported the screen clean.
+
+The first miss was the pattern. **This one was the data.** No run on the
+development database has ever been paid, so that column reads N/A on every row
+here and the browser had nothing to look at. A sweep that drives a screen can
+only see what today's data happens to produce, and a column that is empty on
+this machine is a column nobody is checking.
+
+So the sweep now reads the **source** as well: every `.tsx` under `apps/web/src`
+is scanned for a JSX text child of the form `{something.someDate}` with no
+formatter inside the braces. It does not care what is in the database.
+
+Three things had to be learned by running it, each of which had it silently
+finding nothing:
+
+- **A lookbehind on the brace, not a character class.** JSX children sit on
+  their own indented line, so the character before the whitespace is a newline
+  — which `[^=\s$]` rejects. The check reported itself green while matching
+  nothing at all.
+- **`${...}` is not JSX.** Without excluding it,
+  `new Date(\`${row.effectiveFrom}T00:00:00Z\`)` read as a raw date on screen.
+- **Only what is inside the braces counts as formatting.** It looked at sixty
+  characters either side, and the money cell next door calls `toLocaleString` —
+  so the payroll date was excused by its neighbour.
+
+`value={row.txnDate}` on a DateInput is still correct and still skipped: that
+control wants an ISO string.
+
+`.dateqa.mjs` — 23 checks now, and it fails on a blank page, on a raw date on
+screen, and on a raw date in the source.
+
 ## 44. Money transfer: two eyes, a tick column, and the pair
 
 **Half of what was asked for already existed**, which is worth saying rather

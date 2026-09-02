@@ -57,9 +57,16 @@ const paySubscriptionSchema = z.object({
    * vocabulary rather than the company's expense headings, so there is nothing
    * to derive it from and it is asked for.
    */
-  categoryId: z
-    .string()
-    .uuid("Choose which expense heading this belongs under"),
+  /*
+   * Optional now, and worked out when it is absent.
+   *
+   * It was required because the ledger refuses an uncategorised expense, and
+   * that is still true — but the answer was always the same one, so asking put
+   * a picker on two drawers for a question nobody had to think about.
+   * `subscriptionCategoryId()` resolves it, and refuses loudly if the company
+   * has no such heading rather than filing the charge nowhere.
+   */
+  categoryId: z.string().uuid().optional(),
   note: z.string().trim().max(200).nullish(),
   /** Roll the renewal on a cycle. Off for a payment being recorded late. */
   advanceRenewal: z.boolean().optional(),
