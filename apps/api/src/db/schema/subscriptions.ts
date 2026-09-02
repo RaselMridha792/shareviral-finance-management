@@ -89,18 +89,28 @@ export const subscriptions = pgTable(
     costBdt: numeric("cost_bdt", { precision: 14, scale: 2 }),
 
     /**
-     * What the card adds on top, in taka.
+     * What is charged on top of the plan's price, in dollars.
      *
-     * A plan priced at $100 does not cost this company the taka that converts
-     * to: the bank levies a conversion or service charge on the way, and the
-     * figure that leaves the account is the two together. That charge is not
-     * part of the vendor's price and is not derived from `usd_rate` — it is
-     * levied here, in taka — so it sits beside `cost_bdt` rather than inside
-     * it, and `payableBdt()` in the shared package is the one place the two
-     * are added.
+     * A plan billed at $113 does not always cost $113 — there is a charge on
+     * top, and the figure that leaves the account is the two together. It sits
+     * beside `cost_usd` and converts at the plan's own `usd_rate`, exactly as
+     * the price does; `payableUsd()` and `payableBdt()` in the shared package
+     * are the only places the two are added.
      *
      * Nullable on purpose: a plan nobody has recorded a charge for shows an
      * empty box, not a confident 0.00.
+     */
+    chargeUsd: numeric("charge_usd", { precision: 14, scale: 2 }),
+
+    /**
+     * Superseded by `chargeUsd` above, kept because it may hold values.
+     *
+     * This shipped first, on the reading that a card charge is levied here in
+     * taka. The owner corrected it looking at the form — *"ekhane charge usd
+     * te hobe"* — and `2026-09-02-subscription-charge-usd.sql` carried every
+     * stored figure across at its plan's own rate. Nothing reads or writes it
+     * now. Declared so Drizzle still knows the column exists; dropping it is a
+     * separate decision on a separate day.
      */
     chargeBdt: numeric("charge_bdt", { precision: 14, scale: 2 }),
     usdRate: numeric("usd_rate", { precision: 18, scale: 6 }),

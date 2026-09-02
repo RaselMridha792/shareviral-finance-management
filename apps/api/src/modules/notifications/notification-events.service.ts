@@ -105,7 +105,7 @@ export class NotificationEventsService {
         planName: subscriptions.planName,
         costUsd: subscriptions.costUsd,
         costBdt: subscriptions.costBdt,
-        chargeBdt: subscriptions.chargeBdt,
+        chargeUsd: subscriptions.chargeUsd,
         renewsOn: subscriptions.nextRenewalOn,
       })
       .from(subscriptions)

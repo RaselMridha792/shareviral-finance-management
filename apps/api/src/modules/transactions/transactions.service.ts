@@ -18,6 +18,7 @@ import {
   type UpdateTransactionInput,
   type VoidTransactionInput,
   payableBdt,
+  payableUsd,
 } from "@finance/shared";
 import {
   and,
@@ -1129,14 +1130,14 @@ export class TransactionsService {
      * makes the balance an approximation the screen already knows how to mark
      * rather than a number this invented.
      *
-     * `originalAmount` is the VENDOR's price, not the price plus the charge.
-     * The bank's charge is levied here in taka; the dollar side of the card is
-     * debited by what the vendor billed, and the two figures are different on
-     * purpose.
+     * `originalAmount` is the price PLUS the charge, because the charge is in
+     * dollars too — it is part of what is billed, not something levied here.
+     * `payableUsd` is the same function the screen prints, so the card's
+     * dollar balance and the figure on the plan's page cannot disagree.
      */
     const statedDollars =
       input.amount === undefined && plan.usdRate && Number(plan.usdRate) > 0
-        ? { originalAmount: plan.costUsd, fxRate: plan.usdRate }
+        ? { originalAmount: payableUsd(plan), fxRate: plan.usdRate }
         : null;
 
     const created = await this.create(
@@ -1146,7 +1147,7 @@ export class TransactionsService {
         accountId,
         amount,
         categoryId,
-        ...(statedDollars
+        ...(statedDollars?.originalAmount
           ? {
               originalAmount: statedDollars.originalAmount,
               originalCurrency: "USD",

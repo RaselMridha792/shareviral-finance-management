@@ -111,7 +111,7 @@ const plan = (
     costUsd: "100.00",
     usdRate: "122.77",
     costBdt: "12277.00",
-    chargeBdt: "613.85",
+    chargeUsd: "5.00",
     billingCycle: "monthly",
     startDate: "2026-08-01",
     accountId: account.id,
@@ -121,7 +121,7 @@ const plan = (
 check(
   "a dollar card and a $100 plan with a charge exist",
   Boolean(account?.id && plan?.id),
-  `card ${account?.currency}, plan $${plan?.costUsd} + ৳${plan?.chargeBdt}`,
+  `card ${account?.currency}, plan $${plan?.costUsd} + $${plan?.chargeUsd}`,
 );
 
 const screenBalance = async () => {
@@ -142,8 +142,8 @@ check(
 );
 /* THE COMPLAINT. This was 0.00 → 0.00 before, on every plan, on every card. */
 check(
-  "and the DOLLAR balance the screen shows moves by the vendor's own price",
-  (Number(before.ownBalance) - Number(after.ownBalance)).toFixed(2) === "100.00",
+  "and the DOLLAR balance the screen shows moves by the price plus the charge",
+  (Number(before.ownBalance) - Number(after.ownBalance)).toFixed(2) === "105.00",
   `$${before.ownBalance} → $${after.ownBalance}`,
 );
 check(
@@ -162,7 +162,7 @@ const row = (
 ).rows[0];
 check(
   "the row records the dollars, the currency and the rate",
-  row?.original_amount === "100.00" &&
+  row?.original_amount === "105.00" &&
     row?.original_currency === "USD" &&
     Number(row?.fx_rate) === 122.77,
   JSON.stringify(row),

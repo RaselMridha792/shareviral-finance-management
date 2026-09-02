@@ -40,6 +40,7 @@ ticking all seventeen.
 | 57 | **Salary sheet: the tax auto-fills AND can be typed over** | **done** |
 | 58 | **Subscriptions: a Charge added to the price** | **done** |
 | 59 | **Subscriptions: three live bugs — the dollar balance, the save error, the vanishing row** | **done** |
+| 60 | **Subscriptions: the charge is in dollars, not taka** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -159,6 +160,49 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 60. The subscription charge is in dollars
+
+*"ekhane charge usd te hobe"*, on a screenshot of the price panel — correcting
+the reading #58 shipped on a few hours earlier.
+
+`charge_bdt` was built on the idea that a card charge is levied here, in taka,
+by the bank. It is not: it is part of what is billed, so it sits beside
+`cost_usd` and converts at the plan's own rate exactly as the price does.
+
+**Added, not renamed**, and that is the whole care in the migration. A rename
+breaks the image still serving while the new one builds — the old code selects
+`charge_bdt` by name, and a column renamed out from under it takes every
+subscription query down with it. Two columns for one minute is cheap; a dead
+screen is not. `2026-09-02-subscription-charge-usd.sql`, pushed alone as
+`fb1f571`.
+
+Any plan already carrying a taka charge got the dollar equivalent **at its own
+stored rate**, so nothing typed is lost and nothing is re-valued at a rate it
+never had. The verification counts anything that could not be converted — a
+taka charge on a plan with no rate — rather than rounding it away. Locally:
+0 carried, 0 stranded. `charge_bdt` stays in place holding whatever it holds;
+it is read and written nowhere now, and dropping a column that still has values
+is a separate decision on a separate day.
+
+**Two helpers, not one.** `payableUsd` is price + charge; `payableBdt` is the
+**stored** taka price plus the charge converted at the plan's own rate. The
+stored figure rather than `costUsd × usdRate`, because that is what the form
+derived and what every screen has been showing, and re-deriving it here would
+be a second answer to a settled question. The charge is converted at the plan's
+own rate and never at today's, or a settled total would move every time the
+rate did.
+
+The form's box is now **Charge (USD)** under the dollar box it adds to, and the
+line beside it states both totals — `$105.00 · ৳12,890.85`. The plan page shows
+the charge under Cost (USD) and a Total per cycle carrying both. The register's
+Total / cycle column keeps its taka figure with the split now in dollars
+(`$100.00 + $5.00`). And the ledger's `originalAmount` is now price **plus**
+charge, because the charge is in dollars too — so a $105 plan takes $105 off
+the card, which is the same function the screen prints.
+
+`.chargeqa.mjs` 20 checks and `.subsfixqa.mjs` 16 checks, both passing against
+the dollar model.
 
 ## 59. Three live bugs on AI tools and subscriptions
 

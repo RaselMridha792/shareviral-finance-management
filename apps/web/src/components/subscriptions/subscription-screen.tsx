@@ -10,6 +10,7 @@ import {
   type PaymentMethod,
   hasCharge,
   payableBdt,
+  payableUsd,
 } from "@finance/shared";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
@@ -90,7 +91,13 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
         <CardHeader title="What it costs" />
         <CardBody>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-            <Figure label="Cost (USD)" value={money(plan.costUsd, "USD")} />
+            <Figure
+              label="Cost (USD)"
+              value={money(plan.costUsd, "USD")}
+              extra={
+                hasCharge(plan) ? `+ ${money(plan.chargeUsd, "USD")}` : null
+              }
+            />
             <Figure
               label="USD rate"
               value={plan.usdRate ? Number(plan.usdRate).toFixed(2) : "N/A"}
@@ -98,13 +105,11 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
             <Figure
               label="Equivalent (BDT)"
               value={money(plan.costBdt, "BDT")}
-              extra={
-                hasCharge(plan) ? `+ ${money(plan.chargeBdt, "BDT")}` : null
-              }
             />
             <Figure
               label="Total per cycle"
-              value={money(payableBdt(plan), "BDT")}
+              value={money(payableUsd(plan), "USD")}
+              extra={money(payableBdt(plan), "BDT")}
             />
             <Figure
               label="Billing cycle"

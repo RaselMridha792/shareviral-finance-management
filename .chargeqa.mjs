@@ -113,18 +113,18 @@ const makePlan = async (name, extra) =>
     })
   ).body;
 
-const withCharge = await makePlan(`${MARK} Charged`, { chargeBdt: "613.85" });
+const withCharge = await makePlan(`${MARK} Charged`, { chargeUsd: "5.00" });
 const noCharge = await makePlan(`${MARK} Plain`, {});
 
 check(
   "a plan can be created with a charge on it",
-  Boolean(withCharge?.id) && withCharge?.chargeBdt === "613.85",
-  `chargeBdt ${withCharge?.chargeBdt}`,
+  Boolean(withCharge?.id) && withCharge?.chargeUsd === "5.00",
+  `chargeUsd ${withCharge?.chargeUsd}`,
 );
 check(
   "and one without still reads null rather than 0.00",
-  noCharge?.chargeBdt === null,
-  `chargeBdt ${JSON.stringify(noCharge?.chargeBdt)}`,
+  noCharge?.chargeUsd === null,
+  `chargeUsd ${JSON.stringify(noCharge?.chargeUsd)}`,
 );
 
 /* ---------------- THE ONE THAT MUST NOT BREAK: the derived triple ------- */
@@ -139,8 +139,8 @@ const reRated = await call("PATCH", `/subscriptions/${withCharge.id}`, {
 const rePriced = (await call("GET", `/subscriptions/${withCharge.id}`)).body;
 check(
   "re-pricing the plan leaves the charge exactly where it was",
-  reRated.status < 300 && rePriced?.chargeBdt === "613.85",
-  `rate 122.77 → ${rePriced?.usdRate}, charge ${rePriced?.chargeBdt}`,
+  reRated.status < 300 && rePriced?.chargeUsd === "5.00",
+  `rate 122.77 → ${rePriced?.usdRate}, charge ${rePriced?.chargeUsd}`,
 );
 check(
   "and the rate still ties out against the price it was derived from",
@@ -183,7 +183,7 @@ check(
 check(
   "and the ledger takes out the price PLUS the charge, not the price",
   moved === "12890.85",
-  `${moved} moved — expected 12277.00 + 613.85 = 12890.85`,
+  `${moved} moved — expected 12277.00 + ($5.00 x 122.77) = 12890.85`,
 );
 
 const plainBefore = await balanceOf();
@@ -244,6 +244,7 @@ const planPage = await page.evaluate(() => {
   };
   return {
     blank: document.body.innerText.length < 300,
+    cost: read("Cost (USD)"),
     equivalent: read("Equivalent (BDT)"),
     total: read("Total per cycle"),
   };
@@ -251,15 +252,16 @@ const planPage = await page.evaluate(() => {
 
 check("the plan page rendered", !planPage.blank, planPage.blank ? "near-empty" : "content present");
 check(
-  "the charge is printed under the price it is added to, signed with a +",
-  (planPage.equivalent ?? []).length === 2 &&
-    /^\+/.test(planPage.equivalent[1]) &&
-    /613\.85/.test(planPage.equivalent[1]),
-  JSON.stringify(planPage.equivalent),
+  "the charge is printed under the dollar price it is added to, signed with a +",
+  (planPage.cost ?? []).length === 2 &&
+    /^\+/.test(planPage.cost[1]) &&
+    /5\.00/.test(planPage.cost[1]),
+  JSON.stringify(planPage.cost),
 );
 check(
-  "and the page states the total the two come to",
-  /12,?890\.85/.test((planPage.total ?? []).join(" ")),
+  "and the page states the total the two come to, in both currencies",
+  /105\.00/.test((planPage.total ?? []).join(" ")) &&
+    /12,?890\.85/.test((planPage.total ?? []).join(" ")),
   JSON.stringify(planPage.total),
 );
 
@@ -271,7 +273,7 @@ await page.goto(`${WEB}/subscriptions/${noCharge.id}`, {
 await new Promise((r) => setTimeout(r, 1500));
 const plainPage = await page.evaluate(() => {
   const dt = [...document.querySelectorAll("dt")].find(
-    (d) => (d.textContent ?? "").trim() === "Equivalent (BDT)",
+    (d) => (d.textContent ?? "").trim() === "Cost (USD)",
   );
   const lines = [];
   let el = dt?.nextElementSibling;
@@ -331,9 +333,9 @@ check(
   table.charged?.text ?? "row not found",
 );
 check(
-  "with the split under it, small",
+  "with the split under it in dollars, small",
   (table.charged?.lines ?? []).length === 2 &&
-    /12277\.00\s*\+\s*613\.85/.test(table.charged.lines[1]),
+    /\$100\.00\s*\+\s*\$5\.00/.test(table.charged.lines[1]),
   JSON.stringify(table.charged?.lines),
 );
 check(
@@ -360,7 +362,7 @@ const form = await page.evaluate(() => {
     (l.textContent ?? "").trim(),
   );
   const chargeLabel = [...document.querySelectorAll("label")].find((l) =>
-    /^Charge \(BDT\)/.test((l.textContent ?? "").trim()),
+    /^Charge \(USD\)/.test((l.textContent ?? "").trim()),
   );
   const box = chargeLabel
     ? (chargeLabel.control ??
@@ -376,7 +378,7 @@ const form = await page.evaluate(() => {
 
 check("the add drawer opened", formOpened && form.opened, `labels ${form.labels.length}`);
 check(
-  "it offers a Charge (BDT) box",
+  "it offers a Charge (USD) box",
   form.hasCharge,
   form.labels.filter((l) => /charge|BDT|USD/i.test(l)).join(" | ").slice(0, 90),
 );

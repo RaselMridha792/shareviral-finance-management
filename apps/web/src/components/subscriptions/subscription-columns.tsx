@@ -192,9 +192,9 @@ export function SubscriptionBodyCells({
           {hasCharge(row) ? (
             <span
               className="num text-[11px] leading-tight text-muted-foreground"
-              title={`Price ${row.costBdt} plus a ${row.chargeBdt} card charge`}
+              title={`$${row.costUsd} plus a $${row.chargeUsd} charge, at ${row.usdRate ?? "no rate"}`}
             >
-              {row.costBdt} + {row.chargeBdt}
+              ${row.costUsd} + ${row.chargeUsd}
             </span>
           ) : null}
         </div>

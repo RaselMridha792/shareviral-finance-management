@@ -250,7 +250,7 @@ export class SubscriptionsService {
              * list is silently dropped. It was, and the plan saved with the
              * charge box filled came back with a null in it.
              */
-            chargeBdt: input.chargeBdt ?? null,
+            chargeUsd: input.chargeUsd ?? null,
             billingCycle: input.billingCycle,
             startDate: input.startDate,
             /*
@@ -429,7 +429,7 @@ export class SubscriptionsService {
         costBdt: subscriptions.costBdt,
         // In the projection as well as the schema, or the ledger charges the
         // price without the charge and nothing says why.
-        chargeBdt: subscriptions.chargeBdt,
+        chargeUsd: subscriptions.chargeUsd,
         costUsd: subscriptions.costUsd,
         usdRate: subscriptions.usdRate,
         accountId: subscriptions.accountId,
@@ -524,7 +524,7 @@ export class SubscriptionsService {
       status: subscriptions.status,
       costUsd: subscriptions.costUsd,
       costBdt: subscriptions.costBdt,
-      chargeBdt: subscriptions.chargeBdt,
+      chargeUsd: subscriptions.chargeUsd,
       usdRate: subscriptions.usdRate,
       billingCycle: subscriptions.billingCycle,
       startDate: subscriptions.startDate,

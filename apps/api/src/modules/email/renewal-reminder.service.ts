@@ -102,7 +102,7 @@ export class RenewalReminderService {
         planName: subscriptions.planName,
         costUsd: subscriptions.costUsd,
         costBdt: subscriptions.costBdt,
-        chargeBdt: subscriptions.chargeBdt,
+        chargeUsd: subscriptions.chargeUsd,
         billingCycle: subscriptions.billingCycle,
         loginEmail: subscriptions.loginEmail,
         websiteUrl: subscriptions.websiteUrl,
@@ -233,7 +233,7 @@ export class RenewalReminderService {
       planName: string;
       costUsd: string;
       costBdt: string | null;
-      chargeBdt: string | null;
+      chargeUsd: string | null;
       billingCycle: string;
       websiteUrl: string | null;
     },
@@ -244,7 +244,7 @@ export class RenewalReminderService {
        somebody stops trusting. */
     const payable = payableBdt(plan);
     const price = payable
-      ? `${formatMoney(payable, { currency: "BDT" })} <span style="color:#71717a;font-weight:400">(${formatMoney(plan.costUsd, { currency: "USD" })}${hasCharge(plan) ? ` + ${formatMoney(plan.chargeBdt ?? "0", { currency: "BDT" })} charge` : ""})</span>`
+      ? `${formatMoney(payable, { currency: "BDT" })} <span style="color:#71717a;font-weight:400">(${formatMoney(plan.costUsd, { currency: "USD" })}${hasCharge(plan) ? ` + ${formatMoney(plan.chargeUsd ?? "0", { currency: "USD" })} charge` : ""})</span>`
       : formatMoney(plan.costUsd, { currency: "USD" });
 
     const rows = [

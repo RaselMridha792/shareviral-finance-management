@@ -99,7 +99,7 @@ export function PayDialog({
           hint={
             payable
               ? hasCharge(plan)
-                ? `Blank uses ${payable} — the plan's ${plan.costBdt} plus its ${plan.chargeBdt} charge`
+                ? `Blank uses ${payable} — $${plan.costUsd} plus a $${plan.chargeUsd} charge, at ${plan.usdRate ?? "the plan's rate"}`
                 : `Blank uses the plan's price, ${payable}`
               : "What was charged, in taka"
           }

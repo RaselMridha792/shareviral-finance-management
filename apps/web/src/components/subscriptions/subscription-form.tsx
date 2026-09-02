@@ -4,6 +4,7 @@ import {
   BILLING_CYCLES,
   BILLING_CYCLE_LABELS,
   payableBdt,
+  payableUsd,
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_CATEGORY_LABELS,
   PAYMENT_METHODS,
@@ -261,9 +262,9 @@ export function SubscriptionForm({
   /*
    * Its own state, outside `reprice`. The three figures above derive from each
    * other; this one derives from nothing and must not be recomputed when one
-   * of them changes, or typing a rate would silently rewrite the bank's charge.
+   * of them changes, or typing a rate would silently rewrite the charge.
    */
-  const [chargeBdt, setChargeBdt] = useState(subscription?.chargeBdt ?? "");
+  const [chargeUsd, setChargeUsd] = useState(subscription?.chargeUsd ?? "");
   const [usdRate, setUsdRate] = useState(subscription?.usdRate ?? "");
 
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(
@@ -392,7 +393,7 @@ export function SubscriptionForm({
         status,
         costUsd,
         costBdt,
-        chargeBdt,
+        chargeUsd,
         usdRate,
         billingCycle,
         startDate,
@@ -682,32 +683,44 @@ export function SubscriptionForm({
             fact stated three ways — the panel's own caption says "type any two
             — the third follows" — and a fourth box inside that group reads as
             a fourth way of saying the same price. This is a second, separate
-            figure: what the bank adds for putting a foreign charge through a
-            local card, which no rate derives and nothing above it predicts.
+            figure, and no rate derives it.
+
+            In DOLLARS, under the dollar box it adds to. It shipped in taka
+            first; the owner corrected it looking at this very panel — *"ekhane
+            charge usd te hobe"* — and the taka total below converts it at the
+            plan's own rate, exactly as the price above is converted.
           */}
           <div className="grid gap-4 border-t border-border pt-3 sm:grid-cols-3">
             <Field
-              label="Charge (BDT)"
-              hint="What the card adds on top"
-              error={fieldErrors.chargeBdt}
+              label="Charge (USD)"
+              hint="Charged on top of the price"
+              error={fieldErrors.chargeUsd}
             >
               <MoneyInput
-                value={chargeBdt}
+                value={chargeUsd}
                 placeholder="0.00"
-                onChange={(e) => setChargeBdt(e.target.value)}
+                onChange={(e) => setChargeUsd(e.target.value)}
               />
             </Field>
             <div className="sm:col-span-2 sm:self-end sm:pb-2">
               <p className="text-xs text-muted-foreground">
                 Total per {BILLING_CYCLE_LABELS[billingCycle].toLowerCase()}:{" "}
                 <span className="num font-medium text-foreground">
-                  {payableBdt({ costBdt, chargeBdt }) ?? "—"}
+                  ${payableUsd({ costUsd, chargeUsd }) ?? "—"}
                 </span>
-                {Number(chargeBdt) > 0 ? (
+                {payableBdt({ costBdt, chargeUsd, usdRate }) ? (
+                  <>
+                    {" · "}
+                    <span className="num font-medium text-foreground">
+                      ৳{payableBdt({ costBdt, chargeUsd, usdRate })}
+                    </span>
+                  </>
+                ) : null}
+                {Number(chargeUsd) > 0 ? (
                   <>
                     {" "}
                     <span className="num">
-                      ({costBdt || "0.00"} + {chargeBdt})
+                      (${costUsd || "0.00"} + ${chargeUsd})
                     </span>
                   </>
                 ) : null}

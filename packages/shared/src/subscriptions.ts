@@ -233,15 +233,15 @@ const subscriptionFieldsSchema = z.strictObject({
   costUsd: amountSchema,
   costBdt: optionalMoney,
   /**
-   * What the card adds on top of the price, in taka.
+   * What is charged on top of the price, in dollars.
    *
    * Deliberately outside the three figures that derive from each other. The
    * dollar price, the rate and the taka equivalent are one fact stated three
-   * ways and `deriveCosts` keeps them agreeing; a bank charge is a second,
+   * ways and `deriveCosts` keeps them agreeing; the charge is a second,
    * independent fact. Folding it into any of the three would make the rate
    * somebody reads back off this plan wrong.
    */
-  chargeBdt: optionalMoney,
+  chargeUsd: optionalMoney,
   usdRate: z
     .union([
       z
@@ -427,7 +427,7 @@ export function nextRenewalAfter(
 }
 
 /**
- * What a plan actually costs to renew: its taka price plus the card's charge.
+ * What a plan actually costs, in dollars: its price plus the charge on top.
  *
  * One function, because the alternative is `Number(a) + Number(b ?? 0)` copied
  * into the ledger, the pay dialog, the renewal reminder and two screens — and
@@ -435,30 +435,60 @@ export function nextRenewalAfter(
  * `NaN`. The owner asked for the charge to be part of the figure *"calculation
  * er somoy"*; this is that moment, named.
  *
- * Returns null when there is no taka price at all, which is a real state — a
- * plan can carry a dollar price and no rate — and is distinct from a price of
- * zero. A charge with no price to add it to is not a payable figure, so it
- * does not invent one.
+ * Returns null when there is no dollar price at all, which is distinct from a
+ * price of zero.
+ */
+export function payableUsd(plan: {
+  costUsd?: string | null;
+  chargeUsd?: string | null;
+}): string | null {
+  const cost = money(plan.costUsd);
+  if (cost === null) return null;
+  return (cost + (money(plan.chargeUsd) ?? 0)).toFixed(2);
+}
+
+/**
+ * The same total in taka: the stored taka price, plus the charge converted at
+ * this plan's own rate.
+ *
+ * The stored `costBdt` is used rather than `costUsd * usdRate`, because that
+ * figure is what the form derived and what every screen has been showing — and
+ * re-deriving it here would introduce a second answer to a question already
+ * settled. Only the charge is converted, and only at the plan's own rate: a
+ * charge valued at today's rate would move a settled total every time the rate
+ * moved.
+ *
+ * A charge with no rate to convert it contributes nothing here and is reported
+ * in dollars alone. That is the honest answer — the alternative is inventing a
+ * rate — and the form makes it nearly unreachable, since the taka price is
+ * itself derived from a rate.
  */
 export function payableBdt(plan: {
   costBdt?: string | null;
-  chargeBdt?: string | null;
+  chargeUsd?: string | null;
+  usdRate?: string | null;
 }): string | null {
-  const cost = plan.costBdt === null || plan.costBdt === undefined || plan.costBdt === ""
-    ? null
-    : Number(plan.costBdt);
-  if (cost === null || !Number.isFinite(cost)) return null;
+  const cost = money(plan.costBdt);
+  if (cost === null) return null;
 
-  const charge =
-    plan.chargeBdt === null || plan.chargeBdt === undefined || plan.chargeBdt === ""
-      ? 0
-      : Number(plan.chargeBdt);
+  const charge = money(plan.chargeUsd);
+  const rate = money(plan.usdRate);
+  const chargeInTaka = charge !== null && rate !== null && rate > 0
+    ? charge * rate
+    : 0;
 
-  return (cost + (Number.isFinite(charge) ? charge : 0)).toFixed(2);
+  return (cost + chargeInTaka).toFixed(2);
 }
 
 /** Whether a plan carries a charge worth printing beside its price. */
-export function hasCharge(plan: { chargeBdt?: string | null }): boolean {
-  const charge = Number(plan.chargeBdt ?? 0);
-  return Number.isFinite(charge) && charge > 0;
+export function hasCharge(plan: { chargeUsd?: string | null }): boolean {
+  const charge = money(plan.chargeUsd);
+  return charge !== null && charge > 0;
+}
+
+/** A stored money string as a number, or null for "nobody stated one". */
+function money(value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
