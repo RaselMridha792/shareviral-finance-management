@@ -36,6 +36,9 @@ ticking all seventeen.
 |---|---|---|
 | 50 | Payslip: the company name printed twice | **done** |
 | 51 | **Payroll: invoice and reference upload** when a run is created | **done** |
+| 56 | **Exports: a Windows CSV mail list, a data sheet, a bank statement PDF** | **done** |
+| 57 | **Salary sheet: the tax auto-fills AND can be typed over** | **done** |
+| 58 | **Subscriptions: a Charge added to the price** | **done** — one question open, see below |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -155,6 +158,150 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 58. Subscriptions: the charge on top of the price
+
+*"Ai tools and subscription er eikhane tumi charge name akta field rakhba jeta
+actual price er sathe add hobe calculation er somoy and table eo dekhabe +
+diye choto kore."*
+
+A plan priced at $100 does not cost this company the taka it converts to — the
+card adds its own charge, and the figure that leaves the account is the two
+together. There was nowhere to record the second, so every total the app stated
+for a foreign plan was short by an amount nobody could enter.
+
+**`charge_bdt`, and in taka on purpose.** `cost_usd` is the vendor's price and
+`cost_bdt` is that price at `usd_rate`; a card charge is levied here, by the
+bank, and is not converted from anything. Folding it into either would change
+what the plan is said to cost the moment something re-derives the rate from the
+two — which `deriveCosts` in packages/shared does on every keystroke in the
+form. Migration `2026-09-02-subscription-charge.sql`, pushed alone as `341a6b3`.
+
+**One helper, five callers.** `payableBdt()` in the shared package is the only
+place the two are added, and the ledger, the pay dialog's hint and placeholder,
+the renewal email and the bell notification all call it. The alternative —
+`Number(a) + Number(b ?? 0)` written out five times — is four correct copies
+and a fifth that forgets the `?? 0` and prints `NaN` in somebody's inbox.
+
+**In the form it is on its own row, under a rule.** Not a fourth box beside
+USD / rate / BDT: those three are one fact stated three ways and the panel's
+own caption says *"type any two — the third follows"*. A fourth box inside that
+group reads as a fourth way of saying the same price. The harness retypes a
+rate after setting a charge and asserts the charge did not move, because that
+is the failure this arrangement exists to prevent.
+
+**The bug this would have shipped with.** `create()` lists its columns
+explicitly and spreads only the three `moneyOf` derives — so `chargeBdt` was in
+the schema, in the form, in the request body and silently dropped on the way
+into the database. A plan saved with the box filled came back with a null in
+it. Nothing errored. Found by asserting the stored value rather than the
+response.
+
+**Still open, and it is the owner's call.** He asked for the charge to show
+*"table eo … + diye choto kore"*. The AI tools register has **no money column
+at all** — he had Cost (USD), Equivalent (BDT) and USD Rate removed from it
+himself (*"baki gula single page a jabe"*), so there is no price for a `+৳x` to
+sit beside. It is on the plan's own page, under the price, with a Total per
+cycle. Whether the register gets its price column back to carry the charge is a
+question, not an omission.
+
+Proved by `.chargeqa.mjs` — 15 checks. The money one records a payment and
+reads the **ledger** back rather than the label: ৳12,277.00 + ৳613.85 leaves
+the account, a plan with no charge still takes exactly its price, and a typed
+amount still beats both.
+
+## 57. The salary sheet's tax: worked out, and typeable over
+
+*"ekhane tds ta editable koro. etato auto fill hobe eksathe ami duita feature
+cai. mane auto calculate hoye tds bosbe ami caile karota edit o korte parbo."*
+
+`updatePayrollLineSchema` refused `tdsAmount` on purpose and its comment said
+why: *"a screen that let somebody type over it would make the stored working a
+lie"*. That objection is right, and it is an objection to typing over a figure
+while still **claiming a rule produced it** — not to typing. So the line now
+records which of the two it holds.
+
+**`tds_manual`**, one boolean, migration `2026-09-02-tds-manual.sql`, pushed
+alone as `6bb2572`. Deliberately not `tds_basis = null`: that already means "no
+rule produced this", which is equally true of a line from a year with no rule
+configured, and those must start computing the day one is set up.
+
+**What the mark buys.** Typing sets it and clears `tdsBasis`, because there is
+no longer a working to show. The recompute that fires on a gross, working-days
+or declared-investment change then **skips a marked line and says so in the
+response**. Without that, typing a tax and afterwards correcting a working day
+would put the rule's figure back with no message — which reads as the edit box
+not working rather than as the rule reasserting itself, and is the failure the
+harness is built around. "Work out the tax again" is the one deliberate way
+back: it clears the mark across the run and reports how many typed figures it
+replaced.
+
+On the sheet the cell is a box on a draft and read-only once finalised, like
+every other figure. A typed figure keeps a dotted amber underline and says on
+hover what it is and how to undo it — the cost of making this editable is that
+a sheet stops being readable as "all of this came from the rule", and the mark
+is what buys that back.
+
+`tdsManual` is in the schema **and** in `getRun`'s projection. A column that
+reaches one and not the other is how this app has three times shipped a field
+that stored correctly and read back N/A.
+
+`.tdseditqa.mjs`, 23 checks. Two of them were harness faults worth recording:
+`blur()` on an input that was never focused fires nothing at all, so the first
+run reported the cell not saving when what had not happened was the blur.
+
+## 56. Three exports, in three formats
+
+*"amar export option a new ekta export section add koro eta hobe windows CSV
+format export … Team Member Mail - Id, Name, Depertment, Email Address … r ekta
+thakbe Team member Data Sheet (Sheet format a) … arekta lagbe bank statement.
+Sundor Ekta Graphical PDF version a."*
+
+The export screen is now grouped by **what lands on the disk** — CSV for
+Windows, Documents, Spreadsheets — and every card and button wears its format.
+Three kinds of file in one unlabelled grid is how somebody mails a colleague an
+.xlsx they cannot open.
+
+**The mail list, as Windows CSV.** Four columns and nothing else, because that
+is what a mail merge reads. "Windows CSV" is a specific file and none of what
+makes it one shows in a diff:
+
+- a **UTF-8 byte-order mark**, without which Excel on Windows reads the system
+  code page and a Bangla name arrives as mojibake — fatal for the one thing a
+  mail list is for;
+- **CRLF** endings, per RFC 4180;
+- a **guard against formula injection**. Excel *evaluates* a cell beginning
+  `=`, `+` or `@`, so a department typed as a formula is code running on the
+  machine of whoever opens the file, and this one gets mailed to accountants.
+  Text cells get a leading apostrophe. Money and number cells deliberately do
+  not: `-500.00` is a negative figure, not an attack, and quoting it would
+  break the sum at the foot of somebody's column.
+
+**People with no address on file are left out.** A blank address is not a
+recipient and a merge fails on that line rather than skipping it — said on the
+card above the button and counted in the audit line, because a silent omission
+is what this codebase keeps getting bitten by.
+
+**The data sheet** is the personnel record, distinct from the `team-members`
+directory beside it: identity, contact, emergency, bank, tax, education. Marked
+sensitive in the audit log, which the directory is not — it carries NID, e-TIN
+and bank account numbers. Salary stays out and cannot be added by widening the
+column list, because `compensation_history` is a table this projection does not
+join.
+
+**The bank statement PDF** is the same `register()` result the spreadsheet
+uses, laid out rather than recalculated: a cover with the position, a page
+showing how the balance moved and where the money went, then the line-by-line.
+It reuses the layout engine the financial statement already ships on.
+
+One type made honest on the way past: `TeamMemberDto` never declared
+`employeeCode`, `bankAccountHolder`, `bankBranch` or `bankSwift`, though the
+projection has returned all four for weeks and the screens read them. Nothing
+changed at runtime.
+
+`.exportqa.mjs`, 29 checks — the CSV verified byte by byte against a
+deliberately hostile fixture (a name that is a formula, a department with a
+comma, a Bangla name, and somebody with no address at all).
 
 ## 51. Payroll: attaching the invoice and the bank record
 
