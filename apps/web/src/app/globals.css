@@ -330,10 +330,21 @@ tr.row-finance > th {
    fully green and fully red rows is unreadable, and the amount — which carries
    its own weight and sign — has to stay the loudest thing on the row.
 
-   Anything that sets its own colour keeps it. A link stays link-blue, a Badge
-   keeps its tone, a muted caption stays muted: those are facts about the cell
-   rather than about the row, and overriding them would make a voided reason
-   read as income. -------------------------------------------------------- */
+   ONE COLOUR PER ROW, on the owner's instruction. He was looking at a red row
+   where the text was dark red in one cell, light red in another and blue in a
+   third: "row te text gular color ek jaygay garo red arekjaygay halka red so
+   sob color red hobe jei row red hobe kono extra kore blue korar dorkar nai
+   link er khetre. sudhu underline holei colbe."
+
+   So the two exceptions that used to live here are gone. A LINK inside a
+   coloured row is now that row's colour and is told apart by its underline —
+   which is what an underline is for, and what it does on paper. A MUTED caption
+   takes the row's colour too, shaded rather than grey, because "quieter than
+   the figure beside it" was the job and the row's own colour already does that.
+
+   A Badge still keeps its tone: it paints its own background, states a status
+   rather than a shade of the row, and a red "Cash Out" pill on a red row is the
+   pill doing its job. ---------------------------------------------------- */
 
 tr.row-in > td {
   background-color: color-mix(in oklab, var(--positive) 6%, transparent);
@@ -345,17 +356,32 @@ tr.row-out > td {
   color: color-mix(in oklab, var(--negative) 58%, var(--foreground));
 }
 
-/* A cell that states its own colour outranks the row's. */
+/*
+ * Links and captions inherit the row.
+ *
+ * `color: inherit` rather than no rule at all, because both carry a utility
+ * class that would otherwise win: `.text-link` and `.text-muted-foreground` are
+ * (0,1,0) but they are set ON the element, and `tr.row-out > td` colours the
+ * cell — the child would keep its own. Naming them here at (0,2,1) is what
+ * makes the row's colour reach them.
+ *
+ * The underline is what a link is now recognised by, so it must not be the one
+ * thing left in another colour: `decoration-color` follows the text.
+ */
 tr.row-in > td .text-link,
 tr.row-out > td .text-link,
 tr.row-in > td a,
-tr.row-out > td a {
-  color: var(--link);
-}
-
+tr.row-out > td a,
 tr.row-in > td .text-muted-foreground,
 tr.row-out > td .text-muted-foreground {
-  color: var(--muted-foreground);
+  color: inherit;
+}
+
+tr.row-in > td a,
+tr.row-out > td a,
+tr.row-in > td .text-link,
+tr.row-out > td .text-link {
+  text-decoration-color: currentcolor;
 }
 
 /* --------------------------------------------------------------------------

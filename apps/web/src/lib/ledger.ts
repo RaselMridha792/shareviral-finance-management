@@ -31,6 +31,10 @@ export type TransactionDto = {
   invoiceNo: string | null;
   /** Attached documents. Zero is what the table marks. */
   documentCount: number;
+  /** Attached invoices, and everything else attached, counted apart — so a
+      column only offers its eye when its own drawer has something in it. */
+  invoiceCount: number;
+  recordCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;
@@ -74,6 +78,10 @@ export type TransferRowDto = {
   usdRate: string | null;
   /** How much paper hangs on the pair — colours the number cells. */
   documentCount: number;
+  /** Attached invoices, and everything else attached, counted apart — so a
+      column only offers its eye when its own drawer has something in it. */
+  invoiceCount: number;
+  recordCount: number;
   txnDate: string;
   amount: string;
   description: string;

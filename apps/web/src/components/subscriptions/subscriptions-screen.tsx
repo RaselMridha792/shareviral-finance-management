@@ -37,7 +37,6 @@ import {
   TableScroll,
   TickCell,
   TickHead,
-  Th,
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/field";
 import type { AccountDto } from "@/lib/masters";

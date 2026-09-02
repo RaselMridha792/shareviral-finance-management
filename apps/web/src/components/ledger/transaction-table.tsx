@@ -1,7 +1,8 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
-import { Link2, Paperclip } from "lucide-react";
+import { Link2 } from "lucide-react";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -216,21 +217,24 @@ export function TransactionTable({
                 meant neither could be scanned down or read against a heading
                 that named it.
               */}
-              <Th width="w-32">Invoice</Th>
               {/*
-                "Entry No.", because this column holds OUR number.
+                Invoice and Reference, and nothing else.
 
-                The owner's point, once both existed: `TXN-2026-000005` is
-                issued by this app and `FT26081200412` is issued by the bank,
-                and calling either of them "Reference" made two different facts
-                answer to one word. "Transaction number" was no better — it
-                reads exactly like the bank's transaction id.
+                The owner: "ekhaneo same vabe invoice and reference thakbe entry
+                no thakbena." Both are the paper behind the row — one is the
+                bill, the other is the bank's record of paying it — and both are
+                now attached rather than typed, so both are opened rather than
+                read.
 
-                The bank's own number still shows, small, underneath, which is
-                where every number already recorded continues to live now that
-                nobody types a new one.
+                **Entry No. is gone from this screen.** `TXN-2026-000038` is the
+                app's own number and it still exists: it is on the bank
+                statement, in every Excel export, on the overview PDF, and in the
+                title of the documents drawer. What it is not is a column on the
+                list of every row, where it repeated a fact nobody was looking
+                for and pushed the two that matter off the right-hand edge.
               */}
-              <Th width="w-32">Entry No.</Th>
+              <Th width="w-32">Invoice</Th>
+              <Th width="w-32">Reference</Th>
               {showBalance ? (
                 <Th align="right" width="w-32">
                   Balance
@@ -462,125 +466,49 @@ export function TransactionTable({
                     </td>
                   ) : null}
                   {/*
-                    The company's own number, and the bill behind it.
-
-                    It was plain text, on the reasoning that documents hang off
-                    the entry rather than off the invoice and two buttons a
-                    cell apart doing the same job teaches people to press the
-                    wrong one. That reasoning holds only while both buttons do
-                    the same job — they no longer do. This one opens the
-                    invoice; its neighbour opens the bank's record.
+                    The bill. An eye when there is one attached and no number
+                    typed — which is now the common case, since the number
+                    stopped being asked for.
                   */}
-                  <td className="num text-xs">
-                    {row.invoiceNo ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDocumentsFor({
-                            row,
-                            kinds: ["invoice"],
-                            label: "invoice",
-                          })
-                        }
-                        title="Show the invoice"
-                        className="num cursor-pointer text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-                      >
-                        {row.invoiceNo}
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">N/A</span>
-                    )}
-                  </td>
+                  <ReferenceCell
+                    value={row.invoiceNo}
+                    documentCount={row.invoiceCount}
+                    onOpen={() =>
+                      setDocumentsFor({
+                        row,
+                        kinds: ["invoice"],
+                        label: "invoice",
+                      })
+                    }
+                  />
                   {/*
-                    The transaction number, and the click that opens what is
-                    attached to the entry.
+                    The bank's record of the payment, and its number when the
+                    bank gave one.
 
-                    It leads with the app's own ref, which every row has, and
-                    carries the bank's reference — the string a query to the
-                    bank quotes — underneath. The app's ref is what takes the
-                    click, for the same reason as before the split: a cell that
-                    is sometimes empty cannot be the thing you press, and the
-                    sheets this replaces left the bank's column blank on most
-                    rows.
+                    `ReferenceCell` is the same component the Cash In, Other
+                    expenses and Subscriptions tables use, which is the point:
+                    four screens showing the same pair of facts had four
+                    different cells, and only one of them offered a way in when
+                    a file was attached without a number. It answers three
+                    states — the number as a link, an eye when there is only
+                    paper, and N/A when there is neither.
+
+                    Counted on `recordCount`, not on the row's total. Offering
+                    an eye here because an INVOICE is attached is how a click
+                    lands in an empty drawer, which is what took the amber
+                    triangle off this table in #27.
                   */}
-                  <td>
-                    {/*
-                      A link only when there is something behind it.
-
-                      The owner: "Jodi document na thake tahole N/A hobe." It
-                      used to render as a link on every row, with an amber
-                      warning triangle when nothing was attached — so clicking
-                      the commonest case opened an empty drawer, and a mark
-                      meant to flag the exception was on most of the table.
-
-                      The reference number itself still shows, because it is how
-                      an entry is quoted to a bank. What goes is the pretence
-                      that it opens something.
-                    */}
-                    {row.documentCount === 0 ? (
-                      <span className="num block text-xs text-muted-foreground">
-                        {row.refNo}
-                        <span className="ml-1.5 text-faint">N/A</span>
-                        {/*
-                          The bank's number belongs on BOTH branches.
-
-                          It was written only inside the branch that has a
-                          document, so an entry carrying a typed reference and
-                          no attachment lost the bank's number from the table
-                          entirely — and now that a reference is attached rather
-                          than typed, those legacy rows are precisely the ones
-                          that exist. The N/A is about the paperwork; the number
-                          under it is a fact the row still holds.
-                        */}
-                        {row.reference ? (
-                          <span className="num block text-xs text-faint">
-                            {row.reference}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDocumentsFor({
-                            row,
-                            kinds: ["bank_statement", "receipt", "other"],
-                            label: "payment",
-                          })
-                        }
-                        title="Show the bank's record of this payment"
-                        className="group cursor-pointer text-left"
-                      >
-                        {/*
-                        The count, and a warning when it is zero.
-
-                        The Cash In and expense screens insist on documents, but
-                        a file needs a row to attach to, so an entry is saved a
-                        moment before its documents are — and anybody who closes
-                        the drawer in that moment leaves a recorded entry with
-                        nothing attached. Without this the gap is invisible and
-                        the form's insistence is theatre.
-                      */}
-                        <span
-                          className="num flex items-center gap-1 text-xs font-medium text-link underline decoration-current/40 underline-offset-2 group-hover:decoration-current"
-                          title={`${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`}
-                        >
-                          <Paperclip className="size-3" />
-                          {row.refNo}
-                          {row.documentCount > 1 ? (
-                            <span className="text-muted-foreground">
-                              ×{row.documentCount}
-                            </span>
-                          ) : null}
-                        </span>
-                        {row.reference ? (
-                          <span className="num block text-xs text-muted-foreground">
-                            {row.reference}
-                          </span>
-                        ) : null}
-                      </button>
-                    )}
-                  </td>
+                  <ReferenceCell
+                    value={row.reference}
+                    documentCount={row.recordCount}
+                    onOpen={() =>
+                      setDocumentsFor({
+                        row,
+                        kinds: ["bank_statement", "receipt", "other"],
+                        label: "payment",
+                      })
+                    }
+                  />
                   {showBalance ? (
                     <td className="col-amount">
                       {row.runningBalance ? (

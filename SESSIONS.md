@@ -36,8 +36,8 @@ ticking all seventeen.
 |---|---|---|
 | 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
 | 44 | **Money transfer**: eye buttons on Invoice and Reference, file preview in the drawer, multiple upload, tick column + trash | not started |
-| 45 | **All transactions**: Invoice and Reference as on the others, Entry No. off, eye buttons, tick + trash, the edit drawer showing everything, upload preview, multiple upload | not started |
-| 46 | **All transactions**: one red, not two. A red row's text is all one red, and a link inside it is underlined rather than blue | not started |
+| 45 | **All transactions**: Invoice and Reference as on the others, Entry No. off, eye buttons | **done** — tick + trash, edit drawer, preview and multiple upload still to do |
+| 46 | **All transactions**: one red, not two | **done** |
 
 ## 43. The date on Money transfer, and why nothing caught it
 
@@ -61,6 +61,51 @@ The lookbehind is gone. A false positive is a loud failure somebody looks at; a
 false negative is a bug shipping. With it gone the sweep immediately found the
 Money transfer date, which is now `formatDate`d like everywhere else, and
 nothing else — so the other sixteen screens really were clean.
+
+## 45, 46. All transactions: two columns, two eyes, one colour
+
+**45 — Invoice and Reference, and the app's own number off the screen.**
+*"ekhaneo same vabe invoice and reference thakbe entry no thakbena. eye button
+thakbe."* Both columns now use `ReferenceCell`, the same component Cash In,
+Other expenses and Subscriptions already use — four screens showing one pair of
+facts had four different cells, and only one of them offered a way in when a
+file was attached with no number typed. It answers three states: the number as
+a link, an **eye** when there is only paper, and N/A when there is neither.
+
+`TXN-2026-000038` is not lost. It is on the bank statement, in every Excel
+export, on the overview PDF and in the documents drawer's own title — checked
+before removing the column. What it is not any more is a column on the list of
+every row, where it repeated a fact nobody was looking for.
+
+**And the counts had to be split first.** Both columns used to read the row's
+TOTAL file count, so an entry carrying only an invoice would have offered an eye
+on Reference too — a click into an empty drawer, which is the complaint that
+took the amber triangle off this table in #27. `invoiceCount` and `recordCount`
+are counted apart in the projection now, on both the transactions and the
+transfers queries.
+
+**46 — one colour per row.** *"row te text gular color ek jaygay garo red
+arekjaygay halka red so sob color red hobe jei row red hobe kono extra kore blue
+korar dorkar nai link er khetre. sudhu underline holei colbe."*
+
+Two exceptions used to live in `globals.css`: a link kept link-blue and a muted
+caption kept grey. Both are gone. A link inside a coloured row is that row's
+colour and is told apart by its **underline**, which is what an underline is
+for; a caption is the row's colour, shaded rather than grey, because "quieter
+than the figure beside it" was the job and the row's colour already does it.
+
+`color: inherit` rather than deleting the rules, and that is not fussiness:
+`.text-link` is set ON the element, so without naming it at higher specificity
+the child keeps its own colour and nothing changes. The decoration follows the
+text too — a red link with a blue underline would have been the same complaint
+in a smaller place.
+
+A **Badge** still keeps its tone. It paints its own background and states a
+status rather than a shade of the row.
+
+`.txncolsqa.mjs` — 11 checks. It attaches a file of ONE kind and requires the
+other column to say N/A, and it measures the link, the caption and the row with
+`getComputedStyle` rather than reading the stylesheet.
 
 ## 44, 45, 46. The next batch — Money transfer and All transactions
 

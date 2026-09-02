@@ -101,6 +101,9 @@ export type TransactionDto = {
    * invisible — the form's insistence would be theatre.
    */
   documentCount: number;
+  /** Attached invoices, and everything else attached, counted apart. */
+  invoiceCount: number;
+  recordCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;
@@ -139,6 +142,8 @@ export type TransferRow = {
   usdAmount: string | null;
   usdRate: string | null;
   documentCount: number;
+  invoiceCount: number;
+  recordCount: number;
   txnDate: string;
   amount: string;
   description: string;
@@ -1266,6 +1271,10 @@ export class TransactionsService {
              where df.transaction_id = transactions.id
                and df.deleted_at is null
           )`,
+          /* Split the same way, for the same reason: the Invoice and Reference
+             columns on the transfers table open different drawers. */
+          invoiceCount: documentCountOf(["invoice"]),
+          recordCount: documentCountOf(["bank_statement", "receipt", "other"]),
           fromAccountId: fromAccount.id,
           fromAccountName: fromAccount.name,
           toAccountId: toAccount.id,
@@ -1477,6 +1486,32 @@ function documentCount() {
   )`;
 }
 
+/**
+ * The same count, split the way the two columns are.
+ *
+ * Invoice and Reference each open their OWN kind, so a row that knows only how
+ * many files it has in total cannot say which of the two buttons is worth
+ * offering. Offering both on a total is how a click lands in an empty drawer —
+ * the exact complaint that took the amber triangle off this table in #27.
+ *
+ * `invoice` is its own kind. Everything else a person attaches to an entry —
+ * the bank's slip, a receipt, a photo of something — is the record BEHIND the
+ * movement, which is what the Reference column opens, so the three are counted
+ * together rather than split into buttons nobody asked for.
+ */
+function documentCountOf(kinds: readonly string[]) {
+  return sql<number>`(
+    select count(*)::int
+      from files df
+     where df.transaction_id = transactions.id
+       and df.deleted_at is null
+       and df.kind in (${sql.join(
+         kinds.map((k) => sql`${k}`),
+         sql`, `,
+       )})
+  )`;
+}
+
 const projection = {
   id: transactions.id,
   refNo: transactions.refNo,
@@ -1491,6 +1526,9 @@ const projection = {
   reference: transactions.reference,
   invoiceNo: transactions.invoiceNo,
   documentCount: documentCount(),
+  /* Per kind, because Invoice and Reference open different drawers. */
+  invoiceCount: documentCountOf(["invoice"]),
+  recordCount: documentCountOf(["bank_statement", "receipt", "other"]),
   receiptUrl: transactions.receiptUrl,
   billAmount: transactions.billAmount,
   withheldTaxAmount: transactions.withheldTaxAmount,
