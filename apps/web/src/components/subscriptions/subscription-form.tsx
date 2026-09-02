@@ -3,6 +3,7 @@
 import {
   BILLING_CYCLES,
   BILLING_CYCLE_LABELS,
+  payableBdt,
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_CATEGORY_LABELS,
   PAYMENT_METHODS,
@@ -247,6 +248,12 @@ export function SubscriptionForm({
 
   const [costUsd, setCostUsd] = useState(subscription?.costUsd ?? "");
   const [costBdt, setCostBdt] = useState(subscription?.costBdt ?? "");
+  /*
+   * Its own state, outside `reprice`. The three figures above derive from each
+   * other; this one derives from nothing and must not be recomputed when one
+   * of them changes, or typing a rate would silently rewrite the bank's charge.
+   */
+  const [chargeBdt, setChargeBdt] = useState(subscription?.chargeBdt ?? "");
   const [usdRate, setUsdRate] = useState(subscription?.usdRate ?? "");
 
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(
@@ -375,6 +382,7 @@ export function SubscriptionForm({
         status,
         costUsd,
         costBdt,
+        chargeBdt,
         usdRate,
         billingCycle,
         startDate,
@@ -655,6 +663,49 @@ export function SubscriptionForm({
                 onChange={(e) => reprice({ costBdt: e.target.value })}
               />
             </Field>
+          </div>
+
+          {/*
+            The charge, on its own row and below the rule that separates it.
+
+            Deliberately not a fourth box in the row above. Those three are one
+            fact stated three ways — the panel's own caption says "type any two
+            — the third follows" — and a fourth box inside that group reads as
+            a fourth way of saying the same price. This is a second, separate
+            figure: what the bank adds for putting a foreign charge through a
+            local card, which no rate derives and nothing above it predicts.
+          */}
+          <div className="grid gap-4 border-t border-border pt-3 sm:grid-cols-3">
+            <Field
+              label="Charge (BDT)"
+              hint="What the card adds on top"
+              error={fieldErrors.chargeBdt}
+            >
+              <MoneyInput
+                value={chargeBdt}
+                placeholder="0.00"
+                onChange={(e) => setChargeBdt(e.target.value)}
+              />
+            </Field>
+            <div className="sm:col-span-2 sm:self-end sm:pb-2">
+              <p className="text-xs text-muted-foreground">
+                Total per {BILLING_CYCLE_LABELS[billingCycle].toLowerCase()}:{" "}
+                <span className="num font-medium text-foreground">
+                  {payableBdt({ costBdt, chargeBdt }) ?? "—"}
+                </span>
+                {Number(chargeBdt) > 0 ? (
+                  <>
+                    {" "}
+                    <span className="num">
+                      ({costBdt || "0.00"} + {chargeBdt})
+                    </span>
+                  </>
+                ) : null}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                This is what a recorded payment takes out of the account.
+              </p>
+            </div>
           </div>
 
           {!agree ? (

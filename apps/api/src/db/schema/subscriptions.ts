@@ -87,6 +87,22 @@ export const subscriptions = pgTable(
      */
     costUsd: numeric("cost_usd", { precision: 14, scale: 2 }).notNull(),
     costBdt: numeric("cost_bdt", { precision: 14, scale: 2 }),
+
+    /**
+     * What the card adds on top, in taka.
+     *
+     * A plan priced at $100 does not cost this company the taka that converts
+     * to: the bank levies a conversion or service charge on the way, and the
+     * figure that leaves the account is the two together. That charge is not
+     * part of the vendor's price and is not derived from `usd_rate` — it is
+     * levied here, in taka — so it sits beside `cost_bdt` rather than inside
+     * it, and `payableBdt()` in the shared package is the one place the two
+     * are added.
+     *
+     * Nullable on purpose: a plan nobody has recorded a charge for shows an
+     * empty box, not a confident 0.00.
+     */
+    chargeBdt: numeric("charge_bdt", { precision: 14, scale: 2 }),
     usdRate: numeric("usd_rate", { precision: 18, scale: 6 }),
 
     /**

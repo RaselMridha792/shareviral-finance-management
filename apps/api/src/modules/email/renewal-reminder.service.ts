@@ -5,6 +5,8 @@ import {
   formatMoney,
   todayInDhaka,
   type BillingCycle,
+  hasCharge,
+  payableBdt,
 } from "@finance/shared";
 import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 
@@ -100,6 +102,7 @@ export class RenewalReminderService {
         planName: subscriptions.planName,
         costUsd: subscriptions.costUsd,
         costBdt: subscriptions.costBdt,
+        chargeBdt: subscriptions.chargeBdt,
         billingCycle: subscriptions.billingCycle,
         loginEmail: subscriptions.loginEmail,
         websiteUrl: subscriptions.websiteUrl,
@@ -230,13 +233,18 @@ export class RenewalReminderService {
       planName: string;
       costUsd: string;
       costBdt: string | null;
+      chargeBdt: string | null;
       billingCycle: string;
       websiteUrl: string | null;
     },
     on: string,
   ): string {
-    const price = plan.costBdt
-      ? `${formatMoney(plan.costBdt, { currency: "BDT" })} <span style="color:#71717a;font-weight:400">(${formatMoney(plan.costUsd, { currency: "USD" })})</span>`
+    /* What will leave the account, not what the vendor bills. A reminder
+       stating the plan's price and then a card debit for more is a reminder
+       somebody stops trusting. */
+    const payable = payableBdt(plan);
+    const price = payable
+      ? `${formatMoney(payable, { currency: "BDT" })} <span style="color:#71717a;font-weight:400">(${formatMoney(plan.costUsd, { currency: "USD" })}${hasCharge(plan) ? ` + ${formatMoney(plan.chargeBdt ?? "0", { currency: "BDT" })} charge` : ""})</span>`
       : formatMoney(plan.costUsd, { currency: "USD" });
 
     const rows = [

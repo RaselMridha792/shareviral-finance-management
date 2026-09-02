@@ -42,6 +42,15 @@ export type SubscriptionDto = {
    */
   costUsd: string;
   costBdt: string | null;
+  /**
+   * What the card adds on top of the price, in taka.
+   *
+   * Beside `costBdt`, never inside it: the dollar price, the rate and the taka
+   * equivalent are one fact stated three ways, and a bank charge is a second
+   * fact that would make the rate wrong if it were folded in. `payableBdt()`
+   * is the one place they are added.
+   */
+  chargeBdt: string | null;
   usdRate: string | null;
   billingCycle: BillingCycle;
   startDate: string;

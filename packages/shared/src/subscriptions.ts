@@ -232,6 +232,16 @@ const subscriptionFieldsSchema = z.strictObject({
 
   costUsd: amountSchema,
   costBdt: optionalMoney,
+  /**
+   * What the card adds on top of the price, in taka.
+   *
+   * Deliberately outside the three figures that derive from each other. The
+   * dollar price, the rate and the taka equivalent are one fact stated three
+   * ways and `deriveCosts` keeps them agreeing; a bank charge is a second,
+   * independent fact. Folding it into any of the three would make the rate
+   * somebody reads back off this plan wrong.
+   */
+  chargeBdt: optionalMoney,
   usdRate: z
     .union([
       z
@@ -414,4 +424,41 @@ export function nextRenewalAfter(
     guard += 1;
   }
   return next;
+}
+
+/**
+ * What a plan actually costs to renew: its taka price plus the card's charge.
+ *
+ * One function, because the alternative is `Number(a) + Number(b ?? 0)` copied
+ * into the ledger, the pay dialog, the renewal reminder and two screens — and
+ * the fifth copy is the one that forgets the `?? 0` and turns a total into
+ * `NaN`. The owner asked for the charge to be part of the figure *"calculation
+ * er somoy"*; this is that moment, named.
+ *
+ * Returns null when there is no taka price at all, which is a real state — a
+ * plan can carry a dollar price and no rate — and is distinct from a price of
+ * zero. A charge with no price to add it to is not a payable figure, so it
+ * does not invent one.
+ */
+export function payableBdt(plan: {
+  costBdt?: string | null;
+  chargeBdt?: string | null;
+}): string | null {
+  const cost = plan.costBdt === null || plan.costBdt === undefined || plan.costBdt === ""
+    ? null
+    : Number(plan.costBdt);
+  if (cost === null || !Number.isFinite(cost)) return null;
+
+  const charge =
+    plan.chargeBdt === null || plan.chargeBdt === undefined || plan.chargeBdt === ""
+      ? 0
+      : Number(plan.chargeBdt);
+
+  return (cost + (Number.isFinite(charge) ? charge : 0)).toFixed(2);
+}
+
+/** Whether a plan carries a charge worth printing beside its price. */
+export function hasCharge(plan: { chargeBdt?: string | null }): boolean {
+  const charge = Number(plan.chargeBdt ?? 0);
+  return Number.isFinite(charge) && charge > 0;
 }

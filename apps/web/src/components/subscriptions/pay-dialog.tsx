@@ -1,5 +1,6 @@
 "use client";
 
+import { hasCharge, payableBdt } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
@@ -69,6 +70,8 @@ export function PayDialog({
     }
   }
 
+  const payable = payableBdt(plan);
+
   return (
     <Drawer
       open
@@ -85,15 +88,23 @@ export function PayDialog({
           <DateInput name="txnDate" required />
         </Field>
 
+        {/*
+          The price AND the card's charge, because that is what the account is
+          actually debited. Leaving the box blank takes the same figure the
+          ledger takes, so the hint and the server agree by construction —
+          `payableBdt` is the one function both call.
+        */}
         <Field
           label="Amount"
           hint={
-            plan.costBdt
-              ? `Blank uses the plan's price, ${plan.costBdt}`
+            payable
+              ? hasCharge(plan)
+                ? `Blank uses ${payable} — the plan's ${plan.costBdt} plus its ${plan.chargeBdt} charge`
+                : `Blank uses the plan's price, ${payable}`
               : "What was charged, in taka"
           }
         >
-          <MoneyInput name="amount" placeholder={plan.costBdt ?? "0.00"} />
+          <MoneyInput name="amount" placeholder={payable ?? "0.00"} />
         </Field>
 
         {/*

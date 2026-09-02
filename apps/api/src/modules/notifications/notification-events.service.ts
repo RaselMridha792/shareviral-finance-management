@@ -5,6 +5,7 @@ import {
   tdsDepositDeadlineForMonth,
   deadlineStatus,
   todayInDhaka,
+  payableBdt,
 } from "@finance/shared";
 import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
@@ -104,6 +105,7 @@ export class NotificationEventsService {
         planName: subscriptions.planName,
         costUsd: subscriptions.costUsd,
         costBdt: subscriptions.costBdt,
+        chargeBdt: subscriptions.chargeBdt,
         renewsOn: subscriptions.nextRenewalOn,
       })
       .from(subscriptions)
@@ -126,8 +128,11 @@ export class NotificationEventsService {
 
     let raised = 0;
     for (const plan of due) {
-      const price = plan.costBdt
-        ? formatMoney(plan.costBdt, { currency: "BDT" })
+      /* The payable figure, for the same reason the email states it: the
+         number in the bell has to be the number that leaves the account. */
+      const payable = payableBdt(plan);
+      const price = payable
+        ? formatMoney(payable, { currency: "BDT" })
         : formatMoney(plan.costUsd, { currency: "USD" });
 
       raised += await this.notifications.raise({

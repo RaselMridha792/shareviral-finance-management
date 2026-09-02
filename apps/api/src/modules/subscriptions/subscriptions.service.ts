@@ -238,6 +238,19 @@ export class SubscriptionsService {
             category: input.category,
             status: input.status,
             ...values,
+            /*
+             * Outside `moneyOf`, and that is the point.
+             *
+             * `moneyOf` derives the three figures that state one price — the
+             * dollars, the rate, the taka — and returns exactly those three.
+             * The charge is a second, independent fact and passing it through
+             * that helper would invite it into the derivation. Which is why it
+             * has to be named here: `create` lists its columns explicitly and
+             * spreads only the derived three, so a field that is in neither
+             * list is silently dropped. It was, and the plan saved with the
+             * charge box filled came back with a null in it.
+             */
+            chargeBdt: input.chargeBdt ?? null,
             billingCycle: input.billingCycle,
             startDate: input.startDate,
             /*
@@ -394,6 +407,9 @@ export class SubscriptionsService {
         planName: subscriptions.planName,
         billingCycle: subscriptions.billingCycle,
         costBdt: subscriptions.costBdt,
+        // In the projection as well as the schema, or the ledger charges the
+        // price without the charge and nothing says why.
+        chargeBdt: subscriptions.chargeBdt,
         costUsd: subscriptions.costUsd,
         usdRate: subscriptions.usdRate,
         accountId: subscriptions.accountId,
@@ -488,6 +504,7 @@ export class SubscriptionsService {
       status: subscriptions.status,
       costUsd: subscriptions.costUsd,
       costBdt: subscriptions.costBdt,
+      chargeBdt: subscriptions.chargeBdt,
       usdRate: subscriptions.usdRate,
       billingCycle: subscriptions.billingCycle,
       startDate: subscriptions.startDate,

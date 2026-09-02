@@ -17,6 +17,7 @@ import {
   type TransferInput,
   type UpdateTransactionInput,
   type VoidTransactionInput,
+  payableBdt,
 } from "@finance/shared";
 import {
   and,
@@ -1064,12 +1065,17 @@ export class TransactionsService {
     }
 
     /*
-     * The taka price, because the ledger is in taka. `costBdt` is what the
-     * screen derives and stores beside the dollar price for exactly this; a
-     * plan with only a dollar price and no rate has no taka figure this could
-     * invent, and says so instead of guessing one.
+     * The taka price PLUS the card's charge, because that is what leaves the
+     * account. The ledger is in taka; `costBdt` is what the screen derives and
+     * stores beside the dollar price, and `chargeBdt` is what the bank adds on
+     * top of it. A plan with only a dollar price and no rate has no taka
+     * figure this could invent, and says so instead of guessing one.
+     *
+     * A typed amount still wins over both — that is the whole reason the box
+     * exists, and a card that charged something else is the usual reason to
+     * use it.
      */
-    const amount = input.amount ?? plan.costBdt;
+    const amount = input.amount ?? payableBdt(plan);
     if (!amount || Number(amount) <= 0) {
       throw new BadRequestException(
         "This plan has no taka price on it — type what was charged",

@@ -8,6 +8,8 @@ import {
   formatMoney,
   type BillingCycle,
   type PaymentMethod,
+  hasCharge,
+  payableBdt,
 } from "@finance/shared";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
@@ -96,6 +98,13 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
             <Figure
               label="Equivalent (BDT)"
               value={money(plan.costBdt, "BDT")}
+              extra={
+                hasCharge(plan) ? `+ ${money(plan.chargeBdt, "BDT")}` : null
+              }
+            />
+            <Figure
+              label="Total per cycle"
+              value={money(payableBdt(plan), "BDT")}
             />
             <Figure
               label="Billing cycle"
@@ -265,10 +274,20 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
 function Figure({
   label,
   value,
+  extra = null,
   wide = false,
 }: {
   label: string;
   value: React.ReactNode;
+  /**
+   * A second, smaller line under the figure — the card's charge against the
+   * price it is added to.
+   *
+   * Drawn only when there is one. A "+ 0.00" printed on every plan that has no
+   * charge is a mark on everything, which marks nothing — the same reason the
+   * salary sheet's warning triangle came off.
+   */
+  extra?: React.ReactNode;
   wide?: boolean;
 }) {
   return (
@@ -277,6 +296,9 @@ function Figure({
         {label}
       </dt>
       <dd className="mt-1 text-sm">{value}</dd>
+      {extra ? (
+        <dd className="num mt-0.5 text-xs text-muted-foreground">{extra}</dd>
+      ) : null}
     </div>
   );
 }
