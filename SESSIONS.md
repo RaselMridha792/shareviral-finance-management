@@ -34,11 +34,12 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 50 | **Payslip: the company name printed twice** in the header — the boxed line under the logo comes off | not started |
-| 51 | **Payroll: invoice and reference upload** when a run is created | not started |
-| 52 | **Payslip: Working days as a number** — 30, not "Full month" | not started |
-| 53 | **Payslip: drop the "Gross … · Deductions …" line** under Net payable | not started |
-| 54 | **Payslip: drop the leading "BDT"** from the amount in words | not started |
+| 50 | Payslip: the company name printed twice | **done** |
+| 51 | **Payroll: invoice and reference upload** when a run is created | not started — two decisions needed first |
+| 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
+| 52 | Payslip: Working days as a number | **done** |
+| 53 | Payslip: the Gross-and-Deductions line | **done** |
+| 54 | Payslip: the currency in front of the words | **done** |
 | 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
@@ -84,6 +85,50 @@ Worth checking with it: the name appears twice more further down, at
 `:359` ("Accounts & Finance, {companyName}") and `:388` (the signatory
 fallback). Those are not duplicates — each says who, in a block about who — but
 they should be read once with fresh eyes while this is open.
+
+## 50, 52–55. The payslip, in one pass
+
+Seven changes to one document, done together because that is what one document
+deserves — and measured together, because every one of them is the kind a diff
+shows perfectly while the page shows something else.
+
+- **The company name once.** The line under the logo joined the name to the
+  registered note; only the name was the duplicate. The note stands alone now,
+  and the line disappears when there is no note rather than leaving a rule with
+  nothing on it.
+- **Working days is a number.** A null `workingDays` MEANS the whole month, so
+  it prints the month's own length — 30 for September, 28 for February — and a
+  typed 30 prints identically, because they say the same thing. No column, no
+  migration: the run knows its own year and month.
+- **The check line under Net payable is gone.** Both figures are the two totals
+  directly above it, and a document that restates its own arithmetic under the
+  answer has two places to disagree.
+- **The words are words.** The currency was printed in front of the amount in
+  words while also sitting above the figure and on both column headings — four
+  times on one band, and only that one read as part of the amount.
+- **Both dates are dd/mm/yyyy.** This block deliberately used the file's own
+  long form; the owner asked for numeric, and since both changed together they
+  still read as one kind of fact.
+- **Prepared by is gone.** What it said was that Accounts & Finance prepared the
+  slip, which the slip implies by existing and which nobody signs. The grid
+  keeps its two columns so the signatory stays in the right-hand half rather
+  than drifting to the middle on every document.
+- **The footer.** "Computer-generated payslip · no physical signature required"
+  came off — and it had stopped being true, since the slip carries a real mark
+  when one is uploaded. What is left under Confidential went from 6pt to 7.5pt
+  and a lighter grey: it is the line telling somebody they have seven days to
+  report a mistake in their pay, and a notice nobody can read is a notice that
+  was not given.
+
+**The prepared-by signature went with the block.** It was added an hour before
+the block was removed, so the field and its prop are gone rather than left
+offering somewhere for a file to go and nowhere for it to appear.
+`SignatureField` keeps its `kind` prop and the `file_kind` enum keeps its value
+— Postgres cannot drop one and it costs nothing — so putting it back is a
+handful of lines if the block ever returns.
+
+`.payslipsignqa.mjs` — 13 checks, rewritten around the new slip. The alignment
+it was written for stopped being a question when the second block left.
 
 ## 52, 53, 54. Three more on the payslip
 

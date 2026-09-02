@@ -32,9 +32,6 @@ export default async function PayslipPage({
       signature={
         signatures.find((one) => one.kind === "signature")?.id ?? null
       }
-      preparedSignature={
-        signatures.find((one) => one.kind === "prepared_signature")?.id ?? null
-      }
     />
   );
 }

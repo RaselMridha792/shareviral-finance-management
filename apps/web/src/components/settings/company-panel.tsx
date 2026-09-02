@@ -211,26 +211,16 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
 
             {/* Outside the form's own fields, because it saves itself: an
                 upload cannot wait for a Save button that posts JSON. */}
-            {/*
-              Both marks on a payslip, in the order they appear on it: the one
-              who prepared it on the left, the one who authorised it on the
-              right. The owner asked for the first — "prepared by je ache onar
-              signature upload korar option rekhe diyo settings a" — and the
-              foot of the slip reserves the same height for each, so the two
-              rules line up whether or not either has a mark on it.
-            */}
             <div className="mt-2 flex flex-col gap-6 border-t border-border pt-4">
+              {/* One field again. The prepared-by mark was added and then the
+                  block it printed in was removed, so a second upload here would
+                  offer somewhere for a file to go and nowhere for it to appear.
+                  `SignatureField` keeps its `kind` prop — it costs nothing and
+                  it is what makes putting the second one back a one-liner. */}
               <SignatureField
                 canWrite={canWrite}
-                kind="prepared_signature"
-                label="Prepared-by signature"
-                hint="Prints in the left block at the foot of a payslip, over Accounts & Finance."
-              />
-              <SignatureField
-                canWrite={canWrite}
-                kind="signature"
                 label="Authorised signature"
-                hint="Prints in the right block, over the authorised signatory."
+                hint="Prints over the authorised signatory at the foot of a payslip."
               />
             </div>
           </CardBody>

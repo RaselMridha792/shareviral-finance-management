@@ -14,6 +14,7 @@ import Link from "next/link";
 import type { AppSettingsDto } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
 import { fileHref } from "@/lib/api-client";
+import { formatDate } from "@/lib/utils";
 import type { PayslipDto, PayslipLineDto } from "@/lib/payroll";
 
 /**
@@ -40,7 +41,6 @@ export function PayslipView({
   payslip,
   settings,
   signature,
-  preparedSignature,
 }: {
   payslip: PayslipDto;
   settings: AppSettingsDto;
@@ -52,14 +52,13 @@ export function PayslipView({
    * the rest is a signature somebody prints without.
    */
   signature: string | null;
-  /**
-   * The mark of whoever prepared the slip, for the left block.
-   *
-   * Its own file kind rather than a second row of the same one: the two blocks
-   * are different people signing different things, and `signature` is singular
-   * by rule precisely so a slip never has to choose between two of them.
+  /*
+   * No `preparedSignature`. It was added an hour before the block it printed
+   * in was removed — "prepared by remove kore daw" — and a prop nothing renders
+   * is a prop the next reader has to work out the absence of. The `file_kind`
+   * enum keeps its value, because Postgres cannot drop one and it costs
+   * nothing; putting the field back is a handful of lines if the block returns.
    */
-  preparedSignature: string | null;
 }) {
   const money = (value: string) =>
     formatMoney(value, {
@@ -118,6 +117,9 @@ export function PayslipView({
    * days were paid for.
    */
   const period = monthRange(payslip.periodYear, payslip.periodMonth);
+  /* The month's own length, from the last day of its range — 30 for September,
+     28 for February. What "the whole month" means, as a number. */
+  const daysInPeriod = Number(period.end.slice(8, 10));
 
   return (
     <>
@@ -172,11 +174,19 @@ export function PayslipView({
             </div>
           </div>
 
-          <p className="slip-legal">
-            {[settings.companyName, settings.companyLegalNote]
-              .filter(Boolean)
-              .join("  ·  ")}
-          </p>
+          {/*
+            The registered note ALONE, and only when there is one.
+
+            This joined the company's name to its legal note, and the name is
+            already beside the logo directly above — "eta remove korte hobe" was
+            about that repetition. What is left is the thing a payslip is
+            expected to state once and cannot get from the header: whatever the
+            company is registered as. With no note there is nothing to say, so
+            the line goes rather than leaving a gap where a sentence was.
+          */}
+          {settings.companyLegalNote ? (
+            <p className="slip-legal">{settings.companyLegalNote}</p>
+          ) : null}
           <p className="slip-contact">
             {[
               settings.companyAddress,
@@ -216,9 +226,17 @@ export function PayslipView({
             <div>
               <dt>Working days</dt>
               <dd>
-                {payslip.workingDays != null
-                  ? `${payslip.workingDays} days`
-                  : "Full month"}
+                {/*
+                  A number, never the words. The owner: "ekhane full month
+                  lekha thakbena day hisebe lekha thakbe 30 hole 30."
+
+                  A null `workingDays` MEANS the whole month, so it prints the
+                  month's own length — 30 for September, 28 for February — and a
+                  typed 30 prints identically, because the two say the same
+                  thing. Where they differ is the gross, and that is already its
+                  own figure above.
+                */}
+                {payslip.workingDays ?? daysInPeriod} days
               </dd>
             </div>
             <div className="slip-card-wide">
@@ -263,14 +281,15 @@ export function PayslipView({
         <section className="slip-net">
           <div>
             <p className="slip-net-label">Net payable</p>
-            <p className="slip-net-words">
-              {settings.baseCurrency} {inWords(payslip.netAmount)}
-            </p>
-            <p className="slip-net-check">
-              Gross {money(grossTotal)}
-              {"   ·   "}
-              Deductions {money(deductionTotal)}
-            </p>
+            {/* The words are words. The currency is on the right of this same
+                band, above the figure, and on both column headings above it —
+                saying it a fourth time in front of the sentence was the one
+                place it read as part of the amount. */}
+            <p className="slip-net-words">{inWords(payslip.netAmount)}</p>
+            {/* No "Gross … · Deductions …" line. Both figures are the two
+                totals directly above this band, and a document that restates
+                its own arithmetic under the answer is a document with two
+                places to disagree. */}
           </div>
           <p className="slip-net-figure">
             <span className="slip-net-ccy">{settings.baseCurrency}</span>
@@ -298,17 +317,12 @@ export function PayslipView({
                 fact that was missing, so it takes the slot. */}
             <div>
               <dt>Pay period</dt>
-              {/* `longDate`, not the app's `formatDate`.
-
-                  This block prints "31 August 2026" for the payment date
-                  immediately beside it, and the file's own header explains why:
-                  a payslip is a document that gets printed and signed, so it
-                  carries document-grade dates rather than the table format the
-                  screens use. Two slashed dates sitting next to a spelled-out
-                  one, inside one three-column block, would read as two different
-                  kinds of fact. */}
+              {/* dd/mm/yyyy, on the owner's instruction — "Pay period:dd/mm/yyyy
+                  eirokom hobe also Payment Date: etao same vabe neumeric format
+                  a". This block used the file's own long form; both dates in it
+                  are numeric now, so they still read as one kind of fact. */}
               <dd>
-                {longDate(period.start)} to {longDate(period.end)}
+                {formatDate(period.start)} to {formatDate(period.end)}
               </dd>
             </div>
             <div>
@@ -316,7 +330,7 @@ export function PayslipView({
                   the owner's point was that nobody in this office reads it that
                   way. The figure behind the label has not changed. */}
               <dt>Payment Date</dt>
-              <dd>{payDate ? longDate(payDate) : "Not yet paid"}</dd>
+              <dd>{payDate ? formatDate(payDate) : "Not yet paid"}</dd>
             </div>
             {payslip.remarks ? (
               <div className="slip-payment-wide">
@@ -327,38 +341,21 @@ export function PayslipView({
           </dl>
         </section>
 
-        <section className="slip-signatures">
-          <div>
-            {/*
-              The same slot the right-hand block has, whether or not there is a
-              mark to put in it.
+        {/*
+          One signature block, not two.
 
-              The owner's other point about this footer: "payslip er duita same
-              height a nei left er ta ektu nice namiye diyo." The right block
-              carries 26pt of signature plus a 2pt gap above its rule, and the
-              left carried nothing — so the two rules sat 28pt apart on a
-              document where they read as a pair. Reserving the height rather
-              than shifting the left block down by a magic number means they
-              stay level in all four states: neither signed, either one signed,
-              or both.
-            */}
-            {preparedSignature ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={fileHref(preparedSignature)}
-                alt=""
-                aria-hidden="true"
-                className="slip-signature slip-signature-left"
-              />
-            ) : (
-              <span className="slip-signature-gap" aria-hidden="true" />
-            )}
-            <p className="slip-sign-rule" />
-            <p className="slip-label">Prepared by</p>
-            <p className="slip-sign-name">
-              Accounts &amp; Finance, {settings.companyName}
-            </p>
-          </div>
+          The owner: "prepared by remove kore daw." What it said was that
+          Accounts & Finance prepared the slip — which the slip already implies
+          by existing, and which nobody signs. The block that carries a real
+          person's mark is the one that stays.
+
+          The two-column grid stays with it, so the signatory keeps the
+          right-hand half of the page rather than sliding into the middle: a
+          signature that drifts because its neighbour left is a signature in a
+          different place on every document.
+        */}
+        <section className="slip-signatures">
+          <div aria-hidden="true" />
           <div>
             {/* Above the rule, where a person signs.
                 Fixed height with the width following, so a wide scan cannot
@@ -400,9 +397,15 @@ export function PayslipView({
             </p>
           </div>
           <div className="slip-foot-right">
-            <p className="slip-foot-note">
-              Computer-generated payslip · no physical signature required.
-            </p>
+            {/*
+              No "Computer-generated payslip · no physical signature required."
+
+              The owner had it removed, and it had stopped being true: the slip
+              now carries a real signatory's mark when one is uploaded, so a
+              line saying no signature is required contradicted the ink above
+              it. The website stays — it is the one thing down here somebody
+              might actually want.
+            */}
             {settings.companyWebsite ? (
               <p className="slip-foot-site">{settings.companyWebsite}</p>
             ) : null}
@@ -1060,7 +1063,22 @@ const SHEET_CSS = `
   text-transform: uppercase;
   color: var(--slip-lime);
 }
-.slip-foot-note { margin-top: 2pt; font-size: 6pt; color: #7C857A; max-width: 260pt; }
+/*
+ * 7.5pt, not 6pt, and a lighter grey.
+ *
+ * The owner: "Confidential etar nicer text ta ektu boro kore daw eta readable
+ * na." He is right — 6pt of #7C857A on near-black is at the edge of legible on
+ * a screen and past it on paper, and this is the line that tells somebody they
+ * have seven days to report a mistake in their pay. A notice nobody can read is
+ * a notice that was not given.
+ */
+.slip-foot-note {
+  margin-top: 3pt;
+  font-size: 7.5pt;
+  line-height: 1.45;
+  color: #A9B2A6;
+  max-width: 300pt;
+}
 .slip-foot-right { text-align: right; }
 .slip-foot-site {
   margin-top: 2pt;

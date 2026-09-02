@@ -242,94 +242,116 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1400, height: 1400 });
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** The top of each block's rule, which is what has to be level. */
-const measure = async () => {
+/**
+ * The whole payslip, read once.
+ *
+ * The alignment this file was written for is GONE as a question: the owner had
+ * the "Prepared by" block removed entirely, so there is one signature block and
+ * nothing to be level with. What is left is a document with nine small rules,
+ * and each of them is the kind a diff shows perfectly while the page shows
+ * something else.
+ */
+const readSlip = async () => {
   await page.goto(`${WEB}/payroll/${line.id}/payslip`, {
     waitUntil: "networkidle0",
     timeout: 120000,
   });
   await settle(2600);
   return page.evaluate(() => {
+    const slip = document.querySelector(".slip") ?? document.body;
+    const text = (slip.textContent ?? "").replace(/\s+/g, " ");
     const section = document.querySelector(".slip-signatures");
-    if (!section) return null;
-    const blocks = [...section.children];
-    const ruleTop = (block) => {
-      const rule = block.querySelector(".slip-sign-rule");
-      return rule ? Math.round(rule.getBoundingClientRect().top) : null;
-    };
+    const note = document.querySelector(".slip-foot-note");
+    const brand = document.querySelector(".slip-brand-name");
+    const legal = document.querySelector(".slip-legal");
     return {
-      left: ruleTop(blocks[0]),
-      right: ruleTop(blocks[1]),
-      leftImages: blocks[0].querySelectorAll("img").length,
-      rightImages: blocks[1].querySelectorAll("img").length,
+      text,
+      signatureBlocks: section
+        ? [...section.children].filter(
+            (el) => (el.textContent ?? "").trim().length > 0,
+          ).length
+        : 0,
+      footNotes: document.querySelectorAll(".slip-foot-note").length,
+      footNoteSize: note ? getComputedStyle(note).fontSize : null,
+      brandName: (brand?.textContent ?? "").trim(),
+      legalText: (legal?.textContent ?? "").trim(),
+      images: slip.querySelectorAll("img").length,
     };
   });
 };
 
-const level = (m, label) => {
-  /* A point of rounding is not a misalignment; twenty-eight is. */
-  const gap = Math.abs((m?.left ?? 0) - (m?.right ?? 0));
-  check(
-    `the two rules are level — ${label}`,
-    m !== null && gap <= 1,
-    m === null
-      ? "no signature block on the page"
-      : `left ${m.left}, right ${m.right}, ${gap}px apart`,
-  );
-};
+const up = await uploadSignature("signature");
+check("an authorised signature uploads", up < 300, `HTTP ${up}`);
 
-let m = await measure();
-level(m, "neither signed");
+const slip = await readSlip();
+
 check(
-  "and neither block draws an image when nothing is uploaded",
-  m?.leftImages === 0 && m?.rightImages === 0,
-  `left ${m?.leftImages}, right ${m?.rightImages}`,
+  "50: the company name is printed once, not twice",
+  (slip.text.match(/ShareViral|SFM/g) ?? []).length <= 2 &&
+    slip.legalText !== slip.brandName,
+  `brand "${slip.brandName}", legal line "${slip.legalText}"`,
 );
-
-const up1 = await uploadSignature("prepared_signature");
-check("a prepared-by signature uploads", up1 < 300, `HTTP ${up1}`);
-m = await measure();
-level(m, "prepared-by only");
 check(
-  "the prepared-by mark is drawn in the LEFT block",
-  m?.leftImages === 1 && m?.rightImages === 0,
-  `left ${m?.leftImages}, right ${m?.rightImages}`,
+  "52: Working days reads a number, never the words",
+  /Working days\s*\d+ days/.test(slip.text) && !/Full month/i.test(slip.text),
+  (slip.text.match(/Working days[^A-Z]{0,18}/) ?? ["not found"])[0],
 );
-
-const up2 = await uploadSignature("signature");
-check("an authorised signature uploads too", up2 < 300, `HTTP ${up2}`);
-m = await measure();
-level(m, "both signed");
 check(
-  "each block draws its own, and only its own",
-  m?.leftImages === 1 && m?.rightImages === 1,
-  `left ${m?.leftImages}, right ${m?.rightImages}`,
+  "53: the Gross-and-Deductions line under Net payable is gone",
+  !/Net payable[\s\S]{0,120}Deductions [\d,]/.test(slip.text),
+  /Deductions [\d,]+\.\d\d/.test(
+    (slip.text.match(/Net payable[\s\S]{0,140}/) ?? [""])[0],
+  )
+    ? "still under the band"
+    : "gone",
 );
-
-/* The fourth state: authorised only, which is where this started. */
-await db.query(
-  `update files set deleted_at = now()
-    where settings_id is not null and kind='prepared_signature' and deleted_at is null`,
-);
-m = await measure();
-level(m, "authorised only — the state the owner photographed");
 check(
-  "the left block reserves the space rather than riding up",
-  m?.leftImages === 0 && m?.rightImages === 1,
-  `left ${m?.leftImages}, right ${m?.rightImages}`,
+  "54: the amount in words has no currency in front of it",
+  !/BDT [A-Z][a-z]+ [A-Z]/.test(slip.text),
+  (slip.text.match(/Net payable[^0-9]{0,60}/) ?? ["?"])[0],
+);
+check(
+  "the pay period is dd/mm/yyyy",
+  /Pay period\s*\d{2}\/\d{2}\/\d{4} to \d{2}\/\d{2}\/\d{4}/.test(slip.text),
+  (slip.text.match(/Pay period[^A-Z]{0,40}/) ?? ["not found"])[0],
+);
+check(
+  "and so is the payment date",
+  /Payment Date\s*\d{2}\/\d{2}\/\d{4}/.test(slip.text) &&
+    !/Payment Date\s*\d+ [A-Z][a-z]+ \d{4}/.test(slip.text),
+  (slip.text.match(/Payment Date[^A-Z]{0,26}/) ?? ["not found"])[0],
+);
+check(
+  "the Prepared by block is gone, and one signature block remains",
+  !/Prepared by/i.test(slip.text) && slip.signatureBlocks === 1,
+  `${slip.signatureBlocks} block(s) with content`,
+);
+check(
+  "the authorised signatory keeps its own half of the page",
+  /Authorised signatory/i.test(slip.text) && slip.images >= 1,
+  `${slip.images} image(s) on the slip`,
+);
+check(
+  "the computer-generated line is off the footer",
+  !/Computer-generated/i.test(slip.text) && slip.footNotes === 1,
+  `${slip.footNotes} foot note(s)`,
+);
+check(
+  "and what is left under Confidential is big enough to read",
+  Number.parseFloat(slip.footNoteSize ?? "0") >= 9,
+  `${slip.footNoteSize} — 8pt rendered about 10.6px and was the complaint`,
 );
 
-/* And each is singular: a second upload replaces rather than adds. */
-await uploadSignature("prepared_signature");
-await uploadSignature("prepared_signature");
+/* Each signature is still singular: a second upload replaces rather than adds. */
+await uploadSignature("signature");
 const many = (
   await db.query(
     `select count(*)::int n from files
-      where settings_id is not null and kind='prepared_signature' and deleted_at is null`,
+      where settings_id is not null and kind='signature' and deleted_at is null`,
   )
 ).rows[0].n;
 check(
-  "uploading a second prepared-by mark replaces the first, never adds",
+  "uploading a second authorised mark replaces the first, never adds",
   many === 1,
   `${many} on file — two would mean the slip had to choose`,
 );
