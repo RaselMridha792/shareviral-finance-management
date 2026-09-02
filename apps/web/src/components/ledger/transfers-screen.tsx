@@ -1,6 +1,6 @@
 "use client";
 
-import { formatMoney } from "@finance/shared";
+import { formatMoney, fromMinorUnits, toMinorUnits } from "@finance/shared";
 import { ArrowRight, LoaderCircle, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -15,12 +15,18 @@ import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
+  TickCell,
+  TickHead,
   TableMessageRow,
   TableScroll,
   Th,
 } from "@/components/ui/table";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
 import { useRowDelete } from "@/components/ui/use-row-delete";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, trashApi } from "@/lib/api-client";
 import { ledgerApi, type TransferRowDto } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
@@ -99,6 +105,21 @@ export function TransfersScreen({
     void load(1);
   }, [load]);
 
+  /*
+   * Ticking, and the one act it leads to.
+   *
+   * `useBulkSelect` wants an `id` on every row and a transfer's is `outId` —
+   * the OUT half, which is the side files hang on and the side the single-row
+   * delete already sends. The trash takes both halves from either one
+   * (`siblingIdsInTrash` follows `transfer_group_id`), so ticking a row means
+   * the whole transfer, exactly as pressing its bin does.
+   */
+  const bulkRows = (rows ?? []).map((row) => ({ ...row, id: row.outId }));
+  const bulk = useBulkSelect(bulkRows);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   const del = useRowDelete<TransferRowDto & { id: string }>({
     kind: "transaction",
     subject: "transfer",
@@ -161,9 +182,38 @@ export function TransfersScreen({
       ) : (
         <Card className="overflow-hidden">
           <TableScroll>
+            {/* Only once something is ticked; otherwise the screen is as it
+                was. The bar counts transfers, not rows — one transfer is two
+                ledger entries and saying "4" for two would be a lie about how
+                much money is involved. */}
+            <BulkBar
+              count={bulk.count}
+              /* Summed in minor units and handed over as a string: `BulkBar`
+                 formats money, and adding `numeric(14,2)` text with `+` is how
+                 a total ends up a paisa out. */
+              total={fromMinorUnits(
+                bulk.selected.reduce(
+                  (acc, row) => acc + toMinorUnits(row.amount),
+                  BigInt(0),
+                ),
+              )}
+              noun="transfer"
+              pending={bulkPending}
+              onClear={bulk.clear}
+              onTrash={() => {
+                setBulkError(null);
+                setBulkAsking(true);
+              }}
+            />
             <table className="table-data">
               <thead>
                 <tr>
+                  {canWrite ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <Th width="w-28">Date</Th>
                   <Th>Description</Th>
@@ -188,7 +238,7 @@ export function TransfersScreen({
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <TableMessageRow colSpan={12}>
+                  <TableMessageRow colSpan={13}>
                     Nothing on this page.
                   </TableMessageRow>
                 ) : (
@@ -202,6 +252,13 @@ export function TransfersScreen({
                           voided && "opacity-60 [&_td]:line-through",
                         )}
                       >
+                        {canWrite ? (
+                          <TickCell
+                            checked={bulk.isTicked(row.outId)}
+                            onChange={() => bulk.toggle(row.outId)}
+                            label={row.description}
+                          />
+                        ) : null}
                         <SerialCell n={serial(page, index)} />
                         <td className="num whitespace-nowrap text-muted-foreground">
                           {/* Day/month/year, like the rest of the app. This was
@@ -281,52 +338,41 @@ export function TransfersScreen({
                         <td className="num text-right text-muted-foreground">
                           {row.usdRate ? Number(row.usdRate).toFixed(2) : "N/A"}
                         </td>
-                        <NumberCell
+                        {/*
+                          Invoice and Reference, the same `ReferenceCell` the
+                          other four money tables use.
+
+                          The owner asked for the eye here too. `NumberCell` and
+                          the hand-written button below it both keyed off the
+                          row's TOTAL document count, so a transfer carrying only
+                          a bank slip offered a way into the invoice drawer as
+                          well — a click into an empty one. Counted apart now,
+                          and drawn by the component that already answers all
+                          three states: the number, an eye when there is only
+                          paper, N/A when there is neither.
+
+                          The app's own `refNo` is gone from this cell for the
+                          same reason it left All transactions: it is the bank's
+                          number this column is for, and ours is on the
+                          statement, in the exports and in the drawer's title.
+                        */}
+                        <ReferenceCell
                           value={row.invoiceNo}
-                          hasPaper={row.documentCount > 0}
-                          label="Show the invoice"
+                          documentCount={row.invoiceCount}
                           onOpen={() =>
                             setDocumentsFor({ row, kinds: ["invoice"] })
                           }
                         />
-                        <td>
-                          {/*
-                            The app's own number, with the bank's underneath —
-                            the exact cell the ledger table draws, opening the
-                            same paperwork drawer.
-                          */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDocumentsFor({
-                                row,
-                                kinds: ["bank_statement", "receipt", "other"],
-                              })
-                            }
-                            title={
-                              row.documentCount > 0
-                                ? `${row.documentCount} document${row.documentCount === 1 ? "" : "s"} attached`
-                                : "Nothing is attached to this transfer"
-                            }
-                            className="group cursor-pointer text-left"
-                          >
-                            <span
-                              className={cn(
-                                "num flex items-center gap-1 text-xs font-medium underline decoration-current/40 underline-offset-2 group-hover:decoration-current",
-                                row.documentCount > 0
-                                  ? "text-link"
-                                  : "text-warning",
-                              )}
-                            >
-                              {row.refNo}
-                            </span>
-                            {row.reference ? (
-                              <span className="num block text-xs text-muted-foreground">
-                                {row.reference}
-                              </span>
-                            ) : null}
-                          </button>
-                        </td>
+                        <ReferenceCell
+                          value={row.reference}
+                          documentCount={row.recordCount}
+                          onOpen={() =>
+                            setDocumentsFor({
+                              row,
+                              kinds: ["bank_statement", "receipt", "other"],
+                            })
+                          }
+                        />
                         <RowActions
                           /*
                             No edit, and that is a decision rather than a gap:
@@ -395,42 +441,69 @@ export function TransfersScreen({
         />
       ) : null}
       {del.dialog}
+
+      {/* The whole ticked page, on one confirmation. Both halves of every
+          transfer go, which is what the single-row delete already promises. */}
+      <DeleteDialog
+        open={bulkAsking}
+        subject="transfer"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((row) => row.description)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+          </>
+        }
+        consequences={
+          <p>
+            Both halves of each transfer go together, so the money leaves this
+            record on both accounts. They come back together from{" "}
+            <span className="font-medium text-foreground">
+              Settings &rarr; Trashed
+            </span>
+            . If a transfer really happened and was reversed,{" "}
+            <span className="font-medium text-foreground">void it instead</span>{" "}
+            — that keeps it on both registers, struck through.
+          </p>
+        }
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          setBulkPending(true);
+          setBulkError(null);
+          void trashApi
+            .removeMany(
+              "transaction",
+              bulk.selected.map((row) => row.outId),
+              reason,
+            )
+            .then(() => {
+              setBulkAsking(false);
+              bulk.clear();
+              void load(page);
+            })
+            .catch((err: unknown) =>
+              setBulkError(
+                err instanceof ApiError ? err.message : "That did not work.",
+              ),
+            )
+            .finally(() => setBulkPending(false));
+        }}
+      />
     </>
   );
 }
 
-/**
- * An invoice number that opens the paperwork drawer — blue over paper, amber
- * over nothing, underlined either way, exactly as the ledger table draws it.
+/*
+ * `NumberCell` is gone. It was this screen's own copy of a cell four screens
+ * now share, and it could not offer a way in when a file was attached with no
+ * number typed — which is the state most of these rows are in since the number
+ * stopped being asked for. `ReferenceCell` replaced both of this table's cells.
  */
-function NumberCell({
-  value,
-  hasPaper,
-  label,
-  onOpen,
-}: {
-  value: string | null;
-  hasPaper: boolean;
-  label: string;
-  onOpen: () => void;
-}) {
-  if (!value) return <td className="text-muted-foreground">N/A</td>;
-  return (
-    <td>
-      <button
-        type="button"
-        onClick={onOpen}
-        title={label}
-        className={cn(
-          "num cursor-pointer underline decoration-current/40 underline-offset-2 hover:decoration-current",
-          hasPaper ? "text-link" : "text-warning",
-        )}
-      >
-        {value}
-      </button>
-    </td>
-  );
-}
 
 /**
  * The slice the void dialog reads, built from the pair's out half — the side

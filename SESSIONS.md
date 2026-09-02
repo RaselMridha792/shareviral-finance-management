@@ -35,8 +35,8 @@ ticking all seventeen.
 | # | What | State |
 |---|---|---|
 | 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
-| 44 | **Money transfer**: eye buttons on Invoice and Reference, file preview in the drawer, multiple upload, tick column + trash | not started |
-| 45 | **All transactions**: Invoice and Reference as on the others, Entry No. off, eye buttons | **done** — tick + trash, edit drawer, preview and multiple upload still to do |
+| 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
+| 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
 ## 43. The date on Money transfer, and why nothing caught it
@@ -61,6 +61,36 @@ The lookbehind is gone. A false positive is a loud failure somebody looks at; a
 false negative is a bug shipping. With it gone the sweep immediately found the
 Money transfer date, which is now `formatDate`d like everywhere else, and
 nothing else — so the other sixteen screens really were clean.
+
+## 44. Money transfer: two eyes, a tick column, and the pair
+
+**Half of what was asked for already existed**, which is worth saying rather
+than quietly building twice: the transfer form has taken multiple files and
+previewed them since #6, and All transactions has had its tick column since #4.
+What was actually missing was the two eyes on this screen and its tick column.
+
+**The eyes.** This table had its own `NumberCell`, a fifth private copy of a
+cell four screens share, and it could not offer a way in when a file was
+attached with no number typed — which is what most of these rows look like now
+that the number stopped being asked for. Both columns are `ReferenceCell` now,
+counted on `invoiceCount` and `recordCount` so an eye never opens a drawer
+belonging to the other column. `NumberCell` is deleted.
+
+**The tick column, and the one thing it had to get right.** A transfer is TWO
+ledger rows — out of one account, into the other — and the whole reason this
+screen exists is that the two must never disagree. `useBulkSelect` keys on
+`outId`, the half files hang on and the half the single-row delete already
+sends, and `siblingIdsInTrash` follows `transfer_group_id` so both halves go
+together. The bar counts **transfers**, not rows: saying "2" for one transfer
+would be a lie about how much money is involved.
+
+The total is summed in minor units. Adding `numeric(14,2)` text with `+` is how
+a figure ends up a paisa out and nobody can say where.
+
+`.transfersqa2.mjs` — 11 checks. The one that earns its keep counts the LEDGER
+rows either side of a bulk delete and requires 6 → 4: at 5 one half would have
+been left behind, and the two accounts would have stopped reconciling on the
+screen built to stop exactly that.
 
 ## 45, 46. All transactions: two columns, two eyes, one colour
 
