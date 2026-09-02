@@ -34,7 +34,36 @@ ticking all seventeen.
 
 | # | What | Why it is not done |
 |---|---|---|
-| 12b | Tick columns on Users, FX history, Payroll runs | Each raises a question that is yours — see **12b** below. The lock-out hole they depended on is closed |
+| 38 | **The payslip: three label and content changes** — see below | Arrived 1 Sep, mid-morning. Not started |
+
+**#12b is done** — `9a38c30`. You answered all three questions: the FX rate
+history page was deleted rather than given a tick, Payroll runs got one, and
+Users got one with the tick withheld on your own row (the Delete button on that
+row is already withheld, and a bulk action must not offer what the single-row
+action does not).
+
+## 38. The payslip
+
+Three changes, from a marked screenshot of `payroll/payslip-view.tsx` — the
+page the PDF is printed from, so this is one file and both outputs follow.
+
+1. **"Value date" becomes "Payment Date."** Banking language for the day the
+   money settles; nobody here reads it that way.
+2. **"Credited to" becomes "Pay period"**, holding the dates the salary is FOR
+   — *"jekhane kon tarikh theke kon tarikh er salary take dibo"*. So the month's
+   first day to its last, not a bank account.
+3. **The bank details come out of Payment details.** The header already prints
+   BANK ACCOUNT beside the name; printing it again at the foot says the same
+   fact twice on a one-page document.
+
+Worth settling before it is built: the run holds a `payment_date` and a
+`period_year`/`period_month`, so **the pay period is derivable and needs no new
+column** — but a run PAID before it is finalised, or a line with working days
+short of the month, both have a period that is not simply "1st to last". The
+first is what the label should say; the second is already shown as Working Days
+on the sheet.
+
+More coming — the owner is adding to this list before we start on it.
 
 ### Three things I did not change, each yours to decide
 
