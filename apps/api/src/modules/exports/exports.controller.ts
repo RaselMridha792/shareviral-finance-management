@@ -78,6 +78,8 @@ import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { TeamMembersService } from "../team-members/team-members.service";
 import { VendorsService } from "../vendors/vendors.service";
+import { buildBankStatementReport } from "./bank-statement-report";
+import { CsvService } from "./csv.service";
 import { ExcelService } from "./excel.service";
 import { buildOverviewReport } from "./overview-report";
 import { PdfService } from "./pdf.service";
@@ -107,6 +109,9 @@ export class ExportsController {
     private readonly transactions: TransactionsService,
     private readonly accounts: AccountsService,
     private readonly excel: ExcelService,
+    // Windows-readable CSV, which is a different file from a spreadsheet
+    // and is why it has its own builder rather than an ExcelService flag.
+    private readonly csv: CsvService,
     private readonly audit: AuditService,
     private readonly pdf: PdfService,
     private readonly overview: OverviewService,
@@ -299,6 +304,60 @@ export class ExportsController {
       response,
       buffer,
       ExcelService.filename("transactions", todayInDhaka()),
+    );
+  }
+
+  /**
+   * One account's statement as a document, not a grid.
+   *
+   * *"arekta lagbe bank statement. Sundor Ekta Graphical PDF version a."*
+   *
+   * Declared **before** `register/:accountId` deliberately. Nest matches in
+   * declaration order, and while these two differ in depth today, a route this
+   * specific sitting under a parameterised one is how a later `:accountId`
+   * pattern quietly swallows it.
+   *
+   * Same service, same query schema and the same figures as the spreadsheet
+   * beside it — this file only lays them out differently.
+   */
+  @Get("register/:accountId/statement.pdf")
+  @RequirePermission("exports.run", "transactions.read", "accounts.read")
+  async registerPdf(
+    @Param("accountId") accountId: string,
+    @ZodQuery(registerQuerySchema) query: RegisterQuery,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const id = uuidSchema.parse(accountId);
+    const [register, settings] = await Promise.all([
+      this.transactions.register(id, query),
+      this.settings.get(),
+    ]);
+
+    const buffer = await this.pdf.buildPages(
+      buildBankStatementReport(register, {
+        companyName: settings.companyName,
+        numberFormat: settings.numberFormat,
+        from: query.from,
+        to: query.to,
+        generatedOn: todayInDhaka(),
+        accountTypeLabel:
+          ACCOUNT_TYPE_LABELS[register.account.type] ?? register.account.type,
+      }),
+    );
+
+    await this.audit.log({
+      action: "export",
+      entityTable: "transactions",
+      summary:
+        `Exported the bank statement for ${register.account.name} to PDF ` +
+        `(${register.rows.length} entries)`,
+      module: "exports",
+    });
+
+    return sendPdf(
+      response,
+      buffer,
+      `bank-statement-${slug(register.account.name)}-${todayInDhaka()}.pdf`,
     );
   }
 
@@ -860,6 +919,236 @@ export class ExportsController {
    * the app deliberately does not store one, because a stored age is wrong by
    * the next birthday.
    */
+  /**
+   * The mail list — the one export that is not a spreadsheet.
+   *
+   * *"main name thakbe (Team Member Mail - Id, Name, Depertment, Email
+   * Address)"*, as Windows CSV. Four columns, because that is what a mail
+   * merge reads; anything else in the file is a column somebody has to delete
+   * before they can use it.
+   *
+   * **People with no address on file are left out**, and that is a decision
+   * rather than an oversight: a row with an empty address is not a recipient,
+   * and a merge run against one fails on that line rather than skipping it.
+   * The export panel says so above the button and the audit line below records
+   * how many were dropped — a silent omission is the thing this codebase keeps
+   * getting bitten by, so it is made loud in both places somebody looks.
+   *
+   * `workEmail` first, `personalEmail` only where there is no work address: a
+   * company mail-out goes to the company address wherever one exists.
+   */
+  @Get("team-members/mail.csv")
+  @RequirePermission("exports.run", "team.read")
+  async teamMailList(
+    @ZodQuery(listTeamQuerySchema) query: ListTeamQuery,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const page = await this.team.list({
+      ...query,
+      page: 1,
+      pageSize: CsvService.MAX_ROWS,
+    });
+
+    type Row = (typeof page.items)[number];
+    const addressed = page.items.filter(
+      (row) => (row.workEmail ?? row.personalEmail ?? "").trim().length > 0,
+    );
+
+    const buffer = this.csv.build<Row>({
+      columns: [
+        { header: "Id", kind: "text", value: (r) => r.employeeCode },
+        { header: "Name", kind: "text", value: (r) => r.fullName },
+        { header: "Department", kind: "text", value: (r) => r.department },
+        {
+          header: "Email Address",
+          kind: "text",
+          value: (r) => r.workEmail ?? r.personalEmail,
+        },
+      ],
+      rows: addressed,
+    });
+
+    const missing = page.items.length - addressed.length;
+    await this.audit.log({
+      action: "export",
+      entityTable: "team_members",
+      summary:
+        `Exported the team mail list (${addressed.length} addresses` +
+        (missing > 0 ? `, ${missing} with no email left out` : "") +
+        ")",
+      module: "exports",
+    });
+
+    return sendCsv(
+      response,
+      buffer,
+      CsvService.filename("team-member-mail", todayInDhaka()),
+    );
+  }
+
+  /**
+   * The full employee record, one row per person.
+   *
+   * *"r ekta thakbe Team member Data Sheet (Sheet format a)."* Distinct from
+   * the `team-members` sheet beside it, which is the **directory** — name,
+   * engagement, department, dates — and is what somebody wants when they are
+   * looking at the team. This one is the personnel file: identity, contact,
+   * bank, tax and education, everything the profile screen holds.
+   *
+   * Marked sensitive in the audit log, which the directory is not. It carries
+   * NID, e-TIN and bank account numbers, so a row saying who took a copy and
+   * when is the least this should leave behind.
+   *
+   * Salary is not here and cannot be added by widening this list:
+   * `compensation_history` is a separate table this projection does not join.
+   * `joiningSalary` is the one money column — on `team_members` by decision,
+   * the offer figure rather than the payroll one — and the directory sheet
+   * already carries it under the same permission.
+   */
+  @Get("team-members/data-sheet")
+  @RequirePermission("exports.run", "team.read")
+  async teamDataSheet(
+    @ZodQuery(listTeamQuerySchema) query: ListTeamQuery,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const page = await this.team.list({
+      ...query,
+      page: 1,
+      pageSize: ExcelService.MAX_ROWS,
+    });
+
+    type Row = (typeof page.items)[number];
+    const today = todayInDhaka();
+
+    const text = (
+      header: string,
+      key: string,
+      value: (r: Row) => string | null | undefined,
+      width?: number,
+    ) => ({ header, key, kind: "text" as const, width, value });
+    const date = (
+      header: string,
+      key: string,
+      value: (r: Row) => string | null,
+    ) => ({ header, key, kind: "date" as const, value });
+
+    const buffer = await this.excel.build<Row>({
+      title: "Team member data sheet",
+      subtitle: [
+        describeTeamFilter(query),
+        `${page.total} people · exported ${today}`,
+        "Personnel records — identity, contact, bank and tax details.",
+      ],
+      columns: [
+        text("Employee ID", "code", (r) => r.employeeCode, 14),
+        text("Name", "name", (r) => r.fullName, 26),
+        text("Designation", "designation", (r) => r.designation),
+        text("Department", "department", (r) => r.department),
+        text(
+          "Engagement",
+          "engagement",
+          (r) => ENGAGEMENT_LABELS[r.engagementType],
+          14,
+        ),
+        text("Status", "status", (r) => EMPLOYMENT_STATUS_LABELS[r.status], 14),
+        date("Joined", "joined", (r) => r.joinedOn),
+        date("Confirmed", "confirmed", (r) => r.confirmedOn),
+        date("Probation until", "probation", (r) => r.probationUntil),
+        date("Left", "ended", (r) => r.endedOn),
+
+        text("Work email", "workEmail", (r) => r.workEmail, 28),
+        text("Personal email", "personalEmail", (r) => r.personalEmail, 28),
+        text("Phone", "phone", (r) => r.phone, 16),
+        text("Address", "address", (r) => r.address, 30),
+        text(
+          "Permanent address",
+          "permanentAddress",
+          (r) => r.permanentAddress,
+          30,
+        ),
+
+        date("Date of birth", "dob", (r) => r.dateOfBirth),
+        text("Gender", "gender", (r) => labelOf(GENDER_LABELS, r.gender), 12),
+        text("Blood group", "blood", (r) => r.bloodGroup, 12),
+        text(
+          "Emergency contact",
+          "emergencyName",
+          (r) => r.emergencyContactName,
+          22,
+        ),
+        text(
+          "Emergency relation",
+          "emergencyRelation",
+          (r) => r.emergencyContactRelation,
+          16,
+        ),
+        text(
+          "Emergency phone",
+          "emergencyPhone",
+          (r) => r.emergencyContactPhone,
+          16,
+        ),
+
+        text("NID", "nid", (r) => r.nid, 18),
+        text("e-TIN", "etin", (r) => r.etin, 18),
+        text(
+          "PSR status",
+          "psr",
+          (r) => (r.psrStatus ? PSR_STATUS_LABELS[r.psrStatus] : null),
+          16,
+        ),
+        text("PSR assessment year", "psrYear", (r) => r.psrAssessmentYear, 16),
+        text("Passport", "passport", (r) => r.passportNumber, 16),
+
+        text("Bank", "bankName", (r) => r.bankName, 22),
+        text("Account holder", "bankHolder", (r) => r.bankAccountHolder, 22),
+        text("Branch", "bankBranch", (r) => r.bankBranch, 20),
+        text("Account number", "bankAccount", (r) => r.bankAccountNumber, 22),
+        text("Routing", "bankRouting", (r) => r.bankRouting, 16),
+        text("SWIFT", "bankSwift", (r) => r.bankSwift, 14),
+        text("Wallet", "wallet", (r) => r.walletProvider, 14),
+        text("Wallet number", "walletNumber", (r) => r.walletNumber, 18),
+
+        text(
+          "Education",
+          "education",
+          (r) => labelOf(EDUCATION_LEVEL_LABELS, r.educationLevel),
+          18,
+        ),
+        text("Major", "major", (r) => r.educationMajor, 20),
+        text(
+          "Last qualification",
+          "qualification",
+          (r) => r.lastQualification,
+          22,
+        ),
+
+        {
+          header: "Joining salary",
+          key: "joiningSalary",
+          kind: "money" as const,
+          value: (r: Row) => r.joiningSalary,
+        },
+        text("Notes", "notes", (r) => r.notes, 30),
+      ],
+      rows: page.items,
+    });
+
+    await this.audit.log({
+      action: "export",
+      entityTable: "team_members",
+      summary: `Exported the team member data sheet (${page.total} people)`,
+      module: "exports",
+      isSensitive: true,
+    });
+
+    return send(
+      response,
+      buffer,
+      ExcelService.filename("team-member-data-sheet", today),
+    );
+  }
+
   @Get("team-members")
   @RequirePermission("exports.run", "team.read")
   async teamSheet(
@@ -2053,6 +2342,45 @@ function send(response: Response, buffer: Buffer, filename: string) {
     "Content-Length": String(buffer.length),
   });
   return new StreamableFile(buffer);
+}
+
+function sendCsv(response: Response, buffer: Buffer, filename: string) {
+  response.set({
+    // `charset=utf-8` alongside the byte-order mark the builder writes. The
+    // BOM is what Excel on Windows actually reads; this header is for
+    // everything that opens the file over HTTP without saving it first.
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": disposition(filename),
+    "Content-Length": String(buffer.length),
+  });
+  return new StreamableFile(buffer);
+}
+
+/**
+ * A label for a stored code, without asserting the code is one this build knows.
+ *
+ * `TeamMemberDto` types `gender` and `educationLevel` as plain strings rather
+ * than as their unions, so indexing a label map with one is an unchecked read
+ * — and the value it produces for an unrecognised code is `undefined`, which
+ * lands in the cell as blank. Falling back to the code itself means a row
+ * written before a label existed still says something true about itself.
+ */
+function labelOf(
+  labels: Record<string, string>,
+  key: string | null | undefined,
+): string | null {
+  if (!key) return null;
+  return labels[key] ?? key;
+}
+
+/** A file name somebody can find again: lower case, hyphens, nothing else. */
+function slug(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "account"
+  );
 }
 
 function sendPdf(response: Response, buffer: Buffer, filename: string) {

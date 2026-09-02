@@ -48,6 +48,17 @@ import {
  */
 export type TeamMemberDto = {
   id: string;
+  /**
+   * The company's own identifier, where somebody has one.
+   *
+   * Declared late. `projection` has returned this since the employee-ID
+   * ordering went in and the screens read it, but this type never named it —
+   * so it was there at runtime and invisible to the compiler, which is the
+   * same drift in the other direction as a column missing from a projection.
+   * Nothing changes at runtime; the type now says what the query already
+   * answers with.
+   */
+  employeeCode: string | null;
   fullName: string;
   engagementType: "employee" | "contractor";
   /** Null until somebody says. Not defaulted — see the migration's note. */
@@ -65,6 +76,11 @@ export type TeamMemberDto = {
   psrStatus: "unknown" | "submitted" | "not_submitted";
   psrAssessmentYear: string | null;
   bankName: string | null;
+  /* The three that arrived with the bank-details migration and, like
+     `employeeCode` above, reached every screen without ever reaching here. */
+  bankAccountHolder: string | null;
+  bankBranch: string | null;
+  bankSwift: string | null;
   bankAccountNumber: string | null;
   bankRouting: string | null;
   walletProvider: string | null;

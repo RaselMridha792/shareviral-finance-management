@@ -10,6 +10,7 @@ import { TdsModule } from "../tds/tds.module";
 import { TeamMembersModule } from "../team-members/team-members.module";
 import { TransactionsModule } from "../transactions/transactions.module";
 import { VendorsModule } from "../vendors/vendors.module";
+import { CsvService } from "./csv.service";
 import { ExcelService } from "./excel.service";
 import { ExportsController } from "./exports.controller";
 import { PdfService } from "./pdf.service";
@@ -32,7 +33,7 @@ import { PdfService } from "./pdf.service";
     FilesModule,
   ],
   controllers: [ExportsController],
-  providers: [ExcelService, PdfService],
+  providers: [CsvService, ExcelService, PdfService],
   exports: [ExcelService],
 })
 export class ExportsModule {}
