@@ -62,6 +62,40 @@ false negative is a bug shipping. With it gone the sweep immediately found the
 Money transfer date, which is now `formatDate`d like everywhere else, and
 nothing else — so the other sixteen screens really were clean.
 
+## 49. The payslip's two signatures, level
+
+Two asks, and they turned out to be one fix. *"payslip er duita same height a
+nei left er ta ektu nice namiye diyo also prepared by je ache onar signature
+upload korar option rekhe diyo settings a."*
+
+The right block carried 26pt of signature plus a 2pt gap above its rule; the
+left carried nothing. So the two rules sat **28pt apart** on a document where
+they read as a pair. Nudging the left block down by a magic number would have
+fixed the one state he photographed and broken the other three, so instead both
+blocks now **reserve the same height** whether or not there is a mark in them —
+level when neither is signed, when either is, and when both are.
+
+**A second file kind, not a second row of the first.** `signature` is singular
+by rule — the comment on it says "Two signatures on file would mean a payslip
+had to pick" — and these are two different people signing two different things.
+`prepared_signature` is its own kind, added to the `file_kind` enum in its own
+migration, and added to the singular list beside `signature` so a second upload
+replaces rather than adds. It joins `SIGNATURE_KINDS` too, which is the one line
+that holds it to the same shape rule as the others.
+
+**One component, rendered twice.** `SignatureField` takes the kind, and both
+marks come back from the one settings endpoint — so each field picks out its own
+rather than taking `[0]`, which would have handed whichever was uploaded first
+to both blocks.
+
+`.payslipsignqa.mjs` — 13 checks. It measures `getBoundingClientRect().top` on
+each rule in **all four states**, because "they look level" is exactly the claim
+a screenshot makes and a diff cannot check. It also builds a real
+signature-shaped PNG — 600×100 — rather than reusing the 1×1 placeholder every
+other harness here uses: the app refuses anything under 300px wide or outside
+1.5:1 to 8:1, and the first run read that refusal as the upload being broken.
+And it puts the company's own signatures back exactly as it found them.
+
 ## 47. "Could not save that", and the heading nobody had to choose
 
 **The save that failed, and the message that said nothing.** The owner switched

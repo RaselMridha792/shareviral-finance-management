@@ -420,10 +420,21 @@ export function listSignature() {
   return apiFetch<StoredFile[]>("/files/signature", { cache: "no-store" });
 }
 
-export function uploadSignature(file: File) {
+/**
+ * Which of the payslip's two blocks this mark is for.
+ *
+ * `signature` is the one who authorises; `prepared_signature` is the one who
+ * prepared it. One route, because the endpoint already takes the kind in its
+ * body and both hang on the same settings row — adding a second path would be
+ * two doors to one cupboard.
+ */
+export function uploadSignature(
+  file: File,
+  kind: "signature" | "prepared_signature" = "signature",
+) {
   const form = new FormData();
   form.append("file", file);
-  form.append("kind", "signature");
+  form.append("kind", kind);
   return apiUpload<StoredFile>("/files/signature", form);
 }
 

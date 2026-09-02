@@ -51,10 +51,13 @@ const SINGULAR_KINDS: readonly FileKind[] = [
    */
   "subscription_screenshot",
   /**
-   * And the signature, most of all. It is printed as *the* company's mark; two
-   * on file would mean a payslip had to choose one.
+   * And the signatures, most of all. Each is printed as *the* mark in its own
+   * block on a payslip; two on file for one block would mean the slip had to
+   * choose. Both are here, not just the first — a rule that covers one of two
+   * identical things is a rule somebody will trip over.
    */
   "signature",
+  "prepared_signature",
   /**
    * And the challan. It is opened from a challan number as *the* paper behind
    * that number, so two of them means the register has to pick one — and

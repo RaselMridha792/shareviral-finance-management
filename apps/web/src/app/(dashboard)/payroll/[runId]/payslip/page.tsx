@@ -26,7 +26,15 @@ export default async function PayslipPage({
     <PayslipView
       payslip={payslip}
       settings={settings}
-      signature={signatures[0]?.id ?? null}
+      /* Picked by KIND, not by position. One endpoint returns every file on
+         the settings row, so `[0]` would hand whichever was uploaded first to
+         both blocks — and the two are different people. */
+      signature={
+        signatures.find((one) => one.kind === "signature")?.id ?? null
+      }
+      preparedSignature={
+        signatures.find((one) => one.kind === "prepared_signature")?.id ?? null
+      }
     />
   );
 }

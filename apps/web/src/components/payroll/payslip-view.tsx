@@ -40,6 +40,7 @@ export function PayslipView({
   payslip,
   settings,
   signature,
+  preparedSignature,
 }: {
   payslip: PayslipDto;
   settings: AppSettingsDto;
@@ -51,6 +52,14 @@ export function PayslipView({
    * the rest is a signature somebody prints without.
    */
   signature: string | null;
+  /**
+   * The mark of whoever prepared the slip, for the left block.
+   *
+   * Its own file kind rather than a second row of the same one: the two blocks
+   * are different people signing different things, and `signature` is singular
+   * by rule precisely so a slip never has to choose between two of them.
+   */
+  preparedSignature: string | null;
 }) {
   const money = (value: string) =>
     formatMoney(value, {
@@ -320,6 +329,30 @@ export function PayslipView({
 
         <section className="slip-signatures">
           <div>
+            {/*
+              The same slot the right-hand block has, whether or not there is a
+              mark to put in it.
+
+              The owner's other point about this footer: "payslip er duita same
+              height a nei left er ta ektu nice namiye diyo." The right block
+              carries 26pt of signature plus a 2pt gap above its rule, and the
+              left carried nothing — so the two rules sat 28pt apart on a
+              document where they read as a pair. Reserving the height rather
+              than shifting the left block down by a magic number means they
+              stay level in all four states: neither signed, either one signed,
+              or both.
+            */}
+            {preparedSignature ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fileHref(preparedSignature)}
+                alt=""
+                aria-hidden="true"
+                className="slip-signature slip-signature-left"
+              />
+            ) : (
+              <span className="slip-signature-gap" aria-hidden="true" />
+            )}
             <p className="slip-sign-rule" />
             <p className="slip-label">Prepared by</p>
             <p className="slip-sign-name">
@@ -342,7 +375,11 @@ export function PayslipView({
                 aria-hidden="true"
                 className="slip-signature"
               />
-            ) : null}
+            ) : (
+              /* The same reserved height as the left, so an unsigned slip has
+                 its two rules level too. */
+              <span className="slip-signature-gap" aria-hidden="true" />
+            )}
             <p className="slip-sign-rule" />
             <p className="slip-label">Authorised signatory</p>
             <p className="slip-sign-name">
@@ -963,6 +1000,23 @@ const SHEET_CSS = `
   font-weight: 600;
   color: var(--slip-ink);
 }
+/* The left block's mark sits over its own rule, which is left-aligned. */
+.slip-signature-left { margin: 0 auto 2pt 0; }
+
+/*
+ * An empty slot the exact height of a signature.
+ *
+ * Both blocks reserve it, so the two rules are level whether either has been
+ * signed. Written as a box rather than as padding on the rule, because the
+ * rule is a shared class and giving it a top margin would move it on the
+ * statement's signature block too.
+ */
+.slip-signature-gap {
+  display: block;
+  height: 26pt;
+  margin-bottom: 2pt;
+}
+
 .slip-signature {
   display: block;
   height: 26pt;

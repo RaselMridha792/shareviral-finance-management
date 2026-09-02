@@ -90,6 +90,18 @@ export const FILE_KINDS = [
    * second, disagreeing claim about the enum's order.
    */
   "resignation_letter",
+  /**
+   * The mark of whoever PREPARED the payslip, beside the one who authorised it.
+   *
+   * A second kind rather than a second row of `signature`, because that kind is
+   * singular by design — "Two signatures on file would mean a payslip had to
+   * pick" — and the two blocks are different people signing different things.
+   *
+   * On the end, like `resignation_letter` above and for the same reason: this
+   * array is the declaration order of the `file_kind` enum, and Postgres only
+   * takes new values there.
+   */
+  "prepared_signature",
 ] as const;
 
 export const fileKindSchema = z.enum(FILE_KINDS);
@@ -142,6 +154,9 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   bank_statement: "Bank statement",
   subscription_screenshot: "Plan screenshot",
   signature: "Signature",
+  /* Named for the block it sits in, so the two are told apart wherever a file
+     list shows its kind. */
+  prepared_signature: "Prepared-by signature",
   statement_signature: "Signatory's signature",
   challan: "Challan",
   import_source: "Imported file",
@@ -184,9 +199,10 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
   // subscription is a money row like any other, so it carries the same two
   // documents — our bill and the bank's record of the charge.
   subscription: ["subscription_screenshot", "invoice", "bank_statement"],
-  // One kind, and there is one of it. Two signatures on file would mean a
-  // payslip had to pick.
-  settings: ["signature"],
+  // Two kinds, one of each. The payslip has two signature blocks — the one who
+  // prepared it and the one who authorised it — and they are different people
+  // signing different things. Still one of each, so a payslip never has to pick.
+  settings: ["signature", "prepared_signature"],
   // One kind, and "other" is not among them on purpose: a document on a
   // challan row is the challan. Anything else filed there is misfiled.
   tds_deposit: ["challan"],
@@ -256,6 +272,7 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // Narrower than everything else here on purpose: a signature has to render
   // over a printed rule, and a PDF cannot. See `checkSignatureImage`.
   signature: SIGNATURE_MIME_TYPES,
+  prepared_signature: SIGNATURE_MIME_TYPES,
   // The same narrow pair, for the same reason: it has to render over a printed
   // rule on the closing page, and a PDF cannot.
   statement_signature: SIGNATURE_MIME_TYPES,
@@ -301,6 +318,7 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   // has to stop a file before multer's generic refusal; the readable one comes
   // from the shared check.
   signature: 1 * MB,
+  prepared_signature: 1 * MB,
   // Same again. The readable limit is SIGNATURE_MAX_BYTES; this one only has
   // to stop a file before multer refuses it without naming a rule.
   statement_signature: 1 * MB,
@@ -449,12 +467,15 @@ export const SIGNATURE_RULE = `PNG or JPEG, under ${Math.round(
 /**
  * The kinds this rule applies to.
  *
- * Two of them now — the company's mark on a payslip and a signatory's on a
+ * Three of them now — the two marks on a payslip and a signatory's on a
  * statement — and they are listed rather than checked one at a time, so the
  * next place somebody signs something cannot quietly skip the shape check.
+ * Adding `prepared_signature` here was the whole cost of that promise: one
+ * line, and the new mark is held to the same shape as the old one.
  */
 export const SIGNATURE_KINDS: readonly FileKind[] = [
   "signature",
+  "prepared_signature",
   "statement_signature",
 ];
 

@@ -26,7 +26,23 @@ import {
  * browser is a courtesy rather than a gate. Both call the same function, so
  * neither can start saying something the other does not.
  */
-export function SignatureField({ canWrite }: { canWrite: boolean }) {
+export function SignatureField({
+  canWrite,
+  kind = "signature",
+  label = "Signature",
+  hint,
+}: {
+  canWrite: boolean;
+  /*
+   * Which of the payslip's two blocks this mark prints in. The endpoint takes
+   * the kind and both hang on the same settings row, so this is one component
+   * rendered twice rather than a second copy of it — two copies would drift the
+   * first time the shape rule changed.
+   */
+  kind?: "signature" | "prepared_signature";
+  label?: string;
+  hint?: string;
+}) {
   const [file, setFile] = useState<StoredFile | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,14 +50,16 @@ export function SignatureField({ canWrite }: { canWrite: boolean }) {
 
   async function reload() {
     const found = await listSignature();
-    setFile(found[0] ?? null);
+    /* Both marks come back from one endpoint — the settings row's files — so
+       each field picks out its own rather than taking the first. */
+    setFile(found.find((one) => one.kind === kind) ?? null);
   }
 
   useEffect(() => {
     let live = true;
     listSignature()
       .then((found) => {
-        if (live) setFile(found[0] ?? null);
+        if (live) setFile(found.find((one) => one.kind === kind) ?? null);
       })
       .catch(() => {
         if (live) setError("Could not read the signature on file.");
@@ -92,7 +110,7 @@ export function SignatureField({ canWrite }: { canWrite: boolean }) {
         return;
       }
 
-      await uploadSignature(chosen);
+      await uploadSignature(chosen, kind);
       await reload();
     } catch (caught) {
       setError(
@@ -119,7 +137,10 @@ export function SignatureField({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">Signature</p>
+      <p className="text-sm font-medium">{label}</p>
+      {hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
 
       {/* Said up front. The whole point of the owner's instruction. */}
       <p className="text-xs text-muted-foreground">{SIGNATURE_RULE}</p>
@@ -137,7 +158,7 @@ export function SignatureField({ canWrite }: { canWrite: boolean }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fileHref(file.id)}
-            alt="The signature that prints on payslips"
+            alt={`The ${label.toLowerCase()} that prints on payslips`}
             className="h-14 w-auto object-contain"
           />
         </div>
@@ -176,7 +197,7 @@ export function SignatureField({ canWrite }: { canWrite: boolean }) {
             ) : (
               <Upload className="size-4" />
             )}
-            {file ? "Replace" : "Upload a signature"}
+            {file ? "Replace" : `Upload a ${label.toLowerCase()}`}
           </Button>
           {file ? (
             <button
