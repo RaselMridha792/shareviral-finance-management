@@ -511,9 +511,24 @@ export const updatePayrollLineSchema = z
     grossAmount: amountSchema.optional(),
     bonusAmount: amountSchema.optional(),
     otherAdditions: amountSchema.optional(),
-    // No `tdsAmount`. The app works the tax out from the year's rule; a screen
-    // that let somebody type over it would make the stored working a lie.
-    // Settings → Salary TDS is where a wrong figure gets fixed.
+    /**
+     * The tax, typed.
+     *
+     * This was deliberately absent, and the reason it was absent still holds:
+     * *"a screen that let somebody type over it would make the stored working
+     * a lie"*. What changed is that the line now records WHICH of the two a
+     * figure is. Sending this marks the line `tdsManual`, and a marked line is
+     * skipped by the recompute that the gross, the working days and the
+     * declared investment trigger — so the working behind an untouched figure
+     * still describes that figure, and a typed one no longer claims a rule
+     * produced it.
+     *
+     * The owner asked for both halves in one sentence:
+     * *"auto calculate hoye tds bosbe ami caile karota edit o korte parbo"*.
+     * Settings → Salary TDS is still where a rule gets fixed for everybody;
+     * this is for the one person the rule does not fit.
+     */
+    tdsAmount: amountSchema.optional(),
     tdsDeclaredInvestment: amountSchema.nullable().optional(),
     otherDeductions: amountSchema.optional(),
     deductionNote: optionalText(200),

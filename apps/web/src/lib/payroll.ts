@@ -180,6 +180,14 @@ export type PayrollLineDto = {
   bonusAmount: string;
   otherAdditions: string;
   tdsAmount: string;
+  /**
+   * Whether that figure was typed rather than worked out.
+   *
+   * The sheet needs it to say which of the two a cell holds — the tax is
+   * auto-calculated and hand-editable at once, and a screen that cannot tell
+   * them apart is the reason the field was read-only in the first place.
+   */
+  tdsManual: boolean;
   otherDeductions: string;
   deductionNote: string | null;
   netAmount: string;

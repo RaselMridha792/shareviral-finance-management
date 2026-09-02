@@ -414,6 +414,23 @@ export const payrollLines = pgTable(
     tdsBasis: jsonb("tds_basis"),
 
     /**
+     * Whether the figure above was typed rather than worked out.
+     *
+     * The owner asked for both at once — *"auto calculate hoye tds bosbe ami
+     * caile karota edit o korte parbo"* — and this is what makes both true
+     * without either lying about the other. A typed figure is left alone by
+     * the recompute that fires when the gross, the working days or the
+     * declared investment move, so entering one does not get silently undone
+     * by the next edit to the same row. "Work out the tax again" clears the
+     * mark across the run, which is the one deliberate way back to the rule.
+     *
+     * Not the same fact as `tdsBasis` being null. That says no rule produced
+     * the figure, which is equally true of a line from a year with no rule
+     * configured — and those must start computing the day one is set up.
+     */
+    tdsManual: boolean("tds_manual").notNull().default(false),
+
+    /**
      * Taka per US dollar for THIS line, typed while the sheet is a draft.
      *
      * The sheet used to print the app's one governing rate on every row and

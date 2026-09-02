@@ -971,7 +971,12 @@ function LineRow({
         editable={editable}
         onSave={save}
       />
-      <TdsCell line={line} onOpen={onShowWorking} />
+      <TdsCell
+        line={line}
+        editable={editable}
+        onSave={save}
+        onOpen={onShowWorking}
+      />
       <Cell
         value={line.otherDeductions}
         field="otherDeductions"
@@ -1068,40 +1073,105 @@ function LineRow({
  * line with no working behind it: a run from before the app calculated, or an
  * income year with no rule set up.
  */
+/**
+ * The tax: worked out, and typeable over.
+ *
+ * *"etato auto fill hobe eksathe ami duita feature cai. mane auto calculate
+ * hoye tds bosbe ami caile karota edit o korte parbo."* Both, in one cell.
+ *
+ * The figure arrives from the year's rule and re-figures whenever the gross or
+ * the working days move. Typing into the box replaces it AND marks the line,
+ * so the next edit to the same row leaves the typed figure alone instead of
+ * silently recomputing over it — the server says so when it holds one back.
+ *
+ * The mark is drawn, not only stored. A hand-typed figure keeps a dotted amber
+ * underline and says so on hover, because the one real cost of making this
+ * editable is that a sheet can no longer be read as "all of this came from the
+ * rule". Now it can: the ones that did not are visible.
+ *
+ * The working is still reachable — the small button beside the box — but only
+ * where there is one. An eye onto "no rule was applied to this line" is the
+ * empty drawer this app keeps taking off its tables.
+ */
 function TdsCell({
   line,
+  editable,
+  onSave,
   onOpen,
 }: {
   line: PayrollLineDto;
+  editable: boolean;
+  onSave: (field: string, value: string) => void;
   onOpen: () => void;
 }) {
+  const typed = line.tdsManual;
+
+  if (!editable) {
+    return (
+      <td>
+        <button
+          type="button"
+          onClick={onOpen}
+          title={
+            typed
+              ? "Typed by hand, not worked out from the rule"
+              : line.tdsBasis
+                ? "How this was worked out"
+                : "No rule was applied to this line"
+          }
+          className={cn(
+            "flex w-full cursor-pointer items-center justify-end gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted",
+            typed && "decoration-warning/70 underline decoration-dotted",
+          )}
+        >
+          <Amount value={line.tdsAmount} tone="neutral" />
+        </button>
+      </td>
+    );
+  }
+
   return (
     <td>
-      <button
-        type="button"
-        onClick={onOpen}
-        title={
-          line.tdsBasis
-            ? "How this was worked out"
-            : "No rule was applied to this line"
-        }
-        className="flex w-full cursor-pointer items-center justify-end gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-surface-muted"
-      >
-        {/*
-          The warning triangle is gone, on the owner's instruction.
-
-          It drew whenever a line had no stored `tdsBasis`, which was meant to
-          mark the exception — a figure somebody typed rather than one the app
-          worked out. In practice no line on this system carries a basis, so it
-          drew on every row, and a mark that is on everything marks nothing.
-
-          What goes with it is worth knowing: the sheet no longer distinguishes
-          a computed tax from a typed one at a glance. The cell is still a
-          button, its title still says which this line is, and the drawer
-          behind it still shows the working when there is one.
-        */}
-        <Amount value={line.tdsAmount} tone="neutral" />
-      </button>
+      <div className="flex items-center gap-1">
+        <input
+          /*
+           * Keyed on the figure, so a value the server recomputed after a
+           * gross or working-days edit replaces what is in the box. Without
+           * the key React keeps the uncontrolled input's own value and the
+           * cell shows the old tax against the new gross until a reload —
+           * the same trap the working-days box above already answers this way.
+           */
+          key={`tds-${line.tdsAmount}-${typed ? "typed" : "rule"}`}
+          defaultValue={line.tdsAmount}
+          inputMode="decimal"
+          title={
+            typed
+              ? "Typed by hand. Work out the tax again to put the rule back."
+              : "Worked out from the year's rule. Type over it to set it by hand."
+          }
+          onBlur={(event) => {
+            if (event.target.value !== line.tdsAmount)
+              onSave("tdsAmount", event.target.value);
+          }}
+          className={cn(
+            "col-amount h-8 w-full rounded border border-transparent bg-transparent px-2 text-sm outline-none transition",
+            "hover:border-border focus-visible:border-primary focus-visible:bg-surface",
+            typed &&
+              "border-warning/40 underline decoration-warning/70 decoration-dotted underline-offset-4",
+          )}
+        />
+        {line.tdsBasis ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label="How this was worked out"
+            title="How this was worked out"
+            className="shrink-0 rounded p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <Calculator className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
     </td>
   );
 }

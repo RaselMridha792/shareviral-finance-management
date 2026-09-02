@@ -176,6 +176,10 @@ export class PayrollService {
         bonusAmount: payrollLines.bonusAmount,
         otherAdditions: payrollLines.otherAdditions,
         tdsAmount: payrollLines.tdsAmount,
+        // In the projection as well as in the schema. A column that reaches
+        // one and not the other is how this app has three times shipped a
+        // field that stored correctly and read back N/A.
+        tdsManual: payrollLines.tdsManual,
         otherDeductions: payrollLines.otherDeductions,
         deductionNote: payrollLines.deductionNote,
         netAmount: payrollLines.netAmount,
@@ -414,6 +418,7 @@ export class PayrollService {
         teamMemberId: payrollLines.teamMemberId,
         grossAmount: payrollLines.grossAmount,
         tdsAmount: payrollLines.tdsAmount,
+        tdsManual: payrollLines.tdsManual,
         tdsDeclaredInvestment: payrollLines.tdsDeclaredInvestment,
         isPaid: payrollLines.isPaid,
         fullName: teamMembers.fullName,
@@ -540,13 +545,29 @@ export class PayrollService {
       }
     }
 
-    // The tax is an output now, so it moves whenever anything under it does —
-    // the gross, the working days that re-figure it, or what the person
-    // declared having invested.
+    /*
+     * The tax is an output, so it moves whenever anything under it does — the
+     * gross, the working days that re-figure it, or what the person declared
+     * having invested.
+     *
+     * Unless somebody typed it. A figure entered by hand survives the next
+     * edit to the same row, and that is the whole point of the mark: without
+     * it, typing a tax and then correcting a working day would wipe the tax
+     * with no message, which reads as the edit box not working rather than as
+     * the rule reasserting itself. `recalculateTds` is the deliberate way back.
+     *
+     * Typing a tax IN this request beats everything: it is the most recent
+     * statement of intent, and it sets the mark.
+     */
+    const typing = input.tdsAmount !== undefined;
+    const wasTyped = line.tdsManual && !typing;
+
     const recompute =
-      derived !== null ||
-      input.grossAmount !== undefined ||
-      input.tdsDeclaredInvestment !== undefined;
+      !typing &&
+      !wasTyped &&
+      (derived !== null ||
+        input.grossAmount !== undefined ||
+        input.tdsDeclaredInvestment !== undefined);
 
     const computed = recompute
       ? await this.computeTds(
@@ -560,7 +581,9 @@ export class PayrollService {
     const gross = Number(
       derived?.grossAmount ?? input.grossAmount ?? line.grossAmount,
     );
-    const tds = Number(computed?.tdsAmount ?? line.tdsAmount);
+    const tds = Number(
+      input.tdsAmount ?? computed?.tdsAmount ?? line.tdsAmount,
+    );
 
     await this.audit.mutate({
       action: "update",
@@ -585,6 +608,14 @@ export class PayrollService {
             ...(derived ?? {}),
             ...(computed ?? {}),
             /*
+             * Typing the tax marks the line and clears the working, because
+             * there no longer is one: `tdsBasis` is what the computed figure
+             * was worked out from, and leaving the old rule's arithmetic sitting
+             * behind a hand-entered number is precisely the lie the schema's
+             * old comment refused to allow.
+             */
+            ...(typing ? { tdsManual: true, tdsBasis: null } : {}),
+            /*
              * A gross typed straight into the sheet is a hand-set figure, and
              * a day count left standing beside it would claim the figure came
              * from the days. The explicit act wins; the count clears.
@@ -601,10 +632,26 @@ export class PayrollService {
       },
     });
 
+    /*
+     * Two things can be worth saying, and the quieter one matters more.
+     *
+     * A recompute that did not happen is invisible: the gross changes, the tax
+     * stays where it was typed, and nothing on the screen accounts for it. So
+     * it is said out loud whenever this request would otherwise have moved the
+     * figure.
+     */
+    const held =
+      wasTyped &&
+      (derived !== null ||
+        input.grossAmount !== undefined ||
+        input.tdsDeclaredInvestment !== undefined);
+
     const warning =
       gross > 0 && tds > gross * TDS_WARNING_RATIO
         ? `Tax is ${((tds / gross) * 100).toFixed(0)}% of gross — worth a second look.`
-        : undefined;
+        : held
+          ? "The tax was typed by hand, so it was left as it is. Work out the tax again to put the rule back."
+          : undefined;
 
     return { updated: true, warning };
   }
@@ -965,6 +1012,7 @@ export class PayrollService {
 
     let changed = 0;
     let unset = 0;
+    let replaced = 0;
 
     await this.audit.mutate({
       action: "update",
@@ -987,6 +1035,7 @@ export class PayrollService {
             id: payrollLines.id,
             grossAmount: payrollLines.grossAmount,
             tdsAmount: payrollLines.tdsAmount,
+            tdsManual: payrollLines.tdsManual,
             declared: payrollLines.tdsDeclaredInvestment,
           })
           .from(payrollLines)
@@ -1001,12 +1050,20 @@ export class PayrollService {
           );
           if (!tdsBasis) unset++;
           if (tdsAmount !== line.tdsAmount) changed++;
+          if (line.tdsManual) replaced++;
 
           await tx
             .update(payrollLines)
             .set({
               tdsAmount,
               tdsBasis,
+              /*
+               * This is the one deliberate way back to the rule, so it clears
+               * the hand-typed mark across the whole run. It is also the only
+               * thing that overwrites a typed figure — which is why the count
+               * of how many it replaced is reported rather than swallowed.
+               */
+              tdsManual: false,
               updatedAt: new Date(),
               updatedBy: actor.id,
             })
@@ -1018,11 +1075,17 @@ export class PayrollService {
       },
     });
 
+    const typed = replaced
+      ? ` ${replaced} hand-typed ${replaced === 1 ? "figure was" : "figures were"} replaced by the rule.`
+      : "";
+
     return {
       changed,
-      message: unset
-        ? `No tax rule is set up for that year, so ${unset} of the figures are zero. Settings → Salary TDS has the form.`
-        : `${changed} ${changed === 1 ? "figure" : "figures"} changed.`,
+      message:
+        (unset
+          ? `No tax rule is set up for that year, so ${unset} of the figures are zero. Settings → Salary TDS has the form.`
+          : `${changed} ${changed === 1 ? "figure" : "figures"} changed.`) +
+        typed,
     };
   }
 
