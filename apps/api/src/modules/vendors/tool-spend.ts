@@ -1,7 +1,7 @@
 import { RECURRING_VENDOR_TYPES } from "@finance/shared";
 import { inArray, sql, type SQL } from "drizzle-orm";
 
-import { accounts, vendors } from "../../db/schema";
+import { accounts, transactions, vendors } from "../../db/schema";
 
 /**
  * What counts as money spent on tooling, in one place.
@@ -62,5 +62,22 @@ export function isToolSpend(): SQL {
    * The heuristic keeps its original sentence: the prepaid CARD exists to
    * pay for tooling.
    */
-  return sql`(${isToolVendor()} or coalesce(${accounts.currency} <> 'BDT' and ${accounts.type} = 'card', false))`;
+  /*
+   * The FIRST question is now a fact, not a heuristic.
+   *
+   * `subscription_id` says this row paid that plan. Everything else here is a
+   * guess about intent — "paid to a recurring vendor", "settled on the card
+   * that buys tools" — and both guesses miss a plan paid from an ordinary taka
+   * bank account, which is how the AI and other tools card came to read zero
+   * while the money had genuinely gone out.
+   *
+   * The guesses are kept behind it rather than replaced. Every payment recorded
+   * before this column existed has a null in it, and those rows are still
+   * tooling; dropping the heuristic would rewrite history downward.
+   */
+  return sql`(
+    ${transactions.subscriptionId} is not null
+    or ${isToolVendor()}
+    or coalesce(${accounts.currency} <> 'BDT' and ${accounts.type} = 'card', false)
+  )`;
 }

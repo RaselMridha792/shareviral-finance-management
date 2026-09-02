@@ -62,6 +62,12 @@ export function SubscriptionHeadCells() {
     <>
       <Th>Start Date</Th>
       <Th>Tool Name</Th>
+      {/* The owner: "ekhane tool name and plan akoi table er row te cole geche
+          eta alada row hobe". They were stacked in one cell — the plan in small
+          type under the name — which reads as a caption rather than as a
+          column, cannot be scanned down, and has no heading naming it. Two
+          facts, two columns. */}
+      <Th>Plan</Th>
       <Th>Account/Card</Th>
       {/* The same pair every other money table carries, in the same place:
           ours, then theirs. */}
@@ -135,12 +141,12 @@ export function SubscriptionBodyCells({
             </button>
           ) : null}
         </span>
-        {/* The plan rides under the name instead of taking a column. Two plans
-            of one tool are otherwise the same row twice. */}
-        <span className="block text-xs text-muted-foreground">
-          {row.planName}
-        </span>
       </td>
+
+      {/* The plan, its own column now — two plans of one tool are otherwise
+          the same row twice, and stacked under the name it read as a caption
+          with no heading to scan against. */}
+      <td className="text-sm text-muted-foreground">{row.planName}</td>
 
       {/* Category, the three money columns, and Payment Method are on the
           plan's own page. Six columns of a seventeen-column table that the

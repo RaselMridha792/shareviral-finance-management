@@ -36,6 +36,62 @@ ticking all seventeen.
 |---|---|---|
 | — | Nothing outstanding | The three that arrived this morning are done and pushed |
 
+## 41. Adding a subscription takes the money out
+
+The owner, and he was right that it was big: *"ami already add subscription er
+somoy tools er dam koto oita likhe felchi ... akhon expense overview te geleo
+dekhtechi ai tools and subscription er card a 0 dekhacche. dashboard er moddheo
+ai and other tools er section a nei eita. also all transaction er moddheo nai.
+tar mane eta kothao record hocchena mane taka katechena"*.
+
+**Two faults, and the second was mine.**
+
+1. **Adding a plan wrote no money at all.** It recorded an arrangement and
+   waited for somebody to press a second button in a column called Payment. He
+   had typed the price and nothing moved.
+2. **Even once pressed, the payment did not COUNT as tooling** unless it landed
+   on a non-taka card. `isToolSpend()` asked "paid to a recurring vendor, or
+   settled on the card that buys tools", and I removed the vendor stamp last
+   week — correctly, because it was writing a `subscriptions` id into a column
+   with a foreign key to `vendors`, so the insert could only ever have failed.
+   But that left nothing tying the row to the plan, and a plan paid from an
+   ordinary taka bank fell out of tooling into operational expenses.
+
+**The fix for the second is a fact instead of a guess.**
+`transactions.subscription_id`, its own migration, pushed first. "Paid on the
+prepaid card" was always a heuristic about intent; "this row paid that plan" is
+a fact. The heuristics are kept BEHIND it rather than replaced, because every
+payment recorded before the column existed has a null in it and those rows are
+still tooling — dropping them would rewrite history downward.
+
+**On renewals, he chose to be told rather than charged.** Offered automatic
+monthly deduction, he took the reminder: *"na, renew-er somoy amake ekta barta
+dileii hobe"*. So adding a plan takes ONE payment, on its start date, only when
+it is active, and only on create — editing a plan never charges again. The
+reminder that already fires three days before a renewal is what carries the
+rest, and one click on the row records it. An app that writes money nobody
+watched is an app whose books stop agreeing with the bank the first time a card
+is declined.
+
+**Two fields became required**, and they had to: without an account there is
+nothing to take the money from, and without an expense heading the charge lands
+where no Expenses screen shows it — which is the complaint itself. Both are
+checked BEFORE the plan is written, so a refusal leaves nothing behind rather
+than a plan with no payment.
+
+**The Payment column is gone**, on his word. The act moved into the row's own
+actions, because it is still how a renewal is recorded and how a first payment
+is retried when a card is refused.
+
+**Tool name and Plan are two columns now**, not one stacked cell — *"eta alada
+row hobe"*. Stacked, the plan read as a caption with no heading to scan against.
+
+`.subspaysqa.mjs` — 10 checks, driven from a plain **BDT bank** account, which
+is exactly the case the old heuristic missed: the expense exists, it remembers
+its plan, the account is poorer by exactly the price, the Expenses overview's
+tooling slice is no longer zero, the four slices still add up, and the
+dashboard's own AI figure agrees.
+
 ## 39. A deleted person stops holding their employee ID
 
 The owner: *"kono ekta data upload diye delete korar por abar upload dite gele

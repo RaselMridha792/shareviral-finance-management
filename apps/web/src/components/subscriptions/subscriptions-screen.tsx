@@ -9,7 +9,7 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { Image as Plus } from "lucide-react";
+import { BanknoteArrowDown, Image as Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -415,16 +415,28 @@ export function SubscriptionsScreen({
                   ) : null}
                   <SerialHead />
                   <SubscriptionHeadCells />
-                  {/* The act that makes a plan cost money. Its own column
-                      rather than a fourth slot in RowActions, which is shared
-                      with twenty other tables. */}
-                  <Th width="w-28">Payment</Th>
+                  {/*
+                    No Payment column.
+
+                    The owner: "ami already add subscription er somoy tools er
+                    dam koto oita likhe felchi tahole table a ekhane payment
+                    name a keno arekta option rakhcho etar dorkar nai." He is
+                    right — adding a plan now takes its first payment out, so a
+                    whole column asking him to do it again was a column asking
+                    for a thing already done.
+
+                    The act itself is NOT gone, it moved into the row's own
+                    actions. It is still the way a RENEWAL is recorded, which
+                    he asked to be told about rather than charged for
+                    automatically, and the way a first payment is retried if
+                    the card was declined.
+                  */}
                   <RowActionsHead deletable={canWrite} />
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <TableMessageRow colSpan={19}>Loading…</TableMessageRow>
+                  <TableMessageRow colSpan={18}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => (
                     <tr key={row.id} className="row-finance">
@@ -449,23 +461,24 @@ export function SubscriptionsScreen({
                           onScreenshot: setScreenshotOf,
                         }}
                       />
-                      {/* Both buttons render for everybody. A reader
-                          without write access gets them disabled: a blank
-                          cell where every other row has controls reads as a
-                          rendering fault, not as a permission. */}
-                      <td>
-                        {canWrite ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setPaying(row)}
-                          >
-                            Record payment
-                          </Button>
-                        ) : null}
-                      </td>
                       <RowActions
+                        /* Recording a payment sits here now rather than in a
+                           column of its own — for a renewal, or to retry a
+                           first payment the card refused. `extra` is the slot
+                           RowActions keeps for exactly this. */
+                        extra={
+                          canWrite ? (
+                            <button
+                              type="button"
+                              onClick={() => setPaying(row)}
+                              aria-label={`Record a payment for ${row.toolName}`}
+                              title="Record a payment"
+                              className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
+                            >
+                              <BanknoteArrowDown className="size-3.5" />
+                            </button>
+                          ) : null
+                        }
                         onEdit={canWrite ? () => setEditing(row) : undefined}
                         second="status"
                         onSecond={
@@ -517,6 +530,7 @@ export function SubscriptionsScreen({
           open
           toolNames={toolNames}
           accounts={accounts}
+          categories={categories}
           members={members}
           onClose={() => setAdding(false)}
           onSaved={() => {
@@ -532,6 +546,7 @@ export function SubscriptionsScreen({
           subscription={editing}
           toolNames={toolNames}
           accounts={accounts}
+          categories={categories}
           members={members}
           onClose={() => setEditing(null)}
           onSaved={() => {

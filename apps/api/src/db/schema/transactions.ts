@@ -21,6 +21,7 @@ import {
   txnDirectionEnum,
   txnOriginEnum,
 } from "./enums";
+import { subscriptions } from "./subscriptions";
 import { vendors } from "./vendors";
 import { deletion } from "./shared-columns";
 
@@ -83,6 +84,21 @@ export const transactions = pgTable(
     }),
     vendorId: uuid("vendor_id").references(() => vendors.id, {
       onDelete: "restrict",
+    }),
+    /**
+     * The plan this expense paid for, when it paid for one.
+     *
+     * What makes a subscription payment count as tooling a FACT rather than a
+     * guess. `isToolSpend()` used to ask "was it paid to a recurring vendor, or
+     * settled on a non-taka card" — a heuristic about intent — and a plan paid
+     * from an ordinary taka bank account fell out of it entirely and read as an
+     * operational expense.
+     *
+     * `set null` on delete: removing a plan must never remove or block the money
+     * that left the bank for it. The row loses its link and keeps its figure.
+     */
+    subscriptionId: uuid("subscription_id").references(() => subscriptions.id, {
+      onDelete: "set null",
     }),
     /** Set when paying a team member; the FK arrives with Phase 5. */
     teamMemberId: uuid("team_member_id"),

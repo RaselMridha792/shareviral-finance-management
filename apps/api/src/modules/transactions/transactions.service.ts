@@ -732,6 +732,15 @@ export class TransactionsService {
      */
     input: Omit<CreateTransactionInput, "categoryId"> & {
       categoryId?: string;
+      /*
+       * Which plan this expense paid for, when it paid for one.
+       *
+       * Deliberately NOT on the public contract. It decides whether the row
+       * counts as tooling on the dashboard and the Expenses overview, so it is
+       * something the app states about a payment it wrote itself — not
+       * something a caller can claim about any expense it likes.
+       */
+      subscriptionId?: string;
     },
     actor: AuthenticatedUser,
   ) {
@@ -792,6 +801,7 @@ export class TransactionsService {
               senderAccountName: input.senderAccountName,
               senderAccountNumber: input.senderAccountNumber,
               senderSwiftCode: input.senderSwiftCode,
+              subscriptionId: input.subscriptionId ?? null,
               // Typed by hand unless the caller said otherwise, and the schema
               // only lets it say "ai_intake" — a row cannot claim to have come
               // from payroll or a tax payment.
@@ -1079,6 +1089,9 @@ export class TransactionsService {
         accountId,
         amount,
         categoryId: input.categoryId,
+        /* The fact that makes this tooling, rather than the guess about which
+           card it was on. */
+        subscriptionId: plan.id,
         description: input.note?.trim()
           ? `${plan.toolName} — ${input.note.trim()}`
           : `${plan.toolName} subscription`,
@@ -1495,6 +1508,9 @@ const projection = {
   categoryName: categories.name,
   categoryColor: categories.color,
   vendorId: transactions.vendorId,
+  /* In the projection as well as the schema. Forgetting this is how a column
+     stores perfectly and every screen reads N/A — it has bitten three times. */
+  subscriptionId: transactions.subscriptionId,
   vendorName: vendors.name,
   counterparty: transactions.counterparty,
   senderBankName: transactions.senderBankName,

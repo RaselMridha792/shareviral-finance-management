@@ -32,12 +32,14 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
+import { CategorySelect } from "@/components/ledger/category-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
-import type { AccountDto } from "@/lib/masters";
+import type { AccountDto, CategoryNode } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
+import { subscriptionsApi as payApi } from "@/lib/api-client";
 import {
   subscriptionsApi,
   uploadSubscriptionFile,
@@ -154,6 +156,7 @@ export function SubscriptionForm({
   subscription,
   toolNames,
   accounts,
+  categories,
   members,
   open,
   onClose,
@@ -163,6 +166,9 @@ export function SubscriptionForm({
   /** Every tool name already on the list behind this drawer — see below. */
   toolNames: string[];
   accounts: AccountDto[];
+  /** The spending side of the tree, for the heading the first payment lands
+      under. The whole tree is passed; the picker takes the `out` side. */
+  categories: CategoryNode[];
   members: TeamMemberDto[];
   open: boolean;
   onClose: () => void;
@@ -228,6 +234,21 @@ export function SubscriptionForm({
    */
   const [reference] = useState(subscription?.reference ?? "");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  /*
+   * Which expense heading the charge lands under.
+   *
+   * New, and it is here because adding a plan now takes the money out. The
+   * owner: "ami already add subscription er somoy tools er dam koto oita likhe
+   * felchi ... ekhane jate price tai perfectly kaj kore and account theke jeno
+   * taka kate properly hiseb hoy."
+   *
+   * The ledger refuses an expense with no heading and it is right to: an
+   * uncategorised entry appears on no Expenses screen, which is the very
+   * complaint being answered. A plan's own category — "AI Tool", "Hosting" —
+   * is this register's vocabulary, not the company's expense headings, so
+   * there is nothing here to derive it from.
+   */
+  const [categoryId, setCategoryId] = useState("");
   /*
    * A transaction id, or only the paper. Read back from the plan being
    * edited rather than stored — see components/ledger/reference-kind.tsx.
@@ -400,9 +421,70 @@ export function SubscriptionForm({
         })),
       };
 
+      /*
+       * Checked BEFORE the plan is written, not after.
+       *
+       * Saving the plan and then discovering there is nowhere to take the money
+       * from leaves a plan with no payment and somebody wondering which half
+       * happened. One refusal, nothing written.
+       */
+      if (!subscription && status === "active") {
+        if (!accountId) {
+          setPending(false);
+          setError("Choose the card or account this is paid from — the price comes out of it when you save.");
+          return;
+        }
+        if (!categoryId) {
+          setPending(false);
+          setError("Choose the expense heading, or the charge will not appear on any Expenses screen.");
+          return;
+        }
+      }
+
       const saved = subscription
         ? await subscriptionsApi.update(subscription.id, body)
         : await subscriptionsApi.create(body);
+
+      /*
+       * A NEW plan takes its first payment out of the account, here.
+       *
+       * The owner's instruction, and the bug behind it: he had typed the price
+       * and nothing anywhere moved. The plan was a plan and the money was a
+       * second act nobody knew to perform, so the AI tools card read ৳0 and
+       * All transactions was empty.
+       *
+       * Only on CREATE. Editing a plan must never take money again — a typo
+       * fixed in the notes is not a purchase — and only when the plan is
+       * ACTIVE, because adding a cancelled plan for the record is not a thing
+       * to charge for today.
+       *
+       * Renewals are deliberately NOT automatic. Asked, the owner chose to be
+       * TOLD rather than charged: "na, renew-er somoy amake ekta barta dileii
+       * hobe". The reminder already exists and fires three days out, and one
+       * click on the row records it. An app that writes money nobody watched
+       * is an app whose books stop agreeing with the bank the first time a
+       * card is declined.
+       */
+      if (!subscription && status === "active") {
+        try {
+          await payApi.pay(saved.id, {
+            txnDate: startDate,
+            categoryId,
+            note: "First payment, recorded when the plan was added",
+            /* The renewal date is already the first one AFTER today; advancing
+               it here would skip a month. */
+            advanceRenewal: false,
+          });
+        } catch (caught) {
+          onSaved();
+          setError(
+            `The plan is saved, but the payment did not go through: ${
+              caught instanceof ApiError ? caught.message : "try it again"
+            }. Use "Record payment" on its row to take the money out.`,
+          );
+          return;
+        }
+      }
 
       /*
        * The paperwork, after the row exists for the same reason the screenshot
@@ -643,7 +725,33 @@ export function SubscriptionForm({
             </Select>
           </Field>
 
-          <Field label="Account/Card" error={fieldErrors.accountId}>
+          {/*
+            Required now, both of them, because adding a plan takes the money
+            out. Without an account there is nothing to take it FROM, and
+            without a heading the expense lands where no Expenses screen shows
+            it — which is the complaint this whole change answers. A form that
+            accepted a plan and then quietly failed to charge it would be the
+            same bug wearing a different face.
+          */}
+          <Field
+            label="Expense heading"
+            required={!subscription}
+            hint="Where the charge shows up under Expenses"
+          >
+            <CategorySelect
+              name="categoryId"
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={categories}
+              kind="out"
+            />
+          </Field>
+
+          <Field
+            label="Account/Card"
+            required={!subscription}
+            error={fieldErrors.accountId}
+          >
             <SearchableSelect
               value={accountId}
               onChange={(next) => {
