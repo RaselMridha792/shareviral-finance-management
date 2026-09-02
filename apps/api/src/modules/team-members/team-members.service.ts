@@ -691,9 +691,25 @@ export class TeamMembersService {
         and(
           isNull(teamMembers.deletedAt),
           eq(teamMembers.engagementType, "employee"),
+          /*
+           * A row in the TRASH is not a salary on record.
+           *
+           * This asked whether any row existed at all, trashed ones included,
+           * so somebody whose only salary row had been thrown away counted as
+           * "already has pay" and was skipped. The effect was total silence:
+           * they are not generated onto a payroll sheet (`buildLine` filters
+           * `deleted_at is null`), the directory shows "Not set", and this —
+           * the one action that exists to repair exactly that — neither offered
+           * to fix them nor listed them among the skipped. Invisible in three
+           * places at once.
+           *
+           * Every other reader of this table already filters the same way; this
+           * was the one that did not.
+           */
           sql`not exists (
             select 1 from ${compensationHistory}
             where ${compensationHistory.teamMemberId} = ${teamMembers.id}
+              and ${compensationHistory.deletedAt} is null
           )`,
         ),
       )
@@ -895,28 +911,36 @@ export class TeamMembersService {
               compensationHistory.effectiveFrom,
             ],
             /*
-              The conflict can land on a row that is in the trash, and it must
-              bring that row back out.
+              `targetWhere` names the PARTIAL index, and it is not optional.
 
-              `compensation_effective_idx` is on (team_member_id,
-              effective_from) and is NOT partial — a deleted row still occupies
-              its date. So recording pay effective on the same day as a trashed
-              row takes this branch, and without the three nulls below the
-              figure is written INTO the trashed row: the request answers 200,
-              the screen refreshes, and nothing appears. The person keeps the
-              older salary and the amount nobody meant to type sits in the
-              trash.
+              `compensation_effective_idx` is unique on (team_member_id,
+              effective_from) WHERE deleted_at is null. Postgres infers which
+              index a conflict target means, and the inference has to match: a
+              target with no `where` cannot use a partial index. Drop this line
+              and every salary save fails with "no unique or exclusion
+              constraint matching the ON CONFLICT specification" — which is why
+              the migration and this line ship in one deploy.
 
-              Un-deleting is the right answer rather than an error: somebody
-              recording a figure for a date is saying that is the figure for
-              that date, and the row they are overwriting is one they had
-              already decided was wrong.
+              What it buys: a row in the TRASH no longer occupies its date. It
+              used to, and that is how a figure came to be written into a
+              trashed row — 200 back, nothing on screen, the person left on
+              their old pay.
             */
+            targetWhere: sql`${compensationHistory.deletedAt} is null`,
             set: {
               grossAmount: input.grossAmount,
               components,
               changeReason: input.changeReason,
               createdBy: actor.id,
+              /*
+                Kept, and now belt to the braces rather than the fix itself.
+
+                With the index partial, this branch can only be reached by a
+                LIVE row, whose three columns are already null. It stays because
+                it costs nothing and because it is the thing that would keep the
+                original bug shut if the index were ever widened again — which
+                is exactly the mistake this pair exists to prevent.
+              */
               deletedAt: null,
               deletedBy: null,
               deleteReason: null,

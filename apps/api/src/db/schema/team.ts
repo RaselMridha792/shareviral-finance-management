@@ -291,10 +291,13 @@ export const compensationHistory = pgTable(
     ...deletion(),
   },
   (t) => [
-    uniqueIndex("compensation_effective_idx").on(
-      t.teamMemberId,
-      t.effectiveFrom,
-    ),
+    /* Partial, and `setCompensation`'s ON CONFLICT carries a matching WHERE.
+       The two have to be changed together: a conflict target with no `where`
+       cannot infer a partial index, and one with a `where` cannot infer a full
+       one, so a mismatch makes every salary save fail. */
+    uniqueIndex("compensation_effective_idx")
+      .on(t.teamMemberId, t.effectiveFrom)
+      .where(sql`${t.deletedAt} is null`),
     index("compensation_member_idx").on(t.teamMemberId),
     check("compensation_positive", sql`${t.grossAmount} >= 0`),
   ],

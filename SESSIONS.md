@@ -180,7 +180,49 @@ on the sheet.
 
 More coming — the owner is adding to this list before we start on it.
 
-### Three things I did not change, each yours to decide
+### The three that were yours to decide — all three done
+
+He was given the detail and chose all three. `.salarylocksqa.mjs`, 14 checks.
+
+**1. `compensation_effective_idx` is partial now**, and this is the one that
+needed care. Its migration and its code **cannot be separated**:
+`setCompensation` inserts with `ON CONFLICT (team_member_id, effective_from)`,
+Postgres infers which index that names, and the inference has to match — a
+target with no `where` cannot use a partial index, and one with a `where` cannot
+use a full one. Migration alone, or code alone, and EVERY salary save fails. So
+they shipped in one commit, and the harness's first three checks exist purely to
+prove that did not happen: a first figure, a later figure, and a rewrite of an
+existing date, which is the branch that actually takes the conflict.
+
+What changes in behaviour: recording pay on the same date as a TRASHED row no
+longer collides with it. It inserts a live row and leaves the trashed one alone
+— better than the old answer, which revived a row somebody had thrown away as a
+side effect of typing a figure.
+
+**And it opened a door, which the harness caught before it shipped.** With the
+index partial, a trashed row can no longer come back to a date something else
+has taken meanwhile — Postgres refuses with a 23505 that reaches the browser as
+"Internal server error". That is the same class of bug the index exists to
+close, arriving through the door the fix itself opened. `assertDateStillFree`
+turns it into a sentence.
+
+**2. Restoring a salary row checks what it is coming back INTO.** Restore
+everywhere else lifts `deleted_at` and hands the row back, which is right for an
+expense — the world has not changed shape. A salary row is different: trash the
+one in force, record another while it is gone, restore the first, and two rows
+both say "still in force" while the resolvers take whichever sorts first. Now
+refused, with a sentence saying to record a new change instead. Only
+`compensation` — this is not a rule about trash, it is a rule about a table
+where two open rows is a contradiction.
+
+**3. `backfillCompensationFromJoining` stops counting trashed rows.** It asked
+whether any row existed at all, so somebody whose only salary had been thrown
+away counted as "already has pay". They were then invisible in three places at
+once: not generated onto a payroll sheet, "Not set" in the directory, and
+neither offered nor listed as skipped by the one action that exists to repair
+exactly that.
+
+### The original note, kept for the reasoning
 
 - **`compensation_effective_idx` should be partial** (`where deleted_at is null`),
   the way every index written today is. It cannot be done on its own: making it

@@ -607,6 +607,99 @@ export class TrashService {
     return { done, failed };
   }
 
+  /**
+   * What a row is coming back INTO, not just what it was.
+   *
+   * Restore does one thing everywhere else: it lifts `deleted_at` and hands the
+   * row back. That is right for an expense or an account — the world has not
+   * changed shape while it was away.
+   *
+   * A SALARY row is different, and the owner asked for the check. Trash the row
+   * that is currently in force, record a different figure while it is gone, and
+   * restoring the old one leaves TWO rows that both say "still in force". The
+   * resolvers take the newest row starting on or before the date they want, so
+   * which of the two gets paid depends on nothing a person can see. That is the
+   * one shape of this bug that reaches money.
+   *
+   * Refused with a sentence saying what to do instead, rather than restored and
+   * left to be discovered by a payroll sheet.
+   *
+   * Deliberately only `compensation`. This is not a rule about trash; it is a
+   * rule about a table where two open rows is a contradiction, and inventing a
+   * general one would mean guessing what "overlap" means for fifteen kinds that
+   * have no such notion.
+   */
+  private async assertRestoreFits(
+    entry: TrashEntry,
+    row: Record<string, unknown>,
+  ) {
+    if (entry.kind !== "compensation") return;
+
+    const memberId = row.team_member_id;
+    if (!memberId) return;
+
+    /* An open row is one with no end date — the same definition the screen and
+       the resolvers use. */
+    const isOpen = row.effective_to === null || row.effective_to === undefined;
+    if (!isOpen) return;
+
+    const clash = await this.db.client.execute(
+      sql`select count(*)::int as n
+            from compensation_history
+           where team_member_id = ${memberId}
+             and deleted_at is null
+             and effective_to is null`,
+    );
+    const open = Number((clash.rows as unknown as { n: number }[])[0]?.n ?? 0);
+    if (open > 0) {
+      throw new BadRequestException(
+        "That salary record has no end date, and this person already has one in force. " +
+          "Restoring it would leave two, and nothing on screen would say which one pays. " +
+          "Record the figure you want as a new change instead.",
+      );
+    }
+  }
+
+  /**
+   * The date it is coming back to has to still be free.
+   *
+   * Made necessary by the index this shipped with. `compensation_effective_idx`
+   * is now unique per person per date among LIVE rows, which is the whole point
+   * of it — but it means a trashed row can no longer come back to a date
+   * something else has taken in the meantime. Trash a figure, type a different
+   * one for the same day, then restore: two live rows on one date, and Postgres
+   * refuses with a 23505 that reaches the browser as "Internal server error".
+   *
+   * Caught by the harness before this went out, which is the only reason it is
+   * a sentence here rather than a 500 on the live site. It is the same class of
+   * bug the partial index exists to close, arriving through the door the fix
+   * itself opened.
+   */
+  private async assertDateStillFree(
+    entry: TrashEntry,
+    row: Record<string, unknown>,
+  ) {
+    if (entry.kind !== "compensation") return;
+    const memberId = row.team_member_id;
+    const on = row.effective_from;
+    if (!memberId || !on) return;
+
+    const taken = await this.db.client.execute(
+      sql`select count(*)::int as n
+            from compensation_history
+           where team_member_id = ${memberId}
+             and effective_from = ${on}
+             and deleted_at is null`,
+    );
+    if (Number((taken.rows as unknown as { n: number }[])[0]?.n ?? 0) > 0) {
+      throw new BadRequestException(
+        "There is already a salary recorded for that person on that date. " +
+          "Restoring this one would leave two figures for one day. " +
+          "Edit the figure that is there instead, or delete it first.",
+      );
+    }
+  }
+
   async restore(kind: string, id: string, actor: AuthenticatedUser) {
     const entry = this.entryFor(kind, actor);
     const row = await this.readRow(entry, id);
@@ -616,6 +709,9 @@ export class TrashService {
     }
 
     const ids = await this.siblingIdsInTrash(entry, id, row);
+
+    await this.assertRestoreFits(entry, row);
+    await this.assertDateStillFree(entry, row);
 
     // Restoring an "out" row spends the money again. The account rule holds
     // on the way out of the trash exactly as it does everywhere else.
