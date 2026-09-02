@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 50 | **Payslip: the company name printed twice** in the header — the boxed line under the logo comes off | not started |
+| 51 | **Payroll: invoice and reference upload** when a run is created | not started |
 | 43 | Money transfer: the date read `2026-07-02` | **done** — and it exposed a blind spot in the sweep |
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
@@ -61,6 +63,43 @@ The lookbehind is gone. A false positive is a loud failure somebody looks at; a
 false negative is a bug shipping. With it gone the sweep immediately found the
 Money transfer date, which is now `formatDate`d like everywhere else, and
 nothing else — so the other sixteen screens really were clean.
+
+## 50. The company name, printed twice
+
+From a marked screenshot of the payslip header. "ShareViral Finance Management"
+appears beside the SV logo at the top, and again in its own line directly
+underneath — `slip-legal`, at `payslip-view.tsx:175`, which joins
+`companyName` with `companyLegalNote`.
+
+The fix is not simply deleting the line: it carries **two** things joined by a
+dot, and only the first is the duplicate. `companyLegalNote` is whatever the
+company registered as — the sort of thing a payslip is expected to state once —
+so the line should print the note alone and drop the name, and disappear
+entirely when there is no note rather than leaving an empty rule.
+
+Worth checking with it: the name appears twice more further down, at
+`:359` ("Accounts & Finance, {companyName}") and `:388` (the signatory
+fallback). Those are not duplicates — each says who, in a block about who — but
+they should be read once with fresh eyes while this is open.
+
+## 51. Payroll: attaching the invoice and the bank record
+
+*"ekhane payroll toiri korar somoy invoice and reference upload korar option tao
+diye diyo."*
+
+The same pair every other money screen carries, on the run. What has to be
+settled first, because payroll is not shaped like the others:
+
+- **Which row does the file hang on?** `files` has one owner column per kind and
+  a `files_one_owner` constraint that three migrations have already fought over.
+  A payroll run has no file column today, so this needs one — a migration, and
+  it must be added to that constraint rather than beside it.
+- **The run, or the payment?** Paying a run writes ledger entries, and those
+  already take documents. If the paperwork belongs on the payment, most of this
+  exists; if it belongs on the RUN — which is what "payroll toiri korar somoy"
+  says, since a run is created before it is paid — it is new.
+
+Not started, and not guessed at.
 
 ## 49. The payslip's two signatures, level
 
