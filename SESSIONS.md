@@ -39,6 +39,7 @@ ticking all seventeen.
 | 56 | **Exports: a Windows CSV mail list, a data sheet, a bank statement PDF** | **done** |
 | 57 | **Salary sheet: the tax auto-fills AND can be typed over** | **done** |
 | 58 | **Subscriptions: a Charge added to the price** | **done** |
+| 59 | **Subscriptions: three live bugs — the dollar balance, the save error, the vanishing row** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -158,6 +159,59 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 59. Three live bugs on AI tools and subscriptions
+
+*"payment record add korle account theke taka kattechena, tarpor edit kore save
+dile error dicche, Ami expired duto subscription add korlam oigulao kaj
+korchena."*
+
+All three were real, all three were reproduced before anything was changed
+(`.subsbugs.mjs` prints what the API actually answered), and none of them was
+visible in a diff.
+
+**1. The money did not come off the card.** The taka balance moved every time —
+that was never the problem. A foreign account's balance ON SCREEN is stated in
+its own currency, and `AccountsService.ownCurrencyBalance` builds that from each
+row's `original_amount`, or from the row's own rate where there is none. A row
+carrying neither contributes **zero**. `payForSubscription` wrote neither, so a
+$100 plan paid from a dollar card took **$0.00** out of it and marked the
+balance an estimate into the bargain. Measured before the fix:
+`ownBalance 0.00, ownBalanceExact false`.
+
+It now writes the dollars, the currency and the rate — but only where the price
+was not typed over. A hand-typed amount is a figure whose dollars nobody
+stated, so it carries the plan's rate and makes no dollar claim, which leaves
+the screen to mark it an approximation rather than have this invent one.
+`originalAmount` is the **vendor's** price, not price-plus-charge: the bank's
+charge is levied here in taka, and the two figures are different on purpose.
+
+**2. Every save reported an error, and every save had worked.** `update()`
+returned nothing, so Nest answered **200 with an empty body**; the browser
+client calls `response.json()` on anything that is not a 204, and the thrown
+`Unexpected end of JSON input` was reported as *"Could not save that"*. It also
+broke a second thing quietly: the form reads `saved.id` afterwards to attach the
+invoice and the bank record, and on an edit `saved` was `undefined` — so a file
+chosen while editing could never upload.
+
+`update()` now answers with the plan. **The first attempt at this fix did
+nothing at all**: the method already ended in `return this.audit.mutate({…})`,
+so the new `return this.get(id)` underneath it was unreachable. It compiled, it
+typechecked, and the browser kept reporting the same error — caught only
+because the harness drives the screen. The `mutate` is awaited now.
+
+**3. A plan saved as Expired vanished.** The register opens on Active. Save a
+plan as Expired — or edit an active one to Expired — and it matched nothing on
+screen afterwards, so the table looked untouched and the save looked like it
+had failed. Which is exactly what somebody adding two of them would report.
+Nothing was hidden and nothing was broken; the screen simply kept showing a
+filter that excluded the thing it had just been asked to make. The form now
+tells the screen which status it saved and the screen moves to that tab. "All"
+is left alone, because it already shows the row.
+
+Proved by `.subsfixqa.mjs` — 16 checks. The one that matters reads the
+**accounts screen's own balance endpoint**, not a sum: `$4000.00 → $3900.00`,
+and `ownBalanceExact false → true`.
 
 ## 58. Subscriptions: the charge on top of the price
 

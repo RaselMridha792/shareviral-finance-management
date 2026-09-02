@@ -1110,6 +1110,35 @@ export class TransactionsService {
      * `subscriptions` id in it is an insert that fails outright. The plan is
      * named in the description instead.
      */
+    /**
+     * The dollars, and the rate — without which a USD card's balance does not
+     * move at all.
+     *
+     * The owner: *"payment record add korle account theke taka kattechena."*
+     * He was right, and the taka side was never the problem: the ledger's taka
+     * balance moved every time. A foreign account's balance on screen is its
+     * OWN currency, and `AccountsService.ownCurrencyBalance` builds that from
+     * `original_amount` where the row carries one, or from the row's rate
+     * where it does not — and a row with neither contributes **zero**. This
+     * path wrote neither, so a $100 plan paid from a dollar card took $0 out
+     * of it, and the figure was marked an estimate into the bargain.
+     *
+     * Only where the price was not typed over. A hand-typed amount is a figure
+     * whose dollars nobody stated — the card may have charged something else
+     * entirely — so it carries the plan's rate and no dollar claim, which
+     * makes the balance an approximation the screen already knows how to mark
+     * rather than a number this invented.
+     *
+     * `originalAmount` is the VENDOR's price, not the price plus the charge.
+     * The bank's charge is levied here in taka; the dollar side of the card is
+     * debited by what the vendor billed, and the two figures are different on
+     * purpose.
+     */
+    const statedDollars =
+      input.amount === undefined && plan.usdRate && Number(plan.usdRate) > 0
+        ? { originalAmount: plan.costUsd, fxRate: plan.usdRate }
+        : null;
+
     const created = await this.create(
       {
         direction: "out",
@@ -1117,6 +1146,18 @@ export class TransactionsService {
         accountId,
         amount,
         categoryId,
+        ...(statedDollars
+          ? {
+              originalAmount: statedDollars.originalAmount,
+              originalCurrency: "USD",
+              fxRate: statedDollars.fxRate,
+            }
+          : {}),
+        // The rate stands even where the dollars do not, so a typed amount is
+        // still translatable rather than silently worth nothing.
+        ...(plan.usdRate && Number(plan.usdRate) > 0
+          ? { usdRate: plan.usdRate }
+          : {}),
         /* The fact that makes this tooling, rather than the guess about which
            card it was on. */
         subscriptionId: plan.id,

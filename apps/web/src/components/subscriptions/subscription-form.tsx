@@ -168,7 +168,17 @@ export function SubscriptionForm({
   members: TeamMemberDto[];
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  /**
+   * Told what was saved, not just that something was.
+   *
+   * The register opens on the Active tab. A plan saved as Expired — or an
+   * active one edited to Expired — matched no row on screen afterwards, so the
+   * list looked exactly as it had and the save looked like it had failed. The
+   * owner, having added two: *"expired duto subscription add korlam oigulao
+   * kaj korchena."* The screen uses this to move to the tab the row is
+   * actually on.
+   */
+  onSaved: (savedStatus?: SubscriptionStatus) => void;
 }) {
   const editing = Boolean(subscription);
 
@@ -461,7 +471,7 @@ export function SubscriptionForm({
             advanceRenewal: false,
           });
         } catch (caught) {
-          onSaved();
+          onSaved(status);
           setError(
             `The plan is saved, but the payment did not go through: ${
               caught instanceof ApiError ? caught.message : "try it again"
@@ -485,7 +495,7 @@ export function SubscriptionForm({
         try {
           await uploadSubscriptionFile(saved.id, file, kind);
         } catch (caught) {
-          onSaved();
+          onSaved(status);
           setError(
             `The plan is saved, but the ${what} did not upload: ${
               caught instanceof ApiError ? caught.message : "try it again"
@@ -530,7 +540,7 @@ export function SubscriptionForm({
       Inside the try, anything `onSaved` threw was caught below and reported as
       a failed save — on a plan that had just been written.
     */
-    if (done) onSaved();
+    if (done) onSaved(status);
   }
 
   return (

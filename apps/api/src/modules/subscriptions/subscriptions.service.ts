@@ -311,7 +311,11 @@ export class SubscriptionsService {
       usdRate: input.usdRate ?? existing.usdRate ?? undefined,
     });
 
-    return this.audit.mutate({
+    /* Awaited, not returned. Returning it here made the `return this.get(id)`
+       at the foot of this method unreachable — the fix compiled, typechecked
+       and changed nothing, and the browser kept reporting "Could not save
+       that" on a save that had worked. */
+    await this.audit.mutate({
       action: "update",
       entityTable: "subscriptions",
       entityId: id,
@@ -383,6 +387,22 @@ export class SubscriptionsService {
         if (users) await this.replaceUsers(tx, id, users, actor);
       },
     });
+
+    /**
+     * The updated plan, because a 200 has to have a body.
+     *
+     * This returned nothing, so Nest answered **200 with an empty body**, and
+     * the browser client does `response.json()` on any non-204 — which threw
+     * `Unexpected end of JSON input`, which the form reported as *"Could not
+     * save that"*. The save had already succeeded. The owner hit it every
+     * single time he edited a plan: *"edit kore save dile error dicche."*
+     *
+     * Returning the row rather than a bare 204 also fixes the second half of
+     * the same bug: the form reads `saved.id` afterwards to attach the invoice
+     * and the bank record, and on an edit `saved` was `undefined`, so a file
+     * chosen while editing could never upload.
+     */
+    return this.get(id);
   }
 
   /**

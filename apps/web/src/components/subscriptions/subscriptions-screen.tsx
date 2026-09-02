@@ -156,6 +156,29 @@ export function SubscriptionsScreen({
     setPage(1);
   }, []);
 
+  /**
+   * Move to the tab the row you just saved is actually on.
+   *
+   * The register opens on Active. A plan saved as Expired matched nothing on
+   * screen afterwards, so the table looked untouched and the save looked like
+   * it had failed — which is what the owner reported after adding two of them.
+   * Nothing is hidden and nothing is renamed; the screen simply stops showing
+   * a filter that excludes the thing it was just asked to make.
+   *
+   * "All" is left alone, because it already shows the row.
+   */
+  const showSaved = useCallback(
+    (savedStatus?: SubscriptionStatus) => {
+      if (!savedStatus) return;
+      setTab((current) => {
+        if (current === "all" || current === savedStatus) return current;
+        setPage(1);
+        return savedStatus;
+      });
+    },
+    [],
+  );
+
   const changeCategory = useCallback((next: SubscriptionCategory | "") => {
     setCategory(next);
     setPage(1);
@@ -525,8 +548,9 @@ export function SubscriptionsScreen({
           accounts={accounts}
           members={members}
           onClose={() => setAdding(false)}
-          onSaved={() => {
+          onSaved={(savedStatus) => {
             setAdding(false);
+            showSaved(savedStatus);
             void load();
           }}
         />
@@ -540,8 +564,9 @@ export function SubscriptionsScreen({
           accounts={accounts}
           members={members}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(savedStatus) => {
             setEditing(null);
+            showSaved(savedStatus);
             void load();
           }}
         />
