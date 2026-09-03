@@ -42,6 +42,7 @@ ticking all seventeen.
 | 59 | **Subscriptions: three live bugs — the dollar balance, the save error, the vanishing row** | **done** |
 | 60 | **Subscriptions: the charge is in dollars, not taka** | **done** |
 | 61 | **A bank charge on every kind of transaction** | **done** |
+| 62 | **Cash In: one order, the derived box locked, a charge on both account kinds** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -161,6 +162,93 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 62. Cash In: one order, the derived box locked, a charge either way
+
+*"ekhane usd bank select korle charge field ta nai … bdt select hole … field
+gula ultapalta position a ache also auto calculate hoyna. equivalant field tay
+type kora jay eta vul eta auto select hobe."* And the order, spelled out:
+*"bdt select hole: bdt amount, usd rate, auto fill, bank charge. r usd hole:
+usd amount, usd rate, bdt auto fill, bank charge."*
+
+Three faults in one drawer, and the cause of all three was that the money block
+was **written twice** — once for a dollar account and once for a taka one — and
+the two copies had drifted. The dollar copy never got a Bank charge box. The
+taka copy had it in the middle, and derived nothing.
+
+**One block now, and the ORDER flips with the account rather than the boxes
+being written twice.** Four in a fixed sequence: the account's own currency
+(typed), the rate, the other currency (worked out, locked), the bank charge.
+Which of the first and third is typed follows the account; that exactly one of
+the two is derived is the same rule in both directions.
+
+**Deriving the dollars is only honest now.** The taka that lands is regularly
+short of dollars × rate, and until yesterday that difference had nowhere to go
+— so deriving either side would have buried a bank charge inside a rate. The
+charge has its own row since #61, and what is left is arithmetic.
+
+**The locked box is still not locked blind.** On a dollar account the taka is
+read-only only while the arithmetic owns it: an entry from before the dollars
+were recorded has none to derive from, and a box that is empty AND locked is
+one nobody can save. `usdSent` is also seeded from the row being edited now —
+it started blank, which was survivable while the taka was typed and is not once
+the dollars drive it.
+
+Proved by `.cashinorderqa.mjs` — 17 checks, the four labels read in **document
+order** on each account kind, the derived box measured for its value AND its
+`readOnly`, the rate changed to watch the derived figure move with it, and the
+whole thing saved to confirm ৳122,000 in, $1,000 recorded, ৳450 charged as its
+own row and the account netting ৳121,550.
+
+Three of those checks failed first on the harness rather than the app, and each
+is worth the next person knowing: a `SearchableSelect` keeps its value in a
+hidden input, so setting that input picks no account and every "BDT layout"
+assertion was really looking at the dollar one; `[name="description"]` matches
+Next's `<meta name="description">` in the head before it reaches the form; and
+guessing an element's prototype to find the `value` setter throws on anything
+that is not the tag you guessed. A fourth: the Cash In screen lists the current
+month, so a fixture dated last month passes every database check and is
+invisible to the pencil that is supposed to reopen it.
+
+### What the review caught before any of this shipped
+
+An adversarial pass over the diff (three reviewers, every claim then handed to
+a separate agent told to refute it) returned **twelve findings, all of which
+survived**. Four distinct faults under the duplicates, and every one of them
+was in the change rather than in the old code:
+
+**Every taka receipt would have been filed as a foreign remittance.** The
+derived dollars can never be blank — the rate is required and prefilled — and
+`original_currency is not null` is the whole test `OverviewService` uses for
+the dashboard's CEO funding, with `ReportsService.funding` selecting on
+`original_currency = 'USD'`. Blank used to carry the meaning; the old box said
+*"Blank for a local receipt"*, and a locked box cannot be left blank. Put to
+the owner, who chose a tick: **"Money from inside the country — no dollars were
+sent."** Unticked the derived figure is recorded and the receipt counts as
+funding; ticked the input loses its `name`, `FormData.get` answers null, and
+the row stays what it is. Seeded on an edit from whether the row recorded any
+dollars, so a correction cannot reclassify it.
+
+**Editing a dollar-account receipt would have rewritten its stored taka.**
+Seeding `usdSent` from the row made `isDerived` true on the first render of an
+edit, so the locked box showed dollars × rate and the update sent that product
+— the file's own comment had documented this exact hazard as the reason the
+lock was conditional, and seeding defeated it. Worse where the row carried no
+rate of its own: the fx effect backfills the newest rate on file, so a June
+receipt opened in September would have been revalued at September's rate.
+Fixed with `moneyTouched` — the arithmetic takes over only once somebody moves
+one of its inputs, which is the same guard `transaction-form.tsx` already
+carries as `bdtTouched`.
+
+**The bank charge box was inert on a correction.** It opened blank whatever the
+entry carried, and `chargeAmount` was missing from the update payload, so
+typing one did nothing and clearing one could not clear it.
+
+**The drift warning cried wolf.** It compares the entered rate against taka ÷
+dollars, which only means something when a person typed both. With one side
+derived the difference is a rounding — ৳500 at 122.77 derives $4.07, which
+reads back as 122.85 — so it fired on ordinary small receipts. It now shows
+only where both figures were stated independently.
 
 ## 61. A bank charge on every kind of transaction
 

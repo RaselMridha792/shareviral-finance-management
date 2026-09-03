@@ -139,7 +139,50 @@ export function CashInForm({
    * a report that quietly says a dollar cost ৳1,227.
    */
   const [typedAmount, setTypedAmount] = useState("");
-  const [usdSent, setUsdSent] = useState("");
+  /*
+   * Seeded from the row being edited, not left blank.
+   *
+   * It started empty, which was survivable while the taka was the typed
+   * figure — but the dollars now DRIVE the taka on a USD account, so an empty
+   * box would blank the required amount the moment the drawer opened on an
+   * existing entry.
+   */
+  const [usdSent, setUsdSent] = useState(transaction?.originalAmount ?? "");
+
+  /**
+   * Whether the dollars or the rate have been touched **in this sitting**.
+   *
+   * Seeding `usdSent` from the row made the taka derive the instant an edit
+   * drawer opened — and the comment further down says exactly why that is
+   * dangerous: an entry whose stored taka does not equal dollars x rate is
+   * what a bank charge looks like, and locking the box would rewrite the
+   * figure to the product with nobody asking. Seeding defeated that guard.
+   *
+   * So the arithmetic takes over only once somebody moves one of its inputs.
+   * A NEW entry has nothing to protect, so it derives from the first keystroke
+   * — which is the case the owner is actually looking at.
+   */
+  const [moneyTouched, setMoneyTouched] = useState(false);
+
+  /**
+   * Whether this receipt is money from inside the country.
+   *
+   * The dollars are DERIVED on a taka account now, which means they are never
+   * blank — and `original_currency is not null` is the whole test the rest of
+   * the app uses for "this came from abroad" (`OverviewService`'s CEO funding
+   * total, and `ReportsService.funding`). Left alone, every local receipt in
+   * taka would have been counted as a remittance at an invented realised rate.
+   *
+   * Blank used to carry that meaning: the old box said *"Blank for a local
+   * receipt"*. A locked box cannot be left blank, so the meaning needs a
+   * control of its own. Asked which he wanted, the owner chose the tick.
+   *
+   * Seeded from the row on an edit: one that recorded no dollars WAS a local
+   * receipt, and reading it back is what stops an edit reclassifying it.
+   */
+  const [localReceipt, setLocalReceipt] = useState(
+    transaction ? !transaction.originalAmount : false,
+  );
 
   /**
    * Whether the taka figure was typed rather than worked out.
@@ -226,12 +269,34 @@ export function CashInForm({
    * be the app arguing with the bank over the one figure the bank is certain
    * about.
    */
-  const isDerived = usdPrimary && derivedAmount !== "";
-  const amount = isDerived
-    ? derivedAmount
-    : amountTyped
-      ? typedAmount
-      : (transaction?.amount ?? "");
+  /**
+   * The dollars the taka and the rate come to — the mirror of `derivedAmount`.
+   *
+   * The owner, on a BDT account: *"equivalant field tay type kora jay eta vul
+   * eta auto select hobe"*. So on a taka account the dollars are worked out
+   * rather than asked for, exactly as the taka is on a dollar account. Which
+   * of the two is typed follows the account; that one field is derived and
+   * locked is the same rule in both.
+   *
+   * This is only honest now that a bank charge has a box of its own. The taka
+   * that lands is regularly short of dollars × rate, and until today that
+   * difference had nowhere to go, so deriving either side would have buried a
+   * charge inside a rate. The charge is its own row now; what is left is
+   * arithmetic.
+   */
+  const typedBdt = amountTyped ? typedAmount : (transaction?.amount ?? "");
+  const derivedUsd = (() => {
+    if (!typedBdt.trim()) return "";
+    const bdt = Number(plainAmount(typedBdt));
+    const rate = Number(plainAmount(usdRate));
+    if (!Number.isFinite(bdt) || bdt <= 0) return "";
+    if (!Number.isFinite(rate) || rate <= 0) return "";
+    return (bdt / rate).toFixed(2);
+  })();
+
+  const isDerived =
+    usdPrimary && derivedAmount !== "" && (!transaction || moneyTouched);
+  const amount = isDerived ? derivedAmount : typedBdt;
   /*
    * Switching from a USD account to a BDT one keeps the figure on screen.
    *
@@ -254,7 +319,15 @@ export function CashInForm({
     }
   }
 
-  const realised = realisedRate(amount, usdSent);
+  /*
+   * The pair that will actually be STORED, not the pair of state variables.
+   *
+   * On a taka account the dollars are derived, so `usdSent` holds whatever was
+   * last typed on some other account — reading the note off it would print a
+   * rate for a figure this entry is not going to save.
+   */
+  const usdStored = usdPrimary ? usdSent : localReceipt ? "" : derivedUsd;
+  const realised = realisedRate(amount, usdStored);
 
   /**
    * True when the taka figure no longer matches the rate that was entered.
@@ -266,7 +339,19 @@ export function CashInForm({
    * worth noticing.
    */
   const enteredRate = Number(plainAmount(usdRate));
+  /*
+   * Only where BOTH figures were stated independently.
+   *
+   * The note exists to catch a taka figure and a dollar figure that disagree
+   * about the rate — which can only happen when a person typed both. One side
+   * is derived from the other now, so the "difference" is the second decimal
+   * place of a rounding: ৳500 at 122.77 derives $4.07, and $4.07 × 122.77 reads
+   * back as 122.85. That fired the warning on ordinary small receipts and said
+   * nothing true about any of them.
+   */
+  const bothStated = !isDerived && usdPrimary;
   const drifted =
+    bothStated &&
     realised != null &&
     Number.isFinite(enteredRate) &&
     enteredRate > 0 &&
@@ -323,6 +408,8 @@ export function CashInForm({
     setTypedAmount("");
     setUsdSent("");
     setAmountTyped(false);
+    setMoneyTouched(false);
+    setLocalReceipt(false);
     setInvoiceFiles([]);
     setScreenshotFiles([]);
     /**
@@ -445,6 +532,16 @@ export function CashInForm({
             invoiceNo: payload.invoiceNo,
             description: payload.description,
             amount: payload.amount,
+            /*
+             * Always sent on a correction, even when empty.
+             *
+             * The box was drawn and then dropped from this payload, so typing
+             * a charge on an existing receipt did nothing at all and clearing
+             * one could not clear it. "0.00" is how this form says there is no
+             * charge; the service removes the row rather than leaving a 0.00
+             * line item on the Expenses screen.
+             */
+            chargeAmount: payload.chargeAmount ?? "0.00",
             senderAccountName: payload.senderAccountName,
             notes: payload.notes,
             // No `accountId`: the ledger will not let an edit move money
@@ -663,219 +760,211 @@ export function CashInForm({
             is read back all month, and a rate looked up later is the rate on
             the day of the lookup.
           */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/*
+              1. The account's own currency, typed. This is the fact.
+
+              A dollar account states dollars — that is what the advice says.
+              A taka account states taka — that is what the statement says.
+              Which one is asked for follows the account, and the box beside it
+              is worked out; that ONE of the two is typed is the rule in both
+              directions, which is what the owner asked for: *"bdt select hole
+              age airokom serial a thakbe: bdt amount, usd rate, auto fill,
+              bank charge. r usd hole: usd amount, usd rate, bdt auto fill,
+              bank charge."*
+            */}
+            {usdPrimary ? (
+              <Field
+                label="Amount (USD)"
+                required
+                error={fieldErrors.usdSent}
+                hint="This account's primary currency — the figure the advice states."
+              >
+                <MoneyInput
+                  name="usdSent"
+                  required
+                  placeholder="0.00"
+                  value={usdSent}
+                  onChange={(event) => {
+                    setUsdSent(event.target.value);
+                    setMoneyTouched(true);
+                  }}
+                />
+              </Field>
+            ) : (
+              <Field
+                label="Amount (BDT)"
+                required
+                error={fieldErrors.amount}
+                hint="What landed, in taka"
+              >
+                <MoneyInput
+                  name="amount"
+                  required
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(event) => {
+                    setTypedAmount(event.target.value);
+                    setAmountTyped(true);
+                  }}
+                />
+              </Field>
+            )}
+
+            {/*
+              2. The rate, asked at the only moment anybody knows it. It is
+              read back all month, and a rate looked up later is the rate on
+              the day of the lookup.
+            */}
+            <Field
+              label="Rate"
+              required
+              error={fieldErrors.usdRate}
+              hint={
+                latestRate
+                  ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
+                  : "What a dollar was worth on the day. It governs the whole month."
+              }
+            >
+              <Input
+                name="usdRate"
+                required
+                inputMode="decimal"
+                className="col-amount"
+                placeholder="122.77"
+                value={usdRate}
+                onChange={(event) => {
+                  setUsdRate(event.target.value);
+                  setMoneyTouched(true);
+                }}
+              />
+            </Field>
+          </div>
+
+          {/*
+            3. The other currency, worked out and not typed over.
+
+            The owner, twice — first about the taka on a dollar account
+            (*"oi field ta edit kora jawa ucit na karon oita calculation korei
+            to asteche"*) and now about the dollars on a taka account
+            (*"equivalant field tay type kora jay eta vul eta auto select
+            hobe"*). Same rule, both directions: a box that shows an answer and
+            then accepts typing can end up disagreeing with the two numbers
+            printed beside it, with nothing on screen saying which is true.
+
+            It is only honest to derive either side now that a bank charge has
+            a box of its own. The taka that lands is regularly short of dollars
+            × rate; until today that difference had nowhere to go, so deriving
+            would have buried a charge inside a rate. The charge is its own row
+            now, and what is left is arithmetic.
+          */}
           {usdPrimary ? (
-            <>
-              {/* The dollar side and the rate first, then the taka they come to.
-            The sheet reads taka-first, but this box fills itself in from the
-            two beside it, and an answer printed above its own inputs is a box
-            that appears to change on its own. The rate is asked at the only
-            moment anybody knows it: it is read back all month, since every
-            taka figure is shown in dollars at the rate the month's funding
-            arrived at, and a rate looked up later is the rate on the day of
-            the lookup. */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field
-                  label="Amount (USD)"
-                  required={usdPrimary}
-                  error={fieldErrors.usdSent}
-                  hint={
-                    usdPrimary
-                      ? "This account's primary currency — the figure the advice states."
-                      : "What the sender sent. Blank for a local receipt."
-                  }
-                >
-                  <MoneyInput
-                    name="usdSent"
-                    required={usdPrimary}
-                    placeholder="0.00"
-                    value={usdSent}
-                    onChange={(event) => setUsdSent(event.target.value)}
-                  />
-                </Field>
-
-                <Field
-                  label="Rate"
-                  required
-                  error={fieldErrors.usdRate}
-                  hint={
-                    latestRate
-                      ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
-                      : "What a dollar was worth on the day. It governs the whole month."
-                  }
-                >
-                  <Input
-                    name="usdRate"
-                    required
-                    inputMode="decimal"
-                    className="col-amount"
-                    placeholder="122.77"
-                    value={usdRate}
-                    onChange={(event) => setUsdRate(event.target.value)}
-                  />
-                </Field>
-              </div>
-
-              {/*
-            Worked out, and not typed over.
-
-            The owner: "je field ta auto fill hobe rate bosanor por oi field ta
-            edit kora jawa ucit na karon oita calculation korei to asteche" —
-            and he is right. The box said "Worked out from the two above" and
-            then accepted typing, so a figure could sit there disagreeing with
-            the two numbers printed beside it, and nothing on the screen would
-            say which was true.
-
-            It is read-only now. The dollars and the rate are the two facts;
-            the taka is what they come to. If the bank credited something else,
-            the honest edit is the RATE — that is what the difference actually
-            was — and the working underneath shows it.
-          */}
-              <Field
-                label="Amount (BDT)"
+            <Field
+              label="Amount (BDT)"
+              required
+              error={fieldErrors.amount}
+              hint={
+                isDerived
+                  ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
+                  : "What landed, in taka"
+              }
+            >
+              <MoneyInput
+                name="amount"
                 required
-                error={fieldErrors.amount}
-                hint={
+                placeholder="0.00"
+                value={amount}
+                /*
+                 * Locked only while the arithmetic owns it. An entry from
+                 * before the dollars were recorded has none to derive from,
+                 * and a box that is empty AND locked is one nobody can save.
+                 */
+                readOnly={isDerived}
+                tabIndex={isDerived ? -1 : undefined}
+                aria-readonly={isDerived || undefined}
+                className={
                   isDerived
-                    ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
-                    : "What landed, in taka"
+                    ? "cursor-not-allowed text-muted-foreground"
+                    : undefined
                 }
-              >
-                <MoneyInput
-                  name="amount"
-                  required
-                  placeholder="0.00"
-                  value={amount}
-                  readOnly={isDerived}
-                  tabIndex={isDerived ? -1 : undefined}
-                  aria-readonly={isDerived || undefined}
-                  className={
-                    isDerived
-                      ? "cursor-not-allowed text-muted-foreground"
-                      : undefined
-                  }
-                  onChange={(event) => {
-                    if (isDerived) return;
-                    setTypedAmount(event.target.value);
-                    setAmountTyped(true);
-                  }}
-                />
-              </Field>
-            </>
+                onChange={(event) => {
+                  if (isDerived) return;
+                  setTypedAmount(event.target.value);
+                  setAmountTyped(true);
+                }}
+              />
+            </Field>
           ) : (
-            <>
-              {/*
-            Worked out, and not typed over.
-
-            The owner: "je field ta auto fill hobe rate bosanor por oi field ta
-            edit kora jawa ucit na karon oita calculation korei to asteche" —
-            and he is right. The box said "Worked out from the two above" and
-            then accepted typing, so a figure could sit there disagreeing with
-            the two numbers printed beside it, and nothing on the screen would
-            say which was true.
-
-            It is read-only now. The dollars and the rate are the two facts;
-            the taka is what they come to. If the bank credited something else,
-            the honest edit is the RATE — that is what the difference actually
-            was — and the working underneath shows it.
-          */}
-              <Field
-                label="Amount (BDT)"
-                required
-                error={fieldErrors.amount}
-                hint={
-                  isDerived
-                    ? "Worked out from the dollars and the rate above. Change the rate if the bank credited something else."
-                    : "What landed, in taka"
-                }
-              >
+            <Field
+              label="Amount (USD)"
+              error={fieldErrors.usdSent}
+              hint={
+                localReceipt
+                  ? "Shown for reference only — a local receipt records no dollars."
+                  : "Worked out from the taka and the rate above."
+              }
+            >
+              <div className="flex flex-col gap-2">
                 <MoneyInput
-                  name="amount"
-                  required
+                  /*
+                   * The NAME is dropped on a local receipt, which is what
+                   * decides this. A read-only input still submits, and the
+                   * figure it submits becomes `original_amount` — which is the
+                   * whole test the dashboard and the funding report use for
+                   * "this came from abroad". Nameless, `FormData.get` answers
+                   * null and the row stays what it is: taka that arrived.
+                   */
+                  name={localReceipt ? undefined : "usdSent"}
                   placeholder="0.00"
-                  value={amount}
-                  readOnly={isDerived}
-                  tabIndex={isDerived ? -1 : undefined}
-                  aria-readonly={isDerived || undefined}
+                  value={derivedUsd}
+                  readOnly
+                  tabIndex={-1}
+                  aria-readonly
                   className={
-                    isDerived
-                      ? "cursor-not-allowed text-muted-foreground"
-                      : undefined
+                    localReceipt
+                      ? "cursor-not-allowed text-faint line-through"
+                      : "cursor-not-allowed text-muted-foreground"
                   }
-                  onChange={(event) => {
-                    if (isDerived) return;
-                    setTypedAmount(event.target.value);
-                    setAmountTyped(true);
-                  }}
                 />
-              </Field>
-
-              {/*
-                The bank's cut on the way in.
-
-                A wire arriving is charged too, and the charge is money leaving
-                — so it becomes its own OUT row on this account, under Bank
-                charges, tied to the receipt. Not netted off the amount: what
-                landed is what landed, and the charge is a charge.
-              */}
-              <Field
-                label="Bank charge (BDT)"
-                error={fieldErrors.chargeAmount}
-                hint="Its own entry under Bank charges. Leave it empty when there was none."
-              >
-                <MoneyInput name="chargeAmount" placeholder="0.00" />
-              </Field>
-
-              {/* The dollar side and the rate first, then the taka they come to.
-            The sheet reads taka-first, but this box fills itself in from the
-            two beside it, and an answer printed above its own inputs is a box
-            that appears to change on its own. The rate is asked at the only
-            moment anybody knows it: it is read back all month, since every
-            taka figure is shown in dollars at the rate the month's funding
-            arrived at, and a rate looked up later is the rate on the day of
-            the lookup. */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field
-                  label="Amount (USD)"
-                  required={usdPrimary}
-                  error={fieldErrors.usdSent}
-                  hint={
-                    usdPrimary
-                      ? "This account's primary currency — the figure the advice states."
-                      : "What the sender sent. Blank for a local receipt."
-                  }
-                >
-                  <MoneyInput
-                    name="usdSent"
-                    required={usdPrimary}
-                    placeholder="0.00"
-                    value={usdSent}
-                    onChange={(event) => setUsdSent(event.target.value)}
+                <label className="flex items-center gap-2.5 text-sm">
+                  <input
+                    type="checkbox"
+                    name="localReceipt"
+                    checked={localReceipt}
+                    onChange={(event) => setLocalReceipt(event.target.checked)}
+                    className="size-4 accent-primary"
                   />
-                </Field>
-
-                <Field
-                  label="Rate"
-                  required
-                  error={fieldErrors.usdRate}
-                  hint={
-                    latestRate
-                      ? `Last recorded: ${trimRate(latestRate)} per USD. It governs the whole month.`
-                      : "What a dollar was worth on the day. It governs the whole month."
-                  }
-                >
-                  <Input
-                    name="usdRate"
-                    required
-                    inputMode="decimal"
-                    className="col-amount"
-                    placeholder="122.77"
-                    value={usdRate}
-                    onChange={(event) => setUsdRate(event.target.value)}
-                  />
-                </Field>
+                  Money from inside the country — no dollars were sent
+                </label>
               </div>
-            </>
+            </Field>
           )}
+
+          {/*
+            4. The bank's cut on the way in.
+
+            A wire arriving is charged too, and the charge is money leaving —
+            so it becomes its own OUT row on this account under Bank charges,
+            tied to the receipt. Not netted off the amount: what landed is what
+            landed, and the charge is a charge.
+
+            Outside the branch, because it was inside one — a dollar account
+            offered no charge box at all, which is the half of this the owner
+            found first: *"usd bank select korle charge field ta nai"*.
+          */}
+          <Field
+            label="Bank charge (BDT)"
+            error={fieldErrors.chargeAmount}
+            hint="Its own entry under Bank charges. Leave it empty when there was none."
+          >
+            <MoneyInput
+              name="chargeAmount"
+              placeholder="0.00"
+              /* Seeded, or a correction opens blank and the charge already on
+                 the row reads as none. */
+              defaultValue={transaction?.chargeAmount ?? ""}
+            />
+          </Field>
 
           {/* The arithmetic, back in front of the person who typed it. A digit
             too many in either box turns a plausible rate into an absurd one,
