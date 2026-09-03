@@ -525,11 +525,47 @@ export class TrashService {
         ...(found.rows as unknown as { id: string }[]).map((r) => r.id),
       ];
     }
-    if (entry.kind !== "transaction" || !row.transfer_group_id) return [id];
-    const found = await this.db.client.execute(
-      sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is null`,
-    );
-    return (found.rows as unknown as { id: string }[]).map((r) => r.id);
+    if (entry.kind !== "transaction") return [id];
+
+    /*
+     * A transfer is one movement recorded twice, and either half may carry the
+     * bank's charge — so the group first, then every live charge levied on any
+     * of it. A charge left behind when its payment is deleted is money the
+     * ledger still says left the account for an entry it no longer has.
+     */
+    const group = row.transfer_group_id
+      ? (
+          (
+            await this.db.client.execute(
+              sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is null`,
+            )
+          ).rows as unknown as { id: string }[]
+        ).map((r) => r.id)
+      : [id];
+
+    /*
+     * `in (…)` built with `sql.join`, not `= any($1::uuid[])`.
+     *
+     * Drizzle binds a JS array as ONE parameter, so Postgres read the single
+     * id as an array literal and refused it — "malformed array literal" — and
+     * every delete of a transaction answered 500. One id per placeholder is
+     * what the driver can actually send.
+     */
+    const charges = group.length
+      ? (
+          (
+            await this.db.client.execute(
+              sql`select id::text as id from transactions
+                   where charge_for_id in (${sql.join(
+                     group.map((g) => sql`${g}::uuid`),
+                     sql`, `,
+                   )}) and deleted_at is null`,
+            )
+          ).rows as unknown as { id: string }[]
+        ).map((r) => r.id)
+      : [];
+
+    return [...new Set([...group, ...charges])];
   }
 
   /* -------------------------------------------------------------- restoring */
@@ -781,11 +817,46 @@ export class TrashService {
         ...(found.rows as unknown as { id: string }[]).map((r) => r.id),
       ];
     }
-    if (entry.kind !== "transaction" || !row.transfer_group_id) return [id];
-    const found = await this.db.client.execute(
-      sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is not null`,
-    );
-    return (found.rows as unknown as { id: string }[]).map((r) => r.id);
+    if (entry.kind !== "transaction") return [id];
+
+    /*
+     * The mirror of `companionsOf`, and it has to be kept in step with it.
+     *
+     * The delete side took the transfer group AND every bank charge levied on
+     * it; this side has to put the same set back, or a restored payment comes
+     * back without the charge that went in with it — which the first run of
+     * this did, silently, answering 201 the whole time.
+     *
+     * `deleted_at` matched to the parent's, the same trick the category branch
+     * above uses: the two went in one statement so they share the
+     * transaction's clock to the microsecond. A charge somebody binned on its
+     * own last week does not match, and stays in the trash where it was put.
+     */
+    const group = row.transfer_group_id
+      ? (
+          (
+            await this.db.client.execute(
+              sql`select id::text as id from transactions where transfer_group_id = ${row.transfer_group_id}::uuid and deleted_at is not null`,
+            )
+          ).rows as unknown as { id: string }[]
+        ).map((r) => r.id)
+      : [id];
+
+    const charges = group.length
+      ? (
+          (
+            await this.db.client.execute(
+              sql`select id::text as id from transactions
+                   where charge_for_id in (${sql.join(
+                     group.map((g) => sql`${g}::uuid`),
+                     sql`, `,
+                   )}) and deleted_at = ${row.deleted_at}`,
+            )
+          ).rows as unknown as { id: string }[]
+        ).map((r) => r.id)
+      : [];
+
+    return [...new Set([...group, ...charges])];
   }
 
   /* ---------------------------------------------------------------- purging */

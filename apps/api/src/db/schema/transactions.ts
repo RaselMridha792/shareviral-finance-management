@@ -179,6 +179,21 @@ export const transactions = pgTable(
     /** Two rows — one out, one in — share this when money moves internally. */
     transferGroupId: uuid("transfer_group_id"),
 
+    /**
+     * Set on a BANK CHARGE row, pointing at the entry that incurred it.
+     *
+     * The owner asked for a charge on every kind of transaction and, asked how
+     * it should count, chose a separate row under Bank charges rather than a
+     * bigger amount — so a month's bank charges are one figure on the Expenses
+     * screen instead of being spread invisibly through every other heading.
+     *
+     * The link is what makes that survivable: `void` and the trash follow it,
+     * so a charge cannot outlive the payment it belongs to. It points one way
+     * on purpose — the charge knows its parent, the parent knows nothing
+     * except by being pointed at, which is the same shape as the FK itself.
+     */
+    chargeForId: uuid("charge_for_id"),
+
     /** Bank statement line id, so a re-import can recognise its own rows. */
     externalRef: text("external_ref"),
 

@@ -409,6 +409,10 @@ export function CashInForm({
            where it used to be filled by arithmetic that could not produce a
            comma. */
         amount: plainAmount(String(data.get("amount") ?? "")),
+        /* A wire arriving is charged too, and the charge is money leaving
+           — the API writes it as an out row on this same account. */
+        chargeAmount:
+          plainAmount(String(data.get("chargeAmount") ?? "")) || undefined,
         usdRate: String(data.get("usdRate")).trim(),
         // Blank on a local receipt, and then this row is exactly what it was
         // before: an ordinary money-in with a reference rate on it. Given, the
@@ -803,6 +807,22 @@ export function CashInForm({
                     setAmountTyped(true);
                   }}
                 />
+              </Field>
+
+              {/*
+                The bank's cut on the way in.
+
+                A wire arriving is charged too, and the charge is money leaving
+                — so it becomes its own OUT row on this account, under Bank
+                charges, tied to the receipt. Not netted off the amount: what
+                landed is what landed, and the charge is a charge.
+              */}
+              <Field
+                label="Bank charge (BDT)"
+                error={fieldErrors.chargeAmount}
+                hint="Its own entry under Bank charges. Leave it empty when there was none."
+              >
+                <MoneyInput name="chargeAmount" placeholder="0.00" />
               </Field>
 
               {/* The dollar side and the rate first, then the taka they come to.

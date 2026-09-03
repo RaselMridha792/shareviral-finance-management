@@ -45,6 +45,16 @@ export type TransactionDto = {
   usdRate: string | null;
   createdVia: TxnOrigin;
   transferGroupId: string | null;
+  /** Set on a bank-charge row, naming the entry it was levied on. */
+  chargeForId: string | null;
+  /**
+   * The bank charge levied on THIS entry, folded back from its own row.
+   *
+   * "0.00" where there is none. The charge is a real ledger row under Bank
+   * charges — the owner's choice — and this is the one figure that lets the
+   * edit form show it without the form having to know where it lives.
+   */
+  chargeAmount: string;
   voidedAt: string | null;
   voidReason: string | null;
   accountId: string;

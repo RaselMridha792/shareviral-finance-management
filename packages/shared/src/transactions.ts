@@ -191,6 +191,19 @@ export const createTransactionSchema = z
       .optional(),
 
     /** For a USD remittance: what was sent, and the rate the bank gave. */
+    /**
+     * What the bank took on top, in taka.
+     *
+     * Not added to `amount`. It becomes its own ledger row under Bank charges,
+     * tied to this one — the owner's choice when asked how a ৳115 charge on
+     * ৳10,000 of rent should count: *"alada sari — Bank charges khate"*. So
+     * the heading keeps its own figure, the charge is visible as a charge, and
+     * the account is ৳10,115 lighter either way.
+     *
+     * Optional and zero-tolerant: most entries carry none, and a form that
+     * sends "0.00" means the same as one that sends nothing.
+     */
+    chargeAmount: amountSchema.optional(),
     originalAmount: amountSchema.optional(),
     originalCurrency: z.string().trim().length(3).optional(),
     fxRate: z
@@ -259,6 +272,10 @@ export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
  * figure is read back in. Nobody will know it as precisely again.
  */
 export const recordCashInSchema = z.strictObject({
+  /* The bank's cut, as its own row under Bank charges. Same field, same
+     meaning and the same one line of service code as every other entry —
+     the owner asked for it on every kind of transaction. */
+  chargeAmount: amountSchema.optional(),
   txnDate: isoDateSchema,
 
   /** The bank's reference for the wire — what a query about it would quote. */
@@ -336,6 +353,15 @@ export const updateTransactionSchema = z
   .strictObject({
     txnDate: isoDateSchema.optional(),
     amount: amountSchema.optional(),
+    /**
+     * The bank's cut, rewritten to match.
+     *
+     * Absent means "leave the charge alone" — an edit to the notes must not
+     * delete a charge nobody mentioned. "0.00" means "there is no charge", and
+     * removes the row rather than leaving a 0.00 line item on the Expenses
+     * screen for somebody to read and wonder about.
+     */
+    chargeAmount: amountSchema.optional(),
     categoryId: z.string().uuid().optional(),
     /** By id only — see `createTransactionSchema`. */
     vendorId: z.string().uuid().nullish(),
@@ -376,6 +402,11 @@ export type VoidTransactionInput = z.infer<typeof voidTransactionSchema>;
 export const transferSchema = z
   .strictObject({
     txnDate: isoDateSchema,
+    /* The bank's cut, as its own row under Bank charges — on the account the
+       money LEAVES, because that is where a transfer charge is taken. Same
+       field and the same meaning as on every other entry; the owner asked for
+       it on every kind of transaction. */
+    chargeAmount: amountSchema.optional(),
     fromAccountId: z.string().uuid("Choose the account money leaves"),
     toAccountId: z.string().uuid("Choose the account money arrives in"),
     // The same rule the create and cash-in schemas carry: zero passes the

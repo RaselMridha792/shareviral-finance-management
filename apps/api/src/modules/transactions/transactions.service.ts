@@ -116,6 +116,8 @@ export type TransactionDto = {
   usdRate: string | null;
   createdVia: string;
   transferGroupId: string | null;
+  chargeForId: string | null;
+  chargeAmount: string;
   voidedAt: Date | null;
   voidReason: string | null;
   accountId: string;
@@ -825,11 +827,196 @@ export class TransactionsService {
             })
             .returning({ id: transactions.id, refNo: transactions.refNo });
 
+          /*
+           * The bank's cut, as its own row.
+           *
+           * Inside the same transaction and before the overdraft check, so the
+           * two either both land or neither does, and the account is tested
+           * against what actually leaves it rather than against the entry
+           * alone. An entry that fits and an entry-plus-charge that does not is
+           * exactly the case a check placed after this would wave through.
+           */
+          await this.writeBankCharge(tx, {
+            parentId: created.id,
+            chargeAmount: input.chargeAmount,
+            accountId: input.accountId,
+            txnDate: input.txnDate,
+            description: input.description,
+            year,
+            actor,
+          });
+
           await watch.assert(tx);
           return created;
         },
       })
       .then((created) => this.findOne(created.id));
+  }
+
+  /**
+   * Writes, changes or removes the bank charge attached to one entry.
+   *
+   * One function, called from `create` and `update`, because a charge that is
+   * written one way and edited another is how the two drift. It is always an
+   * OUT row on the entry's own account — a charge on money arriving is still
+   * money leaving — and it always carries `chargeForId`, which is what lets
+   * `void` and the trash take it with its parent.
+   *
+   * A charge of zero, or none, means there is no charge: an existing one is
+   * soft-deleted rather than left at 0.00, because a 0.00 row on the Expenses
+   * screen is a line item that says nothing and still has to be read.
+   */
+  private async writeBankCharge(
+    tx: DbTransaction,
+    input: {
+      parentId: string;
+      chargeAmount?: string;
+      accountId: string;
+      txnDate: string;
+      description: string;
+      year: number;
+      actor: AuthenticatedUser;
+    },
+  ): Promise<void> {
+    /* Bound to a string before the guard, not read through the optional after
+       it: `wanted` is a boolean the compiler cannot narrow a `string |
+       undefined` with, and casting it away would hide the one case that
+       matters — an empty box. */
+    const amountText = input.chargeAmount?.trim() ?? "";
+    const amount = Number(amountText);
+    const wanted = amountText !== "" && Number.isFinite(amount) && amount > 0;
+
+    /*
+     * A charge cannot itself be charged.
+     *
+     * Found by driving the screen: the charge is an ordinary ledger row, so
+     * the edit drawer opened on one offered it a Bank charge box of its own —
+     * and a charge on a charge is a row nothing would ever reconcile. Refused
+     * here rather than only hidden on the screen, because the screen is not
+     * the only door.
+     */
+    const [parent] = await tx
+      .select({ chargeForId: transactions.chargeForId })
+      .from(transactions)
+      .where(eq(transactions.id, input.parentId))
+      .limit(1);
+    if (parent?.chargeForId) {
+      if (!wanted) return;
+      throw new BadRequestException(
+        "This entry is itself a bank charge — a charge cannot carry one.",
+      );
+    }
+
+    const [current] = await tx
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.chargeForId, input.parentId),
+          isNull(transactions.deletedAt),
+          isNull(transactions.voidedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!wanted) {
+      if (current) {
+        await tx
+          .update(transactions)
+          .set({
+            deletedAt: new Date(),
+            deletedBy: input.actor.id,
+            deleteReason: "The charge was cleared on the entry it belonged to",
+            updatedAt: new Date(),
+            updatedBy: input.actor.id,
+          })
+          .where(eq(transactions.id, current.id));
+      }
+      return;
+    }
+
+    const categoryId = await this.bankChargeCategoryId();
+    const description = `Bank charge — ${input.description}`;
+
+    if (current) {
+      await tx
+        .update(transactions)
+        .set({
+          amount: amountText,
+          txnDate: input.txnDate,
+          accountId: input.accountId,
+          description,
+          categoryId,
+          updatedAt: new Date(),
+          updatedBy: input.actor.id,
+        })
+        .where(eq(transactions.id, current.id));
+      return;
+    }
+
+    await tx.insert(transactions).values({
+      refNo: await this.nextRefNo(tx, input.year),
+      accountId: input.accountId,
+      // Always out. A charge on a wire ARRIVING is still money the bank took.
+      direction: "out",
+      txnDate: input.txnDate,
+      amount: amountText,
+      categoryId,
+      description,
+      paymentMethod: "bank_transfer",
+      chargeForId: input.parentId,
+      createdVia: "manual",
+      dedupeHash: dedupeKey({
+        accountId: input.accountId,
+        txnDate: input.txnDate,
+        amount: amountText,
+        direction: "out",
+        description,
+      }),
+      createdBy: input.actor.id,
+      updatedBy: input.actor.id,
+    });
+  }
+
+  /**
+   * The heading a bank charge is filed under.
+   *
+   * Resolved rather than configured, for the same reason a subscription's
+   * heading is: a setting for it would be a second place to keep something the
+   * category tree already says. Slug first, then the name, and a clear refusal
+   * if neither is there — filing a bank charge under whichever OUT heading
+   * happens to sort first is worse than saying the heading is missing.
+   */
+  private async bankChargeCategoryId(): Promise<string> {
+    const [bySlug] = await this.db.client
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          eq(categories.slug, "bank-charges"),
+          eq(categories.kind, "out"),
+          isNull(categories.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (bySlug) return bySlug.id;
+
+    const [byName] = await this.db.client
+      .select({ id: categories.id })
+      .from(categories)
+      .where(
+        and(
+          ilike(categories.name, "%bank charge%"),
+          eq(categories.kind, "out"),
+          isNull(categories.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (byName) return byName.id;
+
+    throw new BadRequestException(
+      'There is no "Bank charges" expense heading to file this under. Add one in Settings → Categories, then record the charge.',
+    );
   }
 
   /**
@@ -849,6 +1036,9 @@ export class TransactionsService {
         txnDate: input.txnDate,
         accountId: input.accountId,
         amount: input.amount,
+        /* A wire arriving is charged too, and the charge is money leaving.
+           `create` writes it as an out row on this same account. */
+        chargeAmount: input.chargeAmount,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
         invoiceNo: input.invoiceNo,
@@ -989,6 +1179,28 @@ export class TransactionsService {
             updatedBy: actor.id,
           })
           .where(eq(transactions.id, id));
+
+        /*
+         * The charge follows its entry.
+         *
+         * Only when the body says something about it — an edit to the notes
+         * must not delete a charge nobody mentioned. When it does say
+         * something, the charge is rewritten to match the entry's current date,
+         * account and description, so a payment moved to another month does not
+         * leave its bank charge behind in the old one.
+         */
+        if (input.chargeAmount !== undefined) {
+          await this.writeBankCharge(tx, {
+            parentId: id,
+            chargeAmount: input.chargeAmount,
+            accountId: existing.accountId,
+            txnDate: nextDate,
+            description: nextDescription,
+            year: Number(nextDate.slice(0, 4)),
+            actor,
+          });
+        }
+
         await watch.assert(tx);
       },
     });
@@ -1286,6 +1498,28 @@ export class TransactionsService {
       : [id];
 
     /*
+     * And whatever bank charge was levied on any of them.
+     *
+     * A voided payment whose charge stays live is money the ledger still says
+     * left the account for a payment it also says never happened. The charge
+     * has no meaning without its parent, so it goes when the parent does —
+     * struck through beside it, in the same audit entry, not deleted.
+     */
+    const charges = (
+      await this.db.client
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          and(
+            inArray(transactions.chargeForId, ids),
+            isNull(transactions.deletedAt),
+            isNull(transactions.voidedAt),
+          ),
+        )
+    ).map((r) => r.id);
+    ids.push(...charges);
+
+    /*
      * Voiding an "in" row removes money the account thought it had, which can
      * leave later spending under water — the same overdraft as typing an
      * expense too large, reached from the other side. A transfer group spans
@@ -1505,6 +1739,18 @@ export class TransactionsService {
           updatedBy: actor.id,
         });
 
+        /* On the FROM account, because that is where a transfer's charge is
+           taken — and hung on the OUT row, which is the half that names it. */
+        await this.writeBankCharge(tx, {
+          parentId: outRow.id,
+          chargeAmount: input.chargeAmount,
+          accountId: input.fromAccountId,
+          txnDate: input.txnDate,
+          description: input.description,
+          year,
+          actor,
+        });
+
         await watch.assert(tx);
         return outRow;
       },
@@ -1657,6 +1903,28 @@ const projection = {
   usdRate: transactions.usdRate,
   createdVia: transactions.createdVia,
   transferGroupId: transactions.transferGroupId,
+  chargeForId: transactions.chargeForId,
+  /**
+   * The bank charge levied on THIS entry, so the edit form can show it.
+   *
+   * A subquery rather than a column, because the charge is its own row — the
+   * owner's choice — and this is the one place that fact is folded back into
+   * the entry it belongs to.
+   *
+   * `transactions.id` is written out rather than interpolated as
+   * `${transactions.id}`. Drizzle renders a column inside a `sql` template
+   * UNQUALIFIED, and the inner table has an `id` of its own, so the
+   * correlation would silently become `c.charge_for_id = c.id` — every entry
+   * reading 0.00 with its charge sitting right there. That exact bug shipped
+   * on the payroll run counts this morning; it is not making a second
+   * appearance here.
+   */
+  chargeAmount: sql<string>`(
+    select coalesce(sum(c.amount), 0)::numeric(14,2)::text
+      from transactions c
+     where c.charge_for_id = transactions.id
+       and c.deleted_at is null
+       and c.voided_at is null)`,
   voidedAt: transactions.voidedAt,
   voidReason: transactions.voidReason,
   accountId: transactions.accountId,

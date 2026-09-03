@@ -41,6 +41,7 @@ ticking all seventeen.
 | 58 | **Subscriptions: a Charge added to the price** | **done** |
 | 59 | **Subscriptions: three live bugs — the dollar balance, the save error, the vanishing row** | **done** |
 | 60 | **Subscriptions: the charge is in dollars, not taka** | **done** |
+| 61 | **A bank charge on every kind of transaction** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -160,6 +161,65 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 61. A bank charge on every kind of transaction
+
+*"sob dhoroner transaction a ei charge ta rakho. karon bank charge dorkar hoy
+sob transaction er khetrei."*
+
+**The decision that shaped everything.** Asked how a ৳115 charge on ৳10,000 of
+rent should count, he chose **a separate row under Bank charges** over folding
+it into the amount. So the heading keeps its own ৳10,000, the charge is ৳115 of
+Bank charges, and the account is ৳10,115 lighter either way — and a year's bank
+charges are one figure on the Expenses screen instead of being spread
+invisibly through every other heading. The category already existed with
+nothing able to reach it.
+
+**`charge_for_id`**, self-referencing, migration `2026-09-02-transaction-bank-charge.sql`,
+pushed alone as `015e8a4`. The link is not decoration: `transfer_group_id`
+beside it is the precedent — rows that move together are joined so `void` and
+the trash can follow the join. Without it, voiding a payment leaves its charge
+standing and deleting one leaves an orphan.
+
+**Where the box is.** All transactions (and every screen that opens the same
+form — Expenses, Other expenses, the register, a category page), Cash In, and
+Money transfer. On a wire arriving the charge is still an **out** row, because
+a charge on money coming in is money going out. On a transfer it lands on the
+account the money **left**.
+
+**What follows the parent, all of it driven rather than assumed:**
+
+- the account moves by amount **plus** charge;
+- raising the charge rewrites the same row rather than adding a second;
+- an edit that never mentions the charge leaves it standing — the notes must
+  not delete a charge nobody spoke about;
+- clearing the box removes the row rather than leaving a ৳0.00 line item on the
+  Expenses screen for somebody to read and wonder about;
+- moving the entry to another date takes its charge to that date, so a payment
+  corrected into another month does not leave its charge behind in the old one;
+- voiding the entry voids the charge, and the account gets **both** figures
+  back;
+- deleting takes the charge into the bin and restoring brings it back — which
+  needed BOTH sides of the trash, since `companionsOf` and `siblingIdsInTrash`
+  are separate lookups and the first version fixed only the delete. The restore
+  answered 201 the whole time and quietly left the charge in the bin.
+
+**Two things found by driving it that reading would not have shown.**
+
+`= any($1::uuid[])` — Drizzle binds a JS array as ONE parameter, so Postgres
+read a single id as an array literal, refused it, and **every delete of a
+transaction answered 500**. `sql.join` with one placeholder per id is what the
+driver can actually send.
+
+And a charge could itself be charged. The charge is an ordinary ledger row, so
+the edit drawer opened on one offered it a Bank charge box of its own — a row
+nothing would ever reconcile. Refused in the service, not only hidden on the
+screen, because the screen is not the only door.
+
+Proved by `.bankchargeqa.mjs` — 31 checks, every money figure read from the
+**ledger** rather than from a response, and the round trip driven on the real
+form: the box opens showing the charge already on the entry, which is the
+failure that would have had somebody re-type a charge and double it.
 
 ## 60. The subscription charge is in dollars
 

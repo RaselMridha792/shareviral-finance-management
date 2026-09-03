@@ -129,6 +129,10 @@ export function TransferForm({
         fromAccountId: String(data.get("fromAccountId")),
         toAccountId: String(data.get("toAccountId")),
         amount: String(data.get("amount")),
+        /* On the FROM account, where a transfer charge is taken. */
+        chargeAmount:
+          String(data.get("chargeAmount") ?? "").replace(/[,\s৳]/g, "") ||
+          undefined,
         description: String(data.get("description")),
         invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
         reference: String(data.get("reference") ?? "") || undefined,
@@ -314,6 +318,21 @@ export function TransferForm({
               setTypedBdt(event.target.value);
             }}
           />
+        </Field>
+
+        {/*
+          The bank's cut, as its own row under Bank charges.
+
+          Not folded into the amount: the heading keeps its own figure and the
+          charge is visible as a charge — the owner's choice when asked how one
+          should count. In taka whatever currency the account is kept in.
+        */}
+        <Field
+          label="Bank charge (BDT)"
+          error={fieldErrors.chargeAmount}
+          hint="Its own entry under Bank charges. Leave it empty when there was none."
+        >
+          <MoneyInput name="chargeAmount" placeholder="0.00" />
         </Field>
 
         <Field label="Description" required error={fieldErrors.description}>

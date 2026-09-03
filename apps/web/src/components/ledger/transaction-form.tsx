@@ -401,6 +401,15 @@ export function TransactionForm({
             // row. `text` omits an empty box, so a row that has a rate can
             // never be cleared by opening it and saving.
             usdRate: text("usdRate"),
+            /*
+             * Always sent on an edit, even when empty — `text` omits an empty
+             * box, and an omitted charge means "leave it alone", which is right
+             * for a rate nobody touched and wrong for a box somebody has just
+             * cleared. "0.00" is how this form says "there is no charge", and
+             * the service removes the row rather than leaving a 0.00 line item.
+             */
+            chargeAmount:
+              plainAmount(String(data.get("chargeAmount") ?? "")) || "0.00",
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
           })
@@ -415,6 +424,7 @@ export function TransactionForm({
             invoiceNo: text("invoiceNo"),
             description: String(data.get("description")),
             notes: text("notes"),
+            chargeAmount: text("chargeAmount"),
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
             usdRate: text("usdRate"),
@@ -646,6 +656,34 @@ export function TransactionForm({
                   placeholder="0.00"
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
+                />
+              </Field>
+            )}
+            {/*
+              The bank's cut, beside the amount it was taken on.
+
+              It does NOT go into the amount. It becomes its own ledger row
+              under Bank charges, tied to this entry — the owner's answer when
+              asked how a ৳115 charge on ৳10,000 of rent should count: the
+              heading keeps its own figure, the charge is visible as a charge,
+              and the account is ৳10,115 lighter either way.
+
+              In taka whatever the account's own currency, because a bank
+              charge here is levied in taka and the ledger counts taka.
+            */}
+            {/* Not on a row that IS a charge. A charge on a charge is a row
+                nothing would reconcile, and the API refuses one — this is the
+                door being closed rather than the refusal being explained. */}
+            {transaction?.chargeForId ? null : (
+              <Field
+                label="Bank charge (BDT)"
+                error={fieldErrors.chargeAmount}
+                hint="Its own entry under Bank charges. Leave it empty when there was none."
+              >
+                <MoneyInput
+                  name="chargeAmount"
+                  placeholder="0.00"
+                  defaultValue={transaction?.chargeAmount ?? ""}
                 />
               </Field>
             )}
