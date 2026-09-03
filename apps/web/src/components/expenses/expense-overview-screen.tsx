@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSettings } from "@/components/settings-provider";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { ShareBar, StatCell, StatStrip } from "@/components/ui/patterns";
 import { ledgerApi, type ExpenseOverview } from "@/lib/ledger";
 import { MonthPicker, type Range } from "./month-picker";
 
@@ -22,7 +23,7 @@ import { MonthPicker, type Range } from "./month-picker";
  *
  * So the arithmetic is the design:
  *
- *     Salary + Tooling + Operational + Uncategorised  =  Spent this month
+ *     Salary + Tooling + Office rent + Operational  =  Spent this month
  *
  * and the page SAYS SO, under the boxes, with the sum written out. A dashboard
  * that claims a total is a dashboard somebody will check; one that shows its
@@ -96,6 +97,11 @@ export function ExpenseOverviewScreen() {
           value: data.salary,
           usd: data.usd?.salary ?? null,
           href: "/payroll",
+          icon: "groups",
+          /* The dashboard's own tones for the two slices it also shows, so the
+             same money is the same colour on both screens. */
+          text: "text-chart-1",
+          bar: "bg-chart-1",
         },
         {
           key: "tooling",
@@ -103,6 +109,23 @@ export function ExpenseOverviewScreen() {
           value: data.tooling,
           usd: data.usd?.tooling ?? null,
           href: "/subscriptions",
+          icon: "auto_awesome",
+          text: "text-chart-6",
+          bar: "bg-chart-6",
+        },
+        {
+          key: "rent",
+          label: "Office rent",
+          value: data.rent,
+          usd: data.usd?.rent ?? null,
+          /* The heading's own page, by SLUG — `/expenses/[category]` resolves
+             `tree.find(node => node.slug === slug)`, and the heading's slug is
+             `office-premises`. Office rent is a sub-category, so the chip row
+             on that page is where it lands. */
+          href: "/expenses/office-premises",
+          icon: "home_work",
+          text: "text-chart-3",
+          bar: "bg-chart-3",
         },
         {
           key: "operational",
@@ -110,16 +133,24 @@ export function ExpenseOverviewScreen() {
           value: data.operational,
           usd: data.usd?.operational ?? null,
           href: "/expenses",
-        },
-        {
-          key: "uncategorised",
-          label: "Uncategorised",
-          value: data.uncategorised,
-          usd: data.usd?.uncategorised ?? null,
-          href: "/expenses/other",
+          icon: "receipt_long",
+          text: "text-chart-5",
+          bar: "bg-chart-5",
         },
       ]
     : [];
+
+  /**
+   * A slice's share of the month, for the bar.
+   *
+   * Guarded against a month that spent nothing: 0/0 is NaN, and a NaN width
+   * renders as a bar of no length that reads as a bar somebody broke.
+   */
+  const shareOf = (value: string) => {
+    const whole = Number(data?.total ?? 0);
+    if (!Number.isFinite(whole) || whole <= 0) return 0;
+    return Number(value) / whole;
+  };
 
   return (
     <>
@@ -157,28 +188,51 @@ export function ExpenseOverviewScreen() {
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/*
+        The dashboard's cards, not four bordered boxes of this page's own.
+
+        `StatStrip` + `StatCell` + `ShareBar` are the same three primitives the
+        dashboard's expense row is built from, so a slice looks the same
+        wherever it is read — one panel with hairline-ruled cells rather than
+        four floating cards, which is what the owner meant by *"dashboard a
+        jemon card ache onekta oirokom"*.
+
+        The bar carries the proportion the text no longer does: he asked for
+        *"sudhu heading, amount and equivalant"* and no paragraph under each
+        box, and a length is not a paragraph. Its colour comes from the app's
+        chart palette rather than from the semantic tones — green and red mean
+        money in and money out here, and every one of these is money out.
+      */}
+      <StatStrip>
         {slices.map((slice) => (
-          <Link
-            key={slice.key}
-            href={slice.href}
-            className="rounded-xl border border-border bg-surface p-4 transition hover:border-link"
-          >
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              {slice.label}
-            </p>
-            <p className="col-amount mt-1.5 text-xl font-semibold">
-              {money(slice.value)}
-            </p>
-            {slice.usd !== null ? (
-              <p className="col-amount text-xs text-muted-foreground">
-                {data?.usd?.exact ? "" : "~ "}
-                {usd(slice.usd)}
-              </p>
-            ) : null}
-          </Link>
+          <div key={slice.key} className="relative bg-surface">
+            <StatCell
+              label={slice.label}
+              icon={slice.icon}
+              iconTone={slice.text}
+              value={money(slice.value)}
+              secondary={
+                slice.usd !== null
+                  ? `${data?.usd?.exact ? "" : "~ "}${usd(slice.usd)}`
+                  : null
+              }
+            >
+              <ShareBar share={shareOf(slice.value)} tone={slice.bar} />
+            </StatCell>
+            {/*
+              The whole cell is the link, laid over it rather than wrapped
+              around it — `StatCell` draws the hairlines that make the strip one
+              panel, and an anchor between the grid and the cell would break
+              them.
+            */}
+            <Link
+              href={slice.href}
+              aria-label={`${slice.label} — see the entries`}
+              className="absolute inset-0 rounded-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-link"
+            />
+          </div>
         ))}
-      </div>
+      </StatStrip>
 
       {/*
         The sum, in one line rather than a paragraph.
@@ -189,8 +243,8 @@ export function ExpenseOverviewScreen() {
       */}
       {data ? (
         <p className="col-amount text-xs text-muted-foreground">
-          {money(data.salary)} + {money(data.tooling)} +{" "}
-          {money(data.operational)} + {money(data.uncategorised)} ={" "}
+          {money(data.salary)} + {money(data.tooling)} + {money(data.rent)} +{" "}
+          {money(data.operational)} ={" "}
           <span className="font-medium text-foreground">
             {money(data.total)}
           </span>

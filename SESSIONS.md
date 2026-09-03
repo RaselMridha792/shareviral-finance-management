@@ -43,6 +43,7 @@ ticking all seventeen.
 | 60 | **Subscriptions: the charge is in dollars, not taka** | **done** |
 | 61 | **A bank charge on every kind of transaction** | **done** |
 | 62 | **Cash In: one order, the derived box locked, a charge on both account kinds** | **done** |
+| 63 | **Expense overview: Office rent replaces Uncategorised, cards get the dashboard's look** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -162,6 +163,58 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 63. Expense overview: Office rent, and the dashboard's cards
+
+*"ekhan theke uncategorized ta remove kore oi jaygay office rent ta rakho and
+card gulake sundor UI daw dashbaord a jemon card ache onekta oirokom with
+colorful progress bar and equivalant usd/bdt."*
+
+**The catch, put to him before any code.** The four boxes partition the month —
+that equality is the page's whole design (#23) and the `+ + + =` line under
+them is its proof. Uncategorised is the catch-all; Office rent is a
+SUB-category under Office & premises, so its money was already inside
+Operational. Swapping one for the other would have double-counted rent and
+dropped money with no heading. Asked, he chose **to keep the sum**: rent is
+carved OUT of operational, and operational became the remainder — so what used
+to be Uncategorised now lands there rather than disappearing. And by
+*"Office rent"* he meant the sub-category alone, not the whole heading.
+
+**By slug, never by name.** The tree carries a stray top-level heading also
+called "Office rent", slug `office-rent-test`. Matching on the name would have
+folded somebody's test category into the company's rent; the harness now spends
+৳1,234 on that decoy and asserts it lands in Operational instead.
+
+**The bug this would have shipped with, and it is the app's oldest one.**
+`transactions.category_id in (…)` is UNKNOWN when the category is null, and
+`not UNKNOWN` is UNKNOWN — so a row with no heading satisfied neither the rent
+filter nor its negation and fell out of every slice. The four came to ৳7,000
+less than the total they exist to equal. It is the same shape as the ৳72,700
+that vanished through `isToolVendor()`, and the fix is the same
+`coalesce(…, false)`. A screenshot could not have caught it; the arithmetic
+check did, on the first run.
+
+**The cards are the dashboard's, not this page's own.** `StatStrip` +
+`StatCell` + `ShareBar` — one panel with hairline-ruled cells rather than four
+floating boxes. Each carries a bar sized by its share of the month and coloured
+from the app's `--chart-*` palette, reusing the dashboard's own tones for the
+two slices that appear on both screens. Deliberately NOT the semantic
+green/red: those mean money in and money out here, and every slice is money
+out. The text stayed as he asked it to be — heading, amount, equivalent, no
+paragraph — because a bar's length is not a paragraph.
+
+Proved by `.overviewqa.mjs`, now 35 checks. The ones that earn their place: the
+four still add to the total exactly; rent is ৳85,000 and Operational is smaller
+by that much rather than larger; the decoy is not rent; money with no heading is
+in Operational rather than lost; the strip holds exactly four cells; every cell
+has a bar; the four bars are four different colours; salary's bar is longer
+than rent's; and every card shows both currencies.
+
+One stale assertion was retired on the way past: it required the sentence
+*"transfers between our own accounts are not spending"* to be on the page — a
+note the owner had removed months ago — so it tested for text he asked to
+delete. It now checks the behaviour instead: the ৳5,00,000 transfer is nowhere
+in the total.
 
 ## 62. Cash In: one order, the derived box locked, a charge either way
 

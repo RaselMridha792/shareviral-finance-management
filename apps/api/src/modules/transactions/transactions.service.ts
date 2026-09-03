@@ -591,24 +591,24 @@ export class TransactionsService {
           : {
               salary: now.salaryUsd,
               tooling: now.toolingUsd,
+              rent: now.rentUsd,
               operational: now.operationalUsd,
-              uncategorised: now.uncategorisedUsd,
               total: now.totalUsd,
               /* Every row carried one, or only some did. */
               exact: withUsd === Number(now.rows),
             },
       salary: now.salary,
       tooling: now.tooling,
+      rent: now.rent,
       operational: now.operational,
-      uncategorised: now.uncategorised,
       total: now.total,
       withheld: now.withheld,
       previous: {
         label: range.previousLabel,
         salary: before.salary,
         tooling: before.tooling,
+        rent: before.rent,
         operational: before.operational,
-        uncategorised: before.uncategorised,
         total: before.total,
       },
     };

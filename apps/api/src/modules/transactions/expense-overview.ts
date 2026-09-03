@@ -1,13 +1,4 @@
-import {
-  and,
-  eq,
-  gte,
-  isNotNull,
-  isNull,
-  lte,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema/transactions";
 import { isToolSpend } from "../vendors/tool-spend";
@@ -22,7 +13,7 @@ import { notATransfer } from "./own-money";
  * and inside the headline, so "Other expenses" read HIGHER than "Operational
  * expenses" beside it. Shown the two shapes, he chose the one that adds up:
  *
- *   salary + tooling + operational + uncategorised = total money out
+ *   salary + tooling + rent + operational = total money out
  *
  * That equality is the whole design, and it is why each slice is defined by
  * excluding the ones before it rather than by its own idea of what it means.
@@ -64,6 +55,36 @@ function spendingIn(from: string, to: string): SQL[] {
  */
 const isSalary = (): SQL => eq(transactions.createdVia, "payroll");
 
+/**
+ * The office rent heading, by slug rather than by name.
+ *
+ * The owner asked for a rent box in the place Uncategorised had. `Office rent`
+ * is a SUB-category under `Office & premises`, so its money was already inside
+ * the operational slice — carving it out rather than adding it beside is what
+ * keeps the four adding up to the month.
+ *
+ * By SLUG, and that matters: the tree also carries a stray top-level heading
+ * literally named "Office rent" with the slug `office-rent-test`, and matching
+ * on the name would silently fold somebody's test category into the company's
+ * rent. A slug that does not exist sums to nothing, which leaves the page
+ * arithmetically correct with an empty box rather than wrong with a full one.
+ *
+ * Written as raw column text rather than interpolated. Drizzle renders a
+ * column inside a `sql` template UNQUALIFIED, and `categories` has an `id` of
+ * its own — the same trap that made a payroll run's document counts read zero
+ * this week.
+ *
+ * COALESCED TO FALSE, and that is not decoration. `null in (…)` is UNKNOWN,
+ * and `not UNKNOWN` is UNKNOWN — so a row with no heading at all satisfied
+ * NEITHER this filter nor its negation and fell out of every slice. The four
+ * came to ৳7,000 less than the total they are supposed to equal, which is the
+ * exact shape of the ৳72,700 that once vanished through `isToolVendor()` for
+ * the same reason. The harness caught it; a screenshot could not have.
+ */
+const isOfficeRent = (): SQL => sql`coalesce(transactions.category_id in (
+  select id from categories where slug = 'office-rent' and deleted_at is null
+), false)`;
+
 /** A row that recorded what it was in dollars, at the time somebody typed it. */
 const carriesDollars = (): SQL =>
   sql`${transactions.originalCurrency} = 'USD'
@@ -75,8 +96,8 @@ export type ExpenseOverview = {
   /** The four that add up to `total`, in the order the page shows them. */
   salary: string;
   tooling: string;
+  rent: string;
   operational: string;
-  uncategorised: string;
   total: string;
   /** Held against a tax liability. Deliberately NOT part of the total. */
   withheld: string;
@@ -89,8 +110,8 @@ export type ExpenseOverview = {
   usd: {
     salary: string;
     tooling: string;
+    rent: string;
     operational: string;
-    uncategorised: string;
     total: string;
     exact: boolean;
   } | null;
@@ -99,8 +120,8 @@ export type ExpenseOverview = {
     label: string;
     salary: string;
     tooling: string;
+    rent: string;
     operational: string;
-    uncategorised: string;
     total: string;
   };
 };
@@ -126,24 +147,29 @@ export function overviewSelect() {
       where not ${isSalary()} and ${isToolSpend()}
     ), 0)::text`,
 
-    /* Categorised spend that is neither of the two above. */
-    operational: sql<string>`coalesce(sum(${transactions.amount}) filter (
+    /* What the office costs to sit in, carved out of operational rather than
+       added beside it — see `isOfficeRent`. */
+    rent: sql<string>`coalesce(sum(${transactions.amount}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
-        and ${isNotNull(transactions.categoryId)}
+        and ${isOfficeRent()}
     ), 0)::text`,
 
     /*
-     * Money out with no heading at all.
+     * Everything else that went out, filed or not.
      *
-     * Invisible on the category grid, which inner-joins categories — so this
-     * box is the only place it appears. That is worth a box of its own: an
-     * expense nobody filed is exactly the one somebody needs to go and file.
+     * It used to require a heading, with a fourth box for the money that had
+     * none. The owner asked for that box to become rent, so this one became
+     * the remainder — which is what keeps the four exhaustive. An expense
+     * nobody filed is still counted here and still invisible on the category
+     * grid, which inner-joins categories; All transactions is where it is
+     * found, and the total on this page no longer depends on it having a
+     * heading.
      */
-    uncategorised: sql<string>`coalesce(sum(${transactions.amount}) filter (
+    operational: sql<string>`coalesce(sum(${transactions.amount}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
-        and ${isNull(transactions.categoryId)}
+        and not ${isOfficeRent()}
     ), 0)::text`,
 
     total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
@@ -166,16 +192,16 @@ export function overviewSelect() {
     toolingUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
       where not ${isSalary()} and ${isToolSpend()} and ${carriesDollars()}
     ), 0)::text`,
+    rentUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+      where not ${isSalary()}
+        and not ${isToolSpend()}
+        and ${isOfficeRent()}
+        and ${carriesDollars()}
+    ), 0)::text`,
     operationalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
-        and ${isNotNull(transactions.categoryId)}
-        and ${carriesDollars()}
-    ), 0)::text`,
-    uncategorisedUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
-      where not ${isSalary()}
-        and not ${isToolSpend()}
-        and ${isNull(transactions.categoryId)}
+        and not ${isOfficeRent()}
         and ${carriesDollars()}
     ), 0)::text`,
     totalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (

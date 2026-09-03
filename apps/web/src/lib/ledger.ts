@@ -178,7 +178,7 @@ export type ExpenseOverview = {
   salary: string;
   tooling: string;
   operational: string;
-  uncategorised: string;
+  rent: string;
   total: string;
   /** Held against a tax liability — deliberately NOT part of the total. */
   withheld: string;
@@ -190,7 +190,7 @@ export type ExpenseOverview = {
     salary: string;
     tooling: string;
     operational: string;
-    uncategorised: string;
+    rent: string;
     total: string;
     exact: boolean;
   } | null;
@@ -199,7 +199,7 @@ export type ExpenseOverview = {
     salary: string;
     tooling: string;
     operational: string;
-    uncategorised: string;
+    rent: string;
     total: string;
   };
 };

@@ -7,7 +7,7 @@
  * "Operational expenses" beside it. Shown both shapes, he chose the one that
  * adds up:
  *
- *     Salary + Tooling + Operational + Uncategorised  =  Spent this month
+ *     Salary + Tooling + Office rent + Operational  =  Spent this month
  *
  * That equality is the whole design, so it is what this measures — with money
  * built to land in each slice and NOTHING in two of them. Four boxes that each
@@ -18,8 +18,9 @@
  *
  *   a TRANSFER between our own accounts is not spending. It inflated five
  *   aggregates here before, through a LEFT JOIN that let category-less
- *   transfers survive as "Uncategorised" — which is now a box of its own, so
- *   the same mistake would be louder and no easier to see.
+ *   transfers survive as spend with no heading — which now lands in
+ *   Operational, so the same mistake would be quieter and this is where it
+ *   gets caught.
  *
  *   a VOIDED row is not spending. That is what makes voiding safe.
  *
@@ -165,6 +166,50 @@ if (toolVendor) {
   );
 }
 
+/*
+ * One row that recorded what it was in DOLLARS.
+ *
+ * Without one the API answers `usd: null` — correctly, because it adds the
+ * dollars the rows carry rather than dividing taka by a rate — and the cards
+ * print no equivalent line at all. The owner asked for the equivalent, so the
+ * month has to contain something that has one.
+ */
+await spend("OVQA a dollar-carrying expense", "12000.00", {
+  categoryId: cat.id,
+  originalAmount: "100.00",
+  originalCurrency: "USD",
+  fxRate: "120.00",
+});
+
+/*
+ * Office rent, and a DECOY.
+ *
+ * The tree carries two headings that read "Office rent" to a person: the real
+ * sub-category under Office & premises (slug `office-rent`) and a stray
+ * top-level one (slug `office-rent-test`). The slice matches on slug, and the
+ * decoy is here so that a future change to matching by NAME fails loudly
+ * rather than quietly folding somebody's test heading into the company's rent.
+ */
+const rentCat = (
+  await db.query(
+    "select id from categories where slug='office-rent' and deleted_at is null limit 1",
+  )
+).rows[0];
+const decoyCat = (
+  await db.query(
+    "select id from categories where slug='office-rent-test' and deleted_at is null limit 1",
+  )
+).rows[0];
+
+if (rentCat) {
+  await spend("OVQA office rent", "85000.00", { categoryId: rentCat.id });
+}
+if (decoyCat) {
+  await spend("OVQA rent decoy on the test heading", "1234.00", {
+    categoryId: decoyCat.id,
+  });
+}
+
 /* The two that must NOT count. */
 const transfer = await call("POST", "/transactions/transfer", {
   txnDate: month + "14",
@@ -192,10 +237,10 @@ const n = (v) => Number(v ?? 0);
 
 check(
   "the four slices add up to the total, exactly",
-  n(ov.salary) + n(ov.tooling) + n(ov.operational) + n(ov.uncategorised) ===
+  n(ov.salary) + n(ov.tooling) + n(ov.rent) + n(ov.operational) ===
     n(ov.total),
-  `${ov.salary} + ${ov.tooling} + ${ov.operational} + ${ov.uncategorised} = ${
-    n(ov.salary) + n(ov.tooling) + n(ov.operational) + n(ov.uncategorised)
+  `${ov.salary} + ${ov.tooling} + ${ov.rent} + ${ov.operational} = ${
+    n(ov.salary) + n(ov.tooling) + n(ov.rent) + n(ov.operational)
   }, total says ${ov.total}`,
 );
 check(
@@ -203,11 +248,47 @@ check(
   n(ov.salary) >= 300000,
   `salary ${ov.salary}`,
 );
+/*
+ * The owner replaced the Uncategorised box with Office rent, and chose to keep
+ * the four adding up — so money with no heading is not dropped, it lands in
+ * Operational. This is the check that says it was not simply lost.
+ */
 check(
-  "the uncategorised row is counted, and only once",
-  n(ov.uncategorised) >= 7000,
-  `uncategorised ${ov.uncategorised}`,
+  "the API no longer reports an uncategorised slice",
+  ov.uncategorised === undefined,
+  `uncategorised ${JSON.stringify(ov.uncategorised)}`,
 );
+check(
+  "money with no heading is counted in Operational rather than dropped",
+  n(ov.operational) >= 47000,
+  `operational ${ov.operational} — expected the 40,000 filed plus the 7,000 that is not`,
+);
+
+/* THE ONE THE WHOLE CHANGE TURNS ON. */
+if (rentCat) {
+  check(
+    "Office rent is its own slice",
+    n(ov.rent) === 85000,
+    `rent ${ov.rent}`,
+  );
+  check(
+    "and it is carved OUT of Operational, not counted beside it",
+    n(ov.operational) < 47000 + 85000,
+    `operational ${ov.operational} would be ${n(ov.operational) + 85000} if rent were still inside it`,
+  );
+}
+if (decoyCat) {
+  check(
+    "a stray heading merely NAMED Office rent is not counted as rent",
+    n(ov.rent) === 85000,
+    `rent ${ov.rent} — the 1,234.00 decoy is filed elsewhere`,
+  );
+  check(
+    "the decoy lands in Operational instead, so nothing is lost",
+    n(ov.operational) >= 47000 + 1234,
+    `operational ${ov.operational}`,
+  );
+}
 if (toolVendor) {
   check(
     "tooling is its own slice",
@@ -285,12 +366,93 @@ check(
 for (const label of [
   "Salary",
   "AI tools and subscriptions",
+  "Office rent",
   "Operational expenses",
-  "Uncategorised",
   "Tax withheld",
 ]) {
   check(`23: the page shows "${label}"`, screen.text.includes(label), "");
 }
+check(
+  "and Uncategorised is gone from it",
+  !screen.text.includes("Uncategorised"),
+  screen.text.includes("Uncategorised") ? "still on the page" : "gone",
+);
+
+/* ---- the cards themselves: the dashboard's look, measured -------------- */
+
+/*
+ * *"card gulake sundor UI daw dashbaord a jemon card ache onekta oirokom with
+ * colorful progress bar and equivalant usd/bdt."*
+ *
+ * Three claims, and none of them is text: the cards share ONE panel the way
+ * the dashboard's do rather than floating as four bordered boxes; each carries
+ * a bar; and the bars are not all the same colour. Read off the DOM, because a
+ * screenshot cannot tell a 40% bar from a 60% one and a diff cannot tell
+ * either from a bar that is not there.
+ */
+const cards = await page.evaluate(() => {
+  const strip = [...document.querySelectorAll("div")].find(
+    (d) =>
+      d.className.includes("rounded-xl") &&
+      d.className.includes("border-border") &&
+      d.style.gridTemplateColumns.includes("auto-fit"),
+  );
+  if (!strip) return { found: false };
+  const cells = [...strip.children];
+  return {
+    found: true,
+    count: cells.length,
+    cells: cells.map((cell) => {
+      const bar = cell.querySelector('[class*="rounded-sm"] > div');
+      const link = cell.querySelector("a");
+      return {
+        text: (cell.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+        barClass: bar ? bar.className : null,
+        barWidth: bar ? bar.style.width : null,
+        href: link ? link.getAttribute("href") : null,
+      };
+    }),
+  };
+});
+
+check(
+  "the four cards sit in one panel, like the dashboard's",
+  cards.found && cards.count === 4,
+  cards.found ? `${cards.count} cells in the strip` : "no strip found",
+);
+check(
+  "every card carries a progress bar",
+  (cards.cells ?? []).every((c) => c.barWidth !== null),
+  (cards.cells ?? []).map((c) => c.barWidth ?? "none").join(" | "),
+);
+check(
+  "and the bars are not all one colour",
+  new Set((cards.cells ?? []).map((c) => (c.barClass ?? "").match(/bg-[\w-]+/)?.[0]))
+    .size === 4,
+  (cards.cells ?? [])
+    .map((c) => (c.barClass ?? "").match(/bg-[\w-]+/)?.[0] ?? "none")
+    .join(" | "),
+);
+check(
+  "each card shows its taka and its dollar equivalent",
+  (cards.cells ?? []).every((c) => /৳/.test(c.text) && /\$/.test(c.text)),
+  (cards.cells ?? []).map((c) => c.text.slice(0, 40)).join(" | "),
+);
+check(
+  "and each one is still a way into the entries behind it",
+  (cards.cells ?? []).every((c) => Boolean(c.href)),
+  (cards.cells ?? []).map((c) => c.href ?? "none").join(" | "),
+);
+
+/* The bar has to mean the share, not decorate the card. */
+const rentCell = (cards.cells ?? []).find((c) => c.text.includes("Office rent"));
+const salaryCell = (cards.cells ?? []).find((c) => c.text.includes("Salary"));
+check(
+  "the bars are sized by share — salary's is the longest of the four",
+  Boolean(rentCell && salaryCell) &&
+    parseFloat(salaryCell.barWidth) > parseFloat(rentCell.barWidth),
+  `salary ${salaryCell?.barWidth} vs rent ${rentCell?.barWidth}`,
+);
 check(
   "23: and it writes the sum out, so the total can be checked",
   /=\s*৳/.test(screen.text) || screen.text.includes("exactly one of the four"),
@@ -298,10 +460,24 @@ check(
     ? ""
     : "the working is not on the page",
 );
+/*
+ * The claim, measured rather than read.
+ *
+ * This asserted the SENTENCE "transfers between our own accounts are not
+ * spending" was on the page — and the owner had that note removed months ago
+ * (*"ekhane ato beshi lekha thakar dorkar nai"*), so it has been failing for a
+ * text he asked to delete. What matters is that the ৳5,00,000 transfer is not
+ * in the figures, and that is checkable.
+ */
 check(
-  "23: it says transfers are not counted",
-  /transfers between our own accounts are not spending/i.test(screen.text),
-  "",
+  "23: the transfer between our own accounts is nowhere in the total",
+  n(ov.total) < 500000,
+  `total ${ov.total} — the transfer alone was 500000.00`,
+);
+check(
+  "23: nor is the voided row",
+  !screen.text.includes("88,000"),
+  screen.text.includes("88,000") ? "88,000 is on the page" : "absent",
 );
 
 /* The rail and the grid's new name. */
