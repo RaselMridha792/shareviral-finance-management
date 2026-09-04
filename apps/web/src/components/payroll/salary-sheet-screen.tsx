@@ -107,6 +107,46 @@ export function SalarySheetScreen({
   const refresh = () => router.refresh();
 
   /*
+   * One rate for the sheet.
+   *
+   * The owner: *"dollar rate prottek sarite thakuk tarporeo opore ek jaygay
+   * rakho jekhane rakhle table er sobgula field a auto fill hobe caile edit o
+   * korte parbe."* Seventeen people paid on one day converted at one rate, so
+   * typing it seventeen times was seventeen chances to mistype it.
+   *
+   * It FILLS the column and then gets out of the way — the rate still lives in
+   * each line's own box and each line stays editable. Nothing on the run
+   * remembers this figure, so the sheet and its rows cannot disagree.
+   */
+  const [sheetRate, setSheetRate] = useState("");
+  const [filling, setFilling] = useState(false);
+
+  async function fillRates(overwrite: boolean) {
+    const rate = sheetRate.trim();
+    if (!rate) return;
+    setFilling(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await payrollApi.setRunFxRate(run.id, rate, overwrite);
+      setNotice(
+        result.filled === 0
+          ? "Every line already states a rate — use Replace to overwrite them."
+          : `Rate ${result.filled === 1 ? "put on 1 line" : `put on ${result.filled} lines`}. Change any of them individually below.`,
+      );
+      refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not set the rate.",
+      );
+    } finally {
+      setFilling(false);
+    }
+  }
+
+  /*
    * The owner's rule: who is on the month stays choosable for as long as the
    * run is a draft. The drawer holds the same checklist the start-a-month
    * form shows, seeded with who is on the sheet now; saving makes the run
@@ -554,6 +594,50 @@ export function SalarySheetScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden">
+          {canWrite && draft ? (
+            <div className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+              <div className="w-40">
+                <label
+                  htmlFor="sheet-fx-rate"
+                  className="mb-1 block text-xs font-medium text-muted-foreground"
+                >
+                  USD rate for this sheet
+                </label>
+                <Input
+                  id="sheet-fx-rate"
+                  inputMode="decimal"
+                  className="col-amount"
+                  placeholder="122.77"
+                  value={sheetRate}
+                  onChange={(event) => setSheetRate(event.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={filling || !sheetRate.trim()}
+                onClick={() => void fillRates(false)}
+              >
+                {filling ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : null}
+                Fill the empty rows
+              </Button>
+              {/* Separate, and second, because it undoes a figure somebody
+                  typed for one person — that should take its own click. */}
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={filling || !sheetRate.trim()}
+                onClick={() => void fillRates(true)}
+              >
+                Replace every row
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Each row keeps its own rate and can still be changed below.
+              </p>
+            </div>
+          ) : null}
           <TableScroll>
             {/* One column wider than it was — the SL somebody reads a row out
                 by — so the money columns keep the width they had. */}

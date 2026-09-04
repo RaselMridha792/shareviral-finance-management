@@ -57,6 +57,64 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 68. One USD rate for the whole salary sheet
+
+The owner, in the same breath as #67:
+
+> *"payroll table a net pay tao editable rakho. also dollar rate prottek sarite
+> thakuk tarporeo opore ek jaygay rakho jekhane rakhle table er sobgula field a
+> auto fill hobe caile edit o korte parbe."*
+
+The FX RATE column read **N/A on every line**, and there was nothing wrong with
+it — the rate had to be typed into each of seventeen boxes and nobody had.
+Seventeen people paid on one day are converted at one rate, so seventeen boxes
+were seventeen chances to mistype it.
+
+A box above the table now, with two buttons:
+
+- **Fill the empty rows** — the default. Lines that already state their own rate
+  are left alone, so filling the column cannot quietly undo a figure somebody
+  typed for one person.
+- **Replace every row** — separate, and second, because it *does* undo that.
+  It deserves its own click.
+
+`POST /payroll/runs/:id/fx-rate`, `payroll.write` (it edits figures on a draft,
+which is what the per-line box already does — nothing moves, so not
+`payroll.pay`).
+
+**It is a fill, not a second home for the figure.** The rate still lives in each
+line's own `fx_rate` and each line stays editable afterwards. Nothing on the run
+remembers what was typed above — there is no second place for the rate to live,
+and so no way for the sheet and its rows to disagree. That was the one design
+decision here and it is the reason the rest is small.
+
+Two guards, checked rather than borrowed, because this writes without going
+through `updateLine`: a **finalised sheet refuses it** like every other figure on
+it, and a **person already paid keeps the rate they were paid at**.
+
+**Proved by `.sheetrateqa.mjs`** — 14 checks. It builds three people and a July
+draft, watches the column start at N/A, types one line's rate by hand, fills the
+rest, and reads `payroll_lines.fx_rate` back out of the table at every step:
+
+    Ayesha     fx_rate=130.000000   (typed, then filled, then typed again)
+    Bipul      fx_rate=125.000000
+    Cathy      fx_rate=125.000000
+
+**Net Pay editable is NOT in this** — it is the other half of the same sentence
+and it needs a migration. `net_amount` is a `GENERATED ALWAYS AS … STORED`
+column (`gross + bonus + other+ − tds − other−`), so Postgres will not take a
+write to it at all. Two honest shapes, and the choice is the owner's because it
+changes what a payslip says:
+
+1. **Typing a Net adjusts Other + / Other −.** No migration. The row still adds
+   up and the reader can see where the difference went — but a figure appears in
+   a column nobody typed.
+2. **A `net_amount_override` column.** Additive migration, travels alone. The
+   typed figure is the figure — but the row visibly stops adding up, which on a
+   payslip is its own problem.
+
+Asked; not started.
+
 ## 67. A rate on every entry, everywhere
 
 The owner, straight after the dollar card that would not move:

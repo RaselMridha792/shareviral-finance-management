@@ -3,10 +3,12 @@ import {
   createPayrollRunSchema,
   listPayrollRunsQuerySchema,
   payPayrollSchema,
+  setRunFxRateSchema,
   updatePayrollLineSchema,
   type CreatePayrollRunInput,
   type ListPayrollRunsQuery,
   type PayPayrollInput,
+  type SetRunFxRateInput,
   type UpdatePayrollLineInput,
   payrollEligibleQuerySchema,
   syncRunMembersSchema,
@@ -126,6 +128,23 @@ export class PayrollController {
   @RequirePermission("payroll.write")
   reopen(@Param("id") id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.payroll.reopen(uuidSchema.parse(id), actor);
+  }
+
+  /**
+   * One rate, typed once, filled onto every line.
+   *
+   * `payroll.write` rather than `payroll.pay` — it edits figures on a draft
+   * sheet, which is what the per-line box already does; nothing moves.
+   */
+  @Post("runs/:id/fx-rate")
+  @HttpCode(200)
+  @RequirePermission("payroll.write")
+  setRunFxRate(
+    @Param("id") id: string,
+    @ZodBody(setRunFxRateSchema) body: SetRunFxRateInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.payroll.setRunFxRate(uuidSchema.parse(id), body, actor);
   }
 
   /** Moves the money. Needs its own permission beyond payroll.write. */

@@ -570,6 +570,35 @@ export const updatePayrollLineSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdatePayrollLineInput = z.infer<typeof updatePayrollLineSchema>;
 
+/**
+ * One rate for the whole sheet.
+ *
+ * The owner: *"dollar rate prottek sarite thakuk tarporeo opore ek jaygay rakho
+ * jekhane rakhle table er sobgula field a auto fill hobe caile edit o korte
+ * parbe."* Seventeen people paid on the same day were converted at the same
+ * rate, so typing it seventeen times was seventeen chances to mistype it.
+ *
+ * It FILLS the rows rather than replacing them: each line keeps its own
+ * `fx_rate` column and stays individually editable afterwards. Nothing on the
+ * run remembers this figure — there is no second place for the rate to live,
+ * and so no way for the sheet and its rows to disagree.
+ */
+export const setRunFxRateSchema = z.strictObject({
+  fxRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,12}(\.\d{1,6})?$/, "Enter a rate like 122.50")
+    .refine((v) => Number(v) > 0, "A rate has to be more than nothing"),
+  /**
+   * Whether a line that already states its own rate is overwritten.
+   *
+   * False by default, so filling the column cannot quietly undo a figure
+   * somebody typed for one person.
+   */
+  overwrite: z.boolean().default(false),
+});
+export type SetRunFxRateInput = z.infer<typeof setRunFxRateSchema>;
+
 export const payPayrollSchema = z.strictObject({
   paymentDate: isoDateSchema,
   accountId: z.string().uuid("Choose the account paying"),

@@ -432,6 +432,12 @@ export const payrollApi = {
       method: "PATCH",
       ...json(input),
     }),
+  /** One rate, filled onto every line of the sheet that has not been paid. */
+  setRunFxRate: (id: string, fxRate: string, overwrite: boolean) =>
+    apiFetch<{ filled: number; fxRate: string }>(`/payroll/runs/${id}/fx-rate`, {
+      method: "POST",
+      ...json({ fxRate, overwrite }),
+    }),
   finalize: (id: string) =>
     apiFetch<{ run: PayrollRunDto; lines: PayrollLineDto[] }>(
       `/payroll/runs/${id}/finalize`,

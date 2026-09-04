@@ -19,6 +19,7 @@ import {
   type PayPayrollInput,
   type PayslipBreakdown,
   type SalarySplit,
+  type SetRunFxRateInput,
   type TdsBasis,
   type TdsPolicy,
   type UpdatePayrollLineInput,
@@ -404,6 +405,76 @@ export class PayrollService {
       skipped: withoutPay,
       message: notes.length ? notes.join(" ") : undefined,
     };
+  }
+
+  /**
+   * One rate typed once, written onto every line of the sheet.
+   *
+   * The owner: *"dollar rate prottek sarite thakuk tarporeo opore ek jaygay
+   * rakho jekhane rakhle table er sobgula field a auto fill hobe caile edit o
+   * korte parbe."*
+   *
+   * A fill, not a second home for the figure. The rate still lives in each
+   * line's own `fx_rate` and each line stays editable afterwards; this only
+   * saves typing it once per person. Lines that already state a rate are left
+   * alone unless `overwrite` says otherwise, so filling the column cannot
+   * quietly undo something somebody typed.
+   *
+   * The same two locks `updateLine` has, for the same reasons: a finalised
+   * sheet is finalised on the server too, and a person already paid keeps the
+   * figures they were paid on. Those are checked here rather than borrowed,
+   * because this writes without going through that method.
+   */
+  async setRunFxRate(
+    runId: string,
+    input: SetRunFxRateInput,
+    actor: AuthenticatedUser,
+  ) {
+    const [run] = await this.db.client
+      .select({
+        id: payrollRuns.id,
+        label: payrollRuns.label,
+        status: payrollRuns.status,
+      })
+      .from(payrollRuns)
+      .where(and(eq(payrollRuns.id, runId), isNull(payrollRuns.deletedAt)))
+      .limit(1);
+
+    if (!run) throw new NotFoundException("No such payroll run");
+    if (run.status !== "draft") {
+      throw new BadRequestException(
+        "That sheet has been finalised — reopen it before changing a figure.",
+      );
+    }
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "payroll_runs",
+      entityId: runId,
+      summary: `Set the USD rate to ${input.fxRate} across ${run.label}`,
+      module: "payroll",
+      read: () => Promise.resolve(undefined),
+      run: async (tx) => {
+        const updated = await tx
+          .update(payrollLines)
+          .set({
+            fxRate: input.fxRate,
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(
+            and(
+              eq(payrollLines.payrollRunId, runId),
+              /* Paid people keep the figures they were paid on. */
+              eq(payrollLines.isPaid, false),
+              ...(input.overwrite ? [] : [isNull(payrollLines.fxRate)]),
+            ),
+          )
+          .returning({ id: payrollLines.id });
+
+        return { filled: updated.length, fxRate: input.fxRate };
+      },
+    });
   }
 
   async updateLine(
