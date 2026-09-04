@@ -252,6 +252,32 @@ export function PayrollListScreen({
               {error}
             </p>
           ) : null}
+          {/*
+            OUTSIDE the table, which is the whole fix.
+
+            It used to sit between `<table>` and `<thead>`. Nothing but
+            `<caption>`, `<colgroup>`, a row group or a script may live there,
+            so the browser hoisted the div out of the table during parsing and
+            left it floating over the header — the owner's screenshot: a box
+            sitting on top of the first rows, the header pushed out of line.
+            *"multiple select korar por eta table er vitore dhuke jacche and
+            broken hoye jacche. team page er ta thik ache eirokom howa ucit."*
+
+            Team's has always been outside its table and has always looked
+            right; this is the same placement, above the scroller so the bar
+            spans the card whatever the table's width is and does not scroll
+            sideways away from the ticks it belongs to.
+          */}
+          <BulkBar
+            count={bulk.count}
+            noun="payroll run"
+            pending={bulkPending}
+            onClear={bulk.clear}
+            onTrash={() => {
+              setBulkError(null);
+              setBulkAsking(true);
+            }}
+          />
           <TableScroll>
             <table
               aria-busy={loading}
@@ -262,16 +288,6 @@ export function PayrollListScreen({
                 loading && "opacity-60",
               )}
             >
-              <BulkBar
-                count={bulk.count}
-                noun="payroll run"
-                pending={bulkPending}
-                onClear={bulk.clear}
-                onTrash={() => {
-                  setBulkError(null);
-                  setBulkAsking(true);
-                }}
-              />
               <thead>
                 <tr className="text-left">
                   {canWrite ? (
