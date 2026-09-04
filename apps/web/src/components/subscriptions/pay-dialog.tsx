@@ -1,6 +1,6 @@
 "use client";
 
-import { hasCharge, payableBdt } from "@finance/shared";
+import { hasCharge, payableBdt, payableUsd } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
@@ -41,7 +41,44 @@ export function PayDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+   * The three money boxes, in the order the money is actually known.
+   *
+   * The owner: *"usd bdt and usd rate sobgula field e aino. karon prottek
+   * renewal a rate soman thakena."* A plan states the rate its price was
+   * struck at; a renewal three months later was billed at a different one, and
+   * a drawer that only offered the taka made him do that arithmetic himself.
+   *
+   * So: the dollars, then the rate, then the taka worked out from the two —
+   * the same block Cash In uses, and for the same reason. The taka box stays
+   * typeable, because the card may have taken something else entirely and the
+   * ledger counts taka.
+   */
+  const [usdCharged, setUsdCharged] = useState("");
+  const [usdRate, setUsdRate] = useState("");
+  const [typedBdt, setTypedBdt] = useState("");
+  /*
+   * Whether the taka box has been typed in **in this sitting**.
+   *
+   * Until it has, the box shows the product and follows the two boxes above
+   * it. Once it has, it is theirs and stops moving — the difference between
+   * the two is precisely what a bank charge or a rounding at the card's end
+   * looks like, and quietly overwriting it would be the drawer disagreeing
+   * with the statement.
+   */
+  const [bdtTouched, setBdtTouched] = useState(false);
+
   if (!plan) return null;
+
+  /* The taka the two boxes above come to. Empty when either is not a figure. */
+  const derivedBdt = (() => {
+    const usd = Number(plainAmount(usdCharged));
+    const rate = Number(plainAmount(usdRate));
+    if (!Number.isFinite(usd) || usd <= 0) return "";
+    if (!Number.isFinite(rate) || rate <= 0) return "";
+    return (usd * rate).toFixed(2);
+  })();
+  const shownBdt = bdtTouched ? typedBdt : derivedBdt;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,9 +90,19 @@ export function PayDialog({
     try {
       await subscriptionsApi.pay(plan.id, {
         txnDate: String(data.get("txnDate") ?? ""),
-        amount: String(data.get("amount") ?? "") || undefined,
+        /*
+         * Sent only when there IS one. Blank still means "use the plan's
+         * price", which is what the hint promises and what the server does.
+         */
+        amount:
+          plainAmount(String(data.get("amount") ?? "")) || undefined,
+        usdAmount:
+          plainAmount(String(data.get("usdAmount") ?? "")) || undefined,
+        /* The bank's fee, as its own row. "0.00" and blank both mean none. */
+        chargeAmount:
+          plainAmount(String(data.get("chargeAmount") ?? "")) || undefined,
         note: String(data.get("note") ?? "") || null,
-        usdRate: String(data.get("usdRate") ?? "").trim() || undefined,
+        usdRate: plainAmount(String(data.get("usdRate") ?? "")) || undefined,
         advanceRenewal: data.get("advanceRenewal") === "on",
       });
       await onPaid();
@@ -72,6 +119,7 @@ export function PayDialog({
   }
 
   const payable = payableBdt(plan);
+  const payableInUsd = payableUsd(plan);
 
   return (
     <Drawer
@@ -90,22 +138,97 @@ export function PayDialog({
         </Field>
 
         {/*
-          The price AND the card's charge, because that is what the account is
-          actually debited. Leaving the box blank takes the same figure the
-          ledger takes, so the hint and the server agree by construction —
-          `payableBdt` is the one function both call.
+          Dollars, then the rate, then the taka the two come to.
+
+          This order is not decoration. A card renewal happens in dollars: the
+          vendor bills $20, the bank picks a rate that day, and the taka is
+          what falls out. Asking for the taka first made somebody do that
+          multiplication in their head every month, at a rate that — as the
+          owner put it — *"prottek renewal a rate soman thakena"*.
+
+          Every box is optional and every one has the plan's own figure behind
+          it, so a renewal at the usual price and the usual rate is still just
+          a date and a button.
         */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Amount (USD)"
+            hint={
+              payableInUsd
+                ? hasCharge(plan)
+                  ? `Blank uses $${payableInUsd} — $${plan.costUsd} plus a $${plan.chargeUsd} charge`
+                  : `Blank uses the plan's price, $${payableInUsd}`
+                : "What the card was billed, in dollars"
+            }
+          >
+            <MoneyInput
+              name="usdAmount"
+              placeholder={payableInUsd ?? "0.00"}
+              value={usdCharged}
+              onChange={(event) => setUsdCharged(event.target.value)}
+            />
+          </Field>
+
+          {/*
+            Every entry states its rate — *"puro application a joto dhoroner
+            transaction a hok na keno manually prottekbar rate bosate hobe"*.
+            The plan's own is the placeholder rather than the value, because a
+            box that arrives already filled is a box nobody re-reads, and the
+            whole reason this one exists is that the rate moves between
+            renewals. Leaving it alone still uses the plan's.
+          */}
+          <Field
+            label="USD rate"
+            hint={
+              plan.usdRate
+                ? `Blank uses the plan's rate, ${plan.usdRate}. It moves between renewals.`
+                : "What one US dollar was worth the day the card was billed"
+            }
+          >
+            <Input
+              name="usdRate"
+              inputMode="decimal"
+              className="col-amount"
+              placeholder={plan.usdRate ?? "122.77"}
+              value={usdRate}
+              onChange={(event) => setUsdRate(event.target.value)}
+            />
+          </Field>
+        </div>
+
         <Field
-          label="Amount"
+          label="Amount (BDT)"
           hint={
-            payable
-              ? hasCharge(plan)
-                ? `Blank uses ${payable} — $${plan.costUsd} plus a $${plan.chargeUsd} charge, at ${plan.usdRate ?? "the plan's rate"}`
-                : `Blank uses the plan's price, ${payable}`
-              : "What was charged, in taka"
+            derivedBdt
+              ? "Worked out from the dollars and the rate. Change it to what the bank actually took — the ledger counts taka."
+              : payable
+                ? `Blank uses the plan's taka price, ${payable}`
+                : "What was charged, in taka"
           }
         >
-          <MoneyInput name="amount" placeholder={payable ?? "0.00"} />
+          <MoneyInput
+            name="amount"
+            placeholder={payable ?? "0.00"}
+            value={shownBdt}
+            onChange={(event) => {
+              setBdtTouched(true);
+              setTypedBdt(event.target.value);
+            }}
+          />
+        </Field>
+
+        {/*
+          The bank's fee, and it is a different thing from the plan's own
+          charge. The plan's `chargeUsd` is part of what the VENDOR bills and is
+          already inside the price above; this is what the BANK takes on top,
+          and like everywhere else in this app it becomes its own row under Bank
+          charges rather than being buried in the amount.
+        */}
+        <Field
+          label="Bank charge (BDT)"
+          hint="Its own entry under Bank charges. Leave it empty when there was none."
+        >
+          <MoneyInput name="chargeAmount" placeholder="0.00" />
         </Field>
 
         {/*
@@ -193,4 +316,9 @@ export function PayDialog({
       </div>
     </Drawer>
   );
+}
+
+/** A money box's text, without the separators and symbols people type. */
+function plainAmount(value: string): string {
+  return value.replace(/[,\s৳$]/g, "").trim();
 }

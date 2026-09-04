@@ -57,6 +57,76 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 70. A renewal is not billed at the rate the plan was signed at
+
+The owner, on Record a payment:
+
+> *"renew er ekhane bank charge ane diyo. also usd bdt and usd rate sobgula
+> field e aino. karon prottek renewal a rate soman thakena."*
+
+The last clause is the whole item. A plan stores the rate its price was struck
+at — sign a $100 plan at 120 and it carries ৳12,000 forever. The drawer offered
+a taka box and a rate box, so a renewal in April at 128.50 either went in at
+January's figure or somebody did the multiplication in their head, every month.
+
+The money block is now the one Cash In uses, in the order the money is actually
+known:
+
+    Amount (USD)   $100.00        what the card was billed
+    USD rate        128.50        the day's, not the plan's
+    Amount (BDT)  ৳12,850.00      worked out, and still typeable
+    Bank charge      ৳230.00      its own row under Bank charges
+
+Every box is optional and every one has the plan's own figure behind it, so an
+ordinary renewal at the usual price and rate is still a date and a button.
+
+**Three things about the shapes.**
+
+The taka is **derived until touched** — `bdtTouched`, the same guard the
+transaction and Cash In forms carry. The gap between the product and the typed
+figure is exactly what a card's own rounding looks like, so overwriting it would
+be the drawer arguing with the statement.
+
+The rate's placeholder is the plan's, **not its value**. A box that arrives
+already filled is a box nobody re-reads, and the entire reason this one exists
+is that the figure moves between renewals. Left alone it still uses the plan's.
+
+The **bank charge is not the plan's charge**. `chargeUsd` on a plan is part of
+what the VENDOR bills and is already inside the price; this is what the BANK
+takes on top, and like everywhere else it becomes its own row rather than being
+buried in the amount.
+
+**The service now settles the rate before the amount**, which is what makes the
+whole thing work: taka is what was typed, else the dollars at *this payment's*
+rate, else the plan's stored taka. It also states the dollars whenever there are
+any. It used to state them only when the taka had **not** been typed over —
+right while the drawer had no dollar box, wrong now that it has one: a renewal
+billed $100 at 125 and settled at ৳12,750 is three facts at once and the row can
+hold all three.
+
+**Proved by `.renewqa.mjs`** — 20 checks, every figure read back out of the
+table:
+
+    January, nothing typed          ৳12,000.00  $100.00  @120.000000
+    April, the rate has moved       ৳12,850.00  $100.00  @128.500000
+    Bank charge — July                 ৳230.00        —  @125.000000
+    July, with a bank fee           ৳12,500.00  $100.00  @125.000000
+    October, the card took else     ৳12,750.00  $100.00  @125.000000
+    card: $3,598.16 of an opening $4,000.00
+
+That last figure is the one worth reading twice: $400 of plans **and $1.84 of
+bank charge** — ৳230 at 125. The charge row states no dollars, so the card reads
+it back at the rate on the row, and the rate is on the row because the charge
+inherits the payment's.
+
+**Three faults were the harness, not the app**, and each is worth knowing.
+The card opened at zero, so the overdraft guard refused every renewal and the
+run measured that guard instead of this drawer. The charge row's description is
+built from the payment's — "Bank charge — Claude — … with a bank fee" — so
+finding the payment by its note found the charge instead; it has to be found by
+shape (`charge_for_id is null`). And a charge row references its parent, so a
+cleanup that deletes payments first violates the foreign key.
+
 ## 69. Net Pay is typed over, and then it IS the figure
 
 The other half of #68's sentence. Asked where an edited Net Pay should land, the

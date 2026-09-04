@@ -84,6 +84,25 @@ const paySubscriptionSchema = z.object({
     .trim()
     .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
     .optional(),
+  /**
+   * What the card was actually billed, in dollars.
+   *
+   * The plan's price is the default and usually the answer, but a renewal is
+   * not obliged to match it — a seat was added, a promotion ended, the vendor
+   * put its price up. Stated here, the row carries it as `original_amount`,
+   * which is what a USD card's own balance is built from.
+   */
+  usdAmount: z.string().trim().optional(),
+  /**
+   * The bank's fee on this charge, as its own row under Bank charges.
+   *
+   * The owner asked for it on every kind of transaction — *"sob dhoroner
+   * transaction a ei charge ta rakho. karon bank charge dorkar hoy sob
+   * transaction er khetrei"* — and a card renewal is one. Distinct from the
+   * plan's own `chargeUsd`, which is part of what the VENDOR bills and is
+   * already inside the price; this is what the BANK takes on top.
+   */
+  chargeAmount: z.string().trim().optional(),
 });
 type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
 

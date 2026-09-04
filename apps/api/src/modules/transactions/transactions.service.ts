@@ -1275,6 +1275,10 @@ export class TransactionsService {
       advanceRenewal?: boolean;
       /** Typed on the dialog; the plan's own rate when it is not. */
       usdRate?: string;
+      /** What the card was billed in dollars. The plan's payable when absent. */
+      usdAmount?: string;
+      /** The bank's fee, written as its own row under Bank charges. */
+      chargeAmount?: string;
     },
     actor: AuthenticatedUser,
   ) {
@@ -1309,7 +1313,49 @@ export class TransactionsService {
      * exists, and a card that charged something else is the usual reason to
      * use it.
      */
-    const amount = input.amount ?? payableBdt(plan);
+    /*
+     * The rate first, because the taka figure can now be worked out from it.
+     *
+     * Typed on the drawer where somebody typed one, otherwise the plan's own —
+     * the rate its dollar price was struck at. The owner's reason for putting
+     * the box on the drawer at all: *"karon prottek renewal a rate soman
+     * thakena"*. Refused rather than guessed when there is neither, because a
+     * row with no rate cannot be read back in dollars at all.
+     */
+    const rateForThisPayment = input.usdRate ?? plan.usdRate ?? null;
+    if (!rateForThisPayment || Number(rateForThisPayment) <= 0) {
+      throw new BadRequestException(
+        "This plan has no USD rate on it — set one on the plan, or type the rate when recording the payment.",
+      );
+    }
+
+    /*
+     * What the card was billed in dollars: stated on the drawer, or the plan's
+     * own price plus its vendor charge.
+     *
+     * NOT the bank's fee. `chargeAmount` is that, it is in taka, and it becomes
+     * its own row — folding it in here would make the dollars claim the vendor
+     * billed more than it did.
+     */
+    const usdCharged = input.usdAmount?.trim() || payableUsd(plan);
+
+    /*
+     * The taka that leaves the account.
+     *
+     * Three answers in order, each narrower than the last: what was typed;
+     * failing that the dollars at this payment's own rate — which is why the
+     * rate had to be settled first, and what makes a renewal at a moved rate
+     * come out right instead of at the price the plan was signed at; failing
+     * both, the plan's stored taka.
+     *
+     * A plan with none of the three has no figure this could invent and says
+     * so rather than guessing one.
+     */
+    const derivedFromDollars =
+      usdCharged && Number(usdCharged) > 0
+        ? (Number(usdCharged) * Number(rateForThisPayment)).toFixed(2)
+        : null;
+    const amount = input.amount ?? derivedFromDollars ?? payableBdt(plan);
     if (!amount || Number(amount) <= 0) {
       throw new BadRequestException(
         "This plan has no taka price on it — type what was charged",
@@ -1357,28 +1403,22 @@ export class TransactionsService {
      * path wrote neither, so a $100 plan paid from a dollar card took $0 out
      * of it, and the figure was marked an estimate into the bargain.
      *
-     * Only where the price was not typed over. A hand-typed amount is a figure
-     * whose dollars nobody stated — the card may have charged something else
-     * entirely — so it carries the plan's rate and no dollar claim, which
-     * makes the balance an approximation the screen already knows how to mark
-     * rather than a number this invented.
+     * The dollars are stated whenever there are any, now that the drawer asks
+     * for them outright. It used to state them only when the taka had NOT been
+     * typed over, on the reasoning that a hand-typed taka figure is one whose
+     * dollars nobody stated — true while the drawer had no dollar box, and no
+     * longer true now that it does. A renewal billed $120 at a rate of 122 and
+     * settled at ৳14,700 is all three facts at once, and the row can hold them.
      *
-     * `originalAmount` is the price PLUS the charge, because the charge is in
-     * dollars too — it is part of what is billed, not something levied here.
-     * `payableUsd` is the same function the screen prints, so the card's
-     * dollar balance and the figure on the plan's page cannot disagree.
+     * `usdCharged` is the price PLUS the plan's vendor charge, because that
+     * charge is in dollars and is part of what is billed. The BANK's fee is
+     * not in here — that is `chargeAmount`, it is in taka, and it becomes its
+     * own row.
      */
     const statedDollars =
-      input.amount === undefined && plan.usdRate && Number(plan.usdRate) > 0
-        ? { originalAmount: payableUsd(plan), fxRate: plan.usdRate }
+      usdCharged && Number(usdCharged) > 0
+        ? { originalAmount: usdCharged, fxRate: rateForThisPayment }
         : null;
-
-    const rateForThisPayment = input.usdRate ?? plan.usdRate ?? null;
-    if (!rateForThisPayment || Number(rateForThisPayment) <= 0) {
-      throw new BadRequestException(
-        "This plan has no USD rate on it — set one on the plan, or type the rate when recording the payment.",
-      );
-    }
 
     const created = await this.create(
       {
@@ -1405,6 +1445,14 @@ export class TransactionsService {
          * still for a month.
          */
         usdRate: rateForThisPayment,
+        /*
+         * The bank's fee, as its own row under Bank charges — the same one
+         * line every other money form passes, and `create()` does the rest.
+         * Nothing to add here beyond letting it through.
+         */
+        ...(input.chargeAmount?.trim()
+          ? { chargeAmount: input.chargeAmount.trim() }
+          : {}),
         /* The fact that makes this tooling, rather than the guess about which
            card it was on. */
         subscriptionId: plan.id,
