@@ -47,7 +47,7 @@ ticking all seventeen.
 | 64 | **A dollar card's balance stood still while its taka moved** | **done** |
 | 65 | **Subscriptions register reads in dollars, taka under it** | **done** |
 | 66 | **Payroll carries no paisa; the tax box is usable; Net follows the boxes** | **done** |
-| 67 | **A USD account showing ৳56.70 and $0.00** | not started — the owner's next item |
+| 67 | **A USD account showing ৳56.70 and $0.00** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -171,18 +171,44 @@ words.
 ## 67. ৳56.70 in the account, $0.00 beside it
 
 *"ekhane 56 taka dekhacche dollar er ghor 0 keno? etato right hiseb holona
-taina. ami hisebe 1 poysaro gormil caina."* — the Exprovia LLC card, a USD
-account reading `$0.00` over `৳56.70`.
+taina. ami hisebe 1 poysaro gormil caina."* — the Exprovia LLC account, USD,
+reading `$0.00` over `৳56.70`.
 
-**Not started.** He asked for it to be held until the payroll work was done.
+**The row had everything it needed.** ৳56.70, a currency, and a rate of 123.26
+recorded with it — `transactions_fx_complete` will not let a row state dollars
+without one. It also carried a **zero** in the dollars, and
+`ownCurrencyBalance` reads a stated dollar figure before it reads any rate. So
+a zero read as a fact beat the rate sitting beside it, and $0.46 came out as
+$0.00. Worse, `ownCurrencyExact` counted the row as a record, so the screen did
+not even mark the figure approximate.
 
-What is known before anyone starts: ৳56.70 at any plausible rate is about
-$0.46, so a zero is not a rounding. The likely shape is a row carrying
-`original_currency = 'USD'` with `original_amount = 0.00` — the first branch of
-`ownCurrencyBalance` trusts a stated dollar figure over any rate, and a stated
-zero is still a statement. #64's fallback only catches rows that state
-NOTHING. Worth checking against the live rows before changing the expression
-again.
+#64's fallback could not reach it: that one catches rows stating **nothing**,
+and this row states zero, which is not the same shape.
+
+**A stated zero cannot be a fact, and the database is what says so.**
+`transactions_amount_positive` is `CHECK (amount > 0)` — a row that moved
+nothing cannot be written at all — so no honest row is worth taka and zero
+dollars at once. A zero there is a box left at its placeholder. Both
+expressions now require `original_amount <> 0`, and the row falls through to
+the rate it was written with. Measured: ৳56.70 ÷ 123.26 = **$0.46**, and a row
+that states real dollars is still taken at its word.
+
+It stays a *record* rather than an estimate, and that is right: the app's own
+rule is "its dollars **or** its own rate", the rate was recorded on the day,
+and nothing is guessed at today's price.
+
+**Where the zeros come from, not fixed and not needing to be.** The transaction
+form sends `plainAmount(usdEntered) || undefined`, and `plainAmount("0")` is
+the string `"0"` — truthy — so typing a zero in the USD box writes exactly this
+row. The reader ignores it now, present and future, so a writer guard would
+change no figure; it is noted rather than done because that form has been
+edited heavily this week and the change would have to move three coupled
+fields at once to keep `transactions_fx_complete` satisfied.
+
+`.zerodollarqa.mjs`, 7 checks. One of them asserts the *licence* rather than
+the behaviour: the ledger is asked to write a zero-amount row and must refuse,
+because that refusal is the whole reason a stated zero may be treated as a
+missing figure.
 
 ## 66. No paisa in payroll, a tax box you can type in, and a Net that follows
 

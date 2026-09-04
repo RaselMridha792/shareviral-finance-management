@@ -142,7 +142,17 @@ const currentBalance = sql<string>`(
  *
  * Rows with no dollar figure fall back to their OWN recorded rate before
  * anything else, so a row that knows what it was worth is never re-valued at
- * today's price. A row with no rate of any kind contributes nothing here and
+ * today's price.
+ *
+ * A stated dollar figure of ZERO is not a statement, and the `<> 0` below is
+ * what says so. The owner found an account holding taka 56.70 and reading
+ * $0.00 beside it -- "ami hisebe 1 poysaro gormil caina" -- and the row had
+ * every figure it needed: taka, a currency, and a rate. It simply also carried
+ * a zero in the dollars, and a zero read as a fact beat the rate sitting next
+ * to it. It cannot be a fact: `transactions_amount_positive` refuses a row
+ * that moved nothing, so no honest row is worth taka and zero dollars at once.
+ * A zero there is a box somebody left at its placeholder, and the rate is what
+ * the figure should have been read at all along. A row with no rate of any kind contributes nothing here and
  * makes the answer approximate rather than wrong — `ownCurrencyExact` below is
  * what says so, and the screen marks it.
  */
@@ -158,6 +168,7 @@ const ownCurrencyBalance = sql<string>`(
       case
         when ${transactions.originalCurrency} = 'USD'
              and ${transactions.originalAmount} is not null
+             and ${transactions.originalAmount} <> 0
         then case when ${transactions.direction} = 'in'
                   then ${transactions.originalAmount}
                   else -${transactions.originalAmount} end
@@ -241,7 +252,8 @@ const ownCurrencyExact = sql<boolean>`(
      */
     coalesce(
       (${transactions.originalCurrency} = 'USD'
-        and ${transactions.originalAmount} is not null)
+        and ${transactions.originalAmount} is not null
+        and ${transactions.originalAmount} <> 0)
       or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,
       false
     )
