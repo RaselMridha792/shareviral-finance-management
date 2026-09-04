@@ -210,6 +210,17 @@ export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 
 export const listAccountsQuerySchema = z.strictObject({
   includeInactive: boolish.default(false),
+  /**
+   * Balances as at the end of this day, rather than now.
+   *
+   * The Accounts screen's month dropdown — *"account overview page a date month
+   * filter any diyo dropdown akare"*. Absent means now, which is what every
+   * other caller wants and what the screen shows until a month is picked.
+   *
+   * A day rather than a month, because that is what a balance is asked "as at",
+   * and the dropdown simply passes the month's last one.
+   */
+  asOf: isoDateSchema.optional(),
 });
 export type ListAccountsQuery = z.infer<typeof listAccountsQuerySchema>;
 

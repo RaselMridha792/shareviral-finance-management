@@ -115,12 +115,50 @@ export type AccountWithBalanceDto = AccountDto & {
  * The join is safe because the correlation is written with `eq()`, which
  * qualifies, and the three columns named below exist on one table each.
  */
-const currentBalance = sql<string>`(
-  ${accounts.openingBalance} + coalesce(
+/**
+ * Which rows a balance counts.
+ *
+ * Always "not voided". Optionally "and dated on or before a day", which is what
+ * turns every figure on the Accounts screen from *what it holds* into *what it
+ * held at the end of that month* — the owner: *"account overview page a date
+ * month filter any diyo dropdown akare"*.
+ *
+ * One predicate rather than three edited expressions. The comment on
+ * `balances()` further down says why that matters: two places working out the
+ * same money two different ways is how two screens come to disagree with no way
+ * to tell which to believe. This is the one place the question "does this row
+ * count" is answered.
+ */
+function counted(asOf: string | null) {
+  return asOf
+    ? sql`${transactions.voidedAt} is null and ${transactions.txnDate} <= ${asOf}`
+    : sql`${transactions.voidedAt} is null`;
+}
+
+/**
+ * The opening balance, but only once the account was open.
+ *
+ * An account opened in March holds nothing at the end of January, and adding
+ * its opening figure to a January total would report money that was not there.
+ * Without a cutoff this is simply the opening balance, so today's behaviour is
+ * unchanged to the byte.
+ */
+function openingUpTo(
+  asOf: string | null,
+  column: typeof accounts.openingBalance | typeof accounts.openingBalanceUsd,
+) {
+  return asOf
+    ? sql`case when ${accounts.openingBalanceOn} <= ${asOf} then ${column} else 0 end`
+    : sql`${column}`;
+}
+
+const balanceUpTo = (asOf: string | null) => sql<string>`(
+  ${openingUpTo(asOf, accounts.openingBalance)} + coalesce(
     sum(${transactions.signedAmount}) filter (
-      where ${transactions.voidedAt} is null
+      where ${counted(asOf)}
     ), 0)
 )::text`;
+const currentBalance = balanceUpTo(null);
 
 /**
  * The same balance, in the currency the account is actually kept in.
@@ -156,14 +194,14 @@ const currentBalance = sql<string>`(
  * makes the answer approximate rather than wrong — `ownCurrencyExact` below is
  * what says so, and the screen marks it.
  */
-const ownCurrencyBalance = sql<string>`(
+const ownBalanceUpTo = (asOf: string | null) => sql<string>`(
   case when ${accounts.currency} = 'BDT' then (
-    ${accounts.openingBalance} + coalesce(
+    ${openingUpTo(asOf, accounts.openingBalance)} + coalesce(
       sum(${transactions.signedAmount}) filter (
-        where ${transactions.voidedAt} is null
+        where ${counted(asOf)}
       ), 0)
   ) else (
-  coalesce(${accounts.openingBalanceUsd}, 0) + coalesce(
+  coalesce(${openingUpTo(asOf, accounts.openingBalanceUsd)}, 0) + coalesce(
     sum(
       case
         when ${transactions.originalCurrency} = 'USD'
@@ -220,9 +258,10 @@ const ownCurrencyBalance = sql<string>`(
         ))
         else 0
       end
-    ) filter (where ${transactions.voidedAt} is null), 0)
+    ) filter (where ${counted(asOf)}), 0)
   ) end
 )::numeric(14,2)::text`;
+const ownCurrencyBalance = ownBalanceUpTo(null);
 
 /**
  * Whether that figure is a record or an estimate.
@@ -232,7 +271,7 @@ const ownCurrencyBalance = sql<string>`(
  * either makes the total an estimate, and an estimate that looks recorded is
  * the failure this app is most careful about.
  */
-const ownCurrencyExact = sql<boolean>`(
+const ownExactUpTo = (asOf: string | null) => sql<boolean>`(
   ${accounts.currency} = 'BDT' or (
   ${accounts.openingBalanceUsd} is not null
   and coalesce(bool_and(
@@ -257,8 +296,9 @@ const ownCurrencyExact = sql<boolean>`(
       or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,
       false
     )
-  ) filter (where ${transactions.voidedAt} is null), true))
+  ) filter (where ${counted(asOf)}), true))
 )`;
+const ownCurrencyExact = ownExactUpTo(null);
 
 @Injectable()
 export class AccountsService {
@@ -286,13 +326,21 @@ export class AccountsService {
     const filters = [isNull(accounts.deletedAt)];
     if (!query.includeInactive) filters.push(eq(accounts.isActive, true));
 
+    /*
+     * `asOf` makes every figure below "as at the end of that day" instead of
+     * "now". Absent — which is every caller but the Accounts screen's month
+     * dropdown — the expressions are the ones this file has always used, so
+     * nothing else on the site changes.
+     */
+    const asOf = query.asOf ?? null;
+
     return (
       this.db.client
         .select({
           ...projection,
-          balance: currentBalance,
-          ownBalance: ownCurrencyBalance,
-          ownBalanceExact: ownCurrencyExact,
+          balance: balanceUpTo(asOf),
+          ownBalance: ownBalanceUpTo(asOf),
+          ownBalanceExact: ownExactUpTo(asOf),
         })
         .from(accounts)
         .leftJoin(transactions, eq(transactions.accountId, accounts.id))

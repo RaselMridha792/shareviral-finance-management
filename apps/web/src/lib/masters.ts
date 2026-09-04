@@ -188,9 +188,14 @@ export const accountsApi = {
       ...json(input),
     }),
 
-  list: (includeInactive = false) =>
+  /**
+   * @param asOf Balances as at the end of this day rather than now. The
+   * Accounts screen's month dropdown sends the month's last day; every other
+   * caller omits it and gets what it always got.
+   */
+  list: (includeInactive = false, asOf?: string) =>
     apiFetch<AccountWithBalance[]>(
-      `/accounts?includeInactive=${includeInactive}`,
+      `/accounts?includeInactive=${includeInactive}${asOf ? `&asOf=${asOf}` : ""}`,
       {
         cache: "no-store",
       },

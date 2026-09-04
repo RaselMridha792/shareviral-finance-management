@@ -57,6 +57,94 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 71. Payroll's selection bar was inside the table
+
+> *"ekhane dekho multiple select korar por eta table er vitore dhuke jacche and
+> broken hoye jacche. team page er ta thik ache eirokom howa ucit. issue ta
+> sudhu payroll page er moddhe ache."*
+
+Right on all three counts, including the last. `<BulkBar>` sat between
+`<table>` and `<thead>` on the payroll list. Nothing but a caption, a colgroup,
+a row group or a script may live there, so the browser hoists the div out during
+parsing and paints it wherever it lands — a 185px box floating over the first
+rows, the table starting 131px above where the bar ended.
+
+Moved above `<TableScroll>`, which is where Team's has always been. Above the
+scroller rather than inside it, so the bar spans the card whatever the table's
+width is and does not scroll sideways away from the ticks it belongs to.
+
+**Only payroll**, and that was checked rather than taken on trust: nine screens
+render a `BulkBar` and a short script walked all nine comparing `<table` and
+`</table>` counts before each one. Eight were already outside. (The script's
+first run said payroll was *still* inside after the fix — it was counting the
+word `<table>` inside the explanatory comment I had just written. The line
+numbers settle it: bar at 271, table at 282.)
+
+**Proved by `.bulkbarqa.mjs`** — 9 checks in a real browser, because a layout
+fault is invisible in a diff. It ticks the header checkbox on both pages and
+measures the bar's box against the table's:
+
+    Team      bar ends 356, table starts 460, 1104px of a 1108px table
+    Payroll   bar ends 234, table starts 234, 1102px of a 1102px table
+
+And it was run against the **broken** build first, to be sure it detects rather
+than merely passes — 4 of 9 failed, naming the descendant relationship, the
+131px overlap and the 185px width.
+
+That run also improved the harness: the check named *"does not overlap the
+header row"* **passed** on the broken build, because the hoisted box happened to
+land over the data rows instead of the header. The one check named after the
+symptom was the one that missed it. It now asks about the whole table.
+
+**Two dev-server notes that cost time.** Port 3000 was running a different
+project entirely, so every page answered 404 and it read like a routing fault;
+the SFM web server is on 3001. And the bar is found by `[role="status"]` — the
+first attempt hunted for a `div` containing the word "selected" with a button
+in it, which matched nothing and reported "no bar" for both pages, which reads
+exactly like the feature being absent.
+
+## 72. Accounts overview: balances as at the end of a month
+
+> *"also account overview page a date month filter any diyo dropdown akare"*
+
+On a screen of balances a month can only mean one thing — what each account held
+when that month ended — so the dropdown sends the month's **last day** and every
+figure on the page is read up to it, the total included.
+
+**Its own dropdown, not the Expenses `MonthFilter`**, and the reason is one word
+on one row. That control's escape hatch reads "Every month", which is right for a
+screen listing entries and meaningless for a screen showing balances. Here it
+reads **As it stands now**. Reusing the shared control would have meant changing
+that label for the three Expenses screens and the subscriptions register too, to
+say something none of them mean.
+
+**One predicate, not three edited expressions.** `counted(asOf)` answers "does
+this row count" once, and the three balance expressions — taka, own-currency,
+and the is-this-exact flag — are now functions of it. `currentBalance` is
+`balanceUpTo(null)`, so every existing caller including the dashboard produces
+the identical SQL it always did. The comment on `balances()` explains why that
+mattered: two places working out the same money two ways is how two screens come
+to disagree with no way to tell which to believe.
+
+**The opening balance is part of the cutoff.** An account opened in March holds
+**nothing** at the end of January, and adding its opening figure to a January
+total would report money that was not there. `openingUpTo` handles it, and
+without a cutoff it is simply the opening balance, so today's behaviour is
+unchanged to the byte.
+
+**Proved by `.asofqa.mjs`** — 13 checks. A taka bank and a dollar card, both
+opened 1 March, one movement a month:
+
+    end of Feb     ৳        0.00    card $     0.00     (not open yet)
+    end of Mar     ৳  1,50,000.00   card $ 1,000.00
+    end of Apr     ৳  1,30,000.00   card $   700.00
+    end of May     ৳  1,40,000.00   card $   700.00
+    as it stands   ৳  1,40,000.00   card $   700.00
+
+The check worth having is the April card row: the cutoff has to reach the
+own-currency expression as well as the taka one, or the page looks filtered and
+is only half filtered. A junk `asOf` is refused with a 400 rather than ignored.
+
 ## 70. A renewal is not billed at the rate the plan was signed at
 
 The owner, on Record a payment:

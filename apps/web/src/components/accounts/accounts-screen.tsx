@@ -2,6 +2,9 @@
 
 import {
   ACCOUNT_TYPE_LABELS,
+  isBeforeRecords,
+  monthRange,
+  todayInDhaka,
   type AccountType,
   type CreateAccountInput,
 } from "@finance/shared";
@@ -16,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { useSettings } from "@/components/settings-provider";
@@ -25,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icon";
 import { SummaryBar } from "@/components/ui/patterns";
 import { DeleteAccountDialog } from "./delete-account-dialog";
@@ -36,6 +40,39 @@ import {
 } from "@/lib/masters";
 import { AccountForm } from "./account-form";
 import { formatDate } from "@/lib/utils";
+
+/**
+ * Every month the books cover, newest first, as an "as at the end of" cutoff.
+ *
+ * Its own list rather than the Expenses screens' `MonthFilter`, and the reason
+ * is one word on one row. That control's escape hatch reads **Every month**,
+ * which is the right answer for a screen listing entries and a meaningless one
+ * for a screen showing balances — a balance is a figure at a moment, so the
+ * escape here is **As it stands now**. Reusing the control would have meant
+ * changing that label for the three Expenses screens and the subscriptions
+ * register too, to say something none of them mean.
+ *
+ * The list itself is built the same way and for the same reason: assembled from
+ * the months that have actually happened, so it carries no greyed rows and
+ * grows on its own.
+ */
+function monthEnds(): { value: string; label: string }[] {
+  const today = todayInDhaka();
+  let year = Number(today.slice(0, 4));
+  let month = Number(today.slice(5, 7));
+
+  const months: { value: string; label: string }[] = [];
+  while (!isBeforeRecords(year, month)) {
+    const range = monthRange(year, month);
+    months.push({ value: range.end, label: range.label });
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return months;
+}
 
 /** The handoff's own four, by name. */
 const ICONS: Record<AccountType, string> = {
@@ -57,6 +94,18 @@ export function AccountsScreen({
   const canWrite = useCan("accounts.write");
 
   const [accounts, setAccounts] = useState(initialAccounts);
+  /*
+   * Which day the balances are read at. Null is today, which is what the page
+   * opens on and what it has always shown.
+   *
+   * The owner: *"account overview page a date month filter any diyo dropdown
+   * akare"*. On a screen of balances a month means one thing — what each
+   * account held when that month ended — so the dropdown sends the month's last
+   * day and the server counts only entries up to it.
+   */
+  const [asOf, setAsOf] = useState<string | null>(null);
+  const [loadingAsOf, setLoadingAsOf] = useState(false);
+  const months = useMemo(() => monthEnds(), []);
   const [editing, setEditing] = useState<AccountDto | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +141,26 @@ export function AccountsScreen({
     .toFixed(2);
 
   async function refresh() {
-    setAccounts(await accountsApi.list(true));
+    setAccounts(await accountsApi.list(true, asOf ?? undefined));
     router.refresh();
+  }
+
+  /** Re-reads every balance at the chosen cutoff. */
+  async function showAsOf(next: string | null) {
+    setAsOf(next);
+    setLoadingAsOf(true);
+    setError(null);
+    try {
+      setAccounts(await accountsApi.list(true, next ?? undefined));
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not read the balances for that month",
+      );
+    } finally {
+      setLoadingAsOf(false);
+    }
   }
 
   /**
@@ -135,6 +202,29 @@ export function AccountsScreen({
         description="Bank accounts and cards."
         actions={
           <>
+            {/*
+              A balance is a figure at a moment, so this names the moment. It
+              sits beside Add account rather than above the cards because it
+              governs every figure on the page, the total included — a filter
+              under what it changes is a filter people meet after the numbers
+              it decided.
+            */}
+            <Select
+              aria-label="Balances as at"
+              className="w-auto shrink-0 font-medium"
+              value={asOf ?? ""}
+              disabled={loadingAsOf}
+              onChange={(event) =>
+                void showAsOf(event.target.value || null)
+              }
+            >
+              <option value="">As it stands now</option>
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  End of {month.label}
+                </option>
+              ))}
+            </Select>
             {canWrite ? (
               <Button
                 variant="primary"
