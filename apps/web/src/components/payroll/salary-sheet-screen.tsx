@@ -924,14 +924,27 @@ function LineRow({
     otherDeductions: line.otherDeductions,
   };
   const [draft, setDraft] = useState(stored);
+  /*
+   * Whether any of the five components has been typed in since the last save.
+   *
+   * Before anything is touched the sheet shows what is STORED — which is the
+   * typed Net where somebody typed one, not the arithmetic it disagrees with.
+   * The moment a component is touched, the row starts showing the arithmetic
+   * it is heading toward, which is also what the server will keep: typing a
+   * component clears a typed net.
+   */
+  const [sumTouched, setSumTouched] = useState(false);
   const [seenLine, setSeenLine] = useState(line);
   if (seenLine !== line) {
     setSeenLine(line);
     setDraft(stored);
+    setSumTouched(false);
   }
 
   /** The net the boxes currently come to. Falls back to the stored figure. */
   const liveNet = (() => {
+    /* Nothing typed yet: whatever is stored, arithmetic or typed. */
+    if (!sumTouched) return line.netAmount;
     const n = (v: string) => {
       const parsed = Number(String(v).replace(/[,\s৳]/g, ""));
       return Number.isFinite(parsed) ? parsed : null;
@@ -949,10 +962,12 @@ function LineRow({
   })();
 
   /** Called as a money box is typed in, before it is saved. */
-  const onLive = (field: string, value: string) =>
+  const onLive = (field: string, value: string) => {
+    if (field in stored) setSumTouched(true);
     setDraft((current) =>
       field in current ? { ...current, [field]: value } : current,
     );
+  };
 
   /*
    * Days are a number or nothing, not an amount — their own path, because
@@ -994,6 +1009,32 @@ function LineRow({
     setError(null);
     try {
       const result = await payrollApi.updateLine(line.id, { fxRate: next });
+      setWarning(result.warning ?? null);
+      onSaved();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not save that.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /*
+   * A typed Net, or the arithmetic back.
+   *
+   * Its own path for the same reason the rate has one: `save` sends whatever
+   * string is in the box, and the contract rightly refuses "" for an amount.
+   * Emptying this box means "go back to what the row adds up to", which is a
+   * real answer and the only way back — so it has to reach the server as null
+   * rather than as a key that was never sent.
+   */
+  async function saveNet(raw: string) {
+    const next = raw.trim() === "" ? null : raw.trim();
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await payrollApi.updateLine(line.id, { netAmount: next });
       setWarning(result.warning ?? null);
       onSaved();
     } catch (caught) {
@@ -1141,15 +1182,52 @@ function LineRow({
         instruments disagree about is one to build the same way as its
         neighbours rather than one to keep arguing about.
       */}
-      <td>
-        <div className="flex w-full items-center justify-end px-1">
-          <Amount
-            value={liveNet}
-            tone="neutral"
-            className="font-semibold"
+      {editable ? (
+        /*
+          Typed over, and then it IS the figure.
+
+          The owner: *"ami cai ami edit kore jodi kichu bosai oitai pore actual
+          hobe. like age net pay dhoro 100 taka ami bosalam 110 taka oi 110
+          takai db te save hobe and oita dhore calculation hobe."* So this is
+          not an adjustment folded in somewhere — what he types is the sheet's
+          total, the salary payment written when the run is paid, and the
+          payslip.
+
+          `key={liveNet}` is what keeps the box following the row while the
+          other columns are being typed: the input is uncontrolled, so without
+          a changing key it would keep showing the figure it mounted with. It
+          does NOT remount while this box itself is typed in, because Net is
+          not one of the five the arithmetic reads.
+        */
+        <td>
+          <input
+            key={liveNet}
+            defaultValue={liveNet}
+            inputMode="decimal"
+            title={
+              line.netManual
+                ? "Typed. Change any other column and the arithmetic comes back."
+                : "Worked out from the row. Type over it to set it yourself."
+            }
+            onBlur={(event) => {
+              if (event.target.value !== liveNet) saveNet(event.target.value);
+            }}
+            className={cn(
+              "col-amount h-8 w-full rounded border border-transparent bg-transparent px-2 text-sm font-semibold outline-none transition",
+              "hover:border-border focus-visible:border-primary focus-visible:bg-surface",
+              /* A typed net disagrees with the four columns beside it, so the
+                 row has to say which figure it is. */
+              line.netManual && !sumTouched && "text-primary",
+            )}
           />
-        </div>
-      </td>
+        </td>
+      ) : (
+        <td>
+          <div className="flex w-full items-center justify-end px-1">
+            <Amount value={liveNet} tone="neutral" className="font-semibold" />
+          </div>
+        </td>
+      )}
       {/*
         The rate this line is read in dollars at, typed here.
 

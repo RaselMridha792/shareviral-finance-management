@@ -72,6 +72,21 @@ const MONTHS = [
   "December",
 ];
 
+/**
+ * The net a line is actually paid at.
+ *
+ * `net_amount` is generated — gross + bonus + other additions − tax − other
+ * deductions — and `net_amount_override` is a figure somebody typed over it.
+ * The owner's rule is that the typed one wins outright: *"oi 110 takai db te
+ * save hobe and oita dhore calculation hobe"*.
+ *
+ * Written out here once and used by every reader, so no screen, total, payslip
+ * or export can pick the wrong one of the two. Table-qualified on purpose:
+ * Drizzle renders a column inside a `sql` template UNQUALIFIED, and this
+ * expression is used in queries that join two other tables.
+ */
+const effectiveNet = sql<string>`coalesce(payroll_lines.net_amount_override, payroll_lines.net_amount)`;
+
 @Injectable()
 export class PayrollService {
   constructor(
@@ -183,7 +198,8 @@ export class PayrollService {
         tdsManual: payrollLines.tdsManual,
         otherDeductions: payrollLines.otherDeductions,
         deductionNote: payrollLines.deductionNote,
-        netAmount: payrollLines.netAmount,
+        netAmount: effectiveNet,
+        netManual: sql<boolean>`payroll_lines.net_amount_override is not null`,
         isPaid: payrollLines.isPaid,
         paidOn: payrollLines.paidOn,
         transactionId: payrollLines.transactionId,
@@ -661,6 +677,21 @@ export class PayrollService {
       input.tdsAmount ?? computed?.tdsAmount ?? line.tdsAmount,
     );
 
+    /* Everything the generated net is made of. Touching any of it rebuilds the
+       row, which is what clears a net somebody typed over the old one. */
+    const touchesTheSum =
+      input.grossAmount !== undefined ||
+      input.bonusAmount !== undefined ||
+      input.otherAdditions !== undefined ||
+      input.tdsAmount !== undefined ||
+      input.otherDeductions !== undefined ||
+      input.workingDays !== undefined ||
+      derived !== undefined ||
+      computed !== undefined;
+
+    /* The typed net is written to its own column, not to the generated one. */
+    const { netAmount: _typedNet, ...writable } = input;
+
     await this.audit.mutate({
       action: "update",
       entityTable: "payroll_lines",
@@ -680,7 +711,34 @@ export class PayrollService {
         await tx
           .update(payrollLines)
           .set({
-            ...input,
+            ...writable,
+            /*
+             * `netAmount` on the contract names what the sheet SHOWS, which is
+             * `coalesce(override, net_amount)` — and `net_amount` itself is
+             * generated, so Postgres refuses a write to it. The value goes to
+             * the override column instead. Pulled out of the spread rather
+             * than renamed at the caller, so the contract keeps the name every
+             * reader already uses.
+             */
+            ...(input.netAmount !== undefined
+              ? { netAmountOverride: input.netAmount }
+              : {}),
+            /*
+             * And a component changing clears a typed net.
+             *
+             * The typed figure is what the person is paid, but it was typed
+             * for the row as it stood. Change the gross or the tax and it
+             * describes a row that no longer exists — so rather than leaving
+             * the sheet silently disagreeing with its own arithmetic for good,
+             * the arithmetic comes back and can be typed over again.
+             *
+             * Unlike `tdsManual`, which survives a recompute: that recompute
+             * fires by itself, off a rule. This one is somebody deliberately
+             * rebuilding the row.
+             */
+            ...(input.netAmount === undefined && touchesTheSum
+              ? { netAmountOverride: null }
+              : {}),
             ...(derived ?? {}),
             ...(computed ?? {}),
             /*
@@ -1180,7 +1238,8 @@ export class PayrollService {
         tdsAmount: payrollLines.tdsAmount,
         otherDeductions: payrollLines.otherDeductions,
         deductionNote: payrollLines.deductionNote,
-        netAmount: payrollLines.netAmount,
+        netAmount: effectiveNet,
+        netManual: sql<boolean>`payroll_lines.net_amount_override is not null`,
         isPaid: payrollLines.isPaid,
         paidOn: payrollLines.paidOn,
         snapshotDesignation: payrollLines.snapshotDesignation,
@@ -1243,7 +1302,8 @@ export class PayrollService {
         periodMonth: payrollRuns.periodMonth,
         grossAmount: payrollLines.grossAmount,
         tdsAmount: payrollLines.tdsAmount,
-        netAmount: payrollLines.netAmount,
+        netAmount: effectiveNet,
+        netManual: sql<boolean>`payroll_lines.net_amount_override is not null`,
         isPaid: payrollLines.isPaid,
         paidOn: payrollLines.paidOn,
       })
@@ -1575,7 +1635,9 @@ export class PayrollService {
         additions: sql<string>`coalesce(sum(${payrollLines.bonusAmount} + ${payrollLines.otherAdditions}), 0)::text`,
         tds: sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::text`,
         deductions: sql<string>`coalesce(sum(${payrollLines.otherDeductions}), 0)::text`,
-        net: sql<string>`coalesce(sum(${payrollLines.netAmount}), 0)::text`,
+        // The typed net where there is one, so the run's total is what
+        // actually leaves the bank rather than what the arithmetic says.
+        net: sql<string>`coalesce(sum(coalesce(payroll_lines.net_amount_override, payroll_lines.net_amount)), 0)::text`,
       })
       .from(payrollLines)
       .where(eq(payrollLines.payrollRunId, runId));

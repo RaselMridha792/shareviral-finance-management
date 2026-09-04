@@ -57,6 +57,76 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 69. Net Pay is typed over, and then it IS the figure
+
+The other half of #68's sentence. Asked where an edited Net Pay should land, the
+owner was unambiguous:
+
+> *"net pay ta to automatic calculation hobe eta ok but ami cai ami edit kore
+> jodi kichu bosai oitai pore actual hobe. like age net pay dhoro 100 taka ami
+> bosalam 110 taka oi 110 takai db te save hobe and oita dhore calculation
+> hobe."*
+
+Not a hint, not an adjustment folded into another column. **110 is saved, and
+110 is what everything then reads.**
+
+**Two commits, and in this order.** `net_amount` is `GENERATED ALWAYS AS (gross +
+bonus + other_additions − tds − other_deductions) STORED`, and Postgres refuses
+a write to a generated column outright, so this needed a column — which means a
+migration, which travels alone and goes first. `aca9c26` added
+`net_amount_override numeric(14,2)` and a CHECK keeping it above zero; the code
+followed once that was confirmed live.
+
+Not a writable `net_amount`. Making that one writable means dropping and
+recreating it on a table holding paid salary history — a destructive change to
+reach what an added column reaches safely. Keeping both is also what lets a
+sheet whose four components no longer sum to its Net actually **say** so.
+
+**One expression, one place.** `effectiveNet` is
+`coalesce(payroll_lines.net_amount_override, payroll_lines.net_amount)`, written
+out once at the top of the service and used by all five readers — the sheet, the
+payslip, a member's payslip list, the run's total, and the export. Table-
+qualified deliberately: Drizzle renders a column inside a `sql` template
+UNQUALIFIED, and two of those queries join other tables. The DTO keeps the name
+`netAmount`, so nothing downstream had to learn a second field and nothing can
+read the wrong one of the two.
+
+**Changing a component clears a typed net.** The typed figure was typed for the
+row as it stood; change the gross or the tax and it describes a row that no
+longer exists. So rather than leaving the sheet silently disagreeing with its own
+arithmetic for good, the arithmetic comes back and can be typed over again. This
+is deliberately *unlike* `tdsManual`, which survives a recompute — that recompute
+fires by itself off a rule, while this is somebody rebuilding the row by hand.
+
+On the screen: the Net Pay column is a box like its neighbours, coloured when the
+figure was typed, and `key={liveNet}` keeps it following the row while the other
+columns are being edited (the input is uncontrolled, so without a changing key it
+would keep showing what it mounted with). Emptying it sends `null` and puts the
+arithmetic back — its own save path, because the contract rightly refuses `""`
+for an amount.
+
+**One real bug, found by driving rather than by reading.** A typed zero came back
+**500**: `amountSchema` accepts `"0.00"` — right for a bonus, wrong for a net —
+so the DB's CHECK was the only thing refusing it, and a constraint violation is
+not an error message. The contract now refuses it with a sentence.
+
+**Proved by `.netpayqa.mjs`** — 19 checks, and the one that matters is the last:
+
+    Ayesha   gross=40,000.00  tds=0.00  arithmetic=40,500.00  typed=41,277.00
+    Bipul    gross=50,000.00  tds=0.00  arithmetic=50,000.00  typed=—
+    run total_net = 91,277.00        money that left the bank = 91,277.00
+    (the arithmetic alone would have paid 90,500.00)
+
+The typed figure survives being finalised, and it is what the salary transaction
+is written for. Everything is read back out of the table, not off a response
+body.
+
+**A trap worth writing down again**: three of these checks failed against a dev
+server that had loaded an older `packages/shared`. `npm run build:shared`
+rebuilds the `dist`, but a running `nest start --watch` does not re-require it —
+it only reloads on its own restart. A block of failures that the built contract
+demonstrably disagrees with means the server, not the code.
+
 ## 68. One USD rate for the whole salary sheet
 
 The owner, in the same breath as #67:

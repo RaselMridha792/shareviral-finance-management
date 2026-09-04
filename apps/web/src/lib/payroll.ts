@@ -190,7 +190,18 @@ export type PayrollLineDto = {
   tdsManual: boolean;
   otherDeductions: string;
   deductionNote: string | null;
+  /**
+   * What the person is actually paid: the typed figure where there is one,
+   * otherwise the arithmetic. One field, so nothing can read the wrong one.
+   */
   netAmount: string;
+  /**
+   * Whether that figure was typed rather than worked out.
+   *
+   * The sheet marks it, because a row whose four components no longer sum to
+   * its Net has to say why — the same reason `tdsManual` exists beside the tax.
+   */
+  netManual: boolean;
   isPaid: boolean;
   paidOn: string | null;
   transactionId: string | null;

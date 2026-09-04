@@ -529,6 +529,35 @@ export const updatePayrollLineSchema = z
      * this is for the one person the rule does not fit.
      */
     tdsAmount: amountSchema.optional(),
+    /**
+     * Net Pay, typed over the arithmetic.
+     *
+     * The owner: *"net pay ta to automatic calculation hobe eta ok but ami cai
+     * ami edit kore jodi kichu bosai oitai pore actual hobe. like age net pay
+     * dhoro 100 taka ami bosalam 110 taka oi 110 takai db te save hobe and
+     * oita dhore calculation hobe."*
+     *
+     * Stored in `net_amount_override`, and from then on it IS the net: the
+     * sheet's total, the salary payment written when the run is paid, and the
+     * payslip all read `coalesce(override, net_amount)`.
+     *
+     * `null` puts the arithmetic back — a real answer, and the only way back,
+     * which is why it is nullable rather than merely optional. Sending "" is
+     * refused, as everywhere else in this app: an empty box is not a figure.
+     */
+    netAmount: amountSchema
+      /*
+       * Above zero, and refused here rather than by the database.
+       *
+       * `amountSchema` accepts "0.00" — right for a bonus, wrong for a net: a
+       * net of nothing is not somebody paid nothing, it is somebody having
+       * mistyped. The CHECK on the column says the same thing, and without
+       * this the sheet answered a typed zero with a 500 rather than telling
+       * whoever typed it what was wrong.
+       */
+      .refine((v) => Number(v) > 0, "A net pay has to be more than nothing")
+      .nullable()
+      .optional(),
     tdsDeclaredInvestment: amountSchema.nullable().optional(),
     otherDeductions: amountSchema.optional(),
     deductionNote: optionalText(200),

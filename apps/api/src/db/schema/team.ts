@@ -470,6 +470,29 @@ export const payrollLines = pgTable(
           sql`${payrollLines.grossAmount} + ${payrollLines.bonusAmount} + ${payrollLines.otherAdditions} - ${payrollLines.tdsAmount} - ${payrollLines.otherDeductions}`,
       ),
 
+    /**
+     * A Net Pay somebody typed, in place of the one the arithmetic produced.
+     *
+     * The owner: *"ami cai ami edit kore jodi kichu bosai oitai pore actual
+     * hobe. like age net pay dhoro 100 taka ami bosalam 110 taka oi 110 takai
+     * db te save hobe and oita dhore calculation hobe."* So it is not a hint
+     * or an adjustment — it is what the person is paid, what the ledger row is
+     * written for, and what the payslip says.
+     *
+     * Beside `netAmount` rather than replacing it, because that one is
+     * `GENERATED ALWAYS AS … STORED` and Postgres will not take a write to it.
+     * Keeping both is also what lets a sheet whose components no longer sum to
+     * its Net actually SAY so.
+     *
+     * Null means nobody has disagreed with the arithmetic, which is every line
+     * written before this column existed. Read everywhere as
+     * `coalesce(net_amount_override, net_amount)` — never on its own.
+     */
+    netAmountOverride: numeric("net_amount_override", {
+      precision: 14,
+      scale: 2,
+    }),
+
     isPaid: boolean("is_paid").notNull().default(false),
     paidOn: date("paid_on"),
     transactionId: uuid("transaction_id").references(() => transactions.id, {
