@@ -57,6 +57,92 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 67. A rate on every entry, everywhere
+
+The owner, straight after the dollar card that would not move:
+
+> *"baddhotamulok all transactions er jonne rate bosate hobe. puro application a
+> joto dhoroner transaction a hok na keno manually prottekbar rate bosate
+> hobe."*
+
+The background is #64 and #66. A row with no `usd_rate` and no stated dollars
+cannot be read in dollars at all, so it adds its taka to a foreign account's
+balance and nothing to the dollars beside it. Both of those sessions added a
+fallback — the account's rate, then the day's rate off `fx_rates`. This closes
+the hole at the other end: **no row is written without a rate in the first
+place.**
+
+**Nine paths write a ledger row.** They were not all obvious, and four of them
+were writing rateless rows in silence because they bypass `create()` entirely
+and insert straight into `transactions`:
+
+| Path | Before | Now |
+|---|---|---|
+| the transaction form (`create`) | a box, saving without it allowed | **required**, contract and form |
+| its bank charge row | inherited | inherits — unchanged, and checked |
+| Cash In | already required | unchanged |
+| Money transfer | asked **only** when a USD account was on a side | **required on every transfer**, both halves stamped |
+| a subscription payment | stamped **conditionally** — a plan with no rate wrote a rateless expense | always; typed on the drawer, else the plan's own, else refused |
+| paying a payroll run | **nothing** | required on the Pay drawer, stamped on the consolidated row and on every per-person row |
+| a TDS challan deposit | **nothing** | required whenever an account is named, since only then is a row written |
+| an income tax payment | **nothing** | required |
+| a bank statement import | **nothing** | one rate for the file, on the mapping step, stamped on every row it writes |
+
+The compiler found the first two callers by itself — dropping `.optional()` off
+`createTransactionSchema.usdRate` names every place that has to supply one. It
+could not find the other four, because a raw `.insert(transactions)` has no
+opinion about a column nobody mentions. Those came from grepping for
+`insert(transactions)` across the API, which is the only way to enumerate them.
+
+**Two decisions worth knowing.**
+
+*The rate is not pre-filled on the transaction form,* though the last recorded
+one is named in the hint. A box that arrives already answered is a box nobody
+reads, and the whole point of the instruction is that the day's rate is stated
+rather than inherited. The two places it IS pre-filled are the subscription
+drawer — a plan states the rate its dollar price was struck at, and that is the
+rate the payment happened at unless the card was billed on another day — and,
+coming next, the payroll sheet, where he asked for exactly that shape:
+*"opore ek jaygay rakho jekhane rakhle table er sobgula field a auto fill hobe
+caile edit o korte parbe."*
+
+*An import states one rate for the whole file.* A statement spans days whose
+rates differed, so this is the rate the file is READ at rather than a claim
+about each row's own day; a row that needs its own can be opened afterwards.
+Anything else means asking for two hundred rates at the mapping step.
+
+**The assistant is the one place a rate could have been invented.** It drafts
+entries and stages imports, it knows roughly what a dollar is worth, and that
+is precisely why it must not write one. `usdRate` is now in the field reference
+automatically — that block is generated from `createTransactionSchema`, so it
+cannot drift — and the prompt names it explicitly as a field to ask for. An
+import plan without a rate is refused at `importMapping()` rather than filled
+in, because a rate the model chose would sit on every row of a two-hundred-row
+batch with nobody having typed it.
+
+**Proved by `.rateqa.mjs`** — 22 checks, all passing. It drives every path
+through the API and then reads `usd_rate` **back out of the table**, because a
+201 says the request was accepted and says nothing about what landed in the
+column. It also asserts the six forms carry a `required` rate box, so a
+contract that demands one cannot ship with a form that does not ask.
+
+    an expense that states its rate      out    1000.00   rate=121.500000
+    Bank charge — an expense with a ...  out      25.00   rate=121.500000
+    a transfer that states its rate      out    5000.00   rate=121.500000
+    a transfer that states its rate      in     5000.00   rate=121.500000
+    funding that states its rate         in    10000.00   rate=121.500000
+    Tool — a subscription payment        out    2430.00   rate=121.500000
+    Tool — a payment at another rate     out    2430.00   rate=130.000000
+
+**No migration.** Every column this uses already exists; what changed is that
+they stop being left null. Old rows keep their nulls and are still read through
+#64's and #66's fallbacks — those stay, and are the reason nothing already in
+the books moved.
+
+**Still open, and next:** the payroll sheet's own two — Net Pay editable, and a
+sheet-level FX rate that fills every row's FX RATE column (which reads N/A on
+every line today) while each row stays individually editable.
+
 ## 43. The date on Money transfer, and why nothing caught it
 
 The owner: *"money transfer table er akhono date formatting change hoynai."* He

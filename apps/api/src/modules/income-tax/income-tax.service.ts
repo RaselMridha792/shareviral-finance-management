@@ -343,6 +343,8 @@ export class IncomeTaxService {
             categoryId: category?.id ?? null,
             description: `${describe(record)} — ${record.assessmentYear}, challan ${input.challanNumber}`,
             reference: input.challanNumber,
+            // Every ledger row states the day's rate.
+            usdRate: input.usdRate,
             createdVia: "tax_payment",
             taxPaymentId: id,
             createdBy: actor.id,

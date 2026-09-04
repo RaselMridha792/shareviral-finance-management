@@ -56,6 +56,21 @@ export const mappingSchema = z.strictObject({
     fallbackCategoryId: z.string().uuid().optional(),
     /** When the file has one amount column with no sign or direction. */
     assumeDirection: z.enum(["in", "out"]).optional(),
+    /*
+     * One rate for the file, stamped on every row it writes — an import is a
+     * batch of ledger entries and every ledger entry states a rate:
+     * *"puro application a joto dhoroner transaction a hok na keno manually
+     * prottekbar rate bosate hobe"*.
+     *
+     * A statement covers a span of days whose rates differed, so this is the
+     * rate the file is read at rather than a claim about each row's own day.
+     * Any row that needs its own can be opened and corrected afterwards.
+     */
+    usdRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+      .refine((v) => Number(v) > 0, "A rate has to be more than nothing"),
   }),
 });
 export type MappingInput = z.infer<typeof mappingSchema>;

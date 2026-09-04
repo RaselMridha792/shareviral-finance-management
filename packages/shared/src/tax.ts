@@ -42,9 +42,24 @@ export const createTdsDepositSchema = z.strictObject({
   depositType: tdsDepositTypeSchema.default("salary"),
   /** When set, a matching money-out entry is written to the ledger. */
   accountId: z.string().uuid().optional(),
+  /*
+   * Every ledger row states the day's rate — *"puro application a joto
+   * dhoroner transaction a hok na keno manually prottekbar rate bosate hobe"*.
+   */
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+    .refine((v) => Number(v) > 0, "A rate has to be more than nothing")
+    .optional(),
   attachmentUrl: optionalText(500),
   notes: optionalText(500),
-});
+})
+  /* Only when an account is named, because only then is a row written. */
+  .refine((v) => !v.accountId || Boolean(v.usdRate), {
+    message: "State the day's USD rate — the deposit writes a ledger row",
+    path: ["usdRate"],
+  });
 export type CreateTdsDepositInput = z.infer<typeof createTdsDepositSchema>;
 
 /**
@@ -307,6 +322,15 @@ export const payIncomeTaxSchema = z.strictObject({
   challanNumber: z.string().trim().min(1, "Enter the challan number").max(60),
   challanDate: isoDateSchema,
   accountId: z.string().uuid("Choose the account paying"),
+  /*
+   * Every ledger row states the day's rate — *"puro application a joto
+   * dhoroner transaction a hok na keno manually prottekbar rate bosate hobe"*.
+   */
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+    .refine((v) => Number(v) > 0, "A rate has to be more than nothing"),
 });
 export type PayIncomeTaxInput = z.infer<typeof payIncomeTaxSchema>;
 

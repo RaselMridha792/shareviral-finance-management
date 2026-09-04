@@ -872,6 +872,8 @@ export class PayrollService {
               categoryId: salaryCategoryId,
               description: `Salary — ${run.label}`,
               paymentMethod: input.paymentMethod,
+              // Every ledger row states the day's rate, this one included.
+              usdRate: input.usdRate,
               createdVia: "payroll",
               payrollRunId: runId,
               createdBy: actor.id,
@@ -905,6 +907,8 @@ export class PayrollService {
                 teamMemberId: line.teamMemberId,
                 description: `Salary — ${line.fullName} — ${run.label}`,
                 paymentMethod: input.paymentMethod,
+                // Every ledger row states the day's rate, this one included.
+                usdRate: input.usdRate,
                 createdVia: "payroll",
                 payrollRunId: runId,
                 payrollLineId: line.id,

@@ -687,8 +687,18 @@ export function TransactionForm({
                 />
               </Field>
             )}
+            {/*
+              * REQUIRED, on every entry — *"baddhotamulok all transactions er
+              * jonne rate bosate hobe … manually prottekbar"*.
+              *
+              * Not pre-filled from the last recorded rate on purpose: a box
+              * that arrives already answered is a box nobody reads, and the
+              * whole point is that the day's rate is stated rather than
+              * inherited. The last one is named in the hint instead.
+              */}
             <Field
               label="USD Rate"
+              required
               error={fieldErrors.usdRate}
               hint={
                 latestRate
@@ -698,6 +708,7 @@ export function TransactionForm({
             >
               <Input
                 name="usdRate"
+                required
                 inputMode="decimal"
                 className="col-amount"
                 placeholder="122.77"

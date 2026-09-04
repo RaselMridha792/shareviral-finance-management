@@ -575,6 +575,17 @@ export const payPayrollSchema = z.strictObject({
   accountId: z.string().uuid("Choose the account paying"),
   paymentMode: paymentModeSchema.default("consolidated"),
   paymentMethod: paymentMethodSchema.default("bank_transfer"),
+  /*
+   * Paying a run writes real ledger rows, so it states its rate like every
+   * other entry does — *"puro application a joto dhoroner transaction a hok na
+   * keno manually prottekbar rate bosate hobe"*. The day the bank moved the
+   * salaries, not the day the sheet was drawn up.
+   */
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+    .refine((v) => Number(v) > 0, "A rate has to be more than nothing"),
 });
 export type PayPayrollInput = z.infer<typeof payPayrollSchema>;
 

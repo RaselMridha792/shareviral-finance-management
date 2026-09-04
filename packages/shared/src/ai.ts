@@ -301,6 +301,13 @@ export type AiImportPlan = {
   dateFormat: "dmy" | "mdy" | "ymd" | "auto" | null;
   /** For a file with one amount column and nothing to say which way it went. */
   assumeDirection: "in" | "out" | null;
+  /**
+   * The rate the whole file is read at, in taka per dollar.
+   *
+   * Asked for, never guessed — every ledger row in this app states a rate, and
+   * a batch that writes two hundred of them states one two hundred times.
+   */
+  usdRate: string | null;
   /** One line naming what is about to be staged, for the button beside it. */
   note: string | null;
 };

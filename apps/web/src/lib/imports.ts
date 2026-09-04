@@ -76,6 +76,8 @@ export const importsApi = {
       columnMap: Record<string, string | null>;
       defaults: {
         accountId: string;
+        /** Stamped on every row the file writes. */
+        usdRate: string;
         dateFormat: string;
         fallbackCategoryId?: string;
         assumeDirection?: "in" | "out";

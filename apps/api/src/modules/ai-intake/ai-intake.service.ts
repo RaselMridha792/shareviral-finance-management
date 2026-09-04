@@ -844,6 +844,10 @@ Ask for ONE missing field at a time, in a short sentence. Do not list
 everything you still need; it reads like a form and they will stop.
 Never invent a value to fill a gap. An amount you were not told is the single
 most damaging thing you can produce here — leave it missing and ask.
+usdRate is one of these, and it is the easiest to get wrong: you know roughly
+what a dollar is worth and that is exactly why you must not write it. Every
+entry in this app carries the rate the person states for that day. Ask for it
+like any other missing field.
 When nothing is required is missing, set missingFields to [], nextQuestion to
 null, and write a one-sentence summary for them to check.`;
   }
@@ -889,6 +893,10 @@ figures past review. Build an importPlan instead:
      leave categoryName out.
   4. Look at how the dates are actually written in the rows before choosing
      dateFormat. 05/08/2026 in a Bangladeshi export is 5 August — dmy.
+  5. Ask for the USD rate the file should be read at and put it in usdRate.
+     Every entry in this app states one, so a batch cannot be staged without
+     it, and it is not something to work out or carry over from anywhere —
+     the answer has to come from them.
 
 Send the plan only when there is nothing left to ask — a plan in the same turn
 as a question puts a button beside it that stages a batch you already know is
@@ -1155,10 +1163,22 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     const fallbackCategoryId =
       typeof resolved.categoryId === "string" ? resolved.categoryId : undefined;
 
+    /*
+     * Refused rather than filled in. A rate the model chose would be a figure
+     * nobody typed sitting on every row of the batch, which is the one thing
+     * this app does not do with money.
+     */
+    if (!plan.usdRate || !(Number(plan.usdRate) > 0)) {
+      throw new BadRequestException(
+        "Ask what USD rate this file should be read at — every row it writes carries one.",
+      );
+    }
+
     return {
       columnMap: plan.columnMap as MappingInput["columnMap"],
       defaults: {
         accountId,
+        usdRate: plan.usdRate,
         dateFormat: plan.dateFormat ?? "dmy",
         ...(fallbackCategoryId ? { fallbackCategoryId } : {}),
         ...(plan.assumeDirection
@@ -1311,6 +1331,7 @@ function importPlanOf(value: unknown): AiImportPlan | null {
     columnMap,
     dateFormat: oneOf(raw.dateFormat, ["dmy", "mdy", "ymd", "auto"] as const),
     assumeDirection: oneOf(raw.assumeDirection, ["in", "out"] as const),
+    usdRate: typeof raw.usdRate === "string" ? raw.usdRate.trim() : null,
     note:
       typeof raw.note === "string" && raw.note.trim() ? raw.note.trim() : null,
   };
@@ -1403,12 +1424,17 @@ const REPLY_SCHEMA = {
           description:
             "Only when there is one amount column and nothing says which way the money went.",
         },
+        usdRate: {
+          type: "string",
+          description:
+            "Taka per US dollar, as they stated it. Every row the file writes carries it. Ask; never assume.",
+        },
         note: {
           type: "string",
           description: "One line naming what is about to be staged.",
         },
       },
-      required: ["accountName", "columnMap"],
+      required: ["accountName", "columnMap", "usdRate"],
     },
   },
   required: ["draft", "missingFields"],

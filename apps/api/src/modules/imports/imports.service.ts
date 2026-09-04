@@ -333,7 +333,10 @@ export class ImportsService {
       throw new BadRequestException("Map the columns before importing.");
     }
 
-    const defaults = batch.defaults as { accountId: string };
+    const defaults = batch.defaults as {
+      accountId: string;
+      usdRate: string;
+    };
     const skip = new Set(input.skipRows);
 
     const candidates = (
@@ -409,6 +412,8 @@ export class ImportsService {
               reference: mapped.reference,
               description: mapped.description,
               notes: mapped.notes,
+              // The file's rate, on every row it writes.
+              usdRate: defaults.usdRate,
               createdVia: "excel_import",
               importBatchId: batchId,
               dedupeHash: dedupeKey({

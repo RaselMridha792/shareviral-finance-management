@@ -35,7 +35,7 @@ import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
-import { DateInput, Field, Select } from "@/components/ui/field";
+import { DateInput, Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
@@ -1510,6 +1510,7 @@ function PayForm({
         accountId: String(data.get("accountId")),
         paymentMode: String(data.get("paymentMode")) as never,
         paymentMethod: "bank_transfer",
+        usdRate: String(data.get("usdRate") ?? "").trim(),
       });
       onPaid();
       onClose();
@@ -1562,6 +1563,24 @@ function PayForm({
               </option>
             ))}
           </Select>
+        </Field>
+        {/*
+          Every ledger row states its rate — *"puro application a joto dhoroner
+          transaction a hok na keno manually prottekbar rate bosate hobe"*. The
+          salary rows this drawer writes are ledger rows like any other.
+        */}
+        <Field
+          label="USD rate"
+          required
+          hint="What one US dollar was worth on the day the salaries left the account"
+        >
+          <Input
+            name="usdRate"
+            required
+            inputMode="decimal"
+            className="col-amount"
+            placeholder="122.77"
+          />
         </Field>
         <Field
           label="How it appears in the ledger"

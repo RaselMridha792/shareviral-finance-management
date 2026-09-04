@@ -136,11 +136,10 @@ export function TransferForm({
         description: String(data.get("description")),
         invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
         reference: String(data.get("reference") ?? "") || undefined,
-        ...(usdPrimary && usdAmount.trim() && usdRate.trim()
-          ? {
-              usdAmount: usdAmount.replace(/[,\s$]/g, ""),
-              usdRate: usdRate.trim(),
-            }
+        /* The rate always; the dollars only when dollars actually moved. */
+        usdRate: usdRate.trim(),
+        ...(usdPrimary && usdAmount.trim()
+          ? { usdAmount: usdAmount.replace(/[,\s$]/g, "") }
           : {}),
         paymentMethod: String(data.get("paymentMethod")) as never,
       });
@@ -267,8 +266,14 @@ export function TransferForm({
           </Field>
         </div>
 
-        {usdPrimary ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/*
+          * The rate is asked for on every transfer now, not only the ones with
+          * a dollar account on a side — *"puro application a joto dhoroner
+          * transaction a hok na keno manually prottekbar rate bosate hobe"*.
+          * The dollars box still appears only when dollars actually moved.
+          */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {usdPrimary ? (
             <Field
               label="Amount (USD)"
               required
@@ -282,18 +287,23 @@ export function TransferForm({
                 onChange={(event) => setUsdAmount(event.target.value)}
               />
             </Field>
-            <Field label="Rate" required error={fieldErrors.usdRate}>
-              <Input
-                inputMode="decimal"
-                className="col-amount"
-                placeholder="122.77"
-                value={usdRate}
-                onChange={(event) => setUsdRate(event.target.value)}
-                required
-              />
-            </Field>
-          </div>
-        ) : null}
+          ) : null}
+          <Field
+            label="USD rate"
+            required
+            error={fieldErrors.usdRate}
+            hint="Today's rate, typed. Every entry carries one."
+          >
+            <Input
+              inputMode="decimal"
+              className="col-amount"
+              placeholder="122.77"
+              value={usdRate}
+              onChange={(event) => setUsdRate(event.target.value)}
+              required
+            />
+          </Field>
+        </div>
 
         <Field
           label={usdPrimary ? "Amount (BDT)" : "Amount"}

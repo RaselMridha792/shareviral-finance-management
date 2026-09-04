@@ -794,6 +794,8 @@ export class TdsService {
               categoryId,
               description: `TDS deposit — challan ${input.challanNumber} (${periodLabel})`,
               reference: input.challanNumber,
+              // Every ledger row states the day's rate.
+              usdRate: input.usdRate,
               createdVia: "tax_payment",
               createdBy: actor.id,
               updatedBy: actor.id,

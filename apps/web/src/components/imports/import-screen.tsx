@@ -16,7 +16,7 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Field, Select } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import {
   importsApi,
@@ -142,6 +142,7 @@ export function ImportScreen({
         columnMap,
         defaults: {
           accountId: String(form.get("accountId")),
+          usdRate: String(form.get("usdRate") ?? "").trim(),
           dateFormat: String(form.get("dateFormat")),
           fallbackCategoryId:
             String(form.get("fallbackCategoryId") || "") || undefined,
@@ -357,6 +358,26 @@ export function ImportScreen({
                     </option>
                   ))}
                 </Select>
+              </Field>
+
+              {/*
+                One rate for the file, stamped on every row it writes — every
+                ledger entry in this app states a rate. A statement spans days
+                whose rates differed, so this is the rate the file is read at;
+                a row that needs its own can be opened afterwards.
+              */}
+              <Field
+                label="USD rate"
+                required
+                hint="Stamped on every row this file writes. Edit a row later if its own day differed."
+              >
+                <Input
+                  name="usdRate"
+                  required
+                  inputMode="decimal"
+                  className="col-amount"
+                  placeholder="122.77"
+                />
               </Field>
 
               <Field

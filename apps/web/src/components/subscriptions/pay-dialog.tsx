@@ -55,6 +55,7 @@ export function PayDialog({
         txnDate: String(data.get("txnDate") ?? ""),
         amount: String(data.get("amount") ?? "") || undefined,
         note: String(data.get("note") ?? "") || null,
+        usdRate: String(data.get("usdRate") ?? "").trim() || undefined,
         advanceRenewal: data.get("advanceRenewal") === "on",
       });
       await onPaid();
@@ -116,6 +117,34 @@ export function PayDialog({
           every time — being asked it on each renewal is being asked to confirm
           something the app already knows. The server resolves it.
         */}
+        {/*
+          Every entry states its rate — *"puro application a joto dhoroner
+          transaction a hok na keno manually prottekbar rate bosate hobe"*.
+
+          Pre-filled here, unlike the transaction form, because a plan already
+          states the rate its dollar price was struck at, and that IS the rate
+          this payment happened at unless the card was billed on a different
+          day. Editable, so a day that moved can be said so.
+        */}
+        <Field
+          label="USD rate"
+          required
+          hint={
+            plan.usdRate
+              ? "The plan's rate. Change it if the card was billed at another."
+              : "What one US dollar was worth on the day the card was billed."
+          }
+        >
+          <Input
+            name="usdRate"
+            required
+            inputMode="decimal"
+            className="col-amount"
+            placeholder="122.77"
+            defaultValue={plan.usdRate ?? ""}
+          />
+        </Field>
+
         <Field
           label="Note"
           hint="Anything that makes this charge recognisable later"

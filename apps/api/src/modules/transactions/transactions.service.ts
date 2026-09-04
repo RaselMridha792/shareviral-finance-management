@@ -1273,6 +1273,8 @@ export class TransactionsService {
       categoryId?: string;
       note?: string | null;
       advanceRenewal?: boolean;
+      /** Typed on the dialog; the plan's own rate when it is not. */
+      usdRate?: string;
     },
     actor: AuthenticatedUser,
   ) {
@@ -1371,6 +1373,13 @@ export class TransactionsService {
         ? { originalAmount: payableUsd(plan), fxRate: plan.usdRate }
         : null;
 
+    const rateForThisPayment = input.usdRate ?? plan.usdRate ?? null;
+    if (!rateForThisPayment || Number(rateForThisPayment) <= 0) {
+      throw new BadRequestException(
+        "This plan has no USD rate on it — set one on the plan, or type the rate when recording the payment.",
+      );
+    }
+
     const created = await this.create(
       {
         direction: "out",
@@ -1385,11 +1394,17 @@ export class TransactionsService {
               fxRate: statedDollars.fxRate,
             }
           : {}),
-        // The rate stands even where the dollars do not, so a typed amount is
-        // still translatable rather than silently worth nothing.
-        ...(plan.usdRate && Number(plan.usdRate) > 0
-          ? { usdRate: plan.usdRate }
-          : {}),
+        /*
+         * A rate on every row, no exceptions — the owner's rule. Typed on the
+         * dialog if he changed it there, otherwise the plan's own, which is
+         * the rate its taka price was struck at.
+         *
+         * Refused rather than guessed when there is neither: a plan with no
+         * rate has no honest figure to read this payment back at, and writing
+         * the row without one is what left a card's dollar balance standing
+         * still for a month.
+         */
+        usdRate: rateForThisPayment,
         /* The fact that makes this tooling, rather than the guess about which
            card it was on. */
         subscriptionId: plan.id,
@@ -1711,12 +1726,19 @@ export class TransactionsService {
             // When the movement was stated in dollars, both halves record it:
             // what moved, in what currency, at what rate. The taka in
             // `amount` stays what every total counts.
-            ...(input.usdAmount && input.usdRate
+            /*
+             * The rate is on both halves whatever the accounts are — the
+             * owner's rule for every entry in the app. The DOLLARS stay
+             * conditional: a taka-to-taka transfer moved no dollars, and
+             * `transactions_fx_complete` wants the three fx columns together
+             * or not at all.
+             */
+            usdRate: input.usdRate,
+            ...(input.usdAmount
               ? {
                   originalAmount: input.usdAmount,
                   originalCurrency: "USD",
                   fxRate: input.usdRate,
-                  usdRate: input.usdRate,
                 }
               : {}),
             accountId: input.fromAccountId,
@@ -1737,12 +1759,13 @@ export class TransactionsService {
         await tx.insert(transactions).values({
           refNo: inRef,
           invoiceNo: input.invoiceNo,
-          ...(input.usdAmount && input.usdRate
+          // Same as the paying half, above.
+          usdRate: input.usdRate,
+          ...(input.usdAmount
             ? {
                 originalAmount: input.usdAmount,
                 originalCurrency: "USD",
                 fxRate: input.usdRate,
-                usdRate: input.usdRate,
               }
             : {}),
           accountId: input.toAccountId,

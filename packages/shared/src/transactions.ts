@@ -184,11 +184,23 @@ export const createTransactionSchema = z
      * figure be read in dollars. Conflating them would let a translation be
      * mistaken for a fact.
      */
+    /*
+     * REQUIRED, on every entry, everywhere.
+     *
+     * The owner's rule, in his words: *"puro application a joto dhoroner
+     * transaction a hok na keno manually prottekbar rate bosate hobe"*.
+     *
+     * It is the one figure that makes a taka row readable in dollars, and a
+     * row without it contributed exactly nothing to a foreign account's
+     * balance — which is how a card sat at $1,500 for a month while its taka
+     * moved every day. Cash In has always demanded it; this is the same demand
+     * everywhere else, so the balance never has to fall back on a rate table
+     * to guess what a row was worth.
+     */
     usdRate: z
       .string()
       .trim()
-      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
-      .optional(),
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77"),
 
     /** For a USD remittance: what was sent, and the rate the bank gave. */
     /**
@@ -425,11 +437,20 @@ export const transferSchema = z
      * actually was in the account's own currency, at what rate.
      */
     usdAmount: amountSchema.optional(),
+    /*
+     * REQUIRED, like every other entry — *"puro application a joto dhoroner
+     * transaction a hok na keno manually prottekbar rate bosate hobe"*.
+     *
+     * It used to be asked for only when a USD account was on one side, and the
+     * dollars beside it were what made it worth storing. Both halves of a
+     * transfer carry it now whatever the accounts are, because either half may
+     * later be read in dollars and a row with no rate contributes nothing to
+     * the account it sits in.
+     */
     usdRate: z
       .string()
       .trim()
-      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
-      .optional(),
+      .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77"),
     paymentMethod: paymentMethodSchema.default("bank_transfer"),
   })
   .refine((v) => v.fromAccountId !== v.toAccountId, {

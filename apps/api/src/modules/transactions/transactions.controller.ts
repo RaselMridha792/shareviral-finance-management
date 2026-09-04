@@ -70,6 +70,20 @@ const paySubscriptionSchema = z.object({
   note: z.string().trim().max(200).nullish(),
   /** Roll the renewal on a cycle. Off for a payment being recorded late. */
   advanceRenewal: z.boolean().optional(),
+  /**
+   * The rate this payment is read back at.
+   *
+   * Every entry carries one now — *"puro application a joto dhoroner
+   * transaction a hok na keno manually prottekbar rate bosate hobe"*. Optional
+   * HERE and only here, because a plan already states the rate its price was
+   * struck at and the dialog offers that as the figure: absent, the plan's own
+   * rate is used, and the row still ends up carrying one.
+   */
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
+    .optional(),
 });
 type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
 

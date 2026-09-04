@@ -615,6 +615,9 @@ export const subscriptionsApi = {
          a subscription payment, so the heading was always the same answer. */
       categoryId?: string;
       note?: string | null;
+      /* Typed on the drawer; the plan's own when it is left alone. Every
+         ledger row states a rate, and this writes one. */
+      usdRate?: string;
       advanceRenewal?: boolean;
     },
   ) =>
