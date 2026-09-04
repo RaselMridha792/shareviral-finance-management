@@ -5,7 +5,9 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
   type SubscriptionStatus,
   hasCharge,
+  formatMoney,
   payableBdt,
+  payableUsd,
 } from "@finance/shared";
 import { ImageIcon } from "lucide-react";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
@@ -179,19 +181,37 @@ export function SubscriptionBodyCells({
       */}
       <td>
         <div className="flex flex-col items-end">
+          {/*
+            DOLLARS on top, taka under them — *"dollar amount boro kore dekhao
+            and takar amount choto kore dekhao"*.
+
+            It is the right way round for this register whatever the app's
+            usual rule: every plan here is priced in dollars by its vendor, and
+            the taka is what the rate made of it that month. The ledger is still
+            in taka and every total elsewhere still is — this one table reads in
+            the currency the bills are written in.
+          */}
+          {/* Formatted by the app's own rule, not printed raw: dollars group
+              western, taka group in lakhs, and a figure written by hand here
+              would read differently from the same figure everywhere else. */}
+          {payableUsd(row) ? (
+            <span className="num text-sm font-medium">
+              {formatMoney(payableUsd(row) ?? "0", { currency: "USD" })}
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground">N/A</span>
+          )}
           {payableBdt(row) ? (
             <Amount
               value={payableBdt(row) ?? "0"}
               tone="neutral"
               showCounterpart={false}
-              className="block"
+              className="block text-[11px] leading-tight text-muted-foreground"
             />
-          ) : (
-            <span className="text-sm text-muted-foreground">N/A</span>
-          )}
+          ) : null}
           {hasCharge(row) ? (
             <span
-              className="num text-[11px] leading-tight text-muted-foreground"
+              className="num text-[11px] leading-tight text-faint"
               title={`$${row.costUsd} plus a $${row.chargeUsd} charge, at ${row.usdRate ?? "no rate"}`}
             >
               ${row.costUsd} + ${row.chargeUsd}

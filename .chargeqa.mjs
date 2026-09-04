@@ -332,16 +332,32 @@ check(
   /12,?890\.85/.test(table.charged?.text ?? ""),
   table.charged?.text ?? "row not found",
 );
+/*
+ * Dollars first and taka under them — *"dollar amount boro kore dekhao and
+ * takar amount choto kore dekhao"*. The ORDER is the claim, so it is read off
+ * the cell's children rather than searched for anywhere in the text.
+ */
 check(
-  "with the split under it in dollars, small",
-  (table.charged?.lines ?? []).length === 2 &&
-    /\$100\.00\s*\+\s*\$5\.00/.test(table.charged.lines[1]),
+  "the dollars are the figure on top",
+  /^\$105\.00$/.test((table.charged?.lines ?? [])[0] ?? ""),
   JSON.stringify(table.charged?.lines),
 );
 check(
-  "and a plan with no charge shows the figure alone — no empty + line",
-  (table.plain?.lines ?? []).length === 1 &&
-    /12,?277\.00/.test(table.plain.lines[0]),
+  "the taka sits under them, smaller, and still grouped in lakhs",
+  /12,890\.85/.test((table.charged?.lines ?? [])[1] ?? ""),
+  JSON.stringify(table.charged?.lines),
+);
+check(
+  "with the split under both, in dollars",
+  (table.charged?.lines ?? []).length === 3 &&
+    /\$100\.00\s*\+\s*\$5\.00/.test(table.charged.lines[2]),
+  JSON.stringify(table.charged?.lines),
+);
+check(
+  "and a plan with no charge shows the two figures alone — no empty + line",
+  (table.plain?.lines ?? []).length === 2 &&
+    /^\$100\.00$/.test(table.plain.lines[0]) &&
+    /12,?277\.00/.test(table.plain.lines[1]),
   JSON.stringify(table.plain?.lines),
 );
 
