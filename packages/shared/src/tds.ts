@@ -382,7 +382,21 @@ export function calculateTds(
     taxAfterRebate: fromMinorUnits(afterRebate),
     minimumTaxApplied: floored ? fromMinorUnits(floor) : null,
     netAnnualTax: fromMinorUnits(net),
-    monthlyTds: fromMinorUnits(net / 12n),
+    /*
+     * A whole taka, not a paisa.
+     *
+     * The owner, looking at a salary sheet full of figures like 52,258.06:
+     * *"ami kono employee er salary te to eirokom decimal kono number
+     * deinai"*. Asked whether the tax should round with the rest of payroll he
+     * said it should, so a payslip carries no paisa anywhere and Net = Gross −
+     * TDS stays whole.
+     *
+     * Floored, like the division above it: twelve months of a floored figure
+     * can fall at most a few taka short of the year's tax, and a deduction
+     * that is a taka light is corrected by the return, while one that is a
+     * taka heavy has been taken from somebody's pay without authority.
+     */
+    monthlyTds: fromMinorUnits((net / 12n / 100n) * 100n),
   };
 }
 

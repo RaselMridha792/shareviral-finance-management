@@ -45,6 +45,9 @@ ticking all seventeen.
 | 62 | **Cash In: one order, the derived box locked, a charge on both account kinds** | **done** |
 | 63 | **Expense overview: Office rent replaces Uncategorised, cards get the dashboard's look** | **done** |
 | 64 | **A dollar card's balance stood still while its taka moved** | **done** |
+| 65 | **Subscriptions register reads in dollars, taka under it** | **done** |
+| 66 | **Payroll carries no paisa; the tax box is usable; Net follows the boxes** | **done** |
+| 67 | **A USD account showing ৳56.70 and $0.00** | not started — the owner's next item |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -164,6 +167,78 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 67. ৳56.70 in the account, $0.00 beside it
+
+*"ekhane 56 taka dekhacche dollar er ghor 0 keno? etato right hiseb holona
+taina. ami hisebe 1 poysaro gormil caina."* — the Exprovia LLC card, a USD
+account reading `$0.00` over `৳56.70`.
+
+**Not started.** He asked for it to be held until the payroll work was done.
+
+What is known before anyone starts: ৳56.70 at any plausible rate is about
+$0.46, so a zero is not a rounding. The likely shape is a row carrying
+`original_currency = 'USD'` with `original_amount = 0.00` — the first branch of
+`ownCurrencyBalance` trusts a stated dollar figure over any rate, and a stated
+zero is still a statement. #64's fallback only catches rows that state
+NOTHING. Worth checking against the live rows before changing the expression
+again.
+
+## 66. No paisa in payroll, a tax box you can type in, and a Net that follows
+
+Three complaints off one screenshot of the May sheet.
+
+**The paisa.** *"ami kono employee er salary te to eirokom decimal kono number
+deinai"* — and he had not. Two places made them: **days worked** (৳90,000 ×
+18⁄31 = ৳52,258.0645) and the **percentage split** (60/30/4/6 of a pro-rated
+figure). Asked whether the tax should round with the rest — it has a challan
+consequence — he said everything should. So:
+
+- the pro-rated gross rounds to a whole taka;
+- `scaleBreakdown` rounds each part to a whole taka and still pins the drift on
+  the largest, so the parts sum to EXACTLY the gross;
+- `splitSalary` floors each percentage line to a whole taka and gives the
+  remainder to Basic, same property;
+- `monthlyTds` floors to a whole taka. **Floored, not rounded**: a deduction a
+  taka light is settled by the return, one a taka heavy has been taken from
+  somebody's pay without authority. The advisor's own page reads 417 flat, so
+  this lands a taka under their figure rather than over it.
+
+Three unit tests encoded the old paisa figure (`416.66`) and now state the new
+rule with the reason. The shortfall over a year went from eight paisa to eight
+taka, which is the price of a payslip with no paisa on it.
+
+**Existing rows keep their paisa** — nothing rewrites history. A draft is
+brought onto the new rule by Rebuild list, or by touching working days, or by
+"Work out the tax again".
+
+**The tax box.** `w-full` on a flex child beside the working button in a 112px
+column squeezes to nothing, so on rows carrying a stored working there was no
+box to click — *"jader tds 0 tader okhane edit kora jacchena"*. It is
+`flex-1 min-w-0` now and the column is `w-36`. The harness MEASURES the
+rendered width rather than looking for the element, because a 4px input is
+present and unusable.
+
+**Net Pay follows the boxes as they are typed.** He read a gross of 116,078
+beside a net of 116,129 and called it wrong arithmetic; he was right about the
+screen. Net is a generated column and the server recomputes it on save, but
+between typing and blurring the cell still showed the last saved figure. The
+row now keeps what its boxes hold and computes the net from them, reset
+whenever the server sends a new line — so a value the server worked out always
+wins over a stale keystroke. Driven by typing into the gross WITHOUT blurring,
+so the only thing that can have moved is the figure on screen.
+
+## 65. The subscriptions register reads in dollars
+
+*"dollar amount boro kore dekhao and takar amount choto kore dekhao."* Every
+plan here is priced in dollars by its vendor and the taka is what the rate made
+of it that month, so this one table reads in the currency the bills are written
+in. The ledger is still taka and every total elsewhere still is.
+
+Both figures go through the app's own formatter rather than being written by
+hand — dollars group western, taka group in lakhs, and a figure printed raw
+would read differently from the same figure everywhere else. `.chargeqa.mjs`
+asserts the ORDER off the cell's children now, because the order is the claim.
 
 ## 64. The card that read $1,500 all month
 

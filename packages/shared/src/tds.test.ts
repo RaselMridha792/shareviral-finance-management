@@ -111,7 +111,7 @@ describe("TDS, against the advisor's twelve handwritten calculations", () => {
       taxable: "536000.00",
       beforeRebate: "13600.00",
       net: "5000.00",
-      monthlyTds: "416.66",
+      monthlyTds: "416.00",
     },
     {
       name: "(unnamed, 62k)",
@@ -119,7 +119,7 @@ describe("TDS, against the advisor's twelve handwritten calculations", () => {
       taxable: "496000.00",
       beforeRebate: "9600.00",
       net: "5000.00",
-      monthlyTds: "416.66",
+      monthlyTds: "416.00",
     },
 
     // Ordinary taxpayers.
@@ -559,13 +559,23 @@ describe("what the arithmetic does with remainders", () => {
    * Not a defect, but not obvious either, and undocumented until a review
    * measured it.
    */
-  it("twelve monthly deductions can fall a few paisa short of the year", () => {
+  it("twelve monthly deductions can fall a few taka short of the year", () => {
     const r = calculateTds("804000.00", DEFAULT_TDS_POLICY);
     assert.equal(r.netAnnualTax, "5000.00");
-    assert.equal(r.monthlyTds, "416.66");
-    // 416.66 x 12 is 4,999.92. Eight paisa, which the advisor drops too -
-    // their page reads 417 flat.
-    assert.equal((41666n * 12n).toString(), "499992");
+    /*
+     * A WHOLE TAKA since the owner asked payroll to carry no paisa anywhere:
+     * *"ami kono employee er salary te to eirokom decimal kono number
+     * deinai"*. It used to read 416.66 and the shortfall was eight paisa a
+     * year; it is now eight taka, which is the price of a payslip with no
+     * paisa on it.
+     *
+     * FLOORED rather than rounded, deliberately. A deduction a taka light is
+     * settled by the return; one a taka heavy has been taken from somebody's
+     * pay without authority. The advisor's own page reads 417 flat, so this is
+     * a taka under their figure rather than over it.
+     */
+    assert.equal(r.monthlyTds, "416.00");
+    assert.equal((41600n * 12n).toString(), "499200");
   });
 
   it("band amounts add up to the taxable income", () => {

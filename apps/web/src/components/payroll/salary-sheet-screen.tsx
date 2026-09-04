@@ -598,7 +598,10 @@ export function SalarySheetScreen({
                   <Th width="w-28" align="right">
                     Gross
                   </Th>
-                  <Th width="w-28" align="right">
+                  {/* Wider than its neighbours because it carries two things:
+                      the box somebody types the tax into, and the button onto
+                      the working behind it. */}
+                  <Th width="w-36" align="right">
                     TDS
                   </Th>
                   <Th width="w-28" align="right">
@@ -816,6 +819,57 @@ function LineRow({
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * What the row's boxes hold RIGHT NOW, so Net Pay can follow them.
+   *
+   * Net is a generated column — gross + bonus + other additions − tax − other
+   * deductions — and the server recomputes it on every save. Between typing
+   * and blurring, though, the cell beside the box still showed the figure from
+   * the last save, so a gross of 116,078 could sit next to a net of 116,129
+   * and the sheet appeared to contradict itself. The owner read exactly that
+   * off the screen.
+   *
+   * Seeded from the line and reset whenever the line changes, so a value the
+   * server worked out always wins over a stale keystroke.
+   */
+  const stored = {
+    grossAmount: line.grossAmount,
+    bonusAmount: line.bonusAmount,
+    otherAdditions: line.otherAdditions,
+    tdsAmount: line.tdsAmount,
+    otherDeductions: line.otherDeductions,
+  };
+  const [draft, setDraft] = useState(stored);
+  const [seenLine, setSeenLine] = useState(line);
+  if (seenLine !== line) {
+    setSeenLine(line);
+    setDraft(stored);
+  }
+
+  /** The net the boxes currently come to. Falls back to the stored figure. */
+  const liveNet = (() => {
+    const n = (v: string) => {
+      const parsed = Number(String(v).replace(/[,\s৳]/g, ""));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const parts = [
+      n(draft.grossAmount),
+      n(draft.bonusAmount),
+      n(draft.otherAdditions),
+      n(draft.tdsAmount),
+      n(draft.otherDeductions),
+    ];
+    if (parts.some((v) => v === null)) return line.netAmount;
+    const [gross, bonus, additions, tds, deductions] = parts as number[];
+    return (gross + bonus + additions - tds - deductions).toFixed(2);
+  })();
+
+  /** Called as a money box is typed in, before it is saved. */
+  const onLive = (field: string, value: string) =>
+    setDraft((current) =>
+      field in current ? { ...current, [field]: value } : current,
+    );
+
   /*
    * Days are a number or nothing, not an amount — their own path, because
    * `save` sends strings and the contract rightly refuses "10" for a day
@@ -934,12 +988,14 @@ function LineRow({
         field="bonusAmount"
         editable={editable}
         onSave={save}
+        onLive={onLive}
       />
       <Cell
         value={line.otherAdditions}
         field="otherAdditions"
         editable={editable}
         onSave={save}
+        onLive={onLive}
       />
       {/* Days actually worked — typed straight on the sheet. The gross, its
           breakdown and the tax re-figure from it against the month's real
@@ -970,11 +1026,13 @@ function LineRow({
         field="grossAmount"
         editable={editable}
         onSave={save}
+        onLive={onLive}
       />
       <TdsCell
         line={line}
         editable={editable}
         onSave={save}
+        onLive={onLive}
         onOpen={onShowWorking}
       />
       <Cell
@@ -982,6 +1040,7 @@ function LineRow({
         field="otherDeductions"
         editable={editable}
         onSave={save}
+        onLive={onLive}
       />
       {/*
         Built like the Tax cell beside it, not like a bare Amount.
@@ -1001,7 +1060,7 @@ function LineRow({
       <td>
         <div className="flex w-full items-center justify-end px-1">
           <Amount
-            value={line.netAmount}
+            value={liveNet}
             tone="neutral"
             className="font-semibold"
           />
@@ -1097,11 +1156,14 @@ function TdsCell({
   line,
   editable,
   onSave,
+  onLive,
   onOpen,
 }: {
   line: PayrollLineDto;
   editable: boolean;
   onSave: (field: string, value: string) => void;
+  /** Reported per keystroke so Net Pay follows the tax as it is typed. */
+  onLive?: (field: string, value: string) => void;
   onOpen: () => void;
 }) {
   const typed = line.tdsManual;
@@ -1149,12 +1211,24 @@ function TdsCell({
               ? "Typed by hand. Work out the tax again to put the rule back."
               : "Worked out from the year's rule. Type over it to set it by hand."
           }
+          onChange={(event) => onLive?.("tdsAmount", event.target.value)}
           onBlur={(event) => {
             if (event.target.value !== line.tdsAmount)
               onSave("tdsAmount", event.target.value);
           }}
           className={cn(
-            "col-amount h-8 w-full rounded border border-transparent bg-transparent px-2 text-sm outline-none transition",
+            /*
+             * `flex-1 min-w-0`, not `w-full`.
+             *
+             * A flex child at 100% width beside a button in a 112px column
+             * squeezes to nothing: the owner found rows where the box could
+             * not be clicked into at all — *"jader tds 0 tader okhane edit kora
+             * jacchena"* — and it was the calculator beside it taking the
+             * space. `min-w-0` is the half that matters; without it a flex
+             * child refuses to shrink below its content and pushes its
+             * neighbour out instead.
+             */
+            "col-amount h-8 min-w-0 flex-1 rounded border border-transparent bg-transparent px-2 text-sm outline-none transition",
             "hover:border-border focus-visible:border-primary focus-visible:bg-surface",
             typed &&
               "border-warning/40 underline decoration-warning/70 decoration-dotted underline-offset-4",
@@ -1310,12 +1384,21 @@ function Cell({
   editable,
   highlight = false,
   onSave,
+  onLive,
 }: {
   value: string;
   field: string;
   editable: boolean;
   highlight?: boolean;
   onSave: (field: string, value: string) => void;
+  /**
+   * Fired on every keystroke, so the row's Net Pay can follow along.
+   *
+   * Separate from `onSave`, which still only fires on blur: saving per
+   * keystroke would be one request per digit, and the sheet's whole habit is
+   * that a cell commits when you leave it.
+   */
+  onLive?: (field: string, value: string) => void;
 }) {
   if (!editable) {
     return (
@@ -1330,6 +1413,7 @@ function Cell({
       <input
         defaultValue={value}
         inputMode="decimal"
+        onChange={(event) => onLive?.(field, event.target.value)}
         onBlur={(event) => {
           if (event.target.value !== value) onSave(field, event.target.value);
         }}

@@ -132,6 +132,67 @@ check(
   `tds_manual ${built?.tds_manual}`,
 );
 
+/* ---------------- whole taka, and a box on every row -------------------- */
+
+/*
+ * The owner, on a sheet full of figures like 52,258.06: *"ami kono employee er
+ * salary te to eirokom decimal kono number deinai"*. Asked whether the tax
+ * should round with the rest, he said it should. So a pro-rated month has to
+ * come out whole from end to end.
+ */
+await call("PATCH", `/payroll/lines/${built.id}`, { workingDays: 18 });
+const prorated = await lineOf();
+const wholeTaka = (v) => /\.00$/.test(String(v));
+check(
+  "a pro-rated gross lands on a whole taka",
+  wholeTaka(prorated?.gross),
+  `gross ${prorated?.gross} for 18 of ${new Date(YEAR, MONTH, 0).getDate()} days`,
+);
+check(
+  "and so does the net beside it",
+  wholeTaka(prorated?.net),
+  `net ${prorated?.net}`,
+);
+
+await call("POST", `/payroll/runs/${run.id}/recalculate-tds`, {});
+const taxed = await lineOf();
+check(
+  "the tax the rule works out is a whole taka too",
+  wholeTaka(taxed?.tds),
+  `tds ${taxed?.tds}`,
+);
+check(
+  "so nothing on the row carries a paisa",
+  wholeTaka(taxed?.gross) && wholeTaka(taxed?.tds) && wholeTaka(taxed?.net),
+  `${taxed?.gross} − ${taxed?.tds} = ${taxed?.net}`,
+);
+
+/* And the parts still sum to exactly the gross they were split from. */
+const parts = (
+  await db.query(
+    "select earnings_breakdown from payroll_lines where id=$1",
+    [built.id],
+  )
+).rows[0]?.earnings_breakdown;
+const partsSum = (parts ?? []).reduce((t, p) => t + Number(p.amount), 0);
+check(
+  "the parts add up to the gross, to the paisa, and are whole themselves",
+  (parts ?? []).length > 0 &&
+    partsSum.toFixed(2) === Number(taxed.gross).toFixed(2) &&
+    (parts ?? []).every((p) => wholeTaka(p.amount)),
+  `${(parts ?? []).map((p) => p.amount).join(" + ")} = ${partsSum.toFixed(2)} vs gross ${taxed.gross}`,
+);
+
+
+/*
+ * Handed back exactly as it was found: a full month, owned by the rule. The
+ * checks below tell a story in order — type a tax, edit around it, put the
+ * rule back — and a block that left the row pro-rated and hand-typed made
+ * three of them measure a state nobody set.
+ */
+await call("PATCH", `/payroll/lines/${built.id}`, { workingDays: null });
+await call("POST", `/payroll/runs/${run.id}/recalculate-tds`, {});
+
 /* ------------------------------------------- 1. the field takes a figure */
 
 const typedValue = "7777.00";
@@ -300,6 +361,98 @@ check(
   /typed by hand/i.test(sheet.cell?.title ?? ""),
   sheet.cell?.title ?? "no title",
 );
+
+/*
+ * The box has to be BIG ENOUGH TO USE, which is a different claim from being
+ * present. The owner found rows he could not click into — *"jader tds 0 tader
+ * okhane edit kora jacchena"* — and it was the working button beside it taking
+ * the width in a 112px column. Measured, because a screenshot of a 4px input
+ * looks like no input at all and a diff shows neither.
+ */
+const tdsBox = await page.evaluate((col, mark) => {
+  const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+    (r.textContent ?? "").includes(mark),
+  );
+  const cell = [...tr.querySelectorAll("td")][col];
+  const input = cell?.querySelector("input");
+  const button = cell?.querySelector("button");
+  return {
+    inputWidth: input ? Math.round(input.getBoundingClientRect().width) : 0,
+    buttonWidth: button ? Math.round(button.getBoundingClientRect().width) : 0,
+    readOnly: input ? input.readOnly : null,
+  };
+}, sheet.tdsCol, MARK);
+check(
+  "the tax box is wide enough to type in, even beside the working button",
+  tdsBox.inputWidth >= 60,
+  `input ${tdsBox.inputWidth}px, button ${tdsBox.buttonWidth}px`,
+);
+check(
+  "and the working button still fits beside it rather than instead of it",
+  tdsBox.buttonWidth === 0 || tdsBox.buttonWidth >= 16,
+  `button ${tdsBox.buttonWidth}px`,
+);
+
+/*
+ * Net Pay follows the boxes AS THEY ARE TYPED.
+ *
+ * The owner read a gross of 116,078 sitting beside a net of 116,129 and called
+ * it wrong arithmetic — and he was right about the screen: the net was the one
+ * from the last save. Typed here WITHOUT blurring, so nothing is saved and the
+ * only thing that can have moved is the figure on screen.
+ */
+const liveNet = await page.evaluate((mark, tdsCol) => {
+  /* By COLUMN, not by the value that happens to be in the box. Gross sits
+     immediately left of TDS and Net Pay immediately right of Other −, and the
+     first draft hunted for a literal "100000.00" that several earlier edits
+     had already changed. */
+  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+    (h.textContent ?? "").trim(),
+  );
+  const netCol = heads.findIndex((h) => /^Net Pay$/i.test(h));
+  const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+    (r.textContent ?? "").includes(mark),
+  );
+  const cells = [...tr.querySelectorAll("td")];
+  const netBefore = (cells[netCol]?.textContent ?? "").trim();
+  const grossInput = cells[tdsCol - 1]?.querySelector("input");
+  if (!grossInput || netCol < 0) return { found: false, netBefore, netCol };
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  ).set;
+  grossInput.focus();
+  setter.call(grossInput, (Number(grossInput.value) * 2).toFixed(2));
+  grossInput.dispatchEvent(new Event("input", { bubbles: true }));
+  return { found: true, netBefore, netCol };
+}, MARK, sheet.tdsCol);
+await new Promise((r) => setTimeout(r, 500));
+const netAfter = await page.evaluate((mark, netCol) => {
+  const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
+    (r.textContent ?? "").includes(mark),
+  );
+  const cells = [...tr.querySelectorAll("td")];
+  return (cells[netCol]?.textContent ?? "").trim();
+}, MARK, liveNet.netCol);
+check(
+  "Net Pay moves with the gross as it is typed, before anything is saved",
+  liveNet.found && netAfter !== liveNet.netBefore,
+  `${liveNet.netBefore} → ${netAfter} (the gross box doubled, unsaved)`,
+);
+
+/* Put it back, so the save below is the one the next checks expect. */
+await page.evaluate(() => {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement)) return;
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  ).set;
+  setter.call(el, el.defaultValue);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.blur();
+});
+await new Promise((r) => setTimeout(r, 1200));
 
 /* Typed on the page rather than through the API — the box has to actually
    save, which is a different claim from the endpoint accepting a body. */

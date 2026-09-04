@@ -536,7 +536,12 @@ export class PayrollService {
         };
       } else {
         const factor = input.workingDays / daysInMonth;
-        const grossFor = (Number(pay.grossAmount) * factor).toFixed(2);
+        /* Rounded to a whole taka. Days worked out of the month's own length
+           is the other place paisa came from: 90,000 x 18/31 is 52,258.0645,
+           and the owner asked for none of it. */
+        const grossFor = Math.round(Number(pay.grossAmount) * factor).toFixed(
+          2,
+        );
         derived = {
           grossAmount: grossFor,
           earningsBreakdown: scaleBreakdown(fullMonth, factor, grossFor),
@@ -1595,9 +1600,9 @@ function seedBreakdown(
 /**
  * The full month's parts, shrunk to the days actually worked.
  *
- * Each line scales by the same factor and is rounded to the paisa; rounding
- * drift is then pinned on the largest line so the parts still sum to exactly
- * the pro-rated gross. Without the pin, four rounded lines disagree with
+ * Each line scales by the same factor and is rounded to the whole taka;
+ * rounding drift is then pinned on the largest line so the parts still sum to
+ * exactly the pro-rated gross. Without the pin, four rounded lines disagree with
  * their own total by a paisa or two, and a slip whose arithmetic does not
  * tie is a slip nobody trusts again.
  */
@@ -1609,7 +1614,8 @@ function scaleBreakdown(
   if (!parts.length) return [{ label: "Basic Salary", amount: targetGross }];
   const scaled = parts.map((part) => ({
     label: part.label,
-    value: Number((Number(part.amount) * factor).toFixed(2)),
+    /* Whole taka, like the gross they have to add up to. */
+    value: Math.round(Number(part.amount) * factor),
   }));
   const sum = scaled.reduce((total, part) => total + part.value, 0);
   const drift = Number((Number(targetGross) - sum).toFixed(2));

@@ -627,9 +627,20 @@ export function splitSalary(
   const gross = toMinorUnits(grossAmount);
   // Percent to four places as an integer, so 33.33% is exact and no float
   // multiplication touches the money itself.
+  /*
+   * Each part floored to a WHOLE TAKA, and the remainder pinned on the first.
+   *
+   * The owner asked for payroll to carry no paisa at all — *"ami kono employee
+   * er salary te to eirokom decimal kono number deinai"* — and a percentage
+   * split is one of the two places they came from. Flooring each line and
+   * giving the difference to Basic keeps the parts summing to EXACTLY the
+   * gross, which is the property this function existed for; the first line is
+   * whole as long as the gross is, because everything taken off it is.
+   */
   const parts = split.map((part) => ({
     label: part.label,
-    minor: (gross * BigInt(Math.round(part.percent * 100))) / 10000n,
+    minor:
+      ((gross * BigInt(Math.round(part.percent * 100))) / 10000n / 100n) * 100n,
   }));
 
   const allocated = parts.reduce((sum, part) => sum + part.minor, 0n);
