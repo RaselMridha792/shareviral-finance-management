@@ -44,6 +44,7 @@ ticking all seventeen.
 | 61 | **A bank charge on every kind of transaction** | **done** |
 | 62 | **Cash In: one order, the derived box locked, a charge on both account kinds** | **done** |
 | 63 | **Expense overview: Office rent replaces Uncategorised, cards get the dashboard's look** | **done** |
+| 64 | **A dollar card's balance stood still while its taka moved** | **done** |
 | 55 | Payslip: Prepared by removed, both dates numeric, footer trimmed and made readable | **done** |
 | 52 | Payslip: Working days as a number | **done** |
 | 53 | Payslip: the Gross-and-Deductions line | **done** |
@@ -163,6 +164,50 @@ figures are already on the slip, in the two totals directly above it.
 Thousand…". The currency is stated twice more in that same black band — above
 the figure on the right, and on both column headings — so the words can be
 words.
+
+## 64. The card that read $1,500 all month
+
+*"ekhane money add korle change hoyna dollar ammount ta. also jodi ami kono
+kichu khoroco kori amount change hoyna. eta diye ai subscription kinlam tao
+dekhi 1500 dollar e thake."* — on the Payoneer card, reading `~$1,500.00` over
+৳1,87,083.00.
+
+Driven through every door money reaches that card by (`.carddollarqa.mjs`), and
+the report was right about the symptom and wrong about the cause: **most doors
+worked.** Cash In moved it, an expense that recorded its dollars moved it, and
+a subscription payment moved it — that last one only because it was fixed
+yesterday. Two did not, and both for the same reason.
+
+**A row carrying neither its dollars nor a rate contributed exactly zero.**
+`ownCurrencyBalance` reads `original_amount` first, then the row's own
+`fx_rate`/`usd_rate`, and had nothing after that — so any entry typed on a
+screen that asks for neither moved the taka and left the dollars where they
+were. Measured: ৳6,138.50 out, $0.00 off the card.
+
+It now falls back to **the rate in force on the row's own day**, from
+`fx_rates` — never today's, because valuing an old row at today's price moves
+a figure nobody touched, which is the whole reason the stored dollars are
+preferred above it. A row dated before the company recorded any rate takes the
+earliest on file. The figure stays marked approximate: `ownCurrencyExact` is
+untouched, so the tilde the owner is looking at stays, and the number under it
+now moves.
+
+**The second door was ours.** The bank charge row written by yesterday's work
+carried no rate of its own, so ৳245.54 of charge came off the taka and $0.00
+off the card. It inherits its entry's rate now — `usdRate`, the reference rate
+a taka figure is read back in, not `fxRate`, which would claim the bank
+converted it.
+
+One thing worth knowing before reading a local run: **this database has no FX
+rates at all**, so the fallback correctly contributes nothing here and the
+first run reported the fix not working. The harness seeds one and removes it,
+which is what the live system already has.
+
+And a caution for the next session, which cost twenty minutes: three harnesses
+reported five to ten failures each, all of them browser checks, because the web
+dev server was a leftover from a previous session. Restarting it turned every
+one of them green without a line of code changing. A browser check that fails
+in a block is a stale server until proven otherwise.
 
 ## 63. Expense overview: Office rent, and the dashboard's cards
 

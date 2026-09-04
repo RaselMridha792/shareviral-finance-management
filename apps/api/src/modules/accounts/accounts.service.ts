@@ -164,6 +164,49 @@ const ownCurrencyBalance = sql<string>`(
         when coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0
         then ${transactions.signedAmount}
              / coalesce(${transactions.fxRate}, ${transactions.usdRate})
+        /*
+         * A row that states neither is read at the rate that was IN FORCE ON
+         * ITS OWN DAY, not at today's.
+         *
+         * It used to contribute exactly nothing, and the owner found what that
+         * looks like: a card whose taka moved with every entry while the dollar
+         * figure beside it sat at the same number all month — "money add korle
+         * change hoyna ... khoroch korle amount change hoyna". A balance that
+         * ignores half its rows is worse than an approximate one.
+         *
+         * On its own day, because that is the whole reason the stored dollars
+         * are preferred above: valuing an old row at today's price moves a
+         * figure nobody touched. The row's day is fixed, so this is stable.
+         * The fallback below it -- the earliest rate on file -- is only for
+         * rows dated before the company recorded any rate at all.
+         *
+         * This does NOT make the figure exact. The exactness expression below
+         * still counts such a row as an estimate, so the screen keeps its
+         * tilde: the number moves, and it still says it is approximate.
+         *
+         * (No backticks in here: this comment lives inside a JS template
+         * literal, and one of them ends the string. Same trap as below.)
+         */
+        when coalesce((
+          select r.rate from fx_rates r
+           where r.base_currency = 'USD' and r.quote_currency = 'BDT'
+             and r.rate_date <= transactions.txn_date
+           order by r.rate_date desc limit 1
+        ), (
+          select r.rate from fx_rates r
+           where r.base_currency = 'USD' and r.quote_currency = 'BDT'
+           order by r.rate_date asc limit 1
+        )) > 0
+        then ${transactions.signedAmount} / coalesce((
+          select r.rate from fx_rates r
+           where r.base_currency = 'USD' and r.quote_currency = 'BDT'
+             and r.rate_date <= transactions.txn_date
+           order by r.rate_date desc limit 1
+        ), (
+          select r.rate from fx_rates r
+           where r.base_currency = 'USD' and r.quote_currency = 'BDT'
+           order by r.rate_date asc limit 1
+        ))
         else 0
       end
     ) filter (where ${transactions.voidedAt} is null), 0)

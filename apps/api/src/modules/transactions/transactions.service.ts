@@ -896,7 +896,22 @@ export class TransactionsService {
      * the only door.
      */
     const [parent] = await tx
-      .select({ chargeForId: transactions.chargeForId })
+      .select({
+        chargeForId: transactions.chargeForId,
+        /*
+         * The rate the entry was read at, so the charge can be read at it too.
+         *
+         * A charge row carried neither dollars nor a rate, and a foreign
+         * account's balance is built from one or the other — so ৳245 of charge
+         * came off the taka and $0.00 off the card, which is half of what the
+         * owner reported as a figure that would not move. The charge is levied
+         * in taka; what it needs is the reference rate to be READ in, which is
+         * `usdRate` rather than `fxRate` — this app keeps "the bank converted
+         * at this" and "read it back at this" as different columns on purpose.
+         */
+        fxRate: transactions.fxRate,
+        usdRate: transactions.usdRate,
+      })
       .from(transactions)
       .where(eq(transactions.id, input.parentId))
       .limit(1);
@@ -937,6 +952,8 @@ export class TransactionsService {
 
     const categoryId = await this.bankChargeCategoryId();
     const description = `Bank charge — ${input.description}`;
+    /** Inherited, so the charge is readable in the same currency its entry is. */
+    const readAt = parent?.fxRate ?? parent?.usdRate ?? null;
 
     if (current) {
       await tx
@@ -947,6 +964,7 @@ export class TransactionsService {
           accountId: input.accountId,
           description,
           categoryId,
+          ...(readAt ? { usdRate: readAt } : {}),
           updatedAt: new Date(),
           updatedBy: input.actor.id,
         })
@@ -964,6 +982,7 @@ export class TransactionsService {
       categoryId,
       description,
       paymentMethod: "bank_transfer",
+      ...(readAt ? { usdRate: readAt } : {}),
       chargeForId: input.parentId,
       createdVia: "manual",
       dedupeHash: dedupeKey({
