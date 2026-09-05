@@ -57,6 +57,80 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 74. Admin and Finance retired; four roles left
+
+> *"admin role take delete kore daw and Finance Role take delete kore daw ekhane
+> Finance and CFO akoi role er under a ache tader kaj akoi and admin er dorkar
+> nai super admin holei hobe"* — and then, mid-work: *"make sure kono data jeno
+> na haray"*.
+
+He was right about the premise, and the code said so: **`admin` and `cfo` were
+literally the same array**, and `finance` was that array minus master data. So
+this removed two names, not two capabilities.
+
+**Two pushes, in this order, and the order is the whole item.**
+
+`hasPermission()` looks the role up in a map and calls `.has()` on the result.
+For a role the code no longer knows that entry is `undefined`, so it does not
+return false — **it throws**. A user still on `admin` when the code shipped
+would have met a **500 on every request in the app**, not a refusal. Measured,
+not assumed. So `3aebf9f` moved everybody first, on the release before the list
+shrank, while the running code still understood both values.
+
+**Where they went, and why not Super Admin.** He said "super admin holei hobe",
+and Super Admin was declined for a reason worth writing down: it is the only
+role with `settings.write` and `users.manage`, so moving fourteen people there
+would have handed all of them the ability to change company settings and to
+create and deactivate sign-in accounts — something they had never had. **CFO is
+Admin's row exactly**, so an Admin moved there lost nothing and gained nothing.
+Finance gained four (accounts.write, categories.write, team.write, audit.read),
+which is his decision that the two are one job.
+
+**Nothing was deleted.** 33 users before, 33 after. Every transaction, payroll
+line and file keeps the id of whoever made it. Soft-deleted users moved too —
+restoring one months later is exactly how a lone `admin` reappears on a release
+that throws on it.
+
+**History was not rewritten.** `audit_logs.actor_role` records the role somebody
+held AT THE TIME; 140 entries still say `admin` and 46 still say `finance`, and
+they should. That drove the shape of the code:
+
+- `STORED_ROLES` (six) describes the **database** — Postgres has no
+  `ALTER TYPE … DROP VALUE`, so `pgEnum("user_role", STORED_ROLES)` keeps
+  Drizzle's picture of the column true.
+- `ROLES` (four) is what the app will **hand out**.
+- `ROLE_LABELS` is keyed by the six, so an August entry still reads "Admin"
+  rather than going blank.
+- Anything reading a role off a row — `AuthenticatedUser`, `UserDto`,
+  `AuditEntryDto.actorRole`, the request context, the audit writer — is
+  `StoredRole`. The compiler found all of them; that is the whole reason to have
+  two types rather than one.
+
+**`hasPermission` now fails closed.** No row in the matrix means no permissions,
+where it used to mean an exception. A user somehow on a retired role can sign in
+and sees nothing — diagnosable and safe, where a 500 is neither.
+
+**Nobody was logged out, and nobody had to be.** The JWT guard re-reads
+`users.role` from the database on **every request** rather than trusting the
+token's claim, so a session opened before the migration carried the new role on
+its very next click. Bumping `tokenVersion` would have signed fourteen people
+out to fix a staleness that does not exist here.
+
+**The users screen tells the truth again.** Its one-line role summaries had HR
+as *"The team directory. Never salary."* — untrue since 2026-08-15, when the
+owner gave HR compensation. A wrong summary on the screen where roles are
+**handed out** is worse than none. It now reads "The team and their pay.
+Prepares payroll but cannot release it, and does not see the ledger." A new
+account starts at CFO, not the Finance that no longer exists.
+
+**Proved by `.rolesqa.mjs`** — 21 checks against the real API and the real
+database. The ones that matter: a row on a retired role **fails closed rather
+than throwing**; not one user is left on either; 33 users before and after; the
+migration's own audit rows name who moved and from what; 186 historical entries
+keep their old actor role; a live CFO still reaches the ledger, accounts,
+payroll and the audit log, and is still refused user management; and the API
+**refuses to create anybody as Admin** (400, and no row written).
+
 ## 73. The bank statement PDF: ledger first, four columns, nothing cut
 
 > *"bank statement export er etake valo ekta font a daw. ekhane font gula onek

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { paginationQuerySchema } from "./pagination.ts";
-import { roleSchema, type Role } from "./roles.ts";
+import { roleSchema, type StoredRole } from "./roles.ts";
 
 /**
  * Who can sign in. Super Admin only — `users.manage` is granted to no other
@@ -73,7 +73,11 @@ export type UserDto = {
   id: string;
   email: string;
   fullName: string;
-  role: Role;
+  /*
+   * What the row says, which may be a role nobody can be given any more — the
+   * users list has to be able to SHOW such a person, not fail to render them.
+   */
+  role: StoredRole;
   status: UserStatus;
   mustChangePassword: boolean;
   /** ISO timestamp, or null if they have never signed in. */

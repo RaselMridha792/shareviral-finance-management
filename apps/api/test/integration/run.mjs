@@ -164,7 +164,8 @@ const people = (
   )
 ).rows;
 
-const NEEDED = ["super_admin", "ceo", "admin", "finance", "hr"];
+/* The four roles that can be given. Admin and Finance were retired 5 Sep 2026. */
+const NEEDED = ["super_admin", "ceo", "hr", "cfo"];
 const tokens = {};
 for (const role of NEEDED) {
   const who = people.find((p) => p.role === role);

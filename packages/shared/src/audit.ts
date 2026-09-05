@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { isoDateSchema } from "./masters.ts";
 import { paginationQuerySchema } from "./pagination.ts";
-import { roleSchema, type Role } from "./roles.ts";
+import { storedRoleSchema, type StoredRole } from "./roles.ts";
 
 export const AUDIT_ACTIONS = [
   "create",
@@ -54,7 +54,8 @@ export type AuditEntryDto = {
   occurredAt: string;
   actorName: string | null;
   actorEmail: string | null;
-  actorRole: Role | null;
+  /* Whatever the actor's role WAS — history keeps retired names. */
+  actorRole: StoredRole | null;
   actorIp: string | null;
   action: AuditAction;
   entityTable: string;
@@ -77,6 +78,6 @@ export type AuditEntryDto = {
 export const auditActorSchema = z.object({
   id: z.string().uuid(),
   fullName: z.string(),
-  role: roleSchema,
+  role: storedRoleSchema,
 });
 export type AuditActor = z.infer<typeof auditActorSchema>;

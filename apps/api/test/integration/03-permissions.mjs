@@ -18,7 +18,7 @@ const TOK = Object.fromEntries(
     .split(/\r?\n/).filter(Boolean).map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1)]; }),
 );
 
-const ROLES = ["super_admin", "ceo", "admin", "finance", "hr"];
+const ROLES = ["super_admin", "ceo", "hr", "cfo"];
 const has = (role, permission) => ROLE_PERMISSIONS[role].includes(permission);
 
 /**

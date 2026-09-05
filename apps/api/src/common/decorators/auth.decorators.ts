@@ -3,7 +3,7 @@ import {
   ExecutionContext,
   SetMetadata,
 } from "@nestjs/common";
-import type { Permission, Role } from "@finance/shared";
+import type { Permission, Role, StoredRole } from "@finance/shared";
 import type { Request } from "express";
 
 export const IS_PUBLIC_KEY = "auth:public";
@@ -27,7 +27,12 @@ export type AuthenticatedUser = {
   id: string;
   email: string;
   fullName: string;
-  role: Role;
+  /*
+   * A STORED role, not an assignable one: this comes off a `users` row, and the
+   * database can hold a role that has since been retired. `hasPermission` fails
+   * closed on one rather than throwing.
+   */
+  role: StoredRole;
   tokenVersion: number;
   mustChangePassword: boolean;
 };

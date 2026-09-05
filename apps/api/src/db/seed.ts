@@ -124,7 +124,12 @@ async function upsertUser(
 }
 
 async function main() {
-  // Not "admin@" — that is the Admin role's address, and the two would collide.
+  /*
+   * "superadmin@", from `emailForRole`. It used to be worth saying "not admin@,
+   * that is the Admin role's address" — Admin was retired on 5 Sep 2026, so the
+   * collision it warned about no longer exists. The `clashingRole` check below
+   * is what actually enforces this now, against whatever roles there are.
+   */
   const adminEmail = process.env.SEED_EMAIL ?? emailForRole("super_admin");
   const adminName = process.env.SEED_NAME ?? "Super Admin";
   const adminPassword = process.env.SEED_PASSWORD ?? generatePassword();

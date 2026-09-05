@@ -85,7 +85,7 @@ await db.query("delete from refresh_tokens where user_id in (select id from user
 await db.query("delete from users where email = $1", [EMAIL]);
 
 const created = await asAdmin("/users", "POST", {
-  email: EMAIL, fullName: "T11 Rotation Test", role: "finance",
+  email: EMAIL, fullName: "T11 Rotation Test", role: "cfo",
   password: PASSWORD, mustChangePassword: false,
 });
 if (created.status !== 201 && created.status !== 200) {

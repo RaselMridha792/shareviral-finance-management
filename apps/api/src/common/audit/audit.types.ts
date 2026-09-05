@@ -1,4 +1,4 @@
-import type { Role } from "@finance/shared";
+import type { StoredRole } from "@finance/shared";
 
 export type AuditAction =
   | "create"
@@ -26,7 +26,8 @@ export type AuditEntry = {
   isSensitive?: boolean;
   /** Overrides the actor from the request context (used by the seed script). */
   actorUserId?: string | null;
-  actorRole?: Role | null;
+  /* Whatever role the actor HELD — the log records history, not the matrix. */
+  actorRole?: StoredRole | null;
 };
 
 /** Columns that are noise in a diff — they change on every write. */

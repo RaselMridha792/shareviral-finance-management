@@ -50,7 +50,16 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user;
     if (!user) throw new ForbiddenException("Not signed in");
 
-    if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
+    /*
+     * Widened on purpose. `allowedRoles` lists roles that can still be given;
+     * `user.role` is whatever the row holds, which may be a retired one. A
+     * retired role is in no `@Roles()` list, so this refuses it — which is the
+     * right answer, and the cast is only so the comparison type-checks.
+     */
+    if (
+      allowedRoles?.length &&
+      !(allowedRoles as readonly string[]).includes(user.role)
+    ) {
       throw new ForbiddenException("Your role cannot do this");
     }
 

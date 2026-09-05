@@ -4,8 +4,10 @@ import {
   ROLES,
   ROLE_LABELS,
   USER_STATUS_LABELS,
+  isRetiredRole,
   suggestPassword,
   type Role,
+  type StoredRole,
   type UserDto,
   type UserStatus,
 } from "@finance/shared";
@@ -52,14 +54,23 @@ import { ApiError, trashApi } from "@/lib/api-client";
 import { pageCount, serial } from "@/lib/pagination";
 import { usersApi } from "@/lib/users";
 
-/** What each role can actually do, in one line, at the moment you assign it. */
+/**
+ * What each role can actually do, in one line, at the moment you assign it.
+ *
+ * Four now. Admin and Finance were withdrawn on 5 Sep 2026 — Admin and CFO had
+ * held the same permissions all along, and Finance was that set minus master
+ * data, so the two were names rather than capabilities.
+ *
+ * HR's line used to read "Never salary", which stopped being true on
+ * 2026-08-15 when the owner gave HR compensation: their HR runs payroll, and a
+ * role that cannot see a salary cannot do that job. A wrong summary on the
+ * screen where roles are HANDED OUT is worse than none.
+ */
 const ROLE_SUMMARY: Record<Role, string> = {
   super_admin: "Everything, including these accounts and Settings",
   ceo: "Sees everything. Changes nothing.",
-  admin: "All the day-to-day work, but not Settings or accounts",
-  finance: "Money, payroll and tax",
-  hr: "The team directory. Never salary.",
-  cfo: "The same as Admin. Money, payroll, tax and the challans.",
+  cfo: "All the day-to-day work — money, payroll, tax, the challans. Not Settings or accounts.",
+  hr: "The team and their pay. Prepares payroll but cannot release it, and does not see the ledger.",
 };
 
 export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
@@ -549,12 +560,35 @@ function RoleSelect({
   defaultValue,
 }: {
   name: string;
-  defaultValue?: Role;
+  /*
+   * A STORED role, because this is handed a user's current one and the database
+   * can still hold a retired value — a row restored from an old backup, say.
+   */
+  defaultValue?: StoredRole;
 }) {
-  const [role, setRole] = useState<Role>(defaultValue ?? "finance");
+  /*
+   * CFO is where a new account starts, and where a retired role lands.
+   *
+   * It used to be Finance, which no longer exists. A retired role cannot be an
+   * option in the list — nobody may be given one again — so the box opens on
+   * CFO and says plainly what the person is at the moment, rather than
+   * appearing blank or silently pretending they were always a CFO.
+   */
+  const retired = defaultValue ? isRetiredRole(defaultValue) : false;
+  const [role, setRole] = useState<Role>(
+    defaultValue && !isRetiredRole(defaultValue) ? defaultValue : "cfo",
+  );
 
   return (
-    <Field label="Role" required hint={ROLE_SUMMARY[role]}>
+    <Field
+      label="Role"
+      required
+      hint={
+        retired
+          ? `This account is still on ${ROLE_LABELS[defaultValue as StoredRole]}, which has been withdrawn. Saving moves it to ${ROLE_LABELS[role]}.`
+          : ROLE_SUMMARY[role]
+      }
+    >
       <Select
         name={name}
         value={role}

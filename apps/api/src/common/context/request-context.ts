@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { Role } from "@finance/shared";
+import type { StoredRole } from "@finance/shared";
 
 export type RequestContext = {
   requestId: string;
@@ -9,7 +9,8 @@ export type RequestContext = {
   ip?: string;
   userAgent?: string;
   userId?: string;
-  role?: Role;
+  /* Stored, not assignable — see AuthenticatedUser. */
+  role?: StoredRole;
   /** Set by the audit writer so the safety-net interceptor knows to stand down. */
   auditWritten: boolean;
 };

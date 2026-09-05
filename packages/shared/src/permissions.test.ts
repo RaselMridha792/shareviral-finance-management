@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ROLES } from "./roles.ts";
+import { ROLES, ROLE_LABELS } from "./roles.ts";
 import {
   canSeeCompensation,
   hasPermission,
@@ -52,20 +52,13 @@ describe("the HR boundary", () => {
 
   it("grants compensation access to the money roles and to HR", () => {
     const allowed = ROLES.filter((role) => canSeeCompensation(role));
-    assert.deepEqual(allowed, [
-      "super_admin",
-      "ceo",
-      "admin",
-      "finance",
-      "hr",
-      "cfo",
-    ]);
+    assert.deepEqual(allowed, ["super_admin", "ceo", "hr", "cfo"]);
   });
 
   it("leaves paying the payroll to the roles that hold the bank", () => {
     // The one that matters most: this is money actually leaving.
     const canPay = ROLES.filter((role) => hasPermission(role, "payroll.pay"));
-    assert.deepEqual(canPay, ["super_admin", "admin", "finance", "cfo"]);
+    assert.deepEqual(canPay, ["super_admin", "cfo"]);
   });
 });
 
@@ -109,32 +102,54 @@ describe("super_admin is the only one who can change settings or users", () => {
   });
 });
 
-describe("admin runs operations but not the company", () => {
-  it("can do the operational work", () => {
-    assert.equal(hasPermission("admin", "transactions.write"), true);
-    assert.equal(hasPermission("admin", "payroll.pay"), true);
-    assert.equal(hasPermission("admin", "team.compensation.read"), true);
+describe("the retired roles", () => {
+  /*
+   * Admin and Finance were withdrawn on 5 Sep 2026 — Admin and CFO had held the
+   * same permission array all along, so retiring Admin removed a name and not
+   * a capability. These two assert the thing that would actually hurt: a row
+   * still carrying one must not take the app down.
+   */
+  it("cannot be handed out any more", () => {
+    assert.equal(ROLES.includes("admin" as never), false);
+    assert.equal(ROLES.includes("finance" as never), false);
   });
 
-  it("cannot change settings or manage users", () => {
-    assert.equal(hasPermission("admin", "settings.write"), false);
-    assert.equal(hasPermission("admin", "users.manage"), false);
+  it("fail closed rather than throwing, if a row still carries one", () => {
+    // `ROLE_PERMISSION_SETS[role]` is undefined for these, and `.has()` on
+    // undefined THROWS — which would have been a 500 on every request such a
+    // user made, not a refusal. No permissions is the safe answer.
+    for (const retired of ["admin", "finance"] as const) {
+      assert.doesNotThrow(() => hasPermission(retired, "dashboard.view"));
+      assert.equal(hasPermission(retired, "dashboard.view"), false);
+      assert.equal(hasPermission(retired, "settings.write"), false);
+      assert.deepEqual([...permissionsFor(retired)], []);
+    }
+  });
+
+  it("keep their names, so history can still say them", () => {
+    // `audit_logs.actor_role` records the role somebody held at the time, and
+    // those rows are never rewritten. A label that disappeared would leave an
+    // August entry rendering blank.
+    assert.equal(ROLE_LABELS.admin, "Admin");
+    assert.equal(ROLE_LABELS.finance, "Finance");
   });
 });
 
-describe("the CFO is admin's row, and stays that way", () => {
-  it("holds everything admin holds", () => {
-    // Asserted against admin rather than against a written-out list. The two
-    // are meant to be the same row, and a copied list is exactly what drifts:
-    // somebody grants admin a new permission, nothing fails, and the CFO
-    // quietly cannot do something they should.
-    for (const permission of PERMISSIONS) {
-      assert.equal(
-        hasPermission("cfo", permission),
-        hasPermission("admin", permission),
-        `cfo and admin disagree about ${permission}`,
-      );
-    }
+describe("the CFO runs operations but not the company", () => {
+  it("holds every permission except the two that are super_admin's", () => {
+    // Written out as "everything but these" rather than as a list, because a
+    // list is what drifts: somebody adds a permission, nothing fails, and the
+    // CFO quietly cannot do something they should.
+    const missing = PERMISSIONS.filter(
+      (permission) => !hasPermission("cfo", permission),
+    );
+    assert.deepEqual(missing, ["settings.write", "users.manage"]);
+  });
+
+  it("can do the operational work", () => {
+    assert.equal(hasPermission("cfo", "transactions.write"), true);
+    assert.equal(hasPermission("cfo", "payroll.pay"), true);
+    assert.equal(hasPermission("cfo", "team.compensation.read"), true);
   });
 
   it("cannot change settings or manage users", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ROLES, type Role } from "./roles.ts";
+import { ROLES, type Role, type StoredRole } from "./roles.ts";
 
 /**
  * The permission vocabulary. Lives here, not in the API, so the sidebar hides
@@ -127,59 +127,30 @@ const OPERATIONAL_FULL: Permission[] = [
  *
  * - `super_admin` is the only role with `settings.write` and `users.manage`.
  * - `ceo` is read-only by decision, but sees money and the audit log.
- * - `admin` runs operations but cannot change settings or manage users.
- * - `cfo` is admin's row exactly — added for the challan work, and given the
- *   whole operational set because a finance officer who cannot see payroll
- *   is not one.
- * - `finance` matches admin minus master-data admin and imports.
- * - `hr` has team.read/write but NOT team.compensation.* and NOT payroll.* —
- *   this is the boundary the whole permission system exists to hold.
+ * - `cfo` runs operations — the whole set except those two.
+ * - `hr` has team.read/write and compensation, but NOT payroll.write or
+ *   payroll.pay and NOT reports — this is the boundary the whole permission
+ *   system exists to hold.
+ *
+ * `admin` and `finance` were withdrawn on 5 Sep 2026. `admin` and `cfo` had
+ * been the same array all along, and `finance` was that array minus master
+ * data, so retiring them removed two names rather than any capability. The
+ * people on them were moved to `cfo` the release before this changed.
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   ceo: READ_ONLY_EVERYTHING,
-  admin: OPERATIONAL_FULL,
   /**
-   * The same row as admin, and deliberately the same object.
+   * Everything operational — the ledger, payroll, salary, tax, the challans
+   * this role was added for — but not `settings.write` and not `users.manage`,
+   * which stay with super_admin alone.
    *
-   * The owner's decision: a CFO does everything admin does — the ledger,
-   * payroll, salary, tax, the challans they were added for — but not
-   * `settings.write` and not `users.manage`, which stay with super_admin
-   * alone.
-   *
-   * Sharing the array rather than copying it is the point. Two lists that are
-   * meant to be identical drift the first time somebody adds a permission to
-   * one of them, and the drift is invisible: nothing fails, a role just
-   * quietly cannot do something it should.
+   * This array used to be shared with `admin`, on the reasoning that two lists
+   * meant to be identical drift the first time somebody adds to one of them.
+   * They never did drift, and that is what made retiring `admin` a rename
+   * rather than a decision about anybody's access.
    */
   cfo: OPERATIONAL_FULL,
-  finance: [
-    "dashboard.view",
-    "dashboard.money",
-    "transactions.read",
-    "transactions.write",
-    "transactions.void",
-    "accounts.read",
-    "vendors.read",
-    "vendors.write",
-    "categories.read",
-    "team.read",
-    "team.compensation.read",
-    "team.compensation.write",
-    "payroll.read",
-    "payroll.write",
-    "payroll.pay",
-    "tds.read",
-    "tds.write",
-    "incometax.read",
-    "incometax.write",
-    "reports.view",
-    "reports.usd",
-    "exports.run",
-    "imports.run",
-    "settings.read",
-    "ai.use",
-  ],
   /**
    * HR owns pay at this company, so HR can see and set it.
    *
@@ -239,26 +210,39 @@ const ROLE_PERMISSION_SETS = (() => {
   return sets;
 })();
 
+/*
+ * These take a STORED role, not an assignable one.
+ *
+ * What arrives here comes off a `users` row or a JWT, and the database can hold
+ * a role the matrix no longer has — a user restored from an old backup, a row
+ * that predates a retirement. That used to be a crash rather than a refusal:
+ * `ROLE_PERMISSION_SETS[role]` is `undefined` for an unknown role and `.has()`
+ * on it THROWS, so one such user would meet a 500 on every request in the app.
+ *
+ * They fail closed instead. No row in the matrix means no permissions: the
+ * person can sign in and sees nothing, which is diagnosable and safe, where a
+ * 500 is neither.
+ */
 export function hasPermission(
-  role: Role | undefined,
+  role: StoredRole | undefined,
   permission: Permission,
 ): boolean {
   if (!role) return false;
-  return ROLE_PERMISSION_SETS[role].has(permission);
+  return ROLE_PERMISSION_SETS[role as Role]?.has(permission) ?? false;
 }
 
 export function hasAnyPermission(
-  role: Role | undefined,
+  role: StoredRole | undefined,
   permissions: readonly Permission[],
 ): boolean {
   return permissions.some((p) => hasPermission(role, p));
 }
 
-export function permissionsFor(role: Role): readonly Permission[] {
-  return ROLE_PERMISSIONS[role];
+export function permissionsFor(role: StoredRole): readonly Permission[] {
+  return ROLE_PERMISSIONS[role as Role] ?? [];
 }
 
 /** Roles allowed to see salary figures anywhere in the app. */
-export function canSeeCompensation(role: Role | undefined): boolean {
+export function canSeeCompensation(role: StoredRole | undefined): boolean {
   return hasPermission(role, "team.compensation.read");
 }

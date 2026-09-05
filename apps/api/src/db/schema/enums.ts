@@ -1,5 +1,5 @@
 import {
-  ROLES,
+  STORED_ROLES,
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_STATUSES,
 } from "@finance/shared";
@@ -11,7 +11,13 @@ import { pgEnum } from "drizzle-orm/pg-core";
  * the API guard, and the frontend nav can never disagree about what a role is.
  */
 
-export const userRoleEnum = pgEnum("user_role", ROLES);
+/*
+ * STORED_ROLES, not ROLES — this declares the COLUMN, and the column still
+ * holds `admin` and `finance` on historical `audit_logs.actor_role` rows.
+ * Postgres has no way to drop an enum value, so the type keeps all six; what
+ * shrank on 5 Sep 2026 is the list the app will hand out, which is `ROLES`.
+ */
+export const userRoleEnum = pgEnum("user_role", STORED_ROLES);
 
 export const userStatusEnum = pgEnum("user_status", [
   "active",
