@@ -107,27 +107,36 @@ export function buildBankStatementReport(
       rule: false,
     },
     blocks: [
-      { kind: "gap", height: 66 },
+      { kind: "gap", height: 78 },
       {
+        /*
+         * 40pt, not 58. The owner: *"ekhane font gula onek boro boro
+         * dekhacche etar ui ke sundor koro."* A statement is a document
+         * somebody reads, not a poster — the words "Bank Statement" filling a
+         * third of the sheet is scale standing in for hierarchy. Smaller type
+         * with more air around it reads as more considered, not less.
+         */
         kind: "display",
         eyebrow: `${account.name} · ${period.label}`,
         lines: ["Bank", "Statement."],
-        size: 58,
+        size: 40,
       },
-      { kind: "gap", height: 6 },
+      { kind: "gap", height: 10 },
       {
         kind: "lede",
-        size: 12.5,
-        width: 366,
+        size: 10.5,
+        width: 330,
         text:
           `Every movement through ${account.name} for ${period.lower}, in date order, ` +
           `carried from the balance the account opened the period with to the balance ` +
           `it closed on. Figures are stated in taka. ` +
           `${describeVoided(rows.length - live.length)}`,
       },
-      { kind: "gap", height: 22 },
+      { kind: "gap", height: 26 },
       {
         kind: "figureBoxes",
+        size: 21,
+        height: 92,
         items: [
           {
             label: "Opening balance",
@@ -145,9 +154,11 @@ export function buildBankStatementReport(
       },
       // Fixed to the foot of the sheet rather than to the flow above it, so a
       // long account name cannot push the figures off the page.
-      { kind: "anchor", fromBottom: 208 },
+      { kind: "anchor", fromBottom: 186 },
       {
         kind: "bigFigures",
+        size: 23,
+        height: 84,
         items: [
           { value: short(register.totalIn), label: "Money in" },
           { value: short(register.totalOut), label: "Money out" },
@@ -176,14 +187,15 @@ export function buildBankStatementReport(
     ...sheet("How it moved", `${account.name} · Movement`),
     blocks: [
       { kind: "gap", height: 8 },
-      { kind: "display", lines: ["The movement."], size: 36 },
-      { kind: "gap", height: 5 },
+      { kind: "display", lines: ["The movement."], size: 25 },
+      { kind: "gap", height: 6 },
       {
         kind: "lede",
+        size: 10,
         text:
           `Where the balance started, what came in, what went out, and where it ` +
-          `finished — the whole of ${period.lower} in one shape, before the ` +
-          `line-by-line overleaf.`,
+          `finished — the whole of ${period.lower} in one shape, after the ` +
+          `line-by-line that precedes it.`,
       },
       { kind: "gap", height: 14 },
       {
@@ -210,8 +222,8 @@ export function buildBankStatementReport(
         kind: "notes",
         items: [
           `Opening balance is what the account held the day before ${period.openedOn}. ` +
-            `It is not a movement and does not appear as a line overleaf; every balance ` +
-            `in that column is built on it.`,
+            `It is not a movement and has no line of its own in the ledger; every ` +
+            `balance in that column is built on it.`,
           `Voided entries are listed for the record and excluded from every total, ` +
             `including the running balance — a voided row leaves the balance exactly ` +
             `where the row above it left it.`,
@@ -224,18 +236,43 @@ export function buildBankStatementReport(
 
   /* ----------------------------------------------------------- the ledger */
 
+  /*
+   * FOUR columns, and Description is not one of them.
+   *
+   * The owner: *"ekhane line by line table ta theke description bad daw. ekhane
+   * date, debit credit, and ballance field gulake rakho kono kichu jeno kata na
+   * pore."* Description was taking 37% of the sheet and every other column was
+   * being cut to pay for it — the date read "09/06/20..", the figures
+   * "৳8,54,000.0..". Dropping it gives that 37% back to the four columns that
+   * carry money, and nothing is cut any more.
+   *
+   * The transaction number stays, as a small line under the date. It is not a
+   * description — it is the handle you match a row to the bank's own statement
+   * by, and a statement whose rows cannot be identified is not one you can
+   * reconcile. It costs no width, because it sits in the space the date's own
+   * row already occupies.
+   *
+   * DEBIT then CREDIT, in that order, because that is what the screen this
+   * document mirrors says — `bank-statement-screen.tsx` puts `direction ===
+   * "out"` under Debit and `"in"` under Credit. It used to read "In" then
+   * "Out", which is the same two figures in the other order under other names:
+   * two documents of the same account that a reader has to check the headings
+   * of before trusting either.
+   */
   const ledger: PdfPage = {
     ...sheet("Line by line", `${account.name} · Ledger`),
     blocks: [
       { kind: "gap", height: 8 },
-      { kind: "display", lines: ["Line by line."], size: 36 },
-      { kind: "gap", height: 5 },
+      { kind: "display", lines: ["Line by line."], size: 25 },
+      { kind: "gap", height: 6 },
       {
         kind: "lede",
+        size: 10,
         text:
           `${rows.length} ${rows.length === 1 ? "entry" : "entries"} for ${period.lower}, ` +
-          `oldest first, with the balance after each. The paged layout continues this ` +
-          `table onto as many sheets as it needs.`,
+          `oldest first, with the balance after each. Debit is money out, credit is ` +
+          `money in — the reading the account's own statement uses. How the balance ` +
+          `moved across the period is set out overleaf.`,
       },
       { kind: "gap", height: 12 },
       {
@@ -246,19 +283,18 @@ export function buildBankStatementReport(
       },
       {
         kind: "stackTable",
+        scale: 0.86,
         columns: [
-          { header: "Date", width: 0.11 },
-          { header: "Description", width: 0.37 },
-          { header: "In", width: 0.16, align: "right" },
-          { header: "Out", width: 0.16, align: "right" },
-          { header: "Balance", width: 0.2, align: "right" },
+          { header: "Date", width: 0.22 },
+          { header: "Debit", width: 0.24, align: "right" },
+          { header: "Credit", width: 0.24, align: "right" },
+          { header: "Balance", width: 0.3, align: "right" },
         ],
         rows: rows.map((row) => ledgerRow(row, money)),
         total: [
           { kind: "caps", text: "Closing" },
-          { kind: "empty" },
-          { kind: "money", primary: money(register.totalIn), tone: "in" },
           { kind: "money", primary: money(register.totalOut), tone: "out" },
+          { kind: "money", primary: money(register.totalIn), tone: "in" },
           {
             kind: "money",
             primary: money(register.closingBalance),
@@ -271,7 +307,14 @@ export function buildBankStatementReport(
 
   return {
     title: `Bank statement — ${account.name}`,
-    pages: rows.length === 0 ? [cover, movement] : [cover, movement, ledger],
+    /*
+     * Ledger BEFORE the charts — *"line by line statement take surute rakho
+     * tarpor graph chart gulake nice rakho."* Right, and not only a
+     * preference: the line-by-line is the thing somebody opens a statement
+     * to read, and the charts are a summary of it. A summary before the
+     * thing it summarises asks the reader to take it on trust.
+     */
+    pages: rows.length === 0 ? [cover, movement] : [cover, ledger, movement],
   };
 
   function sheet(left: string, right: string): Omit<PdfPage, "blocks"> {
@@ -293,30 +336,40 @@ function ledgerRow(
   money: (value: string) => string,
 ): PdfStackCell[] {
   const voided = Boolean(row.voidedAt);
-  const party = row.vendorName ?? row.counterparty ?? row.categoryName;
-  const detail = [voided ? "VOIDED" : null, party, row.refNo]
-    .filter(Boolean)
-    .join(" · ");
 
   return [
-    { kind: "text", text: formatDay(row.txnDate) },
+    /*
+     * The date, with the transaction number beneath it.
+     *
+     * A `label` rather than plain text, because the number has to go
+     * somewhere now that Description is gone and this is the only cell with a
+     * second line to put it on. A voided row says so here too — it used to be
+     * marked in the description's detail line, which no longer exists, and a
+     * void that does not announce itself is a figure a reader will add up.
+     */
     {
       kind: "label",
-      text: row.description ?? "—",
-      detail: detail || null,
+      text: formatDay(row.txnDate),
+      detail:
+        [voided ? "VOIDED" : null, row.refNo].filter(Boolean).join(" · ") ||
+        null,
     },
     /*
+     * Debit is money OUT, credit is money IN. The order and the naming both
+     * come from the on-screen statement, so the two cannot be read against
+     * each other and disagree.
+     *
      * A voided row shows its figure in the column it was in and contributes
      * nothing. Printing it as blank would be tidier and would also make the
      * document disagree with the screen, which lists it — and the reason to
      * list a void at all is that somebody is looking for the entry they
      * remember making.
      */
-    row.direction === "in" && !voided
-      ? { kind: "money", primary: money(row.amount), tone: "in" }
-      : { kind: "empty" },
     row.direction === "out" && !voided
       ? { kind: "money", primary: money(row.amount), tone: "out" }
+      : { kind: "empty" },
+    row.direction === "in" && !voided
+      ? { kind: "money", primary: money(row.amount), tone: "in" }
       : { kind: "empty" },
     voided
       ? { kind: "caps", text: "void" }
@@ -463,7 +516,13 @@ function describePeriod(
 
   const openedOn = start ? formatDay(start) : "account opening";
   const closedOn = end ? formatDay(end) : "today";
-  const label = `${openedOn} → ${closedOn}`;
+  /*
+   * An EN DASH, not an arrow. The embedded subset has no U+2192, and an
+   * undrawable character comes out as a space — so every statement printed
+   * "05/05/2026 05/09/2026", a range with nothing between its ends. The dash
+   * is in the subset, and `SUBSTITUTES` now catches an arrow anyway.
+   */
+  const label = `${openedOn} – ${closedOn}`;
 
   return { label, lower: label, openedOn, closedOn };
 }

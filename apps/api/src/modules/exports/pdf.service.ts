@@ -195,6 +195,14 @@ const LATIN1 = ranges("0020-00FF");
  * reads as garbage.
  */
 const SUBSTITUTES: Record<string, string> = {
+  /*
+   * The subset has no arrow, and an undrawable character becomes a SPACE — so
+   * "05/05/2026 → 05/09/2026" printed as "05/05/2026 05/09/2026" on every
+   * bank statement, a range with nothing between its ends. A hyphen rather
+   * than an en dash because this map's output is emitted as-is: the Helvetica
+   * fallback is Latin-1 and has no en dash either.
+   */
+  "→": "-", // rightwards arrow
   "−": "-", // minus sign
   "–": "-", // en dash
   "—": "-", // em dash
@@ -546,6 +554,10 @@ export type PdfPagedBlock =
         secondary: string;
         source: string;
       }>;
+      /** Caps the figure. Omitted, the document's own scale decides. */
+      size?: number;
+      /** The box. Shrink it with the figure or the type floats in it. */
+      height?: number;
     }
   | {
       kind: "bigFigures";
@@ -557,12 +569,25 @@ export type PdfPagedBlock =
         /** A word rather than a figure — "Reconciled". */
         word?: boolean;
       }>;
+      /** Caps the figures. Omitted, the document's own scale decides. */
+      size?: number;
+      /** The band's height, which the figure sits inside. */
+      height?: number;
     }
   | {
       kind: "stackTable";
       columns: PdfStackColumn[];
       rows: PdfStackCell[][];
       total?: PdfStackCell[];
+      /**
+       * Multiplies every type size and row height in this table.
+       *
+       * Per table rather than per document, so a ledger of five columns and a
+       * ledger of nine can each be set at the size its own widest figure needs
+       * without the other three reports moving. 1 is what every existing
+       * caller gets.
+       */
+      scale?: number;
     }
   | {
       kind: "waterfall";
@@ -1051,11 +1076,11 @@ export class PdfService {
         return;
 
       case "figureBoxes":
-        this.renderFigureBoxes(doc, block.items, p);
+        this.renderFigureBoxes(doc, block, p);
         return;
 
       case "bigFigures":
-        this.renderBigFigures(doc, block.items, p);
+        this.renderBigFigures(doc, block, p);
         return;
 
       case "stackTable":
@@ -1225,24 +1250,28 @@ export class PdfService {
    */
   private renderFigureBoxes(
     doc: PDFKit.PDFDocument,
-    items: Extract<PdfPagedBlock, { kind: "figureBoxes" }>["items"],
+    block: Extract<PdfPagedBlock, { kind: "figureBoxes" }>,
     p: Palette,
   ): void {
+    const items = block.items;
     const top = doc.y;
-    const height = 114;
-    const pad = 15;
+    const height = block.height ?? 114;
+    const cap = block.size ?? SIZE.boxFigure;
+    /* The three lines inside the box slide up with the box itself. */
+    const k = height / 114;
+    const pad = 15 * k;
     const inner = BOX_WIDTH - pad * 2;
 
     // Both boxes take the size the wider figure needs, so the cover's two
     // headline numbers are the same size as each other.
     doc.font(BOLD);
     const figureSize =
-      SIZE.boxFigure *
+      cap *
       sharedScale(
         doc,
         items.slice(0, 2).map((item) => ({
           text: drawable(item.primary),
-          size: SIZE.boxFigure,
+          size: cap,
           width: inner,
         })),
       );
@@ -1258,31 +1287,36 @@ export class PdfService {
 
       this.caps(doc, item.label, {
         x: x + pad,
-        y: top + 15,
+        y: top + 15 * k,
         width: inner,
         color: p.muted,
       });
 
       doc.font(BOLD).fontSize(figureSize).fillColor(p.ink);
-      doc.text(fit(doc, drawable(item.primary), inner), x + pad, top + 33, {
+      doc.text(fit(doc, drawable(item.primary), inner), x + pad, top + 33 * k, {
         width: inner,
         lineBreak: false,
       });
 
       doc
         .font(BODY)
-        .fontSize(10)
+        .fontSize(10 * k)
         .fillColor(p.body)
-        .text(fit(doc, drawable(item.secondary), inner), x + pad, top + 71, {
-          width: inner,
-          lineBreak: false,
-        });
+        .text(
+          fit(doc, drawable(item.secondary), inner),
+          x + pad,
+          top + 71 * k,
+          {
+            width: inner,
+            lineBreak: false,
+          },
+        );
 
       doc
         .font(BODY)
-        .fontSize(8)
+        .fontSize(8 * k)
         .fillColor(p.faint)
-        .text(fit(doc, drawable(item.source), inner), x + pad, top + 89, {
+        .text(fit(doc, drawable(item.source), inner), x + pad, top + 89 * k, {
           width: inner,
           lineBreak: false,
         });
@@ -1300,11 +1334,14 @@ export class PdfService {
    */
   private renderBigFigures(
     doc: PDFKit.PDFDocument,
-    items: Extract<PdfPagedBlock, { kind: "bigFigures" }>["items"],
+    block: Extract<PdfPagedBlock, { kind: "bigFigures" }>,
     p: Palette,
   ): void {
+    const items = block.items;
     const top = doc.y;
-    const height = 102;
+    const height = block.height ?? 102;
+    const cap = block.size ?? SIZE.bigFigure;
+    const k = height / 102;
     const column = CONTENT / Math.max(1, items.length);
     // A left-set figure stands off the divider that follows it, which is drawn
     // 8pt into the next column: at 32pt with a ৳ on the front, "৳34,68,100" ran
@@ -1330,7 +1367,7 @@ export class PdfService {
         .filter((item) => !item.word)
         .map((item) => ({
           text: drawable(item.value),
-          size: SIZE.bigFigure,
+          size: cap,
           width: cellFor(item.align ?? "left"),
         })),
       0.58,
@@ -1343,21 +1380,21 @@ export class PdfService {
 
       if (index > 0 && align === "left") {
         doc
-          .moveTo(x - 8, top + 12)
-          .lineTo(x - 8, top + height - 12)
+          .moveTo(x - 8, top + 12 * k)
+          .lineTo(x - 8, top + height - 12 * k)
           .lineWidth(0.8)
           .strokeColor(p.rule)
           .stroke();
       }
 
-      const valueY = item.word ? top + 24 : top + 15;
+      const valueY = item.word ? top + 24 * k : top + 15 * k;
       const value = drawable(item.value);
 
       doc.font(BOLD).fillColor(p.ink);
       if (item.word) {
-        sized(doc, value, width, SIZE.bigFigure * 0.86);
+        sized(doc, value, width, cap * 0.86);
       } else {
-        doc.fontSize(SIZE.bigFigure * scale);
+        doc.fontSize(cap * scale);
       }
       doc.text(fit(doc, value, width), x, valueY, {
         width,
@@ -1370,7 +1407,7 @@ export class PdfService {
           .font(BODY)
           .fontSize(SIZE.bigSecondary)
           .fillColor(p.body)
-          .text(fit(doc, drawable(item.secondary), width), x, top + 56, {
+          .text(fit(doc, drawable(item.secondary), width), x, top + 56 * k, {
             width,
             align,
             lineBreak: false,
@@ -1379,7 +1416,7 @@ export class PdfService {
 
       this.caps(doc, item.label, {
         x,
-        y: top + 76,
+        y: top + 76 * k,
         width,
         color: p.muted,
         align,
@@ -1416,6 +1453,9 @@ export class PdfService {
       running += w;
     }
 
+    /* 1 for every table that does not ask, so the other reports do not move. */
+    const k = block.scale ?? 1;
+
     const header = () => {
       const top = doc.y;
       let deepest = top;
@@ -1431,12 +1471,12 @@ export class PdfService {
             width: widths[i],
             color: p.muted,
             align: column.align ?? "left",
-            size: SIZE.tableHead,
+            size: SIZE.tableHead * k,
             wrap: true,
           }),
         );
       });
-      doc.y = Math.max(top + 16, deepest + 2);
+      doc.y = Math.max(top + 16 * k, deepest + 2);
       this.hairline(doc, doc.y, p.ink, 1.1);
       doc.y += 1;
     };
@@ -1444,7 +1484,7 @@ export class PdfService {
     header();
 
     block.rows.forEach((row, index) => {
-      const height = this.stackRowHeight(row);
+      const height = this.stackRowHeight(row) * k;
       /**
        * A row split across a page break is a row nobody can read.
        *
@@ -1457,17 +1497,17 @@ export class PdfService {
        * balance attached to the line that produced it.
        */
       const isLast = index === block.rows.length - 1;
-      const needed = height + (isLast && block.total ? TOTAL_ROW : 0);
+      const needed = height + (isLast && block.total ? TOTAL_ROW * k : 0);
 
       if (doc.y + needed > BODY_BOTTOM) {
         flow.next();
         header();
       }
-      this.drawStackRow(doc, row, block.columns, offsets, widths, p, height);
+      this.drawStackRow(doc, row, block.columns, offsets, widths, p, height, k);
     });
 
     if (block.total) {
-      if (doc.y + TOTAL_ROW > BODY_BOTTOM) {
+      if (doc.y + TOTAL_ROW * k > BODY_BOTTOM) {
         flow.next();
         header();
       }
@@ -1475,13 +1515,14 @@ export class PdfService {
       block.total.forEach((cell, i) => {
         this.drawStackCell(doc, cell, {
           x: offsets[i],
-          y: top + 8,
+          y: top + 8 * k,
           width: widths[i],
           align: block.columns[i]?.align ?? "left",
           palette: p,
+          scale: k,
         });
       });
-      doc.y = top + TOTAL_ROW;
+      doc.y = top + TOTAL_ROW * k;
     }
 
     doc.x = MARGIN;
@@ -1504,16 +1545,18 @@ export class PdfService {
     widths: number[],
     p: Palette,
     height: number,
+    scale = 1,
   ): void {
     const top = doc.y;
 
     row.forEach((cell, i) => {
       this.drawStackCell(doc, cell, {
         x: offsets[i],
-        y: top + 7,
+        y: top + 7 * scale,
         width: widths[i],
         align: columns[i]?.align ?? "left",
         palette: p,
+        scale,
       });
     });
 
@@ -1531,9 +1574,12 @@ export class PdfService {
       width: number;
       align: "left" | "right" | "center";
       palette: Palette;
+      /** Multiplies every type size and offset in the cell. */
+      scale?: number;
     },
   ): void {
     const p = at.palette;
+    const k = at.scale ?? 1;
     // A right-aligned figure grows leftwards. Without a standing gap the
     // closing position ran straight into "BANK / CARD" beside it.
     const gutter = at.align === "right" ? CELL_GUTTER : 0;
@@ -1547,17 +1593,18 @@ export class PdfService {
       case "caps":
         this.caps(doc, cell.text, {
           x: left,
-          y: at.y + 3,
+          y: at.y + 3 * k,
           width,
           color: p.ink,
           align: at.align,
+          size: SIZE.caps * k,
         });
         return;
 
       case "text":
         doc
           .font(BODY)
-          .fontSize(SIZE.rowLabel)
+          .fontSize(SIZE.rowLabel * k)
           .fillColor(p.body)
           .text(fit(doc, drawable(cell.text), width), left, at.y, {
             width,
@@ -1567,7 +1614,10 @@ export class PdfService {
         return;
 
       case "label": {
-        doc.font(BOLD).fontSize(SIZE.rowLabel).fillColor(p.ink);
+        doc
+          .font(BOLD)
+          .fontSize(SIZE.rowLabel * k)
+          .fillColor(p.ink);
         doc.text(fit(doc, drawable(cell.text), width), left, at.y, {
           width,
           align: at.align,
@@ -1576,9 +1626,9 @@ export class PdfService {
         if (cell.detail) {
           doc
             .font(BODY)
-            .fontSize(SIZE.rowDetail)
+            .fontSize(SIZE.rowDetail * k)
             .fillColor(p.muted)
-            .text(fit(doc, drawable(cell.detail), width), left, at.y + 15, {
+            .text(fit(doc, drawable(cell.detail), width), left, at.y + 15 * k, {
               width,
               align: at.align,
               lineBreak: false,
@@ -1590,26 +1640,31 @@ export class PdfService {
       case "money": {
         const colour =
           cell.tone === "in" ? p.in : cell.tone === "out" ? p.out : p.ink;
-        const size = cell.large ? SIZE.moneyLarge : SIZE.money;
+        const size = (cell.large ? SIZE.moneyLarge : SIZE.money) * k;
         const primary = drawable(cell.primary);
 
         // Sized down rather than cut: this is the figure the reader came for.
         doc.font(BOLD).fillColor(colour);
         sized(doc, primary, width, size);
-        doc.text(fit(doc, primary, width), left, cell.large ? at.y - 3 : at.y, {
-          width,
-          align: at.align,
-          lineBreak: false,
-        });
+        doc.text(
+          fit(doc, primary, width),
+          left,
+          cell.large ? at.y - 3 * k : at.y,
+          {
+            width,
+            align: at.align,
+            lineBreak: false,
+          },
+        );
 
         if (cell.secondary) {
           const secondary = drawable(cell.secondary);
           doc.font(BODY).fillColor(p.muted);
-          sized(doc, secondary, width, SIZE.moneySecondary);
+          sized(doc, secondary, width, SIZE.moneySecondary * k);
           doc.text(
             fit(doc, secondary, width),
             left,
-            at.y + (cell.large ? 20 : 16),
+            at.y + (cell.large ? 20 : 16) * k,
             { width, align: at.align, lineBreak: false },
           );
         }

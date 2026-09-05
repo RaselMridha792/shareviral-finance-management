@@ -57,6 +57,73 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 73. The bank statement PDF: ledger first, four columns, nothing cut
+
+> *"bank statement export er etake valo ekta font a daw. ekhane font gula onek
+> boro boro dekhacche etar ui ke sundor koro. line by line statement take surute
+> rakho tarpor graph chart gulake nice rakho. and ekhane line by line table ta
+> theke description bad daw. ekhane date, debit credit, and ballance field
+> gulake rakho kono kichu jeno kata na pore font choto kore diyo dorkar hole."*
+
+**The ledger moved ahead of the charts.** Right, and not only a preference: the
+line-by-line is what somebody opens a statement to read, and the charts are a
+summary of it. A summary before the thing it summarises asks the reader to take
+it on trust. Pages are now cover → ledger → movement.
+
+**Four columns, Description gone.** It was taking 37% of the sheet and every
+other column was being cut to pay for it. Measured in the real face, at the old
+widths: the date needed **55.9pt of 54.9pt** and printed "09/06/20..", the
+description **210.6pt of 184.7pt**. Now, on the same figures:
+
+    Date      104.1pt      Debit  113.6pt      Credit  113.6pt      Balance  142.0pt
+
+**Debit then Credit, not In then Out.** `bank-statement-screen.tsx` puts
+`direction === "out"` under Debit and `"in"` under Credit; the PDF had the same
+two figures in the other order under other names, so a reader had to check the
+headings before trusting either. This is the one thing on the page that would be
+*wrong* rather than ugly if reversed, so the harness asserts it from the built
+rows rather than from the source.
+
+**The transaction number stays, under the date.** It is not a description — it
+is the handle you match a row to the bank's own statement by, and a statement
+whose rows cannot be identified is not one you can reconcile. It costs no width:
+it sits on the second line the date's row already has. A voided row says VOIDED
+there too, which it used to say in the description's detail line.
+
+**Two bugs found on the way.**
+
+The period read *"05/05/2026 05/09/2026"* — a range with nothing between its
+ends. The label is built with a `→`, **U+2192 is not in the embedded subset**,
+and `drawable()` turns an uncovered character into a space. Changed to an en
+dash, which is in the subset, and `SUBSTITUTES` now catches an arrow as a
+hyphen so the next one degrades instead of vanishing.
+
+And the harness's own first run measured columns **26pt too wide** — it assumed
+PDFKit's default 48pt margin where the service uses 61. A width check on the
+wrong page width would have called a cut column fine.
+
+**Type came down rather than the font changing.** Cover display 58 → 40, page
+titles 36 → 25, ledes 12.5 → 10.5, the cover's figure boxes and its foot band
+sized explicitly, the ledger table at `scale: 0.86`. The typeface is still Noto
+Sans Bengali and has to be: it is what draws **৳** at all — the built-in
+faces are Latin-1 and print the taka sign as nothing. Its Latin is the Noto
+Sans skeleton, so it is a real text face rather than a fallback. A different
+one means embedding another licensed file, which is a decision for the owner.
+
+**Three additive options on `pdf.service.ts`** — `size`/`height` on
+`figureBoxes` and `bigFigures`, `scale` on `stackTable`. Per block, defaulting
+to exactly what the other two reports already got, because that file draws the
+finance statement and the overview as well. Both were regenerated afterwards
+(6 pages and 1 page, 200) rather than reasoned about.
+
+**Proved by `.stmtpdfqa.mjs`** — 17 checks. A PDF cannot be read back as text
+here: the face is subsetted, so every string in the file is a run of glyph ids.
+So it measures the two things that decide the document instead — the spec the
+report builds, and **the width each cell will draw at, computed with PDFKit and
+the real embedded font** against the width its column actually has. That second
+one is the only way to know `fit()` is not about to append "..", because nothing
+in the source says it is going to.
+
 ## 71. Payroll's selection bar was inside the table
 
 > *"ekhane dekho multiple select korar por eta table er vitore dhuke jacche and
