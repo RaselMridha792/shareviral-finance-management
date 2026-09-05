@@ -419,13 +419,31 @@ export function PayrollListScreen({
                           {PAYROLL_STATUS_LABELS[run.status]}
                         </Badge>
                       </td>
+                      {/*
+                        Both of these only NAVIGATE — they open the sheet, which
+                        is where a run is edited and where its status changes,
+                        with the figures in front of whoever is changing them.
+                        But they are labelled "Edit" and "Change status", and a
+                        reader who can do neither should not be offered either:
+                        *"jegula write action diye thake button oigula hide
+                        thakbe se sudhu dekhte pabe"*.
+
+                        Nothing is lost by hiding them. The month itself is a
+                        link, so a reader still opens the sheet — they arrive at
+                        it through a word that promises only to show it.
+                      */}
                       <RowActions
-                        onEdit={() => router.push(`/payroll/${run.id}`)}
+                        onEdit={
+                          canWrite
+                            ? () => router.push(`/payroll/${run.id}`)
+                            : undefined
+                        }
                         second="status"
-                        // The status of a run is changed on the sheet itself,
-                        // where the figures being finalised are in front of
-                        // whoever is finalising them.
-                        onSecond={() => router.push(`/payroll/${run.id}`)}
+                        onSecond={
+                          canWrite
+                            ? () => router.push(`/payroll/${run.id}`)
+                            : undefined
+                        }
                         onDelete={canWrite ? () => del.ask(run) : undefined}
                       />
                     </tr>

@@ -68,3 +68,4 @@ apps/api/test/integration/*.xlsx
 .count.mjs
 .rolecheck.mjs
 .linkcheck.mjs
+.rolesweep.json

@@ -57,6 +57,80 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 75. A reader is offered nothing to write with
+
+> *"je role er jei page a access nei tar jonne oi page ta hide thakbe sidebar
+> thekeo. also je role view only tar jonne add reports etc mane jegula write
+> action diye thake button oigula hide thakbe se sudhu dekhte pabe."*
+
+**Half of it was already true and half of it was not**, and reading the source
+could not tell which. A screen gates its Add button on a `canWrite` a child may
+or may not receive; a nav item is filtered by a rule that looks right. So
+`.rolesweep.mjs` signs in as **all four roles** and walks **all sixteen
+screens** in a real browser, writing down what is actually on the page.
+
+**The rail was already correct.** HR sees 6 rows, CEO 15, CFO and Super Admin
+17. Nothing to do.
+
+**The buttons were not.** The first pass found six text controls. Then it was
+rerun counting `button[aria-label]` — the icon-only row actions, which carry no
+text and had been invisible to it. That took the count from 6 to **62**:
+
+    CEO, before          All transactions 24 · Subscriptions 24 · Team 9 ·
+                         Payroll 2 · Reports 5 (2 icons)
+    CEO, after           0 · 0 · 0 · 0 · 0
+
+**Six fixes, and the first is the one that mattered.**
+
+1. **`RowActions` renders nothing without a handler**, where it used to render
+   disabled and greyed at 35% opacity — visible, unclickable, on every row of
+   every table for anybody who cannot write. This is `components/ui/`, it
+   reaches **11 screens**, and the owner was asked before it was touched.
+   `disabled` still means what it always meant, and now means only that: the
+   action exists for this person but not for this row — a paid run, an
+   already-void entry. Worth showing greyed, because it explains itself.
+2. **The payroll list** passed `onEdit` and `onSecond` regardless of permission.
+   Both only NAVIGATE to the sheet, but they are labelled "Edit" and "Change
+   status". Gated — and nothing is lost, because the month is a link.
+3. **The statement's notes** — `PATCH /reports/statement` demands
+   `reports.view` AND `transactions.write`, so every control in that card was
+   offered to a CEO and then refused by the server. Now the notes still SHOW
+   and the editing does not.
+4. **"Remove note" bins** gone rather than greyed; disabled, they still said
+   "Remove note 1" to a screen reader.
+5. **"Create a heading"** hidden without `categories.write`. The tick list
+   beside it stays for everyone — it is `localStorage`, one person arranging
+   their own cards.
+6. **The trigger's label follows the reader**: "add category" for somebody who
+   can create one, "Choose cards" for somebody who cannot. A button promising to
+   add a category, opening a panel that cannot, is the small lie a view-only
+   role meets all day.
+
+**A rail row that led to a crash.** HR saw "AI tools and subscriptions" and
+clicking it gave *"This page couldn't load"* — the page fetches
+`accountsApi.list()` server-side and HR has no `accounts.read`. The lists only
+fill the add/edit drawer's pickers, which a reader never opens, so they fall
+back to empty rather than taking the screen down.
+
+**Two controls the CEO keeps, deliberately.** The dashboard's card chooser —
+"Edit" and "Add" — writes to `localStorage`. Nothing in the books moves and
+nobody else sees the difference; taking it away would leave a read-only role
+unable to choose even what to read. The harness allows exactly these two by
+name, so the exemption is written down rather than assumed.
+
+**The sweep is now a guard, not a report.** Six assertions: a reader is offered
+no write control anywhere, not one row icon, **a writer still has all 62**, HR's
+rail carries none of the six ledger screens, the CEO's carries no Import or
+Assistant, and every row in every rail opens without an error. It began as a
+report on purpose — a survey that only checks what somebody already suspected
+finds only that.
+
+**One thing not changed, and worth knowing.** HR typing `/transactions` still
+reaches a page shell; the API answers **403** and the data never arrives. The
+boundary holds — the rail is convenience, the server is the rule — but the
+screen says "couldn't load" rather than "not for you". A proper refusal page is
+its own item.
+
 ## 74. Admin and Finance retired; four roles left
 
 > *"admin role take delete kore daw and Finance Role take delete kore daw ekhane

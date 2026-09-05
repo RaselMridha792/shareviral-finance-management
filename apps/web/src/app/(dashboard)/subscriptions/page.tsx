@@ -20,9 +20,24 @@ export default async function SubscriptionsPage() {
   /* No category tree any more. The heading a subscription payment lands under
      is resolved on the server — it was always the same answer — so this page
      stopped fetching a list nothing on it reads. */
+  /*
+   * Both lists fall back to empty rather than taking the page down.
+   *
+   * HR may READ this register — the nav gates it on `vendors.read`, which HR
+   * has — but has neither `accounts.read` nor `team.read`... it has the second
+   * and not the first. So `accountsApi.list()` answered 403 and the whole
+   * screen rendered "This page couldn't load. A server error occurred": a row
+   * in the sidebar that leads to a crash.
+   *
+   * The lists only fill the pickers in the add/edit drawer, and a reader who
+   * cannot write never opens it. An empty picker for somebody who cannot use
+   * it is not a loss; a broken page is.
+   */
   const [accounts, members] = await Promise.all([
-    accountsApi.list(),
-    teamApi.list({ page: 1, status: "active" }),
+    accountsApi.list().catch(() => []),
+    teamApi
+      .list({ page: 1, status: "active" })
+      .catch(() => ({ items: [] as Awaited<ReturnType<typeof teamApi.list>>["items"] })),
   ]);
 
   return (

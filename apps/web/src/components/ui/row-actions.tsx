@@ -66,11 +66,26 @@ function IconButton({
   disabled?: boolean;
   danger?: boolean;
 }) {
+  /*
+   * No handler, no button.
+   *
+   * It used to render disabled and greyed at 35% — visible, unclickable, and
+   * on every row of every table for anybody who cannot write. The owner:
+   * *"je role view only tar jonne ... jegula write action diye thake button
+   * oigula hide thakbe se sudhu dekhte pabe."*
+   *
+   * `disabled` is still honoured, and still means something different: the
+   * action EXISTS for this person but not for this row — a paid payroll run
+   * that cannot be edited, a void that is already void. That is worth showing
+   * greyed, because it explains itself. An action they will never have is not.
+   */
+  if (!onClick) return null;
+
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || !onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
       className={cn(
@@ -104,6 +119,11 @@ export function RowActions({
 
   return (
     <td>
+      {/*
+        The cell keeps its width whether or not it holds anything, because the
+        column is sized by `RowActionsHead` — so a reader with no actions gets
+        an empty cell rather than a table that changes shape under them.
+      */}
       <div className="flex items-center justify-end gap-1">
         {extra}
         <IconButton label="Edit" icon={SquarePen} onClick={onEdit} />

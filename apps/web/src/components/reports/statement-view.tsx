@@ -240,6 +240,19 @@ export function StatementView({
   const canRunExports = useCan("exports.run");
   const canSeeMoney = useCan("dashboard.money");
   const canExport = canRunExports && canSeeMoney;
+  /*
+   * Whether the notes below can be WRITTEN, as opposed to read.
+   *
+   * `transactions.write`, matching the endpoint exactly: `PATCH
+   * /reports/statement` demands `reports.view` AND `transactions.write`,
+   * because marking a period reconciled is a claim about the books. A CEO has
+   * the first and not the second, so every control in this card was offered to
+   * them and then refused by the server — a button that exists to fail.
+   *
+   * The notes still SHOW. They are part of the statement, and the owner's rule
+   * for a view-only role is *"se sudhu dekhte pabe"* — read it, do not edit it.
+   */
+  const canEditStatement = useCan("transactions.write");
 
   const adopt = useCallback((next: FinancialStatement) => {
     setStatement(next);
@@ -945,7 +958,7 @@ export function StatementView({
                   rows={2}
                   maxLength={600}
                   value={note}
-                  disabled={sample}
+                  disabled={sample || !canEditStatement}
                   onChange={(event) =>
                     editNotes((current) =>
                       current.map((existing, at) =>
@@ -954,19 +967,26 @@ export function StatementView({
                     )
                   }
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  aria-label={`Remove note ${i + 1}`}
-                  disabled={sample}
-                  className="mt-1 shrink-0"
-                  onClick={() =>
-                    editNotes((current) => current.filter((_, at) => at !== i))
-                  }
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                {/*
+                  Gone rather than greyed for a reader. Disabled it still said
+                  "Remove note 1" to a screen reader and drew a bin beside a
+                  note they may only read.
+                */}
+                {canEditStatement ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    aria-label={`Remove note ${i + 1}`}
+                    disabled={sample}
+                    className="mt-1 shrink-0"
+                    onClick={() =>
+                      editNotes((current) => current.filter((_, at) => at !== i))
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                ) : null}
               </li>
             ))}
             {notes.length === 0 ? (
@@ -977,18 +997,20 @@ export function StatementView({
             ) : null}
           </ol>
 
-          <div>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              disabled={sample || notes.length >= 30}
-              onClick={() => editNotes((current) => [...current, ""])}
-            >
-              <Plus className="size-4" />
-              Add a note
-            </Button>
-          </div>
+          {canEditStatement ? (
+            <div>
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                disabled={sample || notes.length >= 30}
+                onClick={() => editNotes((current) => [...current, ""])}
+              >
+                <Plus className="size-4" />
+                Add a note
+              </Button>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-4 border-t border-border pt-5 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5">
@@ -997,7 +1019,7 @@ export function StatementView({
                 inputMode="numeric"
                 className="num w-28"
                 value={cycle}
-                disabled={sample}
+                disabled={sample || !canEditStatement}
                 onChange={(event) =>
                   editCycle(event.target.value.replace(/\D/g, "").slice(0, 2))
                 }
@@ -1012,7 +1034,7 @@ export function StatementView({
               <Select
                 className="w-44"
                 value={status}
-                disabled={sample}
+                disabled={sample || !canEditStatement}
                 onChange={(event) =>
                   editStatus(event.target.value as "draft" | "reconciled")
                 }
@@ -1030,7 +1052,7 @@ export function StatementView({
             signatories={signatories}
             onChange={editSignatories}
             period={{ start: period.start, end: period.end }}
-            disabled={sample}
+            disabled={sample || !canEditStatement}
           />
 
           {saveError ? (
@@ -1043,6 +1065,7 @@ export function StatementView({
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+            {canEditStatement ? (
             <Button
               variant="primary"
               size="md"
@@ -1057,6 +1080,7 @@ export function StatementView({
               )}
               Save
             </Button>
+            ) : null}
             {saved && !saving ? (
               <span className="flex items-center gap-1.5 text-xs text-positive">
                 <CircleCheck className="size-3.5" />

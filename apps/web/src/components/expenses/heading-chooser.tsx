@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
+import { useCan } from "@/components/auth/session-provider";
 import { NewCategoryDrawer } from "@/components/ledger/category-select";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
@@ -167,6 +168,8 @@ export function HeadingChooser({
   categories: CategoryNode[];
   onCreated: () => void | Promise<void>;
 }) {
+  /* `categories.write` — the same permission the endpoint behind it demands. */
+  const canCreate = useCan("categories.write");
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const picked = useHeadingChoice();
@@ -215,9 +218,19 @@ export function HeadingChooser({
 
   return (
     <>
+      {/*
+        The word matches what the drawer can do FOR THIS PERSON.
+
+        "add category" is the owner's own label and stays for anybody who can
+        create one. For a reader the create block below is hidden, so all the
+        drawer offers them is the tick list — and a button promising to add a
+        category, opening a panel that cannot, is the kind of small lie a
+        view-only role meets all day. They still get the panel; it just says
+        what it is.
+      */}
       <Button variant="secondary" size="md" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
-        add category
+        {canCreate ? "add category" : "Choose cards"}
       </Button>
 
       <Drawer
@@ -256,22 +269,33 @@ export function HeadingChooser({
           Below a rule and worded as what it is. Ticking a card is a
           preference; this changes what every expense form in the app offers,
           and it is not undone by unticking a box.
+
+          Which is exactly why it is gated and the ticking above is not. The
+          tick list lives in this browser's `localStorage` — a view-only role
+          arranging their own cards writes nothing and should keep doing it.
+          Creating a heading is a change to the company's books, and a role
+          that may not make one should not be offered the button:
+          *"jegula write action diye thake button oigula hide thakbe"*.
         */}
-        <div className="mt-4 border-t border-border pt-4">
-          <p className="text-sm font-medium">Need a heading that is not here?</p>
-          <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
-            A new one appears everywhere expenses are recorded, not just on this
-            screen.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setCreating(true)}
-          >
-            <Plus className="size-3.5" />
-            Create a heading
-          </Button>
-        </div>
+        {canCreate ? (
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-sm font-medium">
+              Need a heading that is not here?
+            </p>
+            <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
+              A new one appears everywhere expenses are recorded, not just on
+              this screen.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreating(true)}
+            >
+              <Plus className="size-3.5" />
+              Create a heading
+            </Button>
+          </div>
+        ) : null}
       </Drawer>
 
       <NewCategoryDrawer
