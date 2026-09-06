@@ -30,7 +30,7 @@
     "db:bulk": "tsx src/db/seed-bulk.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.116.0",
+    "@anthropic-ai/sdk": "^0.123.0",
     "@finance/shared": "*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -46,12 +46,12 @@
     "helmet": "^8.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "pdfkit": "^0.17.2",
+    "pdfkit": "^0.20.2",
     "pg": "^8.23.0",
     "qrcode-generator": "^2.0.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "zod": "^4.1.12"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
