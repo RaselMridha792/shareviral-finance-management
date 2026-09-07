@@ -53,11 +53,16 @@ cd "$(dirname "$0")"
 WIPE=0
 [ "${1:-}" = "--wipe" ] && WIPE=1
 
-DB="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -- '-db-')"
+# THIS project's `db`, asked of compose. This script empties tables, so which
+# database it is pointed at is the whole question. It used to take the first
+# container on the box whose name contained `-db-`, which became the HR
+# application's database the night a second stack was put on the same VPS.
+DB="$(COMPOSE_PROFILES=local-db docker compose ps -q db 2>/dev/null | head -n1)"
 if [ -z "$DB" ]; then
   echo "No database container found." >&2
   exit 1
 fi
+echo "Database container: $(docker inspect -f '{{.Name}}' "$DB" 2>/dev/null | sed 's#^/##')"
 
 psql() {
   docker exec -i "$DB" \

@@ -82,10 +82,15 @@ say "Database"
 # Credentials from inside the container: `.env` is read by docker compose, not
 # by this shell, and sourcing it here would drag every secret into scope for a
 # report that needs none of them.
-DB="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -- '-db-')"
+#
+# This project's `db`, asked of compose. It used to take the first container
+# on the box whose name contained `-db-` — fine with one stack on the machine,
+# and the HR application's database the moment there were two.
+DB="$(COMPOSE_PROFILES=local-db docker compose ps -q db 2>/dev/null | head -n1)"
 if [ -z "$DB" ]; then
   echo "  no database container found"
 else
+  echo "  $(docker inspect -f '{{.Name}}' "$DB" 2>/dev/null | sed 's#^/##')"
   # stderr is kept, not sent to /dev/null.
   #
   # The first version of this asked `transactions` for `deleted_at`, a column

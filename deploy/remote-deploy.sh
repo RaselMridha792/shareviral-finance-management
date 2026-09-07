@@ -109,9 +109,24 @@ if [ -d ./sql ]; then
   # no `db` service at all.
   COMPOSE_PROFILES=local-db docker compose up -d db >/dev/null 2>&1 || true
 
-  db_container="$(docker ps --format '{{.Names}}' | grep -m1 -- '-db-' || true)"
+  # THIS project's `db`, asked of compose — not the first container on the box
+  # whose name contains `-db-`.
+  #
+  # That is what this line did, and it was right for as long as this was the
+  # only stack on the machine. The night a second application (HRM) was put
+  # on the same VPS, `docker ps` listed its `hrm-db-1` first, `grep -m1`
+  # took it, and every deploy of the finance app ran the finance app's
+  # migrations against the HR database — which failed on the first foreign
+  # key, so the deploy stopped every minute and the finance app fell behind
+  # main. Had the migration been one that applied cleanly, nothing would have
+  # failed at all: the tables would simply have been created in the wrong
+  # database, and the finance app's schema left where it was.
+  #
+  # The same profile as the `up -d db` above, so compose can see the service.
+  db_container="$(COMPOSE_PROFILES=local-db docker compose ps -q db 2>/dev/null | head -n1 || true)"
 
   if [ -n "$db_container" ]; then
+    echo "schema: in $(docker inspect -f '{{.Name}}' "$db_container" 2>/dev/null | sed 's#^/##')"
     # The credentials come from inside the container, not from this shell.
     #
     # `.env` is read by docker compose, not by bash, so POSTGRES_USER is not a
