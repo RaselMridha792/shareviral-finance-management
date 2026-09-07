@@ -57,6 +57,47 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 76. nginx joins a shared network, so a second app can share the box
+
+Deploy configuration, so it travels alone.
+
+The owner is building an HR app — **shareviral-hrm, its own repository** — and
+hosting it on this server for now. The blocker is not code: **this nginx holds
+80 and 443**, and two containers cannot bind the same port. So that stack binds
+no host ports at all, sits on a shared Docker network, and this nginx routes
+`hrm.hellonizam.com` to it by container name.
+
+One service joins `hellonizam-edge`, and it is nginx. Not `db` — reachable from
+another application's containers is precisely what a database must not be.
+
+**`default` is listed explicitly, and that is the line to not delete.** Naming
+any network on a service REPLACES the implicit one. Leave `default` out and
+nginx keeps its new network and loses the one `web`, `api` and `adminer` are on
+— which is every hostname in `sfm.conf` failing to resolve, on the one container
+that serves all of them. It would deploy green and the whole site would be 502.
+
+**`external: true`** because neither stack owns the network. Compose would
+otherwise create it per project and each would get its own — two networks with
+one name and no route between them. It is created once, by hand:
+`docker network create hellonizam-edge`.
+
+**Why this is a commit and not a server-side edit.** The HR session's advice was
+right about everything except where the change lives: `watch-and-deploy.sh` runs
+`git reset --hard origin/main`, so a `docker-compose.yml` edited on the server
+survives until the next SFM deploy and then silently vanishes. Compose would
+recreate nginx without the network on some unrelated future release, the HR app
+would start answering 502, and nothing in that day's diff would mention it.
+
+**Applying it without downtime**: `docker network connect hellonizam-edge
+sfm-nginx-1` attaches the running container immediately and needs no restart —
+name resolution goes through `resolver 127.0.0.11` per request, so nothing has
+to be reloaded. This commit is what makes it survive the next recreate.
+
+Checked by parsing the file rather than reading it: five services still there,
+`nginx.networks` is `["default", "hellonizam-edge"]`, `db` is untouched on the
+implicit network. A compose file that fails to parse takes both applications
+down, and this one is edited rarely enough that nobody would suspect it.
+
 ## 75. A reader is offered nothing to write with
 
 > *"je role er jei page a access nei tar jonne oi page ta hide thakbe sidebar

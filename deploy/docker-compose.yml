@@ -191,6 +191,34 @@ services:
       # of a page nobody had set up yet. A missing password file inside a
       # mounted directory is a 500 on that one hostname instead.
       - ./nginx/secrets:/etc/nginx/secrets:ro
+    # NGINX ALONE JOINS THE SHARED NETWORK.
+    #
+    # This container is the only front door on the box: it holds 80 and 443, so
+    # a second application cannot have its own. `hellonizam-edge` is how it
+    # reaches one — the HR app (shareviral-hrm, its own repository) binds no
+    # host ports at all and is routed to by container name.
+    #
+    # `default` is listed explicitly because naming any network replaces the
+    # implicit one. Leave it out and nginx keeps its new network and loses the
+    # one `web`, `api` and `adminer` are on — which is every hostname in
+    # sfm.conf failing to resolve, on the container that serves all of them.
+    #
+    # Nothing else here joins it. The database especially: reachable from
+    # another application's containers is exactly what it must not be.
+    networks:
+      - default
+      - hellonizam-edge
 
 volumes:
   db-data:
+
+networks:
+  # Created once, by hand, on the server:
+  #
+  #     docker network create hellonizam-edge
+  #
+  # `external` because neither stack owns it — compose would otherwise try to
+  # create it per project and each would get its own, which is two networks
+  # with one name and no route between them.
+  hellonizam-edge:
+    external: true
