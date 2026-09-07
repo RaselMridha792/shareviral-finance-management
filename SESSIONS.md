@@ -57,6 +57,81 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 77. app. and api. went 502 for hours, from a name collision I created
+
+Deploy configuration, so it travels alone. **This is my bug, start to finish.**
+
+The owner: *"finance app 502 dicche — tinbar retry korte o same."*
+
+### What it looked like
+
+Both `app.` and `api.` returning 502 while `hrm.` and `hrmapi.` answered 200
+**through the same nginx**. Every container `Up`, `sfm-db-1` healthy for twelve
+days, **2.9GiB of 3.8GiB memory free**, and nothing in `dmesg` about the OOM
+killer. Two of us guessed memory pressure. Both wrong.
+
+nginx's error log said the one thing that mattered:
+
+    connect() failed (111: Connection refused) while connecting to upstream,
+      upstream: "http://172.16.1.4:3000/", host: "app.hellonizam.com"
+      upstream: "http://172.16.1.3:4001/", host: "api.hellonizam.com"
+
+**Connection refused, not host-not-found and not a timeout.** The name resolved.
+nginx reached a container. Nothing was listening on that port there.
+
+### What it was
+
+Entry 76 put this nginx on a second network so a second application could share
+the box. Compose gives every service a DNS alias equal to its **service name**
+on every network it joins — and that application's services are also called
+`web`, `api` and `adminer`.
+
+So `http://web:3000` stopped being a name and became a coin toss. Docker's
+resolver answered with whichever it liked; when it answered with the other app's
+container — which listens on **3100**, not 3000 — the connection was refused.
+Same for `api`: that one listens on 4002, this config asks for 4001.
+
+It **flapped for hours** rather than failing outright, which is why it read as
+something intermittent and mysterious. `resolver … valid=30s`: every thirty
+seconds the cache expired and it was a fresh toss. The log has a 200 at 16:16:13
+sitting between 502s either side of it — including the one my own HRM deploy
+health check made, at the exact moment it happened to win the toss and reported
+"the finance app still answers".
+
+Restarting the containers appeared to fix it. It did not; it only re-rolled.
+
+### The fix
+
+Every upstream in `sfm.conf` is a **container name** now — `sfm-web-1`,
+`sfm-api-1`, `sfm-adminer-1`. Those are unique across the whole Docker daemon:
+`sfm-web-1` can only ever be this stack's web. Service names are unique only
+within a project, and this box now has two.
+
+The HR app's own config has used container names from the day it was written,
+which is exactly why it was never affected — and why the outage looked like it
+had nothing to do with it.
+
+### What I should have caught
+
+I wrote both files. I checked the two configs against each other for
+`limit_req_zone` names, for hostnames, and for a duplicate `resolver` — and
+wrote in entry 76 that they did not collide. **I never checked the upstream
+names**, which are the one thing the two stacks genuinely share once they share
+a network.
+
+The health check I added in entry 75 to protect this app is the same one that
+reported it healthy while it was already broken. A single request against
+something that fails half the time is not a check; it is a coin toss with a
+comment above it.
+
+### To do, not done here
+
+The other side of this is that the HR stack should not be putting `web`, `api`
+and `adminer` on a shared network at all. Fixing SFM's upstreams removes the
+ambiguity today; renaming those services removes the whole class of it, for the
+next application as well as this one. That is a change in the other repository
+and it travels alone.
+
 ## 76. nginx joins a shared network, so a second app can share the box
 
 Deploy configuration, so it travels alone.
