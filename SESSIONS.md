@@ -57,6 +57,66 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 78. The deploy ran this app's migrations against the HR database — 8 Sep 2026
+
+The fix in 77 (`b732ddb`) was right and did not land. `verify` waited twenty
+minutes on `<no answer>`; the site stayed 502 for three more hours. Read from
+the box, not guessed:
+
+```
+[2026-09-08 02:00:15] deploying b732ddb (running 6ccf6c5)
+ERROR:  relation "public.team_members" does not exist
+migration failed: ./sql/2026-08-16-files.sql
+[2026-09-08 02:00:20] DEPLOY FAILED at b732ddb
+```
+
+Every minute, since the HR stack came up. `remote-deploy.sh` found the
+database with `docker ps | grep -m1 -- '-db-'`. There were now two containers
+with `-db-` in the name, `docker ps` lists the newer first, and the newer was
+**`hrm-db-1`**. So each deploy opened `psql` in the HR app's database, saw a
+`schema_migrations` that was not ours (the HR app keeps one under the same
+name), found none of our files in it, and ran `2026-08-16-files.sql` — which
+stopped at the first foreign key because `team_members` is not a table over
+there. `ON_ERROR_STOP`, exit 1, nothing recorded, try again next minute. And
+because the migration step comes **before** `git reset`'s new `sfm.conf` is
+ever tested or reloaded, the nginx fix sat in the working tree unread.
+
+Had that first file been one that applied cleanly, nothing would have
+failed: our tables would have been created in the HR database and the deploy
+would have gone green. The file opens with `begin;`, so the failure rolled
+back whole; `\dt` and `\dT` on `hrm-db-1` the next morning show only the HR
+app's three tables and four enums.
+
+**Same defect, three files.** `status.sh` and `clean-for-production.sh`
+chose the container the same way. The second empties every table it is
+pointed at. All three now ask compose — `COMPOSE_PROFILES=local-db docker
+compose ps -q db`, the call the deploy already makes to start it — and each
+prints which container it chose, so the next time this is wrong it is a line
+in the log rather than a missing table.
+
+**How the site actually came back**, in order, all from the owner's terminal:
+
+1. `git reset --hard origin/main` on the box, `nginx -t`, `nginx -s reload` —
+   the 77 fix loaded by hand, since the deploy would not reach it. 502 → 200
+   in three seconds. `nslookup web` inside `sfm-nginx-1` had answered
+   `172.16.1.4` = `hrm-web-1`, which settled 77's diagnosis before touching
+   anything.
+2. `fddee60` pushed — the three scripts. The watcher took it on its own;
+   `verify` green; `/api/health` reports `fddee60`.
+
+**What this night is about, in one sentence:** every "find the X" in
+`deploy/` was written when this was the only stack on the machine, and
+"the one whose name contains" stopped being a description the day a second
+one arrived. Two found (77, 78). A wider audit of both deploy directories was
+started and did not finish; a third may exist — `docker image prune -af` at
+the end of `remote-deploy.sh` is daemon-wide and worth a look.
+
+**Left where it is.** `sheet-new.png` is modified in the working tree and is
+not mine. `next.config.ts`'s `staleTimes.static: 0` still draws a warning in
+the web logs (Next wants ≥ 30) — its own session. The HR stack still carries
+`web`/`api` aliases on `hellonizam-edge`; harmless now that both configs use
+container names, but recorded over there as the thing to rename.
+
 ## 77. app. and api. went 502 for hours, from a name collision I created
 
 Deploy configuration, so it travels alone. **This is my bug, start to finish.**
