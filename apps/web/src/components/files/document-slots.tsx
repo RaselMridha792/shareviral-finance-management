@@ -51,8 +51,41 @@ const SLOTS: readonly FileKind[] = [
      owner columns, so an e-Return document is a team_member file rather than a
      ninth owner. The card names the year; this is the paper. */
   "e_return",
+  /* The four carried over from the HR app, 23 Sep 2026.
+     A row each, unconditionally, because that is what this card is for: the
+     question it answers is "what is still missing", and a kind with no row can
+     never be missing — it is simply invisible, which is how a value gets
+     stored and never rendered. Appended rather than woven in, so the order
+     people already know does not move under them.
+     `bank_details` needs `team.compensation.read` to be read, like the two
+     pay-bearing kinds above it, so a role without that permission sees the row
+     and "Not on file" — which is what it has always seen for the appointment
+     letter, and is the honest shape: the row says the paper is expected, not
+     that it is absent from the company. */
+  "education_certificate",
+  "experience_letter",
+  "release_letter",
+  "bank_details",
   "other",
 ];
+
+/**
+ * What to call a file on screen.
+ *
+ * `label` is typed by whoever uploaded it, accepted by the upload endpoint and
+ * stored — and it was never shown. Every row printed `originalName`, which is
+ * whatever the scanner called the file, so four papers filed as `scan_0001.pdf`
+ * through `scan_0004.pdf` were indistinguishable although the field that told
+ * them apart was already in the row and already in the DTO.
+ *
+ * So: the label when there is one, the filename when there is not — and the
+ * filename underneath either way, because that is what the download will be
+ * called and somebody checking a document should be able to see both.
+ */
+function displayName(file: StoredFile): string {
+  const label = file.label?.trim();
+  return label ? label : file.originalName;
+}
 
 export function DocumentSlots({
   memberId,
@@ -132,7 +165,7 @@ export function DocumentSlots({
     setPendingDelete(null);
     try {
       await deleteStoredFile(file.id);
-      toast.show(`${file.originalName} removed.`);
+      toast.show(`${displayName(file)} removed.`);
       setReloads((n) => n + 1);
     } catch (caught) {
       toast.show(
@@ -206,14 +239,14 @@ export function DocumentSlots({
       <ImageLightbox
         open={Boolean(preview?.isImage)}
         src={preview ? fileHref(preview.id) : null}
-        alt={preview?.originalName ?? ""}
+        alt={preview ? displayName(preview) : ""}
         onClose={() => setPreview(null)}
       />
 
       <DocumentViewer
         open={Boolean(preview && !preview.isImage)}
         src={preview ? `${fileHref(preview.id)}?inline=1` : null}
-        name={preview?.originalName ?? ""}
+        name={preview ? displayName(preview) : ""}
         downloadHref={preview ? fileHref(preview.id) : ""}
         onClose={() => setPreview(null)}
       />
@@ -226,7 +259,7 @@ export function DocumentSlots({
         body={
           <>
             <span className="font-medium text-foreground">
-              {pendingDelete?.originalName}
+              {pendingDelete ? displayName(pendingDelete) : ""}
             </span>{" "}
             will be deleted from this company&apos;s server. The record that it
             existed stays in the audit log, but the file itself cannot be
@@ -257,7 +290,7 @@ function Row({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={fileHref(file.id)}
-          alt={file.originalName}
+          alt={displayName(file)}
           loading="lazy"
           className="size-9 shrink-0 cursor-zoom-in rounded object-cover"
           onClick={onPreview}
@@ -269,8 +302,12 @@ function Row({
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{file.originalName}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="truncate text-sm">{displayName(file)}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {/* The filename stays visible whenever a label has taken the line
+              above it — it is what the download will be called, and a person
+              matching a paper against an email attachment needs it. */}
+          {file.label?.trim() ? `${file.originalName} · ` : ""}
           {formatFileSize(file.sizeBytes)}
           {file.uploadedByName ? ` · ${file.uploadedByName}` : ""}
         </p>
@@ -283,13 +320,13 @@ function Row({
         on file is the signed one wants to look at it, not to own a copy of
         it. Saving is a button inside the viewer.
       */}
-      <IconButton label={`View ${file.originalName}`} onClick={onPreview}>
+      <IconButton label={`View ${displayName(file)}`} onClick={onPreview}>
         <Eye className="size-4" />
       </IconButton>
 
       {canWrite ? (
         <IconButton
-          label={`Remove ${file.originalName}`}
+          label={`Remove ${displayName(file)}`}
           destructive
           onClick={onDelete}
         >

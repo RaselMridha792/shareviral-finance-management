@@ -102,6 +102,39 @@ export const FILE_KINDS = [
    * takes new values there.
    */
   "prepared_signature",
+  /* ------------------------------------------------------------------------
+   * The four papers the HR app holds and this one did not, 23 Sep 2026.
+   *
+   * The two apps are separate repositories sharing a server and nothing else,
+   * and they had drifted into two vocabularies for the same filing cabinet:
+   * five of HR's ten kinds already matched a kind here, and the rest would
+   * have arrived as `other` — a pile of indistinguishable documents. The owner
+   * decided on 22 Sep 2026 to BUILD the missing slots on both sides instead.
+   * These four are this side's half.
+   *
+   * On the end and in this order, for the reason `resignation_letter` above
+   * gives: `ALTER TYPE ... ADD VALUE` with no `AFTER` appends, and
+   * deploy/sql/2026-09-23-hr-file-kinds.sql adds them in exactly this
+   * sequence. This array is that type's declaration order — `pgEnum` in
+   * apps/api/src/db/schema/files.ts is built straight from it — so inserting
+   * one of these mid-array would make the list a second, disagreeing claim
+   * about what the database did.
+   *
+   * HR's tenth kind, `linkedin_profile`, is absent on purpose: it is a URL
+   * with no bytes behind it, so it is not a document and there is nothing here
+   * for it to be.
+   * --------------------------------------------------------------------- */
+  "education_certificate",
+  /** The clearance a previous employer gave on the way out. NOC, locally. */
+  "release_letter",
+  "experience_letter",
+  /**
+   * The page that says where somebody's salary is to be sent.
+   *
+   * Sensitive, and gated as such — see `COMPENSATION_FILE_KINDS` below, which
+   * is where the honest part of that promise is written down.
+   */
+  "bank_details",
 ] as const;
 
 export const fileKindSchema = z.enum(FILE_KINDS);
@@ -172,6 +205,13 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
   import_source: "Imported file",
   other: "Document",
   resignation_letter: "Resignation letter",
+  /* The same words the HR app prints for the same paper. Two apps naming one
+     document differently is how a person comes to believe they are two
+     documents and uploads it twice. */
+  education_certificate: "Highest education certificate",
+  release_letter: "Release letter / NOC",
+  experience_letter: "Experience letter",
+  bank_details: "Bank details",
 };
 
 /**
@@ -181,10 +221,23 @@ export const FILE_KIND_LABELS: Record<FileKind, string> = {
  * state it, so both follow `team.compensation.read` rather than `team.read`.
  * This matters less than it did — HR reads compensation now — but the gate is
  * one line and the roles it still holds back are real.
+ *
+ * `bank_details` is here for a reason worth stating rather than inferring.
+ * It does not state a salary; it says where one is sent. In the HR app that
+ * document is SENSITIVE — hidden from anybody who cannot read pay, Management
+ * included — and in this app the same paper would otherwise sit in the general
+ * pile, readable by every role that can open a person's record. The owner was
+ * told that plainly on 22 Sep 2026 and asked for the document to travel here
+ * anyway; that is theirs to decide. What this app can still do is classify it
+ * as honestly as it is able, and this list is that: the narrowest gate here,
+ * the one the other papers that state what somebody is paid already stand
+ * behind. It is not as narrow as HR's, and pretending otherwise by filing it
+ * with the CVs would be the worse answer.
  */
 export const COMPENSATION_FILE_KINDS: readonly FileKind[] = [
   "appointment_letter",
   "salary_certificate",
+  "bank_details",
 ];
 
 /** Which kinds may hang on which owner. Anything else is a 400. */
@@ -201,6 +254,14 @@ export const KINDS_BY_OWNER: Record<FileOwner, readonly FileKind[]> = {
        columns and three migrations have already fought over it. */
     "e_return",
     "resignation_letter",
+    /* The four carried over from the HR app, 23 Sep 2026. Listed here or the
+       upload is a 400 "cannot be attached here" — the kind existing in the
+       enum is not the same as this app agreeing it belongs on a person. All
+       four are papers ABOUT a person and hang nowhere else. */
+    "education_certificate",
+    "release_letter",
+    "experience_letter",
+    "bank_details",
     "other",
   ],
   transaction: ["receipt", "invoice", "bank_statement", "other"],
@@ -298,6 +359,12 @@ export const ALLOWED_MIME_TYPES: Record<FileKind, readonly string[]> = {
   // Images too: a resignation is regularly a photo of a signed page rather
   // than a scan.
   resignation_letter: DOCUMENT_MIME_TYPES,
+  // The four from the HR app. The same set every other paper about a person
+  // takes — a scan, a photograph of a page, or the PDF somebody was emailed.
+  education_certificate: DOCUMENT_MIME_TYPES,
+  release_letter: DOCUMENT_MIME_TYPES,
+  experience_letter: DOCUMENT_MIME_TYPES,
+  bank_details: DOCUMENT_MIME_TYPES,
   other: DOCUMENT_MIME_TYPES,
 };
 
@@ -343,6 +410,16 @@ export const MAX_FILE_BYTES: Record<FileKind, number> = {
   import_source: 15 * MB,
   other: 15 * MB,
   resignation_letter: 15 * MB,
+  // The four from the HR app, sized by their neighbours rather than by a new
+  // number. A certificate and the two letters are multi-page scans like the
+  // appointment letter, so they get what the letters get.
+  education_certificate: 15 * MB,
+  release_letter: 15 * MB,
+  experience_letter: 15 * MB,
+  // Tighter, with the identity papers — the NID, the e-TIN, the e-Return
+  // acknowledgement. A bank page is one sheet or one screenshot, and a ceiling
+  // is the cheapest place to say what a document is expected to be.
+  bank_details: 10 * MB,
 };
 
 /** The largest any single upload may be, for the multipart limit. */
