@@ -317,6 +317,22 @@ export const createTeamMemberSchema = z.strictObject({
   joiningSalary: optionalOf(amountSchema),
 
   /**
+   * What their PREVIOUS employer paid them. Added 22 Sep 2026.
+   *
+   * It arrives from the HR app, which is where a joiner is asked for it, and
+   * it is shown here and nowhere else -- no payroll arithmetic reads it. It
+   * sits beside `joiningSalary` in this schema and means the opposite thing:
+   * that one is this company's offer, this one is the number the offer was
+   * measured against.
+   *
+   * `optionalOf(amountSchema)` like the two above, so a blank means "leave it
+   * alone" rather than "clear it" -- the HR app never sends a blank over a
+   * figure already here, and a person typing in the drawer should not wipe
+   * one by tabbing past.
+   */
+  previousOrgSalary: optionalOf(amountSchema),
+
+  /**
    * What they are paid now — offered when adding them, and editable from the
    * same drawer afterwards, on the owner's instruction that editing be
    * flexible rather than a one-shot.

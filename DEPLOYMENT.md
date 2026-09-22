@@ -416,6 +416,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 | File | What it adds | Deploy order |
 |---|---|---|
 | `sql/2026-08-16-files.sql` | `files` | before the code |
+| `sql/2026-09-22-team-previous-org-salary.sql` | `team_members.previous_org_salary` — what their PREVIOUS employer paid, carried over from the HR app and shown, never calculated with | **before the code — a column on `team_members`, and Drizzle names every column in its SELECT, so without it the whole team query dies and the directory and the salary sheet go with it** |
 | `sql/2026-08-18-two-factor.sql` | `user_two_factor`, `recovery_codes` | before the code |
 | `sql/2026-08-18-two-accounts.sql` | Master card + Standard Chartered Bank | any time |
 | `sql/2026-08-21-signature.sql` | `files.settings_id` — the company's signature as the fifth thing a file can belong to, plus the `signature` kind | **before the code — without it every read of every attachment fails, not just signatures.** The one-owner check is replaced, not added to |

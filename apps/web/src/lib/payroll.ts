@@ -92,6 +92,8 @@ export type TeamMemberDto = {
    * What they are paid now is `CompensationDto`, behind its own permission.
    */
   joiningSalary: string | null;
+  /** What their previous employer paid. Display only; from the HR app. */
+  previousOrgSalary: string | null;
 
   educationLevel: EducationLevel | null;
   educationMajor: string | null;

@@ -121,6 +121,8 @@ export type TeamMemberDto = {
    * from the driver as a string, like every other amount in this app.
    */
   joiningSalary: string | null;
+  /** What their previous employer paid. Display only; added 22 Sep 2026. */
+  previousOrgSalary: string | null;
 
   /** Superseded by the two below; still returned so old data is not orphaned. */
   lastQualification: string | null;
@@ -1070,6 +1072,7 @@ const projection = {
   probationUntil: teamMembers.probationUntil,
   confirmedOn: teamMembers.confirmedOn,
   joiningSalary: teamMembers.joiningSalary,
+  previousOrgSalary: teamMembers.previousOrgSalary,
   lastQualification: teamMembers.lastQualification,
   educationLevel: teamMembers.educationLevel,
   educationMajor: teamMembers.educationMajor,

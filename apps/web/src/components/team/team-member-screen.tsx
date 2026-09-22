@@ -375,6 +375,15 @@ export function TeamMemberScreen({
                 <Amount value={member.joiningSalary} className="font-medium" />
               ) : null}
             </Row>
+            {/* What SOMEBODY ELSE paid them, from the HR app. Read-only
+                context, never arithmetic -- and deliberately not styled like
+                the line above it, because the two are opposite facts and a
+                reader glancing down this card must not add them. */}
+            <Row label="Previous Employer Salary">
+              {member.previousOrgSalary ? (
+                <Amount value={member.previousOrgSalary} />
+              ) : null}
+            </Row>
             <Row
               label="Education Level"
               value={

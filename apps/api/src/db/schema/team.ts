@@ -209,6 +209,25 @@ export const teamMembers = pgTable(
     joiningSalary: numeric("joining_salary", { precision: 14, scale: 2 }),
 
     /**
+     * What SOMEBODY ELSE paid them, before they came here.
+     *
+     * Added 22 Sep 2026 at the owner's request, carried over from the HR app
+     * (a separate repository), and **display only** -- no payroll arithmetic
+     * reads it and nobody is paid a taka differently because of it. It is
+     * context for whoever is looking at the person: the one number that says
+     * whether the offer was a step up.
+     *
+     * A column of its own rather than a note, and deliberately not near
+     * `joiningSalary` in meaning: that is what THIS company agreed, this is
+     * what another one did, and the two must never be added or compared by
+     * any code here.
+     */
+    previousOrgSalary: numeric("previous_org_salary", {
+      precision: 14,
+      scale: 2,
+    }),
+
+    /**
      * Superseded by the level/major pair below, which are the two columns the
      * sheet actually has. Kept, not dropped, on the same terms as the block
      * above: it holds what was typed in before the split existed.
