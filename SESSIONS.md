@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 79 | **The new design, page one: sign-in and the preloader** | **done** — the rest of the app follows a page at a time |
 | 50 | Payslip: the company name printed twice | **done** |
 | 51 | **Payroll: invoice and reference upload** when a run is created | **done** |
 | 56 | **Exports: a Windows CSV mail list, a data sheet, a bank statement PDF** | **done** |
@@ -56,6 +57,103 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 79. The new design, page one: sign-in and the preloader — 27 Sep 2026
+
+> *"new version je zip ta dilam. ami amar full site take oi new version a
+> convert korbo. tumi login page design and preloader diye suru koro"*
+
+**The handoff is `new version of the design.zip` at the repository root, and
+it is not the design the app wears today.** August's (the committed
+`claude Design prototype for redesign pages/`) was Instrument Sans, IBM Plex,
+Material Symbols and dark by default. September's is **Plus Jakarta Sans,
+Phosphor duotone icons, violet beside the lime, and light by default.** Read
+`source/*.dc.html` inside the zip for exact values; its README lists every
+page. The zip is untracked — it is the owner's file and 10 MB, so committing it
+is theirs to decide. Unzip it to a scratch folder, not into the repo.
+
+**What was built.**
+
+- `/login` as drawn: form left, lime graph-paper brand panel right, only the
+  form below 860px. The badge, the module cards and the lock tile drop out at
+  640, 600 and 560px of height, by media query rather than the handoff's resize
+  listener. The form comes first in the DOM, so "Sign in" is the page's h1.
+- **Every piece of the old sign-in logic is unchanged**: the same request, the
+  two-step code screen, the recovery-code way out, `method="post"`, the idle
+  notice. The code step has no drawing in the handoff; it is built from the
+  sign-in screen's own parts.
+- **The preloader** (`components/boot/`) — the arrow drawn from the tile's
+  corner, shot off it, replaced by a tick — at the handoff's own geometry.
+- **When it shows: only between a successful sign-in and the app being
+  there.** Not on every click inside the app (a four-second tax on each), and
+  not on a reload or a new tab (those arrive already rendered). It lives in the
+  ROOT layout because the sign-in page unmounts the moment the dashboard
+  commits; `BootOverlay` renders nothing until the form calls `startBoot()`.
+- **The bar is a clock, the tick is not.** It climbs to 90% over 1.6s and
+  waits; it only reaches 100 and ticks once the path has changed underneath
+  it, i.e. the dashboard really rendered. Measured locally: path changed at
+  2.48s, tick at 3.76s, gone at ~4.3s. `TIMING` at the top of `preloader.tsx`
+  is the one knob. Reduced-motion gets the short version; 20s without arriving
+  and it fades without a tick.
+
+**Four things in the handoff that are not real, and what was done with each.**
+
+- **Cloudflare Turnstile box** — left out. A box saying "you are verified"
+  with nothing behind it is a lie on the one page about security. Real
+  Turnstile needs keys and a server check: an auth change, its own session.
+- **"Forgot password?" / "Contact admin"** — there is no self-service reset
+  and no public address. Each opens the violet notice saying where the answer
+  is (a Super Admin, Settings → People who can sign in) instead of linking to
+  `#`.
+- **Privacy / Terms / Help** footer links — left out; there are no such pages.
+- **"You have signed out."** — made real: the rail's sign-out now goes to
+  `/login?reason=signed-out` (`layout/sidebar-footer.tsx`, one line).
+
+**Shared pieces touched, and why they cannot move another screen.**
+`app/layout.tsx` imports the font and `new-design.css` and mounts
+`BootOverlay` (renders null unless signing in). `new-design.css` defines only
+`--sv-*` variables and `.sv*` classes. **The tokens are prefixed on purpose**:
+`--surface` and `--accent` already exist in globals.css with other meanings,
+so the handoff's own names in `:root` would repaint every unmoved screen. The
+shell session decides how the old names map onto these. Two new dependencies:
+`@phosphor-icons/react` and `@fontsource-variable/plus-jakarta-sans`. Import
+icons as `@phosphor-icons/react/dist/ssr/<Name>` — it works in server and
+client components, and the production bundle carries only the icons used
+(checked: no unused icon in `.next/static`).
+
+**Two traps found, both written into `new-design.css`.**
+
+1. **`globals.css`'s unlayered `* { border-color }` beats every Tailwind
+   border-colour utility.** Measured: an element with `border border-primary`
+   computes `rgb(48, 48, 55)`. So **`focus-visible:border-primary`,
+   `border-primary/40` and friends do nothing anywhere in the app today** —
+   not fixed here, it is globals.css and every screen; its own decision. The
+   new design's borders are unlayered classes, which win by specificity.
+2. **Never call a class `ring`.** Tailwind reads it as its 1px
+   currentColor box-shadow utility, and the brand panel's circles were drawn a
+   second time in black.
+
+**Proved by `.loginqa.mjs`** — 58 checks, real browser, two throwaway accounts
+(one enrolled in two-step through the API, TOTP computed by the harness), both
+deleted. Layout at 1440, 390 and 1280×520; the face actually loaded; the
+lime/violet/line colours as painted; hover and focus; the four notices;
+refusals; the preloader's order (path change strictly before the tick, bar
+never falls, 100% at the tick), scroll lock released, never shown on an
+ordinary navigation; sign-out's notice; the code step end to end. Four CI steps
+green separately; production `next build` green.
+
+**Open, for the owner.**
+
+- **Dark mode.** Sign-in and preloader are light, as drawn, whatever the
+  theme toggle says — while the rest of the app is still dark by default. The
+  handoff's dark tokens exist; they belong to the shell session.
+- **The next session is the shell**: tokens, font and theme default into
+  globals.css, sidebar, top bar. It is the change that reaches every screen,
+  so it wants the owner's go-ahead and `node .sweep.mjs` afterwards.
+- A 401 bounce from `lib/api-client.ts` (session died mid-use) lands on
+  `/login?next=…` with no reason, so it shows no notice. Adding one is `lib/`.
+- Two commits since #78 (`4277e71`, `5916929`, the HR-app columns and file
+  kinds) have no entry here; their commit messages say what they did.
 
 ## 78. The deploy ran this app's migrations against the HR database — 8 Sep 2026
 

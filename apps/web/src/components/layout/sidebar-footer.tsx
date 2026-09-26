@@ -29,7 +29,8 @@ export function SidebarFooter({ collapsed = false }: { collapsed?: boolean }) {
     try {
       await logout();
     } finally {
-      router.replace("/login");
+      // The reason is only for the sign-in page's "You have signed out." line.
+      router.replace("/login?reason=signed-out");
       router.refresh();
     }
   }

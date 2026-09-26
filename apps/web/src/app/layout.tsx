@@ -19,10 +19,16 @@ import "@fontsource/ibm-plex-sans/700.css";
 // default the design asks for; the active nav item switches to FILL 1 through
 // `font-variation-settings` rather than a second file.
 import "@fontsource-variable/material-symbols-rounded";
+// The new design's face (see new-design.css). Declaring it costs nothing on a
+// screen that does not use it: a browser fetches a font file only for text
+// actually set in that family.
+import "@fontsource-variable/plus-jakarta-sans";
 
+import { BootOverlay } from "@/components/boot/boot-overlay";
 import { themeScript } from "@/components/layout/theme-toggle";
 
 import "./globals.css";
+import "./new-design.css";
 
 export const metadata: Metadata = {
   title: "Finance Management",
@@ -36,7 +42,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        <BootOverlay />
+      </body>
     </html>
   );
 }

@@ -1,0 +1,725 @@
+/* --------------------------------------------------------------------------
+   The new design — the September 2026 handoff.
+   --------------------------------------------------------------------------
+   The handoff is `new version of the design.zip` at the repository root;
+   `source/*.dc.html` inside it are the readable files, and they are what these
+   values were copied from. The app is moving to it a page at a time. The
+   sign-in page and the preloader went first.
+
+   ITS TOKENS LIVE HERE, UNDER AN `--sv-` PREFIX, FOR THE LENGTH OF THE MOVE.
+   Two of the handoff's own names — `--surface` and `--accent` — already exist
+   in globals.css and mean something else there: this app's accent is a deep
+   lime TEXT colour, the new design's is a lime FILL. Written into :root under
+   their own names they would repaint every screen that has not moved yet.
+   Prefixed they collide with nothing, and the session that moves the shell
+   decides how the old names map onto these.
+
+   Light only, because that is how the handoff draws these two screens. Its
+   dark values are under `[data-fin-theme="dark"]` in Share Viral Finance.dc.html
+   and belong to the shell session, which is when the rest of the app can
+   follow them too.
+
+   WHY SO MUCH OF THIS IS CSS AND NOT UTILITIES. globals.css sets
+   `* { border-color }` and `:focus-visible { outline }` unlayered, and an
+   unlayered rule beats anything in Tailwind's utilities layer whatever its
+   specificity. So a border colour or a focus ring written as a utility loses
+   silently. Written here, also unlayered, a class outranks `*` and `.sv
+   :focus-visible` outranks `:focus-visible` — by specificity, which is a fight
+   these rules can actually win.
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* The handoff's token table, whole. */
+  --sv-bg: #f1f3ec;
+  --sv-surface: #ffffff;
+  --sv-subtle: #f4f6f0;
+  --sv-hover: #f8fcea;
+  --sv-ink: #060800;
+  --sv-muted: #6e7367;
+  --sv-line: #e7ebe0;
+  --sv-line-soft: #eef1e8;
+  --sv-track: #edefe6;
+  --sv-accent: #bfff00;
+  --sv-accent-hover: #a6e000;
+  --sv-on-accent: #060800;
+  --sv-lime-tint: #f6faea;
+  --sv-lime-line: #e3ebc8;
+  --sv-violet: #8558ec;
+  --sv-violet-mid: #a47cf1;
+  --sv-violet-soft: #cdb8fb;
+  --sv-violet-tint: #f1ecfe;
+  --sv-violet-tint-line: #dfd2fb;
+  --sv-violet-ink: #4b2a9e;
+  --sv-pos: #1e7a3c;
+  --sv-pos-tint: #e6f5ea;
+  --sv-neg: #b3261e;
+  --sv-neg-tint: #fce9e7;
+  --sv-warn: #8a5a00;
+  --sv-warn-tint: #fff4dc;
+  --sv-shadow:
+    0 1px 1px rgb(6 8 0 / 0.03), 0 4px 10px rgb(6 8 0 / 0.04),
+    0 18px 36px rgb(6 8 0 / 0.055);
+  --sv-shadow-hover:
+    0 2px 2px rgb(6 8 0 / 0.03), 0 10px 20px rgb(6 8 0 / 0.06),
+    0 26px 48px rgb(6 8 0 / 0.08);
+
+  /* Values the sign-in page and the preloader use that the table does not
+     name — the lime grid, its rings, and two shades of body text. */
+  --sv-grid: #e6efcb;
+  --sv-ring: #dce8b4;
+  --sv-lime-deep: #9bd400;
+  --sv-body: #4b5142;
+  --sv-ink-soft: #2a2f24;
+  --sv-placeholder: #9aa091;
+
+  --sv-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --sv-font: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* The root of anything drawn in the new design. */
+.sv {
+  font-family: var(--sv-font);
+  color: var(--sv-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sv :focus-visible {
+  outline: 2px solid var(--sv-violet);
+  outline-offset: 2px;
+}
+
+.sv ::placeholder {
+  color: var(--sv-placeholder);
+}
+
+.sv ::selection {
+  background: var(--sv-violet-tint-line);
+  color: var(--sv-ink);
+}
+
+/* The lime graph paper both screens are drawn on. */
+.sv-grid {
+  background-color: var(--sv-lime-tint);
+  background-image:
+    linear-gradient(var(--sv-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sv-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* --------------------------------------------------------------------------
+   Sign-in
+   -------------------------------------------------------------------------- */
+
+.sv-login {
+  min-height: 100dvh;
+  display: flex;
+  background: var(--sv-surface);
+}
+
+/* The right-hand half. Below 860px only the form shows, as the handoff says. */
+.sv-login-brand {
+  display: none;
+  flex: 1.1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  border-left: 1px solid var(--sv-lime-line);
+  padding: clamp(18px, 3.4vh, 32px) clamp(28px, 4vw, 56px);
+}
+
+@media (min-width: 860px) {
+  .sv-login-brand {
+    display: flex;
+  }
+}
+
+.sv-login-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sv-login-decor > span {
+  position: absolute;
+}
+
+/* The circles are `halo`, never `ring`: Tailwind reads every word in a class
+   list, and `ring` is its utility for a 1px currentColor box-shadow. Named
+   that, each circle was drawn a second time in black. */
+
+.sv-login-decor .glow {
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(191 255 0 / 0.35) 0%,
+    rgb(191 255 0 / 0) 65%
+  );
+  top: -220px;
+  right: -180px;
+}
+
+.sv-login-decor .halo {
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sv-ring);
+  left: -260px;
+  bottom: -300px;
+}
+
+.sv-login-decor .halo-dashed {
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sv-violet-soft);
+  left: -160px;
+  bottom: -200px;
+}
+
+.sv-login-decor .haze {
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(133 88 236 / 0.16) 0%,
+    rgb(133 88 236 / 0) 70%
+  );
+  left: -60px;
+  bottom: -100px;
+}
+
+.sv-login-decor .chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--sv-accent);
+  transform: rotate(18deg);
+  right: 22%;
+  top: 16%;
+  box-shadow: 0 6px 14px rgb(6 8 0 / 0.1);
+}
+
+.sv-login-decor .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--sv-violet);
+  right: 12%;
+  top: 30%;
+}
+
+.sv-login-decor .hoop {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--sv-violet-mid);
+  left: 46%;
+  bottom: 14%;
+}
+
+.sv-badge {
+  border: 1px solid var(--sv-lime-line);
+}
+
+/* The four module cards: lift, and take the violet edge, under the pointer. */
+.sv-module {
+  border: 1px solid var(--sv-line);
+  box-shadow:
+    0 1px 1px rgb(6 8 0 / 0.03),
+    0 8px 20px rgb(6 8 0 / 0.05);
+  transition:
+    border-color 0.45s var(--sv-ease),
+    transform 0.45s var(--sv-ease);
+}
+
+.sv-module:hover {
+  border-color: var(--sv-violet);
+  transform: translateY(-2px);
+}
+
+.sv-ghost-button {
+  border: 1px solid var(--sv-line);
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.sv-ghost-button:hover {
+  border-color: var(--sv-violet);
+  color: var(--sv-violet-ink);
+}
+
+.sv-notice {
+  border: 1px solid var(--sv-violet-tint-line);
+}
+
+/* A text box with its icon inside the border. The ring goes on the box, not
+   the input, which is why the input's own outline is taken off. */
+.sv-field {
+  border: 1.5px solid var(--sv-line);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.sv-field:focus-within {
+  border-color: var(--sv-violet);
+  box-shadow: 0 0 0 3px var(--sv-violet-tint);
+  background-color: var(--sv-surface);
+}
+
+.sv-field[data-invalid="true"] {
+  border-color: var(--sv-violet);
+}
+
+.sv-field input:focus-visible {
+  outline: none;
+}
+
+.sv-primary-button {
+  box-shadow: 0 8px 20px rgb(150 200 0 / 0.28);
+  transition:
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.sv-primary-button:hover:not(:disabled) {
+  background-color: var(--sv-accent-hover);
+  transform: translateY(-1px);
+}
+
+@keyframes sv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sv-spin {
+  animation: sv-spin 1s linear infinite;
+}
+
+/* --------------------------------------------------------------------------
+   The preloader
+   --------------------------------------------------------------------------
+   Everything below is the handoff's own motion, at its own timings. What it
+   never says is WHEN the thing is shown; see components/boot/boot-overlay.tsx.
+   -------------------------------------------------------------------------- */
+
+.sv-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background-color: var(--sv-lime-tint);
+  animation: sv-pl-arrive 0.25s ease both;
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+.sv-preloader[data-leaving="true"] {
+  opacity: 0;
+  transform: scale(1.04);
+}
+
+.sv-preloader .paper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--sv-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sv-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: center center;
+  mask-image: radial-gradient(
+    ellipse 70% 65% at 50% 45%,
+    #000 15%,
+    transparent 78%
+  );
+}
+
+.sv-preloader .light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 42%,
+    rgb(255 255 255 / 0.75) 0%,
+    rgb(255 255 255 / 0) 38%
+  );
+}
+
+.sv-pl-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sv-pl-decor > span {
+  position: absolute;
+}
+
+.sv-pl-decor .glow-lime {
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(191 255 0 / 0.35) 0%,
+    rgb(191 255 0 / 0) 65%
+  );
+  top: -180px;
+  left: -140px;
+}
+
+.sv-pl-decor .glow-violet {
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(133 88 236 / 0.16) 0%,
+    rgb(133 88 236 / 0) 70%
+  );
+  bottom: -160px;
+  right: -120px;
+}
+
+.sv-pl-decor .halo {
+  width: 640px;
+  height: 640px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sv-ring);
+  bottom: -360px;
+  right: -300px;
+}
+
+.sv-pl-decor .halo-dashed {
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sv-violet-soft);
+  top: -300px;
+  left: -240px;
+}
+
+.sv-pl-decor .s1 {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--sv-accent);
+  top: 18%;
+  left: 16%;
+  box-shadow: 0 8px 18px rgb(6 8 0 / 0.1);
+  animation: sv-pl-drift-a 7s ease-in-out infinite;
+}
+
+.sv-pl-decor .s2 {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--sv-violet);
+  top: 26%;
+  right: 18%;
+  animation: sv-pl-drift-b 6s ease-in-out infinite;
+}
+
+.sv-pl-decor .s3 {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2.5px solid var(--sv-violet);
+  bottom: 22%;
+  left: 22%;
+  animation: sv-pl-drift-c 8s ease-in-out infinite;
+}
+
+.sv-pl-decor .s4 {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2.5px solid var(--sv-accent);
+  bottom: 26%;
+  right: 24%;
+  animation: sv-pl-drift-a 9s ease-in-out -3s infinite;
+}
+
+.sv-pl-decor .s5 {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--sv-violet-mid);
+  top: 62%;
+  left: 10%;
+  animation: sv-pl-drift-b 7s ease-in-out -2s infinite;
+}
+
+.sv-pl-decor .s6 {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sv-accent);
+  top: 12%;
+  right: 34%;
+  animation: sv-pl-drift-c 6.5s ease-in-out -1s infinite;
+}
+
+/* The three floating chips, only where there is room for them. */
+.sv-pl-chips {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 900px) and (min-height: 560px) {
+  .sv-pl-chips {
+    display: block;
+  }
+}
+
+.sv-pl-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 999px;
+  background: var(--sv-surface);
+  border: 1px solid var(--sv-lime-line);
+  box-shadow:
+    0 1px 1px rgb(6 8 0 / 0.03),
+    0 8px 20px rgb(6 8 0 / 0.06);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--sv-ink-soft);
+  white-space: nowrap;
+}
+
+.sv-pl-chip:nth-child(1) {
+  top: 14%;
+  left: 9%;
+  animation: sv-pl-drift-b 9s ease-in-out infinite;
+}
+
+.sv-pl-chip:nth-child(2) {
+  top: 44%;
+  right: 7%;
+  animation: sv-pl-drift-b 9.5s ease-in-out -2s infinite;
+}
+
+.sv-pl-chip:nth-child(3) {
+  bottom: 16%;
+  left: 12%;
+  animation: sv-pl-drift-b 10.5s ease-in-out -6s infinite;
+}
+
+.sv-pl-orbit-a {
+  position: absolute;
+  inset: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sv-violet-mid);
+  opacity: 0.7;
+  animation: sv-spin 18s linear infinite;
+}
+
+.sv-pl-orbit-b {
+  position: absolute;
+  inset: 52px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sv-lime-deep);
+  opacity: 0.75;
+  animation: sv-pl-spin-rev 12s linear infinite;
+}
+
+.sv-pl-tile {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 26px;
+  background: var(--sv-accent);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow:
+    0 12px 28px rgb(150 200 0 / 0.35),
+    inset 0 -4px 0 rgb(6 8 0 / 0.08);
+  animation: sv-pl-bob 3.6s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  will-change: transform;
+}
+
+.sv-pl-shine {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 40%;
+  height: 140%;
+  background: rgb(255 255 255 / 0.55);
+  filter: blur(6px);
+  animation: sv-pl-shine 2.6s ease-in-out infinite;
+}
+
+.sv-pl-status {
+  animation: sv-pl-in 0.35s ease both;
+}
+
+.sv-pl-status-icon {
+  border: 1px solid var(--sv-lime-line);
+}
+
+.sv-pl-track {
+  border: 1px solid var(--sv-lime-line);
+  box-shadow: inset 0 1px 2px rgb(6 8 0 / 0.05);
+}
+
+.sv-pl-fill {
+  background-color: var(--sv-violet);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgb(255 255 255 / 0.18) 0 7px,
+    transparent 7px 14px
+  );
+  background-size: 28px 100%;
+  animation: sv-pl-bar 1.2s linear infinite;
+}
+
+.sv-pl-knob {
+  border: 2px solid var(--sv-surface);
+  box-shadow: 0 2px 6px rgb(6 8 0 / 0.2);
+}
+
+.sv-pl-step {
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.sv-pl-pop {
+  animation: sv-pl-pop 0.45s ease both;
+}
+
+.sv-pl-draw {
+  animation: sv-pl-draw 0.45s cubic-bezier(0.3, 1.3, 0.5, 1) both;
+}
+
+@keyframes sv-pl-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sv-pl-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes sv-pl-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes sv-pl-shine {
+  0% {
+    transform: translateX(-140%) rotate(20deg);
+  }
+  60%,
+  100% {
+    transform: translateX(240%) rotate(20deg);
+  }
+}
+
+@keyframes sv-pl-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(18px, -22px) rotate(40deg);
+  }
+}
+
+@keyframes sv-pl-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-20px, 16px);
+  }
+}
+
+@keyframes sv-pl-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(14px, 18px) rotate(-30deg);
+  }
+}
+
+@keyframes sv-pl-bar {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 28px 0;
+  }
+}
+
+@keyframes sv-pl-draw {
+  from {
+    stroke-dashoffset: 34;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes sv-pl-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sv-pl-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-preloader,
+  .sv-preloader * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

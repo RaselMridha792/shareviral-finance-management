@@ -1,5 +1,7 @@
-import { LoginForm } from "@/components/auth/login-form";
-import { BrandMark } from "@/components/layout/brand-mark";
+import { todayInDhaka } from "@finance/shared";
+
+import { BrandPanel } from "@/components/auth/brand-panel";
+import { LoginForm, type ArrivalNotice } from "@/components/auth/login-form";
 
 export const metadata = {
   title: "Sign in · SFM",
@@ -7,44 +9,35 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Sign-in, as the September 2026 handoff draws it: the form on the left, what
+ * the app is on the right, and below 860px only the form.
+ *
+ * The form comes first in the document as well as on screen, so a keyboard or
+ * a screen reader reaches the fields before the brochure.
+ */
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : "/";
-  /**
-   * Why they are back here. Without this, an idle sign-out is indistinguishable
-   * from something having gone wrong, and "it logged me out for no reason" is
-   * how a security control gets asked to be turned off.
-   */
-  const idled = params.reason === "idle";
+  /** Why they are back here, when something sent them. */
+  const notice: ArrivalNotice | null =
+    params.reason === "idle"
+      ? "idle"
+      : params.reason === "signed-out"
+        ? "signed-out"
+        : null;
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-2.5">
-          {/* The mark carries its own rounded square, so it needs no coloured
-              box behind it — the same component the signed-in rail uses. */}
-          <BrandMark className="size-9 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold tracking-tight">
-              ShareViral Finance
-            </p>
-            <p className="text-xs text-muted-foreground">Management portal</p>
-          </div>
-        </div>
+    <main className="sv sv-login">
+      <section className="flex min-w-0 flex-1 flex-col bg-(--sv-surface) px-[clamp(24px,3vw,44px)] py-[clamp(14px,3vh,28px)]">
+        <LoginForm next={next} notice={notice} />
 
-        {idled ? (
-          <p className="mb-4 rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted-foreground">
-            You were signed out because this screen was left idle. Nothing is
-            wrong — sign in again to carry on.
-          </p>
-        ) : null}
-
-        <LoginForm next={next} />
-
-        <p className="mt-6 text-xs text-muted-foreground">
-          Company use only. Every sign-in attempt is recorded.
+        <p className="flex-none text-[12px] text-(--sv-muted)">
+          © {todayInDhaka().slice(0, 4)} ShareViral
         </p>
-      </div>
+      </section>
+
+      <BrandPanel />
     </main>
   );
 }
