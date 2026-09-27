@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 97 | **STATUS.md rewritten for the app as it is** | **done** |
+| 96 | **Buttons, fields and every control at the handoff's own sizes** | **done** |
 | 95 | **Cash In adds money in paisa, not floats** | **done** |
 | 94 | **Settings' last six sections, to the handoff — and a shared on/off switch** | **done** — the whole design is in |
 | 93 | **`.capsweep.mjs` and `.acctqa.mjs` brought up to date with the app** | **done** |
@@ -73,6 +75,76 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 97. STATUS.md rewritten for the app as it is — 27 Sep 2026
+
+The owner: *"status.md puropuri update koro latest kaj diye"*. STATUS.md had not
+moved in five weeks. It now opens with "last updated 27 Sep 2026", says what is
+true today screen by screen ("After Phase 9"), has a section for **the design
+system**, lists the root harnesses, and has lost the stale "Next:" sections
+(folded into what was built) and the Vercel/Render and manual-Neon-restore
+paragraphs. Written by an agent from SESSIONS.md, the code and git log, then
+checked here; the button and field sizes brought up to #96.
+
+**What the rewrite turned up — true in the code, and worth the owner's eye:**
+- **The old global rate still has a fallback.** No screen writes `fx_rates`
+  any more, but its newest row still feeds `Amount`'s "~ $" line, and
+  `GET /fx/governing` still feeds the Accounts overview. The owner's rule was
+  no app-wide rate; this is the last of it. Not changed.
+- **Integration suite 13 still expects a void inside a closed period to be
+  refused**; since the 31 Aug decision `transactions.service.ts` allows it, so
+  that check will fail when the suite runs.
+- `payment_method` was never given paypal/payoneer, though the old STATUS said
+  so — corrected there.
+- The bank statement lists oldest first (#31), not newest first as an older
+  entry says.
+- `mustChangePassword` is carried and now shown on People (#94), but still not
+  enforced at sign-in.
+
+## 96. Buttons, fields and every control at the handoff's own sizes — 27 Sep 2026
+
+The owner: *"ami sobkichu exactly amar new design er moto cai so button input
+etc sobkichu oitar moto hote hobe"* — the heights #83 held back (36px buttons,
+40px fields, so a button lined up with a field) now follow the handoff, fields
+and buttons together, so rows still line up. Measured from the handoff's own
+markup (every `<button>`, `<input>`, `<select>` in it, by size):
+
+- **`Button`**: `md` 44px (18px across for the lime one, 16px for the others,
+  14px type), `sm` 38px (13px).
+- **Fields** (`field.tsx`): 44px, 14px across, 14.5px type; textareas 12px
+  top and bottom. By where they sit (plain CSS in new-design.css, so a caller's
+  height cannot undo it): the **filter card** 42px, 8px corners, 1px, 13.5px;
+  the **header card** and a **toolbar row** (`sv-toolbar` — Team, AI tools,
+  TDS, Bank statement) 44px on the white ground, 8px, 1px, 14px; Reports'
+  **violet band** (`sv-band`) 40px edged in the band's violet.
+- **Dates**: `DateRangeField` is two date fields side by side, as the handoff
+  draws them, not one box with a rule between the ends.
+- **Pagers**: 34px, Previous quiet, **Next lime** — the handoff's own pager
+  (Settings → What changed used its own; it matches now too).
+- **Reports**: the Monthly/Quarterly select is in the header card, as the
+  handoff has it; the single "Finance Statement" tab under the header, which
+  chose nothing, is gone. The band's PDF is its 40px lime button.
+- **Bank statement**: its account and dates are a plain toolbar row, as the
+  handoff draws it (it was the filter card).
+- Heights a caller had pinned to the old 36/40px are gone (Email's key Save,
+  TDS's Work it out, Reports' selects) or moved to 44px (a plan's "Open …", the
+  challan's file picker, the team form's document field, the subscription
+  form's renewal box, the no-access page's way back). Transactions' category
+  filter widened so "All categories" shows whole in bold.
+- The Dashboard's own buttons were already built to the handoff's sizes in its
+  pass (#81) and are unchanged.
+
+Also: **`new version of the design.zip` is in `.gitignore`** — it stays at the
+root as the spec, on the owner's word, and never goes into git.
+**`.popupqa.mjs`** opened Settings' sections by clicking a tab whose whole
+text was the name; they are the rail's links now (name + hint), so it opens
+them by URL.
+
+**Proved**: every control measured on twelve screens — filter card 42/8px,
+toolbar and header 44/8px, band 40/8px, forms 44/11px, buttons 44/38 (36 only
+for the tab pills, as the handoff has them), nothing sideways; `.uiqa.mjs`
+67/67, `.popupqa.mjs` 47/47, `.settingsqa.mjs` 16/16, `.accountsqa.mjs`
+20/20; four CI steps and the build pass.
 
 ## 95. Cash In adds money in paisa, not floats — 27 Sep 2026
 
