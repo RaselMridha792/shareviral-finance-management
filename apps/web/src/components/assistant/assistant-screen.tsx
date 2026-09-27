@@ -1,5 +1,7 @@
 "use client";
 
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import {
   AI_TARGET_LABELS,
   type AiAttachment,
@@ -10,13 +12,7 @@ import {
   type AiMessage,
   type AiModel,
 } from "@finance/shared";
-import {
-  ArrowRight,
-  History,
-  LoaderCircle,
-  Sparkles,
-  SquarePen,
-} from "lucide-react";
+import { History, LoaderCircle, Sparkles, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -127,24 +123,32 @@ export function AssistantScreen({
 
   if (!configured) {
     return (
-      <div className="flex h-[calc(100dvh-4rem)] items-center justify-center px-4">
-        <Card className="flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Sparkles className="size-6" />
+      <div className="grid min-h-[calc(100dvh-10rem)] place-items-center px-4">
+        {/* The handoff's card: a violet and a lime circle behind, the lime
+            robot tile, and the way to switch it on in violet. */}
+        <Card className="sv-rise relative flex w-full max-w-[480px] flex-col items-center gap-3 overflow-hidden px-8 py-10 text-center">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-15 -right-15 size-45 rounded-full bg-(--sv-violet-tint)"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-15 -left-10 size-35 rounded-full bg-(--sv-lime-tint)"
+          />
+          <span className="relative grid size-18 place-items-center rounded-[20px] bg-(--sv-accent) text-(--sv-on-accent) shadow-[0_10px_22px_rgb(150_200_0/0.3)]">
+            <RobotIcon weight="duotone" size={38} />
           </span>
-          <div>
-            <p className="text-lg font-semibold">Not switched on</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              {availability.reason}
-            </p>
-          </div>
+          <p className="relative text-[22px] font-extrabold">Not switched on</p>
+          <p className="relative text-[14px] leading-[1.55] text-(--sv-muted)">
+            {availability.reason}
+          </p>
           {canConfigure ? (
             <Link
               href="/settings?tab=assistant"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              className="relative mt-1 inline-flex h-[42px] items-center gap-[7px] rounded-lg bg-(--sv-violet) px-4 text-[14px] font-extrabold text-white transition hover:-translate-y-px"
             >
               Add an API key
-              <ArrowRight className="size-3.5" />
+              <ArrowRightIcon weight="duotone" size={16} />
             </Link>
           ) : null}
         </Card>

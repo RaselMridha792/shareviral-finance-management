@@ -404,6 +404,29 @@
   border-color: var(--sv-lime-line);
 }
 
+/* A statement's closing line: the 1.5px rule over the lime ground. */
+.sv-statement-close > td {
+  border-top: 1.5px solid var(--sv-line);
+}
+
+/* Import's drop zone: a 2px dashed lime edge, violet under the pointer. */
+.sv-drop {
+  border: 2px dashed var(--sv-lime-line);
+  transition: border-color 0.4s ease;
+}
+
+.sv-drop:hover {
+  border-color: var(--sv-violet);
+}
+
+/* A card that is a choice (Export's datasets): violet once chosen. */
+.sv-card.sv-choice[data-selected] {
+  border-color: var(--sv-violet);
+  box-shadow:
+    0 0 0 3px var(--sv-violet-tint),
+    var(--sv-shadow);
+}
+
 /* The empty state's round lime tile. */
 .sv-empty-tile {
   border: 1px solid var(--sv-lime-line);

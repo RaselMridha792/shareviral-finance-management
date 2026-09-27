@@ -186,6 +186,7 @@ export function SummaryBar({
   value,
   secondary,
   actions,
+  lime = false,
 }: {
   label: string;
   icon?: GlyphSource;
@@ -194,20 +195,46 @@ export function SummaryBar({
   value: ReactNode;
   secondary?: ReactNode;
   actions?: ReactNode;
+  /**
+   * The handoff's headline band: the lime tint edged in lime, the icon on a
+   * white tile, the label in violet-ink. For the one figure a screen is about.
+   */
+  lime?: boolean;
 }) {
   return (
-    <div className="sv-card sv-rise flex flex-wrap items-center justify-between gap-4 rounded-[11px] bg-(--sv-surface) px-6 py-5">
+    <div
+      className={cn(
+        "sv-card sv-rise flex flex-wrap items-center justify-between gap-4 rounded-[11px] px-6 py-5",
+        lime ? "sv-card-lime bg-(--sv-lime-tint)" : "bg-(--sv-surface)",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-3.5">
         {icon ? (
-          <ToneTile
-            icon={icon}
-            iconTone={iconTone}
-            size="size-[46px]"
-            glyph={24}
-          />
+          lime ? (
+            <span
+              className={cn(
+                "sv-total-tile grid size-[46px] flex-none place-items-center rounded-[11px] bg-(--sv-surface)",
+                iconTone ?? "text-(--sv-violet)",
+              )}
+            >
+              <Glyph icon={icon} size={24} />
+            </span>
+          ) : (
+            <ToneTile
+              icon={icon}
+              iconTone={iconTone}
+              size="size-[46px]"
+              glyph={24}
+            />
+          )
         ) : null}
         <div className="min-w-0">
-          <p className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-muted) uppercase">
+          <p
+            className={cn(
+              "text-[11px] font-extrabold tracking-[0.14em] uppercase",
+              lime ? "text-(--sv-violet-ink)" : "text-(--sv-muted)",
+            )}
+          >
             {label}
           </p>
           {description ? (

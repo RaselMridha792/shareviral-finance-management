@@ -2,8 +2,6 @@
 
 import { GRANULARITIES, type Granularity } from "@finance/shared";
 
-import { cn } from "@/lib/utils";
-
 /**
  * The four periods a finance document can cover, as tabs rather than a
  * dropdown.
@@ -33,56 +31,4 @@ export function granularityTabs(kind: "Report" | "Statement") {
     /** For a narrow rail where the full name will not fit. */
     short: PERIOD_NAMES[granularity],
   }));
-}
-
-export function TabStrip<T extends string>({
-  tabs,
-  active,
-  onSelect,
-  label,
-}: {
-  tabs: ReadonlyArray<{ id: T; label: string; short?: string }>;
-  active: T;
-  onSelect: (id: T) => void;
-  label: string;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label={label}
-      className="tabs-scroll flex gap-1 border-b border-border"
-    >
-      {tabs.map((entry) => (
-        <button
-          key={entry.id}
-          role="tab"
-          type="button"
-          aria-selected={active === entry.id}
-          onClick={() => onSelect(entry.id)}
-          className={cn(
-            "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition",
-            active === entry.id
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {/*
-            The full name on a wide screen, the period alone on a narrow one.
-            Four tabs each reading "Quarterly Finance Report" is 90 characters
-            of tab bar, which on a phone is a horizontal scroll with the fourth
-            tab permanently out of sight — and a tab you cannot see is a tab
-            nobody presses.
-          */}
-          {entry.short ? (
-            <>
-              <span className="sm:hidden">{entry.short}</span>
-              <span className="hidden sm:inline">{entry.label}</span>
-            </>
-          ) : (
-            entry.label
-          )}
-        </button>
-      ))}
-    </div>
-  );
 }

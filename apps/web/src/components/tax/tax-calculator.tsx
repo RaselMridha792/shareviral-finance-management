@@ -1,7 +1,8 @@
 "use client";
 
 import { fiscalYearLabel, type FiscalYearMode } from "@finance/shared";
-import { Calculator, LoaderCircle } from "lucide-react";
+import { CalculatorIcon } from "@phosphor-icons/react/dist/ssr/Calculator";
+import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { TdsWorking } from "@/components/tds/tds-working";
@@ -72,6 +73,7 @@ export function TaxCalculator({
   return (
     <Card>
       <CardHeader
+        icon={CalculatorIcon}
         title="Tax calculator"
         description="A year's salary in, the monthly deduction out — with every step of the sum, so it can be checked against the accountant's working."
       />
@@ -127,7 +129,7 @@ export function TaxCalculator({
             {busy ? (
               <LoaderCircle className="size-4 animate-spin" />
             ) : (
-              <Calculator className="size-4" />
+              <CalculatorIcon weight="duotone" size={19} />
             )}
             Work it out
           </Button>

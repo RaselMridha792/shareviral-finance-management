@@ -1,6 +1,12 @@
 "use client";
 
-import { Download } from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { ExportIcon } from "@phosphor-icons/react/dist/ssr/Export";
+import { FileCsvIcon } from "@phosphor-icons/react/dist/ssr/FileCsv";
+import { FilePdfIcon } from "@phosphor-icons/react/dist/ssr/FilePdf";
+import { FileXlsIcon } from "@phosphor-icons/react/dist/ssr/FileXls";
+import { FunnelIcon } from "@phosphor-icons/react/dist/ssr/Funnel";
 import { useMemo, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
@@ -304,6 +310,7 @@ export function ExportPanel({ accounts }: { accounts: AccountDto[] }) {
       <Card>
         <CardHeader
           title="What to export"
+          icon={ExportIcon}
           description="One dataset per file. Every column comes out."
         />
         <CardBody className="flex flex-col gap-6">
@@ -321,44 +328,41 @@ export function ExportPanel({ accounts }: { accounts: AccountDto[] }) {
             return (
               <section key={format} className="flex flex-col gap-2">
                 <div>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <h3 className="flex items-center gap-2 text-[15px] font-extrabold">
                     {meta.heading}
                     <FormatBadge format={format} />
                   </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-[12.5px] text-(--sv-muted)">
                     {meta.blurb}
                   </p>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))]">
                   {entries.map((entry) => (
                     <button
                       key={entry.id}
                       type="button"
                       onClick={() => setChosen(entry.id)}
                       aria-pressed={entry.id === dataset.id}
-                      className={cn(
-                        "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition",
-                        entry.id === dataset.id
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:bg-surface-muted",
-                      )}
+                      data-selected={entry.id === dataset.id || undefined}
+                      className="sv-card sv-card-lift sv-choice flex cursor-pointer flex-col gap-3 rounded-[11px] bg-(--sv-surface) p-[18px] text-left"
                     >
                       <span className="flex items-center justify-between gap-2">
+                        <FormatTile format={entry.format} />
+                        <FormatBadge format={entry.format} />
+                      </span>
+                      <span>
                         <span
                           className={cn(
-                            "block text-sm",
-                            entry.id === dataset.id
-                              ? "font-medium text-primary"
-                              : "",
+                            "block text-[15.5px] font-extrabold",
+                            entry.id === dataset.id && "text-(--sv-violet-ink)",
                           )}
                         >
                           {entry.label}
                         </span>
-                        <FormatBadge format={entry.format} />
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {entry.detail}
+                        <span className="mt-0.5 block text-[12.5px] text-(--sv-muted)">
+                          {entry.detail}
+                        </span>
                       </span>
                     </button>
                   ))}
@@ -372,6 +376,7 @@ export function ExportPanel({ accounts }: { accounts: AccountDto[] }) {
       <Card>
         <CardHeader
           title="Narrow it"
+          icon={FunnelIcon}
           description={
             dataset.controls.length === 0
               ? "This one comes out whole — it has nothing to narrow by."
@@ -473,7 +478,7 @@ export function ExportPanel({ accounts }: { accounts: AccountDto[] }) {
 
           <div>
             <Button onClick={download} disabled={!target}>
-              <Download className="size-3.5" />
+              <DownloadSimpleIcon weight="duotone" size={18} />
               Download {dataset.label.toLowerCase()} (
               {FORMATS[dataset.format].badge})
             </Button>
@@ -526,6 +531,22 @@ const MONTHS = [
  * On the card and on the section heading both — a reader who has already
  * scrolled past the heading is exactly the one about to click the wrong thing.
  */
+/** The violet tile at the top of a dataset's card: what lands on the disk. */
+const FORMAT_ICONS: Record<Format, Icon> = {
+  csv: FileCsvIcon,
+  pdf: FilePdfIcon,
+  sheet: FileXlsIcon,
+};
+
+function FormatTile({ format }: { format: Format }) {
+  const Glyph = FORMAT_ICONS[format];
+  return (
+    <span className="grid size-[42px] flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+      <Glyph weight="duotone" size={23} />
+    </span>
+  );
+}
+
 function FormatBadge({ format }: { format: Format }) {
   return (
     <span

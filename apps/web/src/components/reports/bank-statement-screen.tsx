@@ -1,5 +1,7 @@
 "use client";
 
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,6 +10,7 @@ import { formatMoney } from "@finance/shared";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
+import { Dated } from "@/components/ui/dated";
 import {
   DateRangeField,
   FilterBar,
@@ -180,29 +183,32 @@ export function BankStatementScreen({
           below is built on it. So it leaves the rows and becomes their
           preamble, which is also how a bank prints it.
         */}
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-border px-4 py-3">
-          <span className="text-sm font-medium">
+        <div className="sv-panel-head flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-4">
+          <span className="flex items-center gap-3 text-[17px] font-extrabold">
+            <span className="grid size-9 flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+              <BankIcon weight="duotone" size={20} />
+            </span>
             {register.account.bankName ?? register.account.name}
             {range.from ? (
-              <span className="text-muted-foreground">
+              <span className="text-[13.5px] font-medium text-(--sv-muted)">
                 {" · "}
-                <span className="num">{formatDate(range.from)}</span>
+                <span className="tabular-nums">{formatDate(range.from)}</span>
                 {range.to ? (
                   <>
                     {" → "}
-                    <span className="num">{formatDate(range.to)}</span>
+                    <span className="tabular-nums">{formatDate(range.to)}</span>
                   </>
                 ) : null}
               </span>
             ) : null}
           </span>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-[13.5px] text-(--sv-muted)">
             Brought forward at{" "}
-            <span className="num">
+            <span className="tabular-nums">
               {formatDate(register.account.openingBalanceOn)}
             </span>
             {" — "}
-            <span className="num font-medium text-ink">
+            <span className="font-extrabold text-(--sv-ink) tabular-nums">
               {formatMoney(register.openingBalance, { currency: "BDT" })}
             </span>
           </span>
@@ -283,11 +289,16 @@ export function BankStatementScreen({
                         a phone to a bank. Number 1 is the newest line, and
                         every page continues where the last one stopped. */}
                     <SerialCell n={serial(current, index)} />
-                    <td className="num whitespace-nowrap">
-                      {formatDate(row.txnDate)}
+                    <td>
+                      <Dated>{formatDate(row.txnDate)}</Dated>
                     </td>
                     <td className="cell-prose">
-                      <span className={cn(row.voidedAt && "line-through")}>
+                      <span
+                        className={cn(
+                          "font-extrabold",
+                          row.voidedAt && "line-through",
+                        )}
+                      >
                         {row.description}
                       </span>
                     </td>
@@ -357,18 +368,16 @@ export function BankStatementScreen({
               )}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-ink">
+              <tr className="sv-statement-close bg-(--sv-lime-tint)">
                 {/* 3: SL, Date, Description — the label reaches the first
                     figure it is the total of. */}
                 <td colSpan={3}>
-                  <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    Closing balance
-                  </span>{" "}
+                  <span className="font-extrabold">Closing balance</span>{" "}
                   {/* Said out loud now that the table pages: this line is the
                       whole period, and it sits under whichever twenty rows are
                       on screen. Without the qualifier a reader on page 3 has
                       every reason to read it as page 3's total. */}
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-(--sv-muted)">
                     · whole period, not this page
                   </span>
                 </td>
@@ -377,7 +386,7 @@ export function BankStatementScreen({
                     value={register.totalOut}
                     tone="out"
                     showCounterpart={false}
-                    className="block"
+                    className="block font-extrabold"
                   />
                 </td>
                 <td className="text-right">
@@ -385,14 +394,14 @@ export function BankStatementScreen({
                     value={register.totalIn}
                     tone="in"
                     showCounterpart={false}
-                    className="block"
+                    className="block font-extrabold"
                   />
                 </td>
                 <td className="text-right">
                   <Amount
                     value={register.closingBalance}
                     tone="neutral"
-                    className="block font-semibold"
+                    className="block font-extrabold"
                   />
                 </td>
                 {/* Transaction ID, Invoice and actions: a total has no
@@ -419,7 +428,12 @@ export function BankStatementScreen({
         onPage={setPage}
       />
 
-      <p className="text-xs text-muted-foreground">
+      <p className="flex items-start gap-2.5 text-[13px] text-(--sv-muted)">
+        <InfoIcon
+          weight="duotone"
+          size={18}
+          className="flex-none text-(--sv-violet)"
+        />
         Voided entries are shown struck through and left out of every total — a
         statement that hides a correction is the one an auditor is looking for.
       </p>

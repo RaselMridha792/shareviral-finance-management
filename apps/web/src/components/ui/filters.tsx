@@ -142,7 +142,7 @@ export function FilterSelect({
       className={cn(
         controlClass,
         "w-auto shrink-0 text-[13.5px] font-extrabold",
-        wide && "max-w-34",
+        wide && "max-w-44",
       )}
     >
       {children}

@@ -22,13 +22,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
-import { TabStrip } from "@/components/reports/granularity-tabs";
+import { CalculatorIcon } from "@phosphor-icons/react/dist/ssr/Calculator";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/ssr/ListChecks";
 import { useSettings } from "@/components/settings-provider";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { LineChallanForm } from "@/components/tax/line-challan-form";
 import { TaxCalculator } from "@/components/tax/tax-calculator";
 import { Card, CardHeader } from "@/components/ui/card";
-import { FilterBar, FilterSelect } from "@/components/ui/filters";
+import { FilterSelect } from "@/components/ui/filters";
 import { SummaryBar } from "@/components/ui/patterns";
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/segmented";
@@ -64,8 +65,8 @@ import { setLineChallan, tdsApi } from "@/lib/tax";
  * with, rather than in a second table underneath that repeats the month.
  */
 const TABS = [
-  { id: "register", label: "Salary deductions" },
-  { id: "calculator", label: "Tax calculator" },
+  { id: "register", label: "Salary deductions", icon: ListChecksIcon },
+  { id: "calculator", label: "Tax calculator", icon: CalculatorIcon },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -273,11 +274,14 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
         description="Tax deducted from salaries — whose, and how much."
       />
 
-      <TabStrip
-        tabs={TABS}
-        active={tab}
-        onSelect={setTab}
+      {/* The handoff's pill group, with its icons, rather than the underline
+          row — the same control as every other pair of views in the app. */}
+      <Segmented
+        options={TABS}
+        value={tab}
+        onChange={setTab}
         label="Withholding tax"
+        className="self-start"
       />
 
       {tab === "calculator" ? (
@@ -291,20 +295,22 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
             as a figure the filter had produced.
           */}
           <SummaryBar
+            lime
             label={`Deducted in ${register.currentMonth.label}`}
             icon="percent"
-            iconTone="text-negative"
             description="The month we are in, whichever period the table shows."
             value={
               <Amount
                 value={register.currentMonth.total}
                 tone="neutral"
-                className="text-[clamp(25px,2vw,32px)] font-semibold"
+                className="text-[clamp(26px,2.4vw,32px)] font-extrabold"
               />
             }
           />
 
-          <FilterBar>
+          {/* A row of its own rather than the filter card: the period group is a
+              card already, and the handoff sets the two selects beside it. */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <Segmented
               options={PERIOD_TABS}
               value={granularity}
@@ -369,7 +375,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
                 Reading {periods[index - 1]?.label ?? "that period"}…
               </span>
             ) : null}
-          </FilterBar>
+          </div>
 
           {error ? (
             <p

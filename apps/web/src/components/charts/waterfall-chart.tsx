@@ -33,11 +33,12 @@ import { useSettings } from "@/components/settings-provider";
 
 const FILL: Record<WaterfallStep["kind"], string> = {
   // The two pillars share a colour because they are the same kind of thing:
-  // a balance, not a movement.
-  opening: "var(--chart-3)",
-  closing: "var(--chart-3)",
-  in: "var(--chart-1)",
-  out: "var(--chart-5)",
+  // a balance, not a movement — the handoff's violet. The movements are money
+  // arriving and leaving, so they take the app's own green and red.
+  opening: "var(--sv-violet)",
+  closing: "var(--sv-violet)",
+  in: "var(--sv-pos)",
+  out: "var(--sv-neg)",
 };
 
 type Datum = {
@@ -264,7 +265,7 @@ function WaterfallTooltip({
       name: datum.kind === "opening" ? "Opened at" : "Balance after",
       dataKey: "balance",
       value: datum.balance,
-      color: "var(--chart-3)",
+      color: "var(--sv-violet)",
     },
   ];
 

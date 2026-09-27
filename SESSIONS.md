@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 90 | **The new design: TDS, Reports, Bank statement, AI Assistant, Import and Export — the last pages** | **done** — every screen is in the new design |
 | 89 | **The new design: Team and a person's profile, Payroll and the salary sheet** | **done** |
 | 88 | **The new design: Subscriptions and a plan's page, All transactions, an account's register** | **done** |
 | 87 | **The new design: Cash In, Money Transfer, and the expense screens** | **done** |
@@ -67,6 +68,53 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 90. The new design: TDS, Reports, Bank statement, Assistant, Import/Export — 27 Sep 2026
+
+The last five pages. With this, every screen in the app is in the September
+handoff's design.
+
+- **TDS**: Salary deductions / Tax calculator as the pill group with icons (the
+  underline tab row is gone); "Deducted in <month>" on the lime band; the period
+  group and the two selects on a plain row (the period group is a card itself,
+  and a card in the filter card was two borders); the calculator's icons.
+- **Reports**: the period as the handoff's violet band — the number in a white
+  tile at 22px, the name at 22px/800, Cycle as a lime pill, PDF as the primary
+  button; the two closing balances as cards with a violet bank / card tile and
+  the figure at the right; the section numbers (01, 02…) violet; icon tiles on
+  Where it went and Notes. **The fund-movement chart** is violet for its two
+  pillars (kept one colour — the code's own rule: both are balances) and the
+  app's green and red for money in and out; it was the old chart orange.
+- **Bank statement**: the account's name beside a bank tile over the 1.5px
+  rule, calendar dates, 800 descriptions, the closing line on the lime ground
+  with its figures at 800, the footnote with a violet info icon.
+- **AI Assistant** (when it is not switched on): the handoff's centred card —
+  a violet and a lime circle behind, the 72px lime robot tile, "Add an API
+  key" as a violet button.
+- **Import and Export**: the two tabs as the pill group with icons; the four
+  steps as the handoff's chips (the current one violet with its number in a
+  white circle, carets between, a tick on the ones done); the drop zone dashed
+  lime (violet under the pointer) with the lime Choose file; Past imports' icon.
+  Export's datasets are the handoff's cards — a violet tile per format, the
+  name at 800, violet edge and halo once chosen.
+- Shared, additive: `SummaryBar` gained `lime` (only TDS passes it); capped
+  filter selects widen from 136px to 176px because the bold value no longer
+  fitted ("September 2(" on TDS). `TabStrip` in `reports/granularity-tabs.tsx`
+  had no caller left and is removed.
+
+**Proved** across the whole app at the end: `.uiqa.mjs` 67/67 (every screen,
+every Settings section, 1440 and 390), `.settingsqa.mjs` 16/16,
+`.accountsqa.mjs` 20/20, and `.sweep.mjs` (run from a copy with this checkout's
+path — the file still names `d:/codes/…`): every screen's heading 28px, padding
+24, gap 18, nothing sideways at 1440, 1180 or 900. Its "wide" lines are the
+header card's decoration, which runs past the card's edge on purpose and is
+clipped by it.
+
+**Left for the owner to decide**, noticed on the way and not touched: the
+Reports page still says "Reports" where the handoff says "Finance statement";
+the green/red rows on All transactions (kept, the owner asked for them);
+`.sweep.mjs` and `.regpage.mjs` point at `d:/codes/…` and need their path
+fixed to run as they are.
 
 ## 89. The new design: Team, a profile, Payroll, the salary sheet — 27 Sep 2026
 

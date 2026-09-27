@@ -1,5 +1,11 @@
 "use client";
 
+import type { Icon } from "@phosphor-icons/react";
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { NotepadIcon } from "@phosphor-icons/react/dist/ssr/Notepad";
+import { ChartDonutIcon } from "@phosphor-icons/react/dist/ssr/ChartDonut";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { FilePdfIcon } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import {
   formatMoney,
   type FinancialStatement,
@@ -9,7 +15,6 @@ import {
 } from "@finance/shared";
 import {
   CircleCheck,
-  FileDown,
   FileWarning,
   Info,
   LoaderCircle,
@@ -406,31 +411,36 @@ export function StatementView({
       ) : null}
 
       {/* --- header strip ---------------------------------------------- */}
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="num flex size-12 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-lg font-semibold text-muted-foreground">
+      {/* The handoff's period band: violet, the period's number in a white
+          tile, its name at 22px, and the statement's state beside it. */}
+      <div className="sv-note-violet sv-rise rounded-[11px] bg-(--sv-violet-tint) shadow-(--sv-shadow)">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+          <div className="flex min-w-60 items-center gap-[18px]">
+            <span className="sv-note-violet grid size-[58px] shrink-0 place-items-center rounded-[11px] bg-(--sv-surface) text-[22px] font-extrabold text-(--sv-violet) tabular-nums">
               {period.ordinal}
             </span>
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-semibold tracking-tight">
+              <h2 className="truncate text-[22px] font-extrabold tracking-[-0.02em]">
                 {period.label}
               </h2>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-[13px] text-(--sv-muted)">
                 {company.name}
                 {company.counterparty ? ` · ${company.counterparty}` : ""}
               </p>
               {/* Day/month/year, like the rest of the app. Reports was not on
                   the date sweep, so it kept printing 2026-09-01 for a fortnight
                   after #1 converted everything else. */}
-              <p className="num mt-0.5 text-xs text-muted-foreground">
+              <p className="text-[13px] text-(--sv-muted) tabular-nums">
                 {formatDate(period.start)} → {formatDate(period.end)}
               </p>
             </div>
           </div>
 
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <Badge tone="primary">
+            <Badge
+              tone="primary"
+              className="bg-(--sv-accent) text-(--sv-on-accent)"
+            >
               Cycle {String(statement.cycle).padStart(2, "0")}
             </Badge>
             <Badge
@@ -442,8 +452,8 @@ export function StatementView({
               {statement.status === "reconciled" ? "Reconciled" : "Draft"}
             </Badge>
             {statement.audited ? <Badge tone="neutral">Audited</Badge> : null}
-            <Badge tone="neutral">
-              <span className="num">{statement.lineItems}</span>
+            <Badge tone="neutral" className="bg-(--sv-surface)">
+              <span className="tabular-nums">{statement.lineItems}</span>
               {statement.lineItems === 1 ? " line item" : " line items"}
             </Badge>
 
@@ -508,7 +518,7 @@ export function StatementView({
             */}
             {canExport && !sample ? (
               <Button
-                variant="secondary"
+                variant="primary"
                 size="sm"
                 className="h-9"
                 disabled={loading}
@@ -520,13 +530,13 @@ export function StatementView({
                   });
                 }}
               >
-                <FileDown className="size-4" />
+                <FilePdfIcon weight="duotone" size={18} />
                 PDF
               </Button>
             ) : null}
           </div>
         </div>
-      </Card>
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -541,24 +551,31 @@ export function StatementView({
             reads — and it survived on this screen because the sweep that
             checked for it only ever opened an account drawer. */}
         <HeadlineCard
+          icon={BankIcon}
           label="Closing bank balance"
           hint={`on ${formatDate(period.end)}`}
           value={summary.closing.bank}
         />
         {summary.closing.card ? (
           <HeadlineCard
+            icon={CreditCardIcon}
             label="Closing card balance"
             hint="prepaid, not credit"
             value={summary.closing.card}
           />
         ) : (
-          <Card className="flex flex-col justify-center p-5">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Closing card balance
-            </p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              No card account was in use this period.
-            </p>
+          <Card className="flex items-center gap-3.5 p-5">
+            <span className="grid size-11 flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+              <CreditCardIcon weight="duotone" size={23} />
+            </span>
+            <div>
+              <p className="text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
+                Closing card balance
+              </p>
+              <p className="text-[12.5px] text-(--sv-muted)">
+                No card account was in use this period.
+              </p>
+            </div>
           </Card>
         )}
       </div>
@@ -758,6 +775,7 @@ export function StatementView({
       <Card>
         <CardHeader
           title="Where it went"
+          icon={ChartDonutIcon}
           description={
             <span>
               Total outflow{" "}
@@ -936,6 +954,7 @@ export function StatementView({
       <Card>
         <CardHeader
           title="Notes to the accounts"
+          icon={NotepadIcon}
           description="The parts a ledger cannot derive. Written by a person; the app supplies a first draft."
           action={
             <span className="num text-xs text-muted-foreground">
@@ -1113,8 +1132,8 @@ function SectionHeader({
   return (
     <CardHeader
       title={
-        <span className="flex items-baseline gap-2">
-          <span className="num text-xs font-normal text-muted-foreground">
+        <span className="flex items-baseline gap-3">
+          <span className="text-[13px] font-extrabold text-(--sv-violet) tabular-nums">
             {ordinal}
           </span>
           <span>{title}</span>
@@ -1126,20 +1145,28 @@ function SectionHeader({
 }
 
 function HeadlineCard({
+  icon: Glyph,
   label,
   hint,
   value,
 }: {
+  icon: Icon;
   label: string;
   hint: string;
   value: Money2;
 }) {
   return (
-    <Card className="p-5">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <div className="mt-3 flex flex-col items-start">
+    <Card className="flex flex-wrap items-center gap-3.5 p-5">
+      <span className="grid size-11 flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+        <Glyph weight="duotone" size={23} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
+          {label}
+        </p>
+        <p className="text-[12.5px] text-(--sv-muted) tabular-nums">{hint}</p>
+      </div>
+      <div className="flex flex-col items-end">
         {/*
           The dollar line comes from `UsdLine` below, at the rate this period
           was actually reported at. Without this flag `Amount` drew its own as
@@ -1151,11 +1178,10 @@ function HeadlineCard({
           currency="BDT"
           tone="auto"
           showCounterpart={false}
-          className="block text-3xl font-semibold tracking-tight"
+          className="block text-[26px] font-extrabold tracking-[-0.02em]"
         />
-        <UsdLine value={value} className="mt-1 text-sm" />
+        <UsdLine value={value} className="text-[13px]" />
       </div>
-      <p className="num mt-2 text-xs text-muted-foreground">{hint}</p>
     </Card>
   );
 }

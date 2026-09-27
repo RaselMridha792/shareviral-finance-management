@@ -1,13 +1,16 @@
 "use client";
 
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { FileXlsIcon } from "@phosphor-icons/react/dist/ssr/FileXls";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple";
 import {
   CircleAlert,
   CircleCheck,
   Copy,
-  FileSpreadsheet,
   LoaderCircle,
   RotateCcw,
-  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
@@ -220,21 +223,45 @@ export function ImportScreen({
       {/* The page heading belongs to `DataScreen`, which owns both tabs. Two
           tabs each drawing their own title redraws the heading on every
           switch, and the heading is the one thing that does not change. */}
-      <ol className="flex flex-wrap gap-2">
+      {/* The handoff's four chips: the step you are on violet, with its
+          number in a white circle; a caret between each. */}
+      <ol className="flex flex-wrap items-center gap-2">
         {STEPS.map((label, index) => (
-          <li
-            key={label}
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
-              index === step
-                ? "border-primary bg-primary/10 text-primary"
-                : index < step
-                  ? "border-border text-muted-foreground"
-                  : "border-border text-muted-foreground opacity-55",
-            )}
-          >
-            <span className="num text-xs font-semibold">{index + 1}</span>
-            {label}
+          <li key={label} className="flex items-center gap-2">
+            {index > 0 ? (
+              <CaretRightIcon
+                weight="duotone"
+                size={14}
+                aria-hidden="true"
+                className="text-(--sv-muted)"
+              />
+            ) : null}
+            <span
+              aria-current={index === step ? "step" : undefined}
+              className={cn(
+                "inline-flex h-[38px] items-center gap-2 rounded-full pr-3.5 pl-1.5 text-[13.5px] font-extrabold",
+                index === step
+                  ? "bg-(--sv-violet) text-white"
+                  : "sv-button-quiet bg-(--sv-surface) text-(--sv-muted)",
+                index > step && "opacity-70",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-[26px] place-items-center rounded-full text-[12px] tabular-nums",
+                  index === step
+                    ? "bg-white text-(--sv-violet)"
+                    : "bg-(--sv-subtle)",
+                )}
+              >
+                {index < step ? (
+                  <CheckIcon weight="bold" size={13} />
+                ) : (
+                  index + 1
+                )}
+              </span>
+              {label}
+            </span>
           </li>
         ))}
       </ol>
@@ -249,13 +276,13 @@ export function ImportScreen({
       ) : null}
 
       {step === 0 ? (
-        <Card className="flex flex-col items-center gap-4 border-dashed px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <FileSpreadsheet className="size-6" />
+        <div className="sv-drop sv-rise flex flex-col items-center gap-2.5 rounded-[11px] bg-(--sv-lime-tint) px-6 py-[52px] text-center">
+          <span className="sv-total-tile grid size-[68px] place-items-center rounded-full bg-(--sv-surface) text-(--sv-violet) shadow-(--sv-shadow)">
+            <FileXlsIcon weight="duotone" size={34} />
           </span>
-          <div>
-            <p className="text-lg font-semibold">Choose a spreadsheet</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+          <div className="mt-1">
+            <p className="text-[19px] font-extrabold">Choose a spreadsheet</p>
+            <p className="mx-auto mt-1 max-w-[48ch] text-[14px] leading-normal text-(--sv-muted)">
               An .xlsx file or a CSV from your bank. The first row must be the
               column headings. Nothing is saved until you have checked it.
             </p>
@@ -268,16 +295,16 @@ export function ImportScreen({
               disabled={busy}
               className="sr-only"
             />
-            <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90">
+            <span className="mt-1.5 inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg bg-(--sv-accent) px-[18px] text-[14px] font-extrabold text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.28)] transition hover:bg-(--sv-accent-hover)">
               {busy ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <Upload className="size-4" />
+                <UploadSimpleIcon weight="duotone" size={18} />
               )}
               Choose file
             </span>
           </label>
-        </Card>
+        </div>
       ) : null}
 
       {step === 1 && upload ? (
@@ -610,7 +637,11 @@ export function ImportScreen({
       ) : null}
 
       <Card>
-        <CardHeader title="Past imports" description="Most recent first" />
+        <CardHeader
+          title="Past imports"
+          icon={ClockCounterClockwiseIcon}
+          description="Most recent first"
+        />
         <CardBody className="p-0">
           {initialBatches.length === 0 ? (
             <p className="px-5 py-6 text-sm text-muted-foreground">
