@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * border colour, so a `focus:border-*` utility here would never paint.
  */
 export const controlClass =
-  "sv-control h-10 w-full rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-3 text-sm outline-none disabled:opacity-50";
+  "sv-control h-11 w-full rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-3.5 text-[14.5px] outline-none disabled:opacity-50";
 
 export function Field({
   label,
@@ -57,7 +57,7 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
 export function Select({ className, ...props }: ComponentProps<"select">) {
   return (
     <select
-      className={cn(controlClass, "font-extrabold", className)}
+      className={cn(controlClass, "px-3 font-extrabold", className)}
       {...props}
     />
   );
@@ -67,7 +67,7 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return (
     <textarea
       rows={3}
-      className={cn(controlClass, "h-auto py-2 leading-relaxed", className)}
+      className={cn(controlClass, "h-auto py-3 leading-relaxed", className)}
       {...props}
     />
   );
@@ -81,7 +81,7 @@ export function MoneyInput({ className, ...props }: ComponentProps<"input">) {
       // Not type="number" — it lets browsers accept "1e5" and silently strips
       // leading zeros, and the spinner arrows are a hazard next to an amount.
       type="text"
-      className={cn(controlClass, "col-amount pr-3", className)}
+      className={cn(controlClass, "col-amount pr-3.5", className)}
       {...props}
     />
   );

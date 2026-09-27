@@ -62,7 +62,7 @@ export default async function NoAccessPage({
 
       <Link
         href="/"
-        className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+        className="inline-flex h-11 items-center rounded-lg bg-(--sv-accent) px-[18px] text-[14px] font-extrabold text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.28)] transition hover:bg-(--sv-accent-hover)"
       >
         Back to the dashboard
       </Link>

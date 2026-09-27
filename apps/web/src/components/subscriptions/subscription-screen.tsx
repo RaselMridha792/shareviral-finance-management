@@ -75,7 +75,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
               target="_blank"
               /* A third-party address typed by whoever added the plan. */
               rel="noreferrer noopener"
-              className="sv-button-quiet inline-flex h-9 items-center gap-2 rounded-lg bg-(--sv-surface) px-3.5 text-[14px] font-extrabold"
+              className="sv-button-quiet inline-flex h-11 items-center gap-2 rounded-lg bg-(--sv-surface) px-4 text-[14px] font-extrabold"
             >
               <ArrowSquareOutIcon
                 weight="duotone"

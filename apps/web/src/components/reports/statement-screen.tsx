@@ -48,41 +48,28 @@ export function StatementScreen({
         title="Finance statement"
         icon="bar_chart"
         description="The reconciled position for a period, with its notes and who signed it off."
+        /*
+         * The period's length in the header card, as the handoff has it. It
+         * sat under the header beside a single "Finance Statement" tab — one
+         * tab, choosing nothing, that the handoff does not draw.
+         */
+        actions={
+          <Select
+            aria-label="Period"
+            className="w-auto"
+            value={granularity}
+            onChange={(event) =>
+              setGranularity(event.target.value as Granularity)
+            }
+          >
+            {TABS.map((tab) => (
+              <option key={tab.id} value={tab.id}>
+                {tab.short ?? tab.label}
+              </option>
+            ))}
+          </Select>
+        }
       />
-
-      {/*
-        One tab, and the period beside it in a select.
-
-        It was four tabs — "Monthly Finance Statement", "Quarterly Finance
-        Statement", and so on — which is the same three words written four
-        times, and 90 characters of tab bar for one choice. The tab stays
-        rather than disappearing because it is the row another statement would
-        join; the choice it used to carry is now a control that says what it
-        is choosing.
-      */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border">
-        <span
-          role="tab"
-          aria-selected="true"
-          className="-mb-px border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary"
-        >
-          Finance Statement
-        </span>
-        <Select
-          aria-label="Period"
-          className="mb-2 h-9 w-auto"
-          value={granularity}
-          onChange={(event) =>
-            setGranularity(event.target.value as Granularity)
-          }
-        >
-          {TABS.map((tab) => (
-            <option key={tab.id} value={tab.id}>
-              {tab.short ?? tab.label}
-            </option>
-          ))}
-        </Select>
-      </div>
 
       <StatementView
         key={granularity}

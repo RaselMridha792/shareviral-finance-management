@@ -168,7 +168,7 @@ export function EmailPanel() {
               <Button
                 variant="secondary"
                 // As tall as the key box beside it, as the handoff lines them up.
-                className="h-10 px-3.5 text-[13.5px]"
+                className="px-3.5 text-[13.5px]"
                 disabled={!canWrite || !apiKey.trim() || busy !== null}
                 onClick={() =>
                   run("key", async () => {

@@ -218,9 +218,10 @@ try {
 
   /* ------------------------------------------------ settings */
   console.log("\n/settings — two panels");
-  await open("/settings");
-  for (const [tab, button] of [["Categories", "Add heading"], ["People who can sign in", "Add someone"]]) {
-    await clickText(tab, "body");
+  // Opened by URL: Settings' sections are the rail's links now (each carrying
+  // its name AND a hint line), not tabs whose whole text is the name.
+  for (const [tab, button] of [["categories", "Add heading"], ["users", "Add someone"]]) {
+    await open(`/settings?tab=${tab}`);
     await settle(900);
     const ok = await clickText(button);
     await settle();

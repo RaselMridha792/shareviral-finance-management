@@ -310,7 +310,7 @@ export function WithholdingScreen({ initial }: { initial: SalaryTdsRegister }) {
 
           {/* A row of its own rather than the filter card: the period group is a
               card already, and the handoff sets the two selects beside it. */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="sv-toolbar flex flex-wrap items-center gap-2.5">
             <Segmented
               options={PERIOD_TABS}
               value={granularity}

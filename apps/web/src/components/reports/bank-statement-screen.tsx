@@ -13,7 +13,6 @@ import { Card } from "@/components/ui/card";
 import { Dated } from "@/components/ui/dated";
 import {
   DateRangeField,
-  FilterBar,
   FilterSelect,
 } from "@/components/ui/filters";
 import { PageHeader } from "@/components/ui/page-header";
@@ -143,7 +142,7 @@ export function BankStatementScreen({
         balance of one account, so this is the question the table cannot be
         read without an answer to. The dates narrow what it has already chosen.
       */}
-      <FilterBar>
+      <div className="sv-toolbar flex flex-wrap items-center gap-2.5">
         {/* `wide` because the options come from the database — an account named
             after its bank and its branch would otherwise size the control to
             itself. */}
@@ -160,16 +159,14 @@ export function BankStatementScreen({
           ))}
         </FilterSelect>
 
-        {/* One bordered control with a hairline between the ends, not two
-            boxes: the rule is what says these are the ends of a range. The
-            labels ride on the inputs — a caption above each is what made rows
-            like this two lines high. */}
+        {/* The two ends of the range, labelled on the inputs — a caption above
+            each is what made rows like this two lines high. */}
         <DateRangeField
           from={range.from}
           to={range.to}
           onChange={(next) => go({ account: accountId, ...next })}
         />
-      </FilterBar>
+      </div>
 
       <Card className="overflow-hidden p-0">
         {/*

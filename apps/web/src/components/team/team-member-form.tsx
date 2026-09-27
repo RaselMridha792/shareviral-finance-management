@@ -768,7 +768,7 @@ function PaperPick({
   return (
     <Field label={label} hint={showing ? undefined : hint}>
       <div className="flex items-center gap-2">
-        <label className="flex h-10 min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 text-sm text-muted-foreground transition hover:text-foreground">
+        <label className="sv-control flex h-11 min-w-0 cursor-pointer items-center gap-2 rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-3.5 text-[14.5px] text-muted-foreground transition hover:text-foreground">
           <Paperclip className="size-3.5 shrink-0" />
           {name ? (
             <span className="max-w-48 truncate text-foreground">{name}</span>

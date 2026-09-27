@@ -69,3 +69,7 @@ apps/api/test/integration/*.xlsx
 .rolecheck.mjs
 .linkcheck.mjs
 .rolesweep.json
+
+# The owner's design handoff (10MB). Kept at the root on purpose: the screens
+# are built against it. Never committed.
+new version of the design.zip

@@ -455,7 +455,7 @@ function FilterRow({
         for as long as nobody has touched it.
       */}
       <SearchableSelect
-        className="w-36 shrink-0"
+        className="w-40 shrink-0"
         value={filters.categoryId ?? ""}
         onChange={(next) => set({ categoryId: next || undefined })}
         placeholder="All categories"

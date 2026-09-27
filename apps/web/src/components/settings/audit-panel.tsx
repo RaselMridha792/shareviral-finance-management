@@ -223,20 +223,24 @@ export function AuditPanel() {
           </span>
           {totalPages > 1 ? (
             <span className="flex items-center gap-2">
+              {/* The handoff's own pager for this screen: 34px, Back quiet and
+                  muted, Next lime. */}
               <Button
                 size="sm"
                 variant="secondary"
+                className="h-[34px] px-3 text-(--sv-muted)"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
                 Back
               </Button>
-              <span className="num text-xs text-muted-foreground">
+              <span className="text-[13px] text-(--sv-muted) tabular-nums">
                 {page} / {totalPages}
               </span>
               <Button
                 size="sm"
-                variant="secondary"
+                variant="primary"
+                className="h-[34px] px-3 shadow-none"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >

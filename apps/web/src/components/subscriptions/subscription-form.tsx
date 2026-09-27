@@ -774,7 +774,7 @@ export function SubscriptionForm({
             not what it will read forever.
           */}
           <Field label="Renews on">
-            <p className="flex h-9 items-center rounded-lg border border-dashed border-border px-3 text-sm text-muted-foreground">
+            <p className="sv-chip flex h-11 items-center rounded-[11px] border-dashed px-3.5 text-[14.5px] text-muted-foreground">
               {derivedRenewal ? (
                 <span className="num">{formatDate(derivedRenewal)}</span>
               ) : /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? (

@@ -282,8 +282,8 @@ export function LineChallanForm({
                 className="sr-only"
                 onChange={(event) => setChosen(event.target.files?.[0] ?? null)}
               />
-              <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-medium transition hover:bg-surface-muted">
-                <Paperclip className="size-3.5" />
+              <span className="sv-button-quiet inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg bg-(--sv-surface) px-4 text-[14px] font-extrabold">
+                <Paperclip className="size-4 text-(--sv-violet)" />
                 {scan || chosen ? "Choose another" : "Attach the file"}
               </span>
             </label>

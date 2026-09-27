@@ -568,12 +568,7 @@ function TdsCalculator({ year }: { year: number }) {
             <span aria-hidden="true" className="text-[13px] font-extrabold">
               &nbsp;
             </span>
-            <Button
-              type="submit"
-              variant="secondary"
-              disabled={busy}
-              className="h-10"
-            >
+            <Button type="submit" variant="secondary" disabled={busy}>
               {busy ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (

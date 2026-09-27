@@ -328,7 +328,7 @@ export function SubscriptionsScreen({
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="sv-toolbar flex flex-wrap items-center gap-3">
         {/* A filter over one list, so the design's segmented group rather than
             the underline row it had — underlines are for switching between
             documents, which these five are not. */}

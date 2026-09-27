@@ -50,23 +50,16 @@ export function FilterBar({
 }
 
 /**
- * From and to, as one control.
+ * From and to: two date fields side by side, as the handoff draws them — each
+ * its own 42px box in the filter card, at 13.5px.
  *
- * Two separate bordered boxes read as two unrelated dates. One box with a
- * hairline between them reads as a range, and it is worth about thirty pixels
- * of the row — which on a laptop is the difference between this fitting on one
- * line and not.
+ * They were one bordered box with a hairline between the two dates. The
+ * handoff draws two, and the owner asked for the handoff exactly.
  *
  * The labels are on the inputs rather than above them: a caption stacked over
- * each is what made this two rows in the first place, and a date input ignores
- * a placeholder, so `aria-label` names each end for a screen reader and
- * `title` says the same to a mouse.
- *
- * 13px, not the app's usual 15: the browser sizes a date field to whatever
- * "mm/dd/yyyy" and its picker button need, and no width of ours makes it
- * smaller without cutting the year off. What it does answer to is type size —
- * the pair asks for 234px at 13px against 266px at 15px. Digits in a mono face
- * carry the smaller size without complaint.
+ * each makes the filter two rows, and a date input ignores a placeholder, so
+ * `aria-label` names each end for a screen reader and `title` says the same to
+ * a mouse.
  */
 export function DateRangeField({
   from,
@@ -81,8 +74,9 @@ export function DateRangeField({
   fromLabel?: string;
   toLabel?: string;
 }) {
+  const date = cn(controlClass, "num w-auto shrink-0 px-2.5 text-[13.5px]");
   return (
-    <div className="sv-control flex h-10 shrink-0 items-center gap-1 rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-2 text-[13px]">
+    <>
       <input
         type="date"
         aria-label={fromLabel}
@@ -91,9 +85,8 @@ export function DateRangeField({
         onChange={(event) =>
           onChange({ from: event.target.value || undefined, to })
         }
-        className="num w-auto bg-transparent outline-none"
+        className={date}
       />
-      <span aria-hidden="true" className="h-5 w-px bg-(--sv-line)" />
       <input
         type="date"
         aria-label={toLabel}
@@ -102,9 +95,9 @@ export function DateRangeField({
         onChange={(event) =>
           onChange({ from, to: event.target.value || undefined })
         }
-        className="num w-auto bg-transparent outline-none"
+        className={date}
       />
-    </div>
+    </>
   );
 }
 

@@ -6,13 +6,17 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 /**
- * The September 2026 handoff's buttons, at the app's own heights.
+ * The September 2026 handoff's buttons, at the handoff's own sizes.
  *
  * Bold (800), a lime primary with a soft lime shadow that lifts a pixel under
- * the pointer, a white secondary whose edge turns violet. The owner chose this
- * everywhere at once. The heights did NOT move — 36 and 32 — because every
- * filter row and form lines a button up against a 36px input, and a taller
- * button is a crooked row on every screen.
+ * the pointer, a white secondary whose edge turns violet.
+ *
+ * `md` is the handoff's 44px (18px across for the lime one, 16px for the
+ * others, 14px type) and `sm` its 38px (13px). They were held at 36 and 32 so a
+ * button lined up with a 36px input; the owner then asked for everything
+ * exactly as the handoff draws it — *"button input etc sobkichu oitar moto
+ * hote hobe"* — and the inputs moved to its 44px with them (field.tsx), so a
+ * form row still lines up.
  *
  * The secondary's edge is the class `sv-button-quiet` (new-design.css) rather
  * than a border utility: globals.css's unlayered `* { border-color }` beats any
@@ -34,8 +38,8 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5",
-  md: "h-9 px-4 text-sm gap-2",
+  sm: "h-[38px] px-[13px] text-[13px] gap-[7px]",
+  md: "h-11 px-4 text-[14px] gap-2",
 };
 
 export function Button({
@@ -51,6 +55,7 @@ export function Button({
         "disabled:cursor-not-allowed disabled:opacity-50",
         VARIANTS[variant],
         SIZES[size],
+        variant === "primary" && size === "md" && "px-[18px]",
         className,
       )}
       {...props}

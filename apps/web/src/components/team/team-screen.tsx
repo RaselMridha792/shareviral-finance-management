@@ -278,7 +278,7 @@ export function TeamScreen({
 
       {/* The two views and the search on one row, as the handoff draws them:
           the tabs at the left, the search pushed to the right. */}
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="sv-toolbar flex flex-wrap items-center gap-2.5">
         {data.items.length > 0 ? (
           /*
             Two views of one list, so a segmented group — the underline row

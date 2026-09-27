@@ -341,10 +341,44 @@
   border-color: var(--sv-neg);
 }
 
-/* In the filter card the controls are the handoff's slimmer kind: 1px, 8px. */
+/* Where a control sits decides its shape, as the handoff draws it.
+
+   A form field is the default (field.tsx): 44px, 11px corners, 1.5px line,
+   the subtle ground. In the filter card: 42px, 8px, 1px, subtle, 13.5px. In
+   the header card or on a toolbar row above a table: 44px, 8px, 1px, on the
+   white ground, 14px. On Reports' violet period band: 40px, edged in the
+   band's own violet. These are plain CSS rather than utilities so they win
+   over a height a caller's className set. */
 .sv-filterbar .sv-control {
+  height: 42px;
   border-width: 1px;
   border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.sv-page-head .sv-control,
+.sv-toolbar .sv-control {
+  height: 44px;
+  border-width: 1px;
+  border-radius: 8px;
+  background-color: var(--sv-surface);
+  font-size: 14px;
+}
+
+.sv-band .sv-control {
+  height: 40px;
+  border-width: 1px;
+  border-radius: 8px;
+  border-color: var(--sv-violet-tint-line);
+  background-color: var(--sv-surface);
+  font-size: 13.5px;
+}
+
+/* A date field's own padding, as the handoff has it (10px, not 14). */
+.sv-filterbar input[type="date"].sv-control,
+.sv-toolbar input[type="date"].sv-control {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 /* SL, in a 28px box — a position, not data. */

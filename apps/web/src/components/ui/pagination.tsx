@@ -73,15 +73,19 @@ export function Pagination({
         <Button
           size="sm"
           variant="secondary"
+          className="h-[34px] px-3"
           disabled={page <= 1}
           onClick={() => onPage(page - 1)}
         >
           <CaretLeftIcon weight="bold" size={14} />
           Previous
         </Button>
+        {/* Next is the lime one, as on the handoff's own pager: it is the
+            way on, and Previous is the way back. */}
         <Button
           size="sm"
-          variant="secondary"
+          variant="primary"
+          className="h-[34px] px-3 shadow-none"
           disabled={page >= totalPages}
           onClick={() => onPage(page + 1)}
         >

@@ -413,7 +413,7 @@ export function StatementView({
       {/* --- header strip ---------------------------------------------- */}
       {/* The handoff's period band: violet, the period's number in a white
           tile, its name at 22px, and the statement's state beside it. */}
-      <div className="sv-note-violet sv-rise rounded-[11px] bg-(--sv-violet-tint) shadow-(--sv-shadow)">
+      <div className="sv-band sv-note-violet sv-rise rounded-[11px] bg-(--sv-violet-tint) shadow-(--sv-shadow)">
         <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div className="flex min-w-60 items-center gap-[18px]">
             <span className="sv-note-violet grid size-[58px] shrink-0 place-items-center rounded-[11px] bg-(--sv-surface) text-[22px] font-extrabold text-(--sv-violet) tabular-nums">
@@ -466,7 +466,7 @@ export function StatementView({
                   ? "July to June"
                   : "January to December"
               }
-              className="h-9 w-auto"
+              className="w-auto"
               value={fiscalYear}
               disabled={loading}
               onChange={(event) => setFiscalYear(Number(event.target.value))}
@@ -483,7 +483,7 @@ export function StatementView({
             {periods.periods.length > 1 ? (
               <Select
                 aria-label="Period"
-                className="h-9 w-auto max-w-40"
+                className="w-auto max-w-44"
                 value={index}
                 disabled={loading}
                 onChange={(event) => setIndex(Number(event.target.value))}
@@ -520,7 +520,7 @@ export function StatementView({
               <Button
                 variant="primary"
                 size="sm"
-                className="h-9"
+                className="h-10 px-3.5 text-[13.5px] shadow-none"
                 disabled={loading}
                 onClick={() => {
                   window.location.href = exportUrl("statement.pdf", {
