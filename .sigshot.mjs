@@ -1,13 +1,16 @@
 // The Signed by block, as somebody actually sees it.
 //
 //   node .sigshot.mjs
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const OUT = path.join(REPO, ".sigcheck-out");
 const env = Object.fromEntries(
   fs

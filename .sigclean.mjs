@@ -2,11 +2,14 @@
 // the pre-existing settings path still worked after the shared changes.
 // Nothing was on file before it, so take it back out — a payslip should not
 // print a test scrawl.
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const env = Object.fromEntries(
   fs
     .readFileSync(path.join(REPO, "apps/api/.env"), "utf8")

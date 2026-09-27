@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import pg from "pg";
 
-const env = readFileSync("d:/codes/Finance-Management-software/apps/api/.env", "utf8");
+const env = readFileSync(new URL("./apps/api/.env", import.meta.url), "utf8");
 const url = env.match(/^DATABASE_URL_UNPOOLED=(.*)$/m)[1].trim().replace(/^["']|["']$/g, "");
 const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
 await client.connect();

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 92 | **Every root harness runs from any checkout — no more `d:/codes`** | **done** |
 | 91 | **Reports is headed "Finance statement"; `.sweep.mjs` and `.regpage.mjs` run again** | **done** |
 | 90 | **The new design: TDS, Reports, Bank statement, AI Assistant, Import and Export — the last pages** | **done** — every screen is in the new design |
 | 89 | **The new design: Team and a person's profile, Payroll and the salary sheet** | **done** |
@@ -69,6 +70,39 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 92. Every root harness runs from any checkout — 27 Sep 2026
+
+The owner: *"jegula d:codes dhore ache oigula thik koro"*. Ninety-five
+`.*.mjs` scripts at the root named `d:/codes/Finance-Management-software` —
+one machine's checkout — so on any other every one of them died on its first
+`readFileSync` of `apps/api/.env`. None of them is deployed; the live site
+never ran them, so this was never a fault on the site, only in the tools that
+check it.
+
+- 93 declared `const REPO = "d:/codes/…"`. Each now reads
+  `fileURLToPath(new URL(".", import.meta.url))` — the folder the script sits
+  in, which is the repository root wherever it is checked out — with the
+  `node:url` import added. The other 2 read the `.env` by full path; they pass
+  `new URL("./apps/api/.env", import.meta.url)` to `readFileSync`, which takes
+  a URL as readily as a path. Line endings kept as each file had them.
+- 83 are tracked and are in this commit; 12 are in `.gitignore` (local-only
+  scratch — `.sweep.mjs`, `.pager.mjs`, `.linkcheck.mjs` and others) and are
+  fixed on this machine only.
+
+**Proved**: `grep` finds no `d:/codes` in any script; all 95 pass
+`node --check`; five read-only ones were run against the dev server and all
+reached the `.env`, the database and the pages — `.dateqa.mjs` 23/23,
+`.pager.mjs` and `.linkcheck.mjs` clean.
+
+**Two scripts are out of date, not broken** — they now run and report what
+they were written to look for, which the app no longer does:
+`.capsweep.mjs` wants an "FX locked" chip on every screen (it went with the
+global FX rate, on the owner's word), and `.acctqa.mjs` expects Cash In to list
+every month (it shows the chosen month) and the register oldest first (it is
+newest first — `.regpage.mjs` checks that and passes). Not changed; the owner
+decides whether they are updated or retired. `.rolecheck.mjs` was not run: it
+creates a sign-in account.
 
 ## 91. "Finance statement", and two harnesses that run again — 27 Sep 2026
 

@@ -4,13 +4,16 @@
 // current month; this only re-saves the signatory list and re-reads the PDF.
 //
 //   node .siggrid.mjs
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const BASE = "http://localhost:3000/api";
 const SHEET = { width: 595.28, height: 841.89 };
 const FIGURES = SHEET.height - 182;

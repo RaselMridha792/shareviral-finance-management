@@ -13,13 +13,16 @@
  * over an order, and it is wrong in a way that looks right: every figure is
  * plausible, and only the arithmetic between them gives it away.
  */
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const env = Object.fromEntries(
   fs
     .readFileSync(path.join(REPO, "apps/api/.env"), "utf8")

@@ -1,5 +1,5 @@
 import fs from "node:fs"; import jwt from "jsonwebtoken"; import pg from "pg"; import puppeteer from "puppeteer-core";
-const env=Object.fromEntries(fs.readFileSync("d:/codes/Finance-Management-software/apps/api/.env","utf8").split(/\r?\n/).filter(l=>l&&!l.trim().startsWith("#")&&l.includes("=")).map(l=>{const i=l.indexOf("=");return[l.slice(0,i).trim(),l.slice(i+1).trim().replace(/^["']|["']$/g,"")]}));
+const env=Object.fromEntries(fs.readFileSync(new URL("./apps/api/.env", import.meta.url),"utf8").split(/\r?\n/).filter(l=>l&&!l.trim().startsWith("#")&&l.includes("=")).map(l=>{const i=l.indexOf("=");return[l.slice(0,i).trim(),l.slice(i+1).trim().replace(/^["']|["']$/g,"")]}));
 const db=new pg.Client({connectionString:env.DATABASE_URL_UNPOOLED||env.DATABASE_URL,ssl:{rejectUnauthorized:false}});
 await db.connect();
 const {rows:u}=await db.query(`select id, role, token_version from users where status='active' and deleted_at is null order by created_at limit 1`);

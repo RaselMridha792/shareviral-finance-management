@@ -1,12 +1,15 @@
 // The whole gesture, through the browser: pencil, type, save, and the table
 // afterwards. Nothing here calls the API directly.
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const env = Object.fromEntries(
   fs.readFileSync(path.join(REPO, "apps/api/.env"), "utf8").split(/\r?\n/)
     .filter((l) => l && !l.trim().startsWith("#") && l.includes("="))

@@ -15,13 +15,16 @@
  * It reads. It opens drawers and closes them again, which is the only way to
  * find one that renders wrong, but it submits nothing and saves nothing.
  */
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it is
+// checked out. It named one machine's path, and failed on every other.
+const REPO = fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]+$/, "");
 const WEB = "http://localhost:3000";
 
 const env = Object.fromEntries(
