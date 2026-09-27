@@ -1,5 +1,6 @@
 "use client";
 
+import { ShareNetworkIcon } from "@phosphor-icons/react/dist/ssr/ShareNetwork";
 import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
@@ -104,6 +105,7 @@ export function SocialAccounts({
     <Card>
       <CardHeader
         title="Social media"
+        icon={ShareNetworkIcon}
         description="Where they can be found"
         action={
           canWrite ? (

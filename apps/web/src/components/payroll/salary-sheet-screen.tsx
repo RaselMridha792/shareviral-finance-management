@@ -9,18 +9,23 @@ import {
   todayInDhaka,
   toMinorUnits,
 } from "@finance/shared";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
+import { CalculatorIcon } from "@phosphor-icons/react/dist/ssr/Calculator";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
+import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
+import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info";
+import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
+import { LockSimpleOpenIcon } from "@phosphor-icons/react/dist/ssr/LockSimpleOpen";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { VaultIcon } from "@phosphor-icons/react/dist/ssr/Vault";
 import {
-  ArrowLeft,
   Calculator,
-  CircleCheck,
   LoaderCircle,
-  Lock,
   Printer,
-  RefreshCw,
-  Save,
-  TriangleAlert,
-  Unlock,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,11 +38,12 @@ import { RunDocuments } from "@/components/payroll/run-documents";
 import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState, StatCell, StatStrip } from "@/components/ui/patterns";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
@@ -364,9 +370,9 @@ export function SalarySheetScreen({
     <>
       <Link
         href="/payroll"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
       >
-        <ArrowLeft className="size-3.5" />
+        <ArrowLeftIcon weight="bold" size={15} />
         All payroll runs
       </Link>
 
@@ -383,7 +389,7 @@ export function SalarySheetScreen({
                 disabled={busy}
                 onClick={() => setChoosingPeople(true)}
               >
-                <Users className="size-4" />
+                <UsersThreeIcon weight="duotone" size={18} />
                 People
               </Button>
             ) : null}
@@ -394,7 +400,7 @@ export function SalarySheetScreen({
                 disabled={busy}
                 onClick={() => act(() => payrollApi.generateLines(run.id))}
               >
-                <RefreshCw className="size-4" />
+                <ArrowsClockwiseIcon weight="duotone" size={18} />
                 {lines.length ? "Rebuild list" : "Build list"}
               </Button>
             ) : null}
@@ -411,7 +417,7 @@ export function SalarySheetScreen({
                 disabled={busy}
                 onClick={() => act(() => payrollApi.recalculateTds(run.id))}
               >
-                <Calculator className="size-4" />
+                <CalculatorIcon weight="duotone" size={18} />
                 Work out the tax again
               </Button>
             ) : null}
@@ -438,7 +444,7 @@ export function SalarySheetScreen({
                 disabled={busy}
                 onClick={saveDraft}
               >
-                <Save className="size-4" />
+                <FloppyDiskIcon weight="duotone" size={18} />
                 Save draft
               </Button>
             ) : null}
@@ -451,7 +457,7 @@ export function SalarySheetScreen({
                   act(() => payrollApi.finalize(run.id), "Figures locked.")
                 }
               >
-                <Lock className="size-4" />
+                <LockSimpleIcon weight="duotone" size={18} />
                 Finalise
               </Button>
             ) : null}
@@ -481,7 +487,7 @@ export function SalarySheetScreen({
                     : act(() => payrollApi.reopen(run.id), "Open for editing.")
                 }
               >
-                <Unlock className="size-4" />
+                <LockSimpleOpenIcon weight="duotone" size={18} />
                 {run.status === "paid" ? "Edit" : "Reopen"}
               </Button>
             ) : null}
@@ -491,7 +497,7 @@ export function SalarySheetScreen({
                 size="md"
                 onClick={() => setPaying(true)}
               >
-                <CircleCheck className="size-4" />
+                <CheckCircleIcon weight="duotone" size={18} />
                 Mark paid
               </Button>
             ) : null}
@@ -542,16 +548,31 @@ export function SalarySheetScreen({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Figure label="Gross" value={run.totalGross} />
-        <Figure label="Additions" value={run.totalAdditions} />
-        <Figure
-          label="Tax withheld"
-          value={run.totalTds}
-          hint="Stays with you until the challan is deposited"
+      <StatStrip min={220}>
+        <StatCell
+          label="Gross"
+          icon="payments"
+          value={<Amount value={run.totalGross} tone="neutral" />}
         />
-        <Figure label="Net to pay" value={run.totalNet} emphasis />
-      </div>
+        <StatCell
+          label="Additions"
+          icon={PlusCircleIcon}
+          value={<Amount value={run.totalAdditions} tone="neutral" />}
+        />
+        <StatCell
+          label="Tax withheld"
+          icon={VaultIcon}
+          iconTone="text-warning"
+          value={<Amount value={run.totalTds} tone="neutral" />}
+          footnote="Stays with you until the challan is deposited"
+        />
+        <StatCell
+          label="Net to pay"
+          icon={HandCoinsIcon}
+          emphasis
+          value={<Amount value={run.totalNet} tone="neutral" />}
+        />
+      </StatStrip>
 
       {/*
         This month's paperwork, beside this month's totals.
@@ -563,21 +584,21 @@ export function SalarySheetScreen({
         is when the owner asked for it: *"payroll toiri korar somoy invoice and
         reference upload korar option tao diye diyo"*.
       */}
-      <Card className="flex flex-col gap-3 p-5">
-        <div>
-          <h2 className="text-sm font-semibold">Documents</h2>
-          <p className="text-xs text-muted-foreground">
-            The invoice for this month and the bank&apos;s record of paying it.
-            Either can be added later.
-          </p>
-        </div>
-        <RunDocuments runId={run.id} canWrite={canWrite} />
+      <Card>
+        <CardHeader
+          title="Documents"
+          icon={FilesIcon}
+          description="The invoice for this month and the bank's record of paying it. Either can be added later."
+        />
+        <CardBody>
+          <RunDocuments runId={run.id} canWrite={canWrite} />
+        </CardBody>
       </Card>
 
       {run.status === "draft" ? (
-        <div className="flex items-start gap-3 rounded-lg bg-surface-muted px-4 py-3">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
+        <div className="sv-note-violet flex items-start gap-2.5 rounded-[11px] bg-(--sv-violet-tint) px-4 py-3 text-(--sv-violet-ink)">
+          <InfoIcon weight="duotone" size={19} className="mt-px flex-none" />
+          <p className="text-[13.5px] leading-normal">
             Nothing has left the bank. Type each person&apos;s tax into the
             table, finalise to lock the figures, then mark it paid — that last
             step is what creates the ledger entry.
@@ -586,11 +607,11 @@ export function SalarySheetScreen({
       ) : null}
 
       {lines.length === 0 ? (
-        <Card className="px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            The list is empty. Build it to pull in everyone employed this month
-            at the pay they were on.
-          </p>
+        <Card>
+          <EmptyState icon="table_view" title="The list is empty">
+            Build it to pull in everyone employed this month at the pay they
+            were on.
+          </EmptyState>
         </Card>
       ) : (
         <Card className="overflow-hidden">
@@ -1613,34 +1634,6 @@ function FootAmount({ value }: { value: string }) {
     <td>
       <Amount value={value} tone="neutral" className="block font-semibold" />
     </td>
-  );
-}
-
-function Figure({
-  label,
-  value,
-  hint,
-  emphasis = false,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  emphasis?: boolean;
-}) {
-  return (
-    <Card className={cn("p-5", emphasis && "border-primary/40")}>
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <Amount
-        value={value}
-        tone="neutral"
-        className="mt-3 block text-xl font-semibold tracking-tight"
-      />
-      {hint ? (
-        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-      ) : null}
-    </Card>
   );
 }
 

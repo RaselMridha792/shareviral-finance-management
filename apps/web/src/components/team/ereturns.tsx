@@ -1,5 +1,6 @@
 "use client";
 
+import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
 import {
   fiscalYearLabelLong,
   fiscalYearOf,
@@ -49,6 +50,7 @@ export function Ereturns({
     <Card>
       <CardHeader
         title="E-Return"
+        icon={FileTextIcon}
         description="One filing per income year, with its acknowledgement"
         action={
           canWrite ? (

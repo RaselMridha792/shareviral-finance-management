@@ -8,7 +8,10 @@ import {
   todayInDhaka,
   type Paginated,
 } from "@finance/shared";
-import { LoaderCircle, Plus, Wallet } from "lucide-react";
+import { CalendarCheckIcon } from "@phosphor-icons/react/dist/ssr/CalendarCheck";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useEffect, useState, type FormEvent } from "react";
@@ -25,6 +28,8 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dated } from "@/components/ui/dated";
+import { EmptyState } from "@/components/ui/patterns";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -211,7 +216,7 @@ export function PayrollListScreen({
               size="md"
               onClick={() => setCreating(true)}
             >
-              <Plus className="size-4" />
+              <PlusCircleIcon weight="duotone" size={19} />
               New month
             </Button>
           ) : null
@@ -224,17 +229,11 @@ export function PayrollListScreen({
         announce "No payroll runs yet" over a set of runs that exist.
       */}
       {data.total === 0 ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Wallet className="size-6" />
-          </span>
-          <div>
-            <p className="text-lg font-semibold">No payroll runs yet</p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Start a month, build the salary sheet, type in each person&apos;s
-              tax, then mark it paid — that last step is what moves money.
-            </p>
-          </div>
+        <Card>
+          <EmptyState icon="payments" title="No payroll runs yet">
+            Start a month, build the salary sheet, type in each person&apos;s
+            tax, then mark it paid — that last step is what moves money.
+          </EmptyState>
         </Card>
       ) : (
         <Card className="overflow-hidden">
@@ -339,23 +338,32 @@ export function PayrollListScreen({
                         />
                       ) : null}
                       <SerialCell n={serial(data.page, index)} />
-                      <td className="num text-muted-foreground">
+                      <td className="text-muted-foreground">
                         {/* Day/month/year, like everywhere else. This one
                             escaped both sweeps: no run on the development
                             database has been paid, so the column reads N/A
                             here and the browser check had nothing to see. It is
                             the source check that catches it now. */}
-                        {run.paymentDate ? formatDate(run.paymentDate) : "N/A"}
+                        {run.paymentDate ? (
+                          <Dated>{formatDate(run.paymentDate)}</Dated>
+                        ) : (
+                          "N/A"
+                        )}
                       </td>
                       <td>
                         {/* One link per row — see the note in team-screen.tsx. */}
-                        <Link
-                          href={`/payroll/${run.id}`}
-                          prefetch={false}
-                          className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-                        >
-                          {run.label}
-                        </Link>
+                        <span className="flex items-center gap-2.5 whitespace-nowrap">
+                          <span className="grid size-[34px] flex-none place-items-center rounded-lg bg-(--sv-violet-tint) text-(--sv-violet)">
+                            <CalendarCheckIcon weight="duotone" size={18} />
+                          </span>
+                          <Link
+                            href={`/payroll/${run.id}`}
+                            prefetch={false}
+                            className="font-extrabold text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+                          >
+                            {run.label}
+                          </Link>
+                        </span>
                       </td>
                       <td className="text-right">
                         <Amount
@@ -375,7 +383,7 @@ export function PayrollListScreen({
                         <Amount
                           value={run.totalNet}
                           tone="neutral"
-                          className="block font-medium"
+                          className="block font-extrabold"
                         />
                       </td>
                       {/*
@@ -407,15 +415,20 @@ export function PayrollListScreen({
                         }
                       />
                       <td>
+                        {/* The handoff's: Paid green with its tick, a
+                            finalised run violet, a draft amber. */}
                         <Badge
                           tone={
                             run.status === "paid"
                               ? "positive"
                               : run.status === "finalized"
                                 ? "primary"
-                                : "neutral"
+                                : "warning"
                           }
                         >
+                          {run.status === "paid" ? (
+                            <CheckCircleIcon weight="duotone" size={14} />
+                          ) : null}
                           {PAYROLL_STATUS_LABELS[run.status]}
                         </Badge>
                       </td>

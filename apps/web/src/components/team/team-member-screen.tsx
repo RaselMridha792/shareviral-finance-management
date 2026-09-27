@@ -1,5 +1,16 @@
 "use client";
 
+import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { BriefcaseIcon } from "@phosphor-icons/react/dist/ssr/Briefcase";
+import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
+import { IdentificationCardIcon } from "@phosphor-icons/react/dist/ssr/IdentificationCard";
+import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil";
+import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import {
   EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
@@ -12,15 +23,15 @@ import {
   todayInDhaka,
   type EmploymentStatus,
 } from "@finance/shared";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { UserGearIcon } from "@phosphor-icons/react/dist/ssr/UserGear";
 import {
-  ArrowLeft,
   LoaderCircle,
   Lock,
   Plus,
   Printer,
-  SquarePen,
   Trash2,
-  UserCog,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/components/settings-provider";
 import { MemberTools } from "@/components/team/member-tools";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { StatusPill, type PillTone } from "@/components/ui/patterns";
 import { Drawer } from "@/components/ui/drawer";
 import {
   DateInput,
@@ -238,13 +250,21 @@ export function TeamMemberScreen({
     <>
       <Link
         href="/team"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
       >
-        <ArrowLeft className="size-3.5" />
+        <ArrowLeftIcon weight="bold" size={15} />
         All team
       </Link>
 
-      <Card className="flex flex-wrap items-center gap-4 p-5">
+      {/* The profile's own header card: the photo where a screen's lime tile
+          would be, and the handoff's decoration behind the words. */}
+      <Card className="sv-page-head sv-rise relative isolate flex flex-wrap items-center gap-4 overflow-hidden px-6 py-5">
+        <div aria-hidden="true" className="sv-page-head-decor">
+          <span className="grid-paper" />
+          <span className="blob" />
+          <span className="loop" />
+          <span className="square" />
+        </div>
         <div className="flex flex-col items-center gap-1.5">
           <button
             type="button"
@@ -278,18 +298,18 @@ export function TeamMemberScreen({
         />
 
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
             {member.fullName}
           </h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-[14.5px] text-(--sv-muted)">
             {[member.designation, member.department]
               .filter(Boolean)
               .join(" · ") || ENGAGEMENT_LABELS[member.engagementType]}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge tone={member.status === "active" ? "positive" : "neutral"}>
+            <StatusPill tone={STATUS_TONES[member.status]}>
               {EMPLOYMENT_STATUS_LABELS[member.status]}
-            </Badge>
+            </StatusPill>
           </div>
         </div>
 
@@ -304,7 +324,11 @@ export function TeamMemberScreen({
               size="md"
               onClick={() => setChangingStatus(true)}
             >
-              <UserCog className="size-4" />
+              <UserGearIcon
+                weight="duotone"
+                size={18}
+                className="text-(--sv-violet)"
+              />
               Change status
             </Button>
             <Button
@@ -312,7 +336,11 @@ export function TeamMemberScreen({
               size="md"
               onClick={() => setEditing(true)}
             >
-              <SquarePen className="size-4" />
+              <PencilSimpleIcon
+                weight="duotone"
+                size={18}
+                className="text-(--sv-violet)"
+              />
               Edit
             </Button>
           </div>
@@ -323,7 +351,7 @@ export function TeamMemberScreen({
           words, so a row here and a column there are the same field. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Employee details" />
+          <CardHeader title="Employee details" icon={IdentificationCardIcon} />
           <CardBody className="flex flex-col gap-2.5 text-sm">
             <Row label="Name of Employee" value={member.fullName} />
             <Row label="Designation" value={member.designation} />
@@ -349,7 +377,7 @@ export function TeamMemberScreen({
         </Card>
 
         <Card>
-          <CardHeader title="Contact" />
+          <CardHeader title="Contact" icon={AddressBookIcon} />
           <CardBody className="flex flex-col gap-2.5 text-sm">
             <Row label="Contact No." mono value={member.phone} />
             <Row label="Email" value={member.personalEmail} />
@@ -362,6 +390,7 @@ export function TeamMemberScreen({
         <Card>
           <CardHeader
             title="Employment"
+            icon={BriefcaseIcon}
             description="Joining Salary is what was agreed at hire — what they are paid now is below"
           />
           <CardBody className="flex flex-col gap-2.5 text-sm">
@@ -399,7 +428,7 @@ export function TeamMemberScreen({
         {/* Not on the sheet. These are the app's own — the code it files
             people under, and the status the salary sheet reads. */}
         <Card>
-          <CardHeader title="Record" />
+          <CardHeader title="Record" icon={ClipboardTextIcon} />
           <CardBody className="flex flex-col gap-2.5 text-sm">
             <Row
               label="Engaged as"
@@ -407,9 +436,9 @@ export function TeamMemberScreen({
             />
             <Row label="Department" value={member.department} />
             <Row label="Status">
-              <Badge tone={member.status === "active" ? "positive" : "neutral"}>
+              <StatusPill tone={STATUS_TONES[member.status]}>
                 {EMPLOYMENT_STATUS_LABELS[member.status]}
-              </Badge>
+              </StatusPill>
             </Row>
             {/*
               Only for somebody who has one.
@@ -429,6 +458,7 @@ export function TeamMemberScreen({
         <Card>
           <CardHeader
             title="Tax"
+            icon={PercentIcon}
             description="Missing PSR raises the withholding rate by half"
           />
           <CardBody className="flex flex-col gap-2.5 text-sm">
@@ -455,7 +485,7 @@ export function TeamMemberScreen({
         </Card>
 
         <Card>
-          <CardHeader title="Where they are paid" />
+          <CardHeader title="Where they are paid" icon={BankIcon} />
           <CardBody className="flex flex-col gap-2.5 text-sm">
             {/*
               The six a salary transfer actually needs, in the order a bank
@@ -484,6 +514,7 @@ export function TeamMemberScreen({
         <Card className="lg:col-span-2">
           <CardHeader
             title="Documents"
+            icon={FilesIcon}
             description="Every paper this record should hold, and which are missing"
           />
           <CardBody>
@@ -512,6 +543,7 @@ export function TeamMemberScreen({
         <Card className="min-w-0 overflow-hidden lg:col-span-2">
           <CardHeader
             title="Paid tools"
+            icon={SparkleIcon}
             description="What this person has a seat on, and what they used to"
           />
           <CardBody>
@@ -522,7 +554,7 @@ export function TeamMemberScreen({
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader title="Notes" />
+          <CardHeader title="Notes" icon={NotePencilIcon} />
           <CardBody className="text-sm">
             {member.notes ? (
               <p className="whitespace-pre-line">{member.notes}</p>
@@ -662,6 +694,7 @@ export function TeamMemberScreen({
             <Card>
               <CardHeader
                 title="Salary changes"
+                icon={ChartLineUpIcon}
                 description="What they were paid before, and why it changed"
               />
               <CardBody className="p-0">
@@ -807,6 +840,7 @@ export function TeamMemberScreen({
           <Card>
             <CardHeader
               title="Payslips"
+              icon={ReceiptIcon}
               description="Every month they appear on a finalised salary sheet"
             />
             <CardBody className="p-0">
@@ -1213,12 +1247,12 @@ function Row({
 
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="shrink-0 text-(--sv-muted)">{label}</span>
       <span
         className={cn(
           "text-right wrap-break-word",
-          mono && "num",
-          empty && "text-muted-foreground",
+          mono && "tabular-nums",
+          empty ? "text-(--sv-muted)" : "font-extrabold",
         )}
       >
         {empty ? "N/A" : content}
@@ -1325,3 +1359,12 @@ function CompensationForm({
     </Drawer>
   );
 }
+
+/** The same tones as the team list: working violet, on leave amber, left grey,
+ *  terminated red. */
+const STATUS_TONES: Record<EmploymentStatus, PillTone> = {
+  active: "primary",
+  on_leave: "warning",
+  resigned: "neutral",
+  terminated: "negative",
+};

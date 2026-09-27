@@ -5,7 +5,10 @@ import {
   EMPLOYMENT_TYPE_LABELS,
   type Paginated,
 } from "@finance/shared";
-import { Plus, Users } from "lucide-react";
+import { IdentificationBadgeIcon } from "@phosphor-icons/react/dist/ssr/IdentificationBadge";
+import { UserMinusIcon } from "@phosphor-icons/react/dist/ssr/UserMinus";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/ssr/UserPlus";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -17,10 +20,15 @@ import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { ApiError, trashApi } from "@/lib/api-client";
 import { useRowDelete } from "@/components/ui/use-row-delete";
 import { Amount } from "@/components/money/amount";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DataPanel } from "@/components/ui/patterns";
+import { Dated } from "@/components/ui/dated";
+import {
+  DataPanel,
+  EmptyState,
+  StatusPill,
+  type PillTone,
+} from "@/components/ui/patterns";
 import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
@@ -247,7 +255,7 @@ export function TeamScreen({
                 size="md"
                 onClick={() => setCreating(true)}
               >
-                <Plus className="size-4" />
+                <UserPlusIcon weight="duotone" size={19} />
                 Add person
               </Button>
             ) : null}
@@ -268,81 +276,82 @@ export function TeamScreen({
         </p>
       ) : null}
 
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        onSubmit={(next) => {
-          // Back to page 1: a narrower result set is a shorter one, and
-          // staying on page 4 of it lands on rows that no longer exist.
-          setSubmitted(next);
-          setPage(1);
-        }}
-        placeholder="Search by name, designation or phone"
-        label="Search the team"
-        className="max-w-sm"
-      />
+      {/* The two views and the search on one row, as the handoff draws them:
+          the tabs at the left, the search pushed to the right. */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {data.items.length > 0 ? (
+          /*
+            Two views of one list, so a segmented group — the underline row
+            is for pages that are different documents.
 
-      {data.items.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Users className="size-6" />
-          </span>
-          <div>
-            <p className="text-lg font-semibold">
-              {/* `submitted`, not `query`: the box can hold half a typed name
-                  that was never searched for, and "Nobody matched that" under
-                  the full list would be blaming a search nobody ran. */}
-              {submitted ? "Nobody matched that" : "No one added yet"}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Add your employees and contractors here. Pay is recorded
-              separately, once someone exists.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <>
-          {/*
-              Two views of one list, so a segmented group — the underline row
-              is for pages that are different documents.
-
-              The counts that used to sit on these two chips are gone, and
-              deliberately. They were `current.length` and `past.length`,
-              counted over the rows this page happens to hold: with the whole
-              team fetched at once they were the real totals, and the moment a
-              page holds twenty they became "how many of these twenty", under
-              a label that reads as "how many people". A chip saying
-              "Past team 3" beside a company that has lost forty is a wrong
-              number on a screen somebody answers questions from.
-
-              They cannot be worked out here. Current is active *or* on leave
-              and Past is resigned *or* terminated, while the API's `status`
-              filter takes exactly one status — so neither tab is a query this
-              client can ask, and no whole-set count for either arrives in the
-              envelope. `data.total` counts everybody, which is what the pager
-              below says and all this screen honestly knows. Restoring the
-              numbers needs the API, not this file: see the report.
-          */}
+            The counts that used to sit on these two chips are gone, and
+            deliberately. They were `current.length` and `past.length`,
+            counted over the rows this page happens to hold: with the whole
+            team fetched at once they were the real totals, and the moment a
+            page holds twenty they became "how many of these twenty", under a
+            label that reads as "how many people". Current is active *or* on
+            leave and Past is resigned *or* terminated, while the API's
+            `status` filter takes exactly one status — so neither tab is a
+            query this client can ask. Restoring the numbers needs the API.
+          */
           <Segmented
             options={[
-              { id: "current" as const, label: "Current team" },
-              { id: "past" as const, label: "Past team" },
+              {
+                id: "current" as const,
+                label: "Current team",
+                icon: UsersThreeIcon,
+              },
+              { id: "past" as const, label: "Past team", icon: UserMinusIcon },
             ]}
             value={tab}
             onChange={changeTab}
             label="Team"
           />
+        ) : null}
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          onSubmit={(next) => {
+            // Back to page 1: a narrower result set is a shorter one, and
+            // staying on page 4 of it lands on rows that no longer exist.
+            setSubmitted(next);
+            setPage(1);
+          }}
+          placeholder="Search by name, designation or phone"
+          label="Search the team"
+          className="ml-auto max-w-sm min-w-60"
+        />
+      </div>
 
+      {data.items.length === 0 ? (
+        <Card>
+          {/* `submitted`, not `query`: the box can hold half a typed name that
+              was never searched for, and "Nobody matched that" under the full
+              list would be blaming a search nobody ran. */}
+          <EmptyState
+            icon={UsersThreeIcon}
+            title={submitted ? "Nobody matched that" : "No one added yet"}
+          >
+            Add your employees and contractors here. Pay is recorded separately,
+            once someone exists.
+          </EmptyState>
+        </Card>
+      ) : (
+        <>
           {shown.length === 0 ? (
-            <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-              <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-                <Users className="size-6" />
-              </span>
-              <p className="max-w-sm text-sm text-muted-foreground">
+            <Card>
+              <EmptyState
+                icon={tab === "past" ? UserMinusIcon : UsersThreeIcon}
+                title={
+                  tab === "past"
+                    ? "Nobody has left yet"
+                    : "Nobody is currently working"
+                }
+              >
                 {tab === "past"
-                  ? "Nobody has left yet. When somebody resigns or is let go, change their status on their profile and they move here — their record and their payslips stay."
-                  : "Nobody is currently working. Anybody who has left is under Past team."}
-              </p>
+                  ? "When somebody resigns or is let go, change their status on their profile and they move here — their record and their payslips stay."
+                  : "Anybody who has left is under Past team."}
+              </EmptyState>
             </Card>
           ) : (
             /*
@@ -528,7 +537,11 @@ function Section({
      * right about it; this one now names the group. The honest total is on the
      * pager below, which is the one figure this screen fetches.
      */
-    <DataPanel title={title} icon="groups" description={subtitle}>
+    <DataPanel
+      title={title}
+      icon={IdentificationBadgeIcon}
+      description={subtitle}
+    >
       {/* 960 before Employment type. The fixed columns alone now come to
           roughly a thousand pixels, and a min-width under them lets the
           browser squeeze Designation instead of scrolling — which wraps
@@ -610,8 +623,8 @@ function Section({
               <td className="num text-muted-foreground">
                 {member.employeeCode ?? "N/A"}
               </td>
-              <td className="num text-muted-foreground">
-                {formatDate(member.joinedOn)}
+              <td>
+                <Dated>{formatDate(member.joinedOn)}</Dated>
               </td>
               <td>
                 {/*
@@ -628,13 +641,21 @@ function Section({
                       it is work not worth doing. The sidebar keeps its
                       prefetch, because there the guess is usually right.
                     */}
-                <Link
-                  href={`/team/${member.id}`}
-                  prefetch={false}
-                  className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-                >
-                  {member.fullName}
-                </Link>
+                <span className="flex items-center gap-2.5 whitespace-nowrap">
+                  <span
+                    aria-hidden="true"
+                    className="grid size-[34px] flex-none place-items-center rounded-full bg-(--sv-violet-tint) text-[12px] font-extrabold text-(--sv-violet-ink)"
+                  >
+                    {initialsOf(member.fullName)}
+                  </span>
+                  <Link
+                    href={`/team/${member.id}`}
+                    prefetch={false}
+                    className="font-extrabold text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+                  >
+                    {member.fullName}
+                  </Link>
+                </span>
                 {/* No "Employee" or "Contractor" under the name. This table
                     does now mix the two — the second panel is gone — but the
                     Employment type column says Contractual on exactly the rows
@@ -672,7 +693,11 @@ function Section({
               {showPay ? (
                 <td className="col-amount">
                   {salaries.get(member.id) ? (
-                    <Amount value={salaries.get(member.id)!} hideDecimals />
+                    <Amount
+                      value={salaries.get(member.id)!}
+                      hideDecimals
+                      className="font-extrabold"
+                    />
                   ) : (
                     <span className="text-xs text-muted-foreground">
                       Not set
@@ -703,11 +728,9 @@ function Section({
                 {member.department ?? "N/A"}
               </td>
               <td>
-                <Badge
-                  tone={member.status === "active" ? "positive" : "neutral"}
-                >
+                <StatusPill tone={STATUS_TONES[member.status]}>
                   {EMPLOYMENT_STATUS_LABELS[member.status]}
-                </Badge>
+                </StatusPill>
               </td>
               <RowActions
                 onEdit={onEdit ? () => onEdit(member) : undefined}
@@ -721,4 +744,26 @@ function Section({
       </table>
     </DataPanel>
   );
+}
+
+/**
+ * The handoff's pills for a person's status: somebody working is violet with
+ * its dot, somebody on leave amber, and somebody who has left grey — red only
+ * for a termination.
+ */
+const STATUS_TONES: Record<TeamMemberDto["status"], PillTone> = {
+  active: "primary",
+  on_leave: "warning",
+  resigned: "neutral",
+  terminated: "negative",
+};
+
+/** "Nabila Bhuiyan" → "NB": the round tile before a name. */
+function initialsOf(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters =
+    words.length > 1
+      ? `${words[0][0]}${words[words.length - 1][0]}`
+      : (words[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
 }

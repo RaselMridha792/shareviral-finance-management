@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 89 | **The new design: Team and a person's profile, Payroll and the salary sheet** | **done** |
 | 88 | **The new design: Subscriptions and a plan's page, All transactions, an account's register** | **done** |
 | 87 | **The new design: Cash In, Money Transfer, and the expense screens** | **done** |
 | 86 | **The new design: Settings gets its own sidebar** | **done** |
@@ -67,6 +68,30 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 89. The new design: Team, a profile, Payroll, the salary sheet — 27 Sep 2026
+
+- **Team**: the two tabs (with their icons) and the search on one row, tabs at
+  the left and search at the right, as the handoff draws it; the table card's
+  ID-badge tile; a round violet initials tile before each name, the joining
+  date with the calendar, the salary at 800, and status as the shared pill —
+  Working violet with its dot, on leave amber, left grey, terminated red. The
+  empty states are the shared one. Add person carries the user-plus.
+- **A person's profile** (no page in the handoff, so drawn like an account's):
+  the violet way back, the header card with the handoff's decoration behind the
+  photo and a 28px name, every card with its icon tile (Social media and
+  E-Return too), values at 800 against muted labels, the status pill as above,
+  Change status and Edit with violet Phosphor icons.
+- **Payroll**: New month with the plus-circle, a violet calendar tile before
+  each month, the paid date with the calendar, Net at 800, Paid green with its
+  tick and a draft amber (it was grey) — the handoff's "Draft (warn)".
+- **The salary sheet**: the violet way back, the four totals as stat cards
+  (Tax withheld amber, Net to pay on the lime tint), Documents as a proper card
+  header, the draft note violet, the shared empty state, and the header's
+  buttons in Phosphor.
+
+**Proved** by `.uiqa.mjs team` and `payroll` (SL, row buttons, tabs, nothing
+sideways at 390, no console errors) and screenshots of each.
+
 ## 88. The new design: Subscriptions, a plan's page, All transactions, a register — 27 Sep 2026
 
 - **AI tools and subscriptions**: each tool's name behind a 34px violet
@@ -89,7 +114,7 @@ ticking all seventeen.
 
 **Proved** by `.uiqa.mjs` on each route, `.registerqa.mjs` (5/5 — still no
 Record button, edit and void still work), and screenshots. `.regpage.mjs`
-could not run: it reads `d:\codes\…ppspi\.env`, a path from another
+could not run: it reads `d:/codes/.../apps/api/.env`, a path from another
 machine.
 
 ## 87. The new design: Cash In, Money Transfer, and the expense screens — 27 Sep 2026
