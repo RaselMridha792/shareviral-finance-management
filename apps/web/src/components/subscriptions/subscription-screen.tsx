@@ -57,6 +57,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
 
       <PageHeader
         title={plan.toolName ?? plan.planName}
+        icon="auto_awesome"
         description={
           plan.toolName && plan.planName !== plan.toolName
             ? `${plan.planName} · ${SUBSCRIPTION_CATEGORY_LABELS[plan.category]}`

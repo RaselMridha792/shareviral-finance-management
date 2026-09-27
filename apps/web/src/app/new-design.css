@@ -167,6 +167,73 @@
   color: var(--sv-violet-ink);
 }
 
+/* The header card every screen opens with (components/ui/page-header.tsx).
+   The decoration sits behind the words (`isolation` on the card, -1 on the
+   pieces): a lime grid fading in from the left edge of its right-hand 60%, a
+   lime blob drifting at the corner, a dashed violet ring and a small square. */
+.sv-page-head {
+  border: 1px solid var(--sv-line);
+  box-shadow: var(--sv-shadow);
+}
+
+.sv-page-head-decor > span {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.sv-page-head-decor .grid-paper {
+  inset: 0 0 0 40%;
+  background-image:
+    linear-gradient(var(--sv-lime-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sv-lime-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(90deg, transparent, #000 70%);
+  opacity: 0.8;
+}
+
+.sv-page-head-decor .blob {
+  right: -50px;
+  top: -80px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--sv-accent);
+  opacity: 0.22;
+  animation: sv-fx-blob 10s ease-in-out infinite;
+}
+
+.sv-page-head-decor .loop {
+  right: 170px;
+  bottom: -70px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--sv-violet-soft);
+}
+
+.sv-page-head-decor .square {
+  right: 120px;
+  top: 18px;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--sv-violet);
+  animation: sv-fx-float 4s ease-in-out infinite;
+}
+
+.sv-page-head-tile {
+  box-shadow:
+    0 10px 22px rgb(150 200 0 / 0.32),
+    inset 0 -3px 0 rgb(6 8 0 / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-page-head-decor > span {
+    animation: none;
+  }
+}
+
 /* The popup every form opens in (components/ui/drawer.tsx): a dimmed,
    slightly blurred page behind, the card rising 14px as it arrives. The rise
    has no forwards fill, so the card ends with no transform — a transformed

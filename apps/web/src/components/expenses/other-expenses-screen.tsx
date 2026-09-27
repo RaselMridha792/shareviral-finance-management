@@ -284,6 +284,7 @@ export function OtherExpensesScreen({
 
       <PageHeader
         title="Other expenses"
+        icon="shopping_basket"
         description="Everything the company spent that is not an AI tool or a subscription."
         actions={
           <>
