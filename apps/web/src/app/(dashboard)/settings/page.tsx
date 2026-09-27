@@ -9,14 +9,10 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Settings · SFM" };
 
-export default async function SettingsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string }>;
-}) {
-  // So a link from elsewhere can open the right panel rather than dropping
-  // somebody on the first tab to find it themselves.
-  const { tab } = await searchParams;
+// Which section is open is the URL's `?tab=`, read on the client by the
+// screen and the Settings rail alike — so a link from elsewhere opens the
+// right panel rather than dropping somebody on the first to find it.
+export default async function SettingsPage() {
   const session = await getSession();
   // Anyone else gets a 403 from this endpoint, which would take the page down.
   const canManageUsers = session?.permissions.includes("users.manage") ?? false;
@@ -34,7 +30,6 @@ export default async function SettingsPage({
       initialSettings={settings}
       initialTree={categories}
       initialUsers={users}
-      initialTab={tab}
     />
   );
 }

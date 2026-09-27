@@ -1,5 +1,7 @@
 "use client";
 
+import { CalculatorIcon } from "@phosphor-icons/react/dist/ssr/Calculator";
+import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
 import {
   DEFAULT_TDS_POLICY,
   TDS_EXEMPTION_MODES,
@@ -185,6 +187,7 @@ export function TaxPanel() {
       <Card>
         <CardHeader
           title="Salary TDS"
+          icon={PercentIcon}
           description="What the app deducts, and how it works it out. One rule per income year."
           action={
             <select
@@ -512,6 +515,7 @@ function TdsCalculator({ year }: { year: number }) {
     <Card>
       <CardHeader
         title="Check a figure"
+        icon={CalculatorIcon}
         description="Run one salary through the rule above and see every step."
       />
       <CardBody className="flex flex-col gap-4">

@@ -6,7 +6,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { TrendUpIcon } from "@phosphor-icons/react/dist/ssr/TrendUp";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useId, useState } from "react";
+import { Suspense, useId, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
 import {
@@ -14,6 +14,7 @@ import {
   SECONDARY_NAV,
   type NavItem,
 } from "@/components/layout/nav-items";
+import { SettingsNav } from "@/components/layout/settings-nav";
 import { SidebarFooter } from "@/components/layout/sidebar-footer";
 import { useSidebarCollapsed } from "@/components/layout/sidebar-state";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,10 @@ import { cn } from "@/lib/utils";
  * width. So there is one rail, 270px or gone — which also retired the icons-only
  * branch of every row, and the "widen first, then open" dance a parent needed
  * in the strip.
+ *
+ * SETTINGS HAS ITS OWN RAIL. While /settings is open the main nav steps aside
+ * for a way back and Settings' sections (`settings-nav.tsx`), which is where
+ * the screen's row of tabs went. The brand and the footer stay.
  */
 
 /** The handoff's width. */
@@ -344,19 +349,26 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
 
-      <nav
-        aria-label="Main"
-        className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5 pt-1 pb-3.5"
-      >
-        {groups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-0.5">
-            <p className="px-3 pt-4 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
-              {group.title}
-            </p>
-            {group.items.map((item) => renderItem(item))}
-          </div>
-        ))}
-      </nav>
+      {underPath(pathname, "/settings") ? (
+        // It reads `?tab=`; the boundary is what `useSearchParams` asks for.
+        <Suspense fallback={<div className="flex-1" />}>
+          <SettingsNav onNavigate={onNavigate} />
+        </Suspense>
+      ) : (
+        <nav
+          aria-label="Main"
+          className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5 pt-1 pb-3.5"
+        >
+          {groups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-0.5">
+              <p className="px-3 pt-4 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
+                {group.title}
+              </p>
+              {group.items.map((item) => renderItem(item))}
+            </div>
+          ))}
+        </nav>
+      )}
 
       <SidebarFooter />
     </div>

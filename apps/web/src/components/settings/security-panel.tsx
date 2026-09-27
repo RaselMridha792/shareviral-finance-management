@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import {
   Check,
   Copy,
@@ -140,6 +141,7 @@ export function SecurityPanel() {
       <Card>
         <CardHeader
           title="Two-step sign-in"
+          icon={ShieldCheckIcon}
           description="A six-digit code from your phone, on top of your password."
         />
         <CardBody className="flex flex-col gap-4">

@@ -18,11 +18,14 @@ import { Glyph, type GlyphSource } from "@/components/ui/glyph";
  */
 export function PageHeader({
   title,
+  eyebrow,
   icon,
   description,
   actions,
 }: {
   title: string;
+  /** A small violet line over the title — Settings' "Settings · General". */
+  eyebrow?: ReactNode;
   /**
    * The screen's icon: a Phosphor component, or the Material name the rail used
    * to carry (see `glyph.tsx`).
@@ -47,6 +50,11 @@ export function PageHeader({
           </span>
         ) : null}
         <div className="min-w-0">
+          {eyebrow ? (
+            <p className="mb-0.5 text-[11px] font-extrabold tracking-[0.14em] text-(--sv-violet-ink) uppercase">
+              {eyebrow}
+            </p>
+          ) : null}
           <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
             {title}
           </h1>

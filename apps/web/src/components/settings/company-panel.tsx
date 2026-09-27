@@ -1,5 +1,8 @@
 "use client";
 
+import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
+import { CalendarIcon } from "@phosphor-icons/react/dist/ssr/Calendar";
+import { FileDocIcon } from "@phosphor-icons/react/dist/ssr/FileDoc";
 import { formatMoney, type NumberFormat } from "@finance/shared";
 import { LoaderCircle, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -70,6 +73,7 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
         <Card>
           <CardHeader
             title="Company"
+            icon={BuildingsIcon}
             description="Shown on payslips and Excel exports"
           />
           <CardBody className="flex flex-col gap-4">
@@ -126,6 +130,7 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
         <Card>
           <CardHeader
             title="Payslip letterhead"
+            icon={FileDocIcon}
             description="What prints across the top and bottom of a payslip"
           />
           <CardBody className="flex flex-col gap-4">
@@ -229,6 +234,7 @@ export function CompanyPanel({ settings }: { settings: AppSettingsDto }) {
         <Card>
           <CardHeader
             title="Financial year and figures"
+            icon={CalendarIcon}
             description="Decides which months a quarter covers, and how amounts read"
           />
           <CardBody className="flex flex-col gap-4">

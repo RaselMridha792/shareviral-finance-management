@@ -1,5 +1,8 @@
 "use client";
 
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 import { Check, LoaderCircle, Send, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -123,6 +126,7 @@ export function EmailPanel() {
       <Card>
         <CardHeader
           title="Sending"
+          icon={PaperPlaneTiltIcon}
           description="Renewal reminders go out at 9am Dhaka time, three days before a plan renews."
           action={
             status.blockedBy ? (
@@ -332,6 +336,7 @@ export function EmailPanel() {
       <Card>
         <CardHeader
           title="Making mail arrive"
+          icon={EnvelopeSimpleIcon}
           description="Pasting a key is not enough. Until the domain is verified, most of what you send lands in spam or is refused."
         />
         <CardBody className="flex flex-col gap-3">
@@ -384,6 +389,7 @@ export function EmailPanel() {
       <Card className="overflow-hidden p-0">
         <CardHeader
           title="What has gone out"
+          icon={ClockCounterClockwiseIcon}
           description="Every reminder, and whether it arrived at the provider."
         />
         <TableScroll>

@@ -1,5 +1,6 @@
 "use client";
 
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
 import { KeyRound, LoaderCircle, ShieldCheck, ShieldOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -104,6 +105,7 @@ export function CardPasswordPanel() {
     <Card>
       <CardHeader
         title="Card password"
+        icon={CreditCardIcon}
         description="One shared secret that unlocks the card numbers and CVCs on file"
       />
       <CardBody className="flex flex-col gap-4">

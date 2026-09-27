@@ -237,9 +237,9 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Who can sign in, and as what. A role decides what somebody sees and
-          can change — the API enforces it, so a hidden menu is never the only
-          thing standing between HR and a salary figure.
+          A role decides what somebody sees and can change — the API enforces
+          it, so a hidden menu is never the only thing standing between HR and
+          a salary figure.
         </p>
         <Button variant="primary" size="md" onClick={() => setCreating(true)}>
           <Plus className="size-4" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { ArchiveRestore, LoaderCircle, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -180,6 +181,7 @@ export function TrashPanel() {
     <Card>
       <CardHeader
         title="Trashed"
+        icon={TrashIcon}
         description="Deleted rows wait here. Restore puts one back exactly where it was; emptying the trash is the only delete in this app that cannot be undone."
         action={
           anythingAtAll ? (

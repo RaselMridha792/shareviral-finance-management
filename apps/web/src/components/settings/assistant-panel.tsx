@@ -1,5 +1,8 @@
 "use client";
 
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { ProhibitIcon } from "@phosphor-icons/react/dist/ssr/Prohibit";
 import {
   AI_DATA_ACCESS,
   AI_DATA_ACCESS_DETAIL,
@@ -144,6 +147,7 @@ export function AssistantPanel() {
       <Card>
         <CardHeader
           title="Anthropic API key"
+          icon={KeyIcon}
           description="Needed for the assistant, and nothing else."
           action={
             status?.configured ? (
@@ -267,6 +271,7 @@ export function AssistantPanel() {
       <Card>
         <CardHeader
           title="What leaves the building"
+          icon={ArrowSquareOutIcon}
           description="Anything the assistant is given is sent to Anthropic to be turned into a sentence. This decides how much that is."
         />
         <CardBody className="flex flex-col gap-4">
@@ -328,7 +333,10 @@ export function AssistantPanel() {
       </Card>
 
       <Card>
-        <CardHeader title="What it cannot do, whatever the setting" />
+        <CardHeader
+          title="What it cannot do, whatever the setting"
+          icon={ProhibitIcon}
+        />
         <CardBody>
           <ul className="flex max-w-2xl flex-col gap-2 text-sm text-muted-foreground">
             <li>

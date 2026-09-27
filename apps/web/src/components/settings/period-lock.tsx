@@ -1,5 +1,6 @@
 "use client";
 
+import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { todayInDhaka } from "@finance/shared";
 import { Lock, LockOpen, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -51,6 +52,7 @@ export function PeriodLock({
     <Card>
       <CardHeader
         title="Closing the books"
+        icon={LockSimpleIcon}
         description="Nothing dated on or before this can be added, edited or voided."
       />
       <CardBody className="flex flex-col gap-4">

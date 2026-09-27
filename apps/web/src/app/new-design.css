@@ -111,6 +111,11 @@
   border: 1px solid var(--sv-violet-tint-line);
 }
 
+/* Settings' rail: the white tile in "Back to dashboard". */
+.sv-back-tile {
+  border: 1px solid var(--sv-line);
+}
+
 /* --------------------------------------------------------------------------
    Shared by the screens as they are rebuilt
    -------------------------------------------------------------------------- */

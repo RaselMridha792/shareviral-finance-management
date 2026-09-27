@@ -1,5 +1,6 @@
 "use client";
 
+import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
 import { CATEGORY_KIND_LABELS } from "@finance/shared";
 import {
   ChevronRight,
@@ -117,6 +118,7 @@ export function CategoriesPanel({
       <Card>
         <CardHeader
           title="Categories"
+          icon={TagIcon}
           description="Two levels: a heading and the things under it"
           action={
             canWrite ? (

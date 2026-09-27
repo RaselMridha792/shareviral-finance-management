@@ -1,5 +1,8 @@
 "use client";
 
+import { BellRingingIcon } from "@phosphor-icons/react/dist/ssr/BellRinging";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -108,6 +111,7 @@ export function NotificationsPanel() {
       <Card>
         <CardHeader
           title="What raises a notification"
+          icon={BellRingingIcon}
           description="The bell in the top bar. Checked every morning at 9am Dhaka time."
         />
         <CardBody className="flex flex-col gap-3">
@@ -127,6 +131,7 @@ export function NotificationsPanel() {
       <Card>
         <CardHeader
           title="Watching what people change"
+          icon={EyeIcon}
           description="Off by default, and to super admins only."
         />
         <CardBody className="flex flex-col gap-3">
@@ -150,6 +155,7 @@ export function NotificationsPanel() {
       <Card>
         <CardHeader
           title="Try it"
+          icon={LightningIcon}
           description="Runs this morning's check now, against today's real data."
         />
         <CardBody className="flex flex-col gap-2">

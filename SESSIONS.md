@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 86 | **The new design: Settings gets its own sidebar** | **done** |
 | 85 | **The new design: the shared pieces — cards, fields, SL, row buttons, pills, tabs, stat cards, empty states, filter bar, pager, search** | **done** — every screen, asked first |
 | 84 | **The new design: Accounts, and an account's own page** | **done** |
 | 83 | **The header card and the buttons, on every screen** | **done** — 21 screens, asked first |
@@ -63,6 +64,38 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 86. The new design: Settings gets its own sidebar — 27 Sep 2026
+
+As the handoff draws it, and as the owner chose ("Yes, as in the design"):
+while `/settings` is open the rail's main nav steps aside for **Back to
+dashboard**, a **Settings** title and the sections in four groups — General,
+Access, Data, Integrations — each with its icon tile, its name, a one-line
+hint and a badge: how many people can sign in, how long the audit trail is,
+what is in the trash, whether the Assistant is on and the mail is sending. The
+row of tabs on the screen is gone.
+
+- **`settings/sections.ts`**: the one list both readers use — id, name, icon,
+  hint, header line, group, permission. The ids are the ones `?tab=` always
+  took (the Assistant screen links to `?tab=assistant`), not the handoff's.
+- **`layout/settings-nav.tsx`**: the rail. A section is `?tab=` changed with
+  `history.pushState`, which Next keeps `useSearchParams` in step with — so
+  switching fetches nothing again, and Back walks the sections. A badge is
+  asked for only when the reader may open its section, each on its own.
+- **`settings-screen.tsx`** reads the section from the URL, not from state; the
+  page no longer passes `initialTab`. The header card carries "Settings ·
+  <group>" over the section's own name, icon and line — through a new optional
+  `eyebrow` on `PageHeader`, which no other screen passes, so none changed.
+- Every card inside a section has the handoff's violet icon tile now.
+
+**Proved by `.settingsqa.mjs`**, 16 checks: the main nav steps aside, four
+groups, ten sections for a Super Admin each with a hint, no tab row, the
+People badge equals the database's count, every section opens from the rail
+with URL, header and marker agreeing, **without reloading the page** (a marker
+on `window` survives), Back returns to the section before, a link to
+`?tab=audit` opens it, Back to dashboard restores the main nav, nothing
+sideways at 390, and a CFO is not offered People and falls back to the first
+section when a URL asks for it. `.uiqa.mjs settings` passes all 20.
 
 ## 85. The new design: the shared pieces, on every screen — 27 Sep 2026
 
