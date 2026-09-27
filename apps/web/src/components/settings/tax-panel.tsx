@@ -1,7 +1,9 @@
 "use client";
 
 import { CalculatorIcon } from "@phosphor-icons/react/dist/ssr/Calculator";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import {
   DEFAULT_TDS_POLICY,
   TDS_EXEMPTION_MODES,
@@ -9,15 +11,15 @@ import {
   type TdsExemptionMode,
   type TdsPolicy,
 } from "@finance/shared";
-import { Calculator, LoaderCircle, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { TdsWorking } from "@/components/tds/tds-working";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/field";
+import { SwitchRow } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { taxPolicyApi, type TdsCalculation } from "@/lib/tax-policy";
@@ -167,15 +169,19 @@ export function TaxPanel() {
   return (
     <div className="flex flex-col gap-4">
       {unsaved ? (
-        <Card className="border-warning/40 bg-warning/5 px-5 py-4">
-          <p className="flex items-start gap-2 text-sm">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+        <Card className="sv-warn-note bg-(--sv-warn-tint) px-5 py-4">
+          <p className="flex items-start gap-2.5 text-sm">
+            <WarningIcon
+              weight="duotone"
+              size={18}
+              className="mt-px flex-none text-(--sv-warn)"
+            />
             <span>
               <strong>No rule is saved yet — nothing is deducted.</strong> The
               figures below are this app&apos;s defaults, not this year&apos;s
               circular. Check every band, the exemption and the minimum tax
               against the NBR&apos;s own document, then save.
-              <span className="mt-1 block text-muted-foreground">
+              <span className="mt-1 block text-(--sv-muted)">
                 Until it is saved, payroll cannot work out a single deduction —
                 a salary paid now is a salary paid without tax withheld.
               </span>
@@ -190,10 +196,11 @@ export function TaxPanel() {
           icon={PercentIcon}
           description="What the app deducts, and how it works it out. One rule per income year."
           action={
-            <select
+            <Select
+              aria-label="Income year"
               value={year ?? ""}
               onChange={(event) => setYear(Number(event.target.value))}
-              className="h-9 rounded-lg border border-border bg-surface-muted px-3 text-sm"
+              className="w-auto"
             >
               {[...new Set([...years, year ?? 0])]
                 .filter(Boolean)
@@ -203,13 +210,19 @@ export function TaxPanel() {
                     {label(y)}
                   </option>
                 ))}
-            </select>
+            </Select>
           }
         />
-        <CardBody className="flex flex-col gap-5">
+        {/* A container, so the field grids go four across by the card's own
+            width — the sidebar can be open or shut. */}
+        <CardBody className="@container flex flex-col gap-5.5">
           {!exact ? (
-            <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+            <p className="sv-warn-note flex items-start gap-2.5 rounded-[11px] bg-(--sv-warn-tint) px-4 py-3 text-sm">
+              <WarningIcon
+                weight="duotone"
+                size={18}
+                className="mt-px flex-none text-(--sv-warn)"
+              />
               <span>
                 No rule has been set for {label(year ?? 0)}. The figures below
                 are {label(policy.fiscalYear)}&apos;s, which is what would be
@@ -220,19 +233,18 @@ export function TaxPanel() {
           ) : null}
 
           {error ? (
-            <p className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative">
+            <p className="rounded-[11px] bg-(--sv-neg-tint) px-4 py-3 text-sm text-(--sv-neg)">
               {error}
             </p>
           ) : null}
 
           {/* ------------------------------------------------- exemption */}
           <section>
-            <h3 className="text-sm font-semibold">Exemption</h3>
-            <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
+            <SectionHead title="Exemption">
               The untaxed share of salary: a fraction of it, or the cap —
               whichever is lower.
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            </SectionHead>
+            <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @min-[62rem]:grid-cols-[repeat(3,minmax(0,1fr))_22rem]">
               {/*
                 A numerator and a denominator rather than "33.33%". One third
                 has no exact decimal, and carrying 0.3333 through paisa made a
@@ -278,53 +290,51 @@ export function TaxPanel() {
                   onChange={(e) => set({ exemptionCap: e.target.value })}
                 />
               </Field>
-            </div>
 
-            {/*
-              Which of the two applies.
-              The Act's wording on this moves most years, and an app that can
-              only express one reading of it is one that goes quietly wrong the
-              year it changes. The default is what the company's accountant
-              works to.
-            */}
-            <Field
-              label="Which one applies"
-              className="mt-4 max-w-md"
-              hint="Change this only against the year's own rule"
-            >
-              <Select
-                value={policy.exemptionMode}
-                disabled={!canWrite}
-                onChange={(e) =>
-                  set({
-                    exemptionMode: e.target.value as TdsExemptionMode,
-                  })
-                }
+              {/*
+                Which of the two applies.
+                The Act's wording on this moves most years, and an app that can
+                only express one reading of it is one that goes quietly wrong the
+                year it changes. The default is what the company's accountant
+                works to.
+              */}
+              <Field
+                label="Which one applies"
+                hint="Change this only against the year's own rule"
               >
-                {TDS_EXEMPTION_MODES.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {TDS_EXEMPTION_MODE_LABELS[mode]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                <Select
+                  value={policy.exemptionMode}
+                  disabled={!canWrite}
+                  onChange={(e) =>
+                    set({
+                      exemptionMode: e.target.value as TdsExemptionMode,
+                    })
+                  }
+                >
+                  {TDS_EXEMPTION_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {TDS_EXEMPTION_MODE_LABELS[mode]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
           </section>
 
           {/* ----------------------------------------------------- slabs */}
           <section>
-            <h3 className="text-sm font-semibold">Slabs</h3>
-            <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
+            <SectionHead title="Slabs">
               Applied in order to the taxable income. The last band has no width
               and takes everything above.
-            </p>
+            </SectionHead>
             {/* Capped, because a slab is a five-digit number and the page is
                 now the full width of the window: the fields ran eleven hundred
                 pixels with the digits parked at the far end, a screen's width
                 from the label that names them. */}
-            <div className="flex max-w-2xl flex-col gap-2">
+            <div className="flex max-w-155 flex-col gap-2">
               {policy.slabs.map((band, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <span className="w-24 shrink-0 text-xs text-muted-foreground">
+                <div key={index} className="flex items-center gap-2.5">
+                  <span className="w-22.5 shrink-0 text-[13px] font-extrabold text-(--sv-muted)">
                     {band.width === null
                       ? "Remainder"
                       : index === 0
@@ -332,7 +342,7 @@ export function TaxPanel() {
                         : "Next"}
                   </span>
                   <Input
-                    className="col-amount"
+                    className="col-amount min-w-0 flex-1"
                     placeholder={band.width === null ? "everything above" : ""}
                     value={band.width ?? ""}
                     disabled={!canWrite || band.width === null}
@@ -342,11 +352,11 @@ export function TaxPanel() {
                       set({ slabs });
                     }}
                   />
-                  <div className="flex w-32 shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <Input
                       type="number"
                       step="0.01"
-                      className="col-amount"
+                      className="col-amount w-18 px-2.5"
                       value={(band.rate * 100).toString()}
                       disabled={!canWrite}
                       onChange={(e) => {
@@ -358,7 +368,7 @@ export function TaxPanel() {
                         set({ slabs });
                       }}
                     />
-                    <span className="text-sm text-muted-foreground">%</span>
+                    <PercentSign />
                   </div>
                 </div>
               ))}
@@ -367,12 +377,11 @@ export function TaxPanel() {
 
           {/* ---------------------------------------------------- rebate */}
           <section>
-            <h3 className="text-sm font-semibold">Investment rebate</h3>
-            <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
+            <SectionHead title="Investment rebate">
               The lowest of three: a share of the eligible investment, a share
               of taxable income, and a flat ceiling.
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            </SectionHead>
+            <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @min-[64rem]:grid-cols-4">
               {/*
                 Two rates, not the 3.75% they come to. Collapsed, the figure
                 would not move when either is changed here — and moving it is
@@ -412,8 +421,8 @@ export function TaxPanel() {
               </Field>
             </div>
 
-            <Toggle
-              className="mt-4"
+            <SwitchRow
+              className="mt-5.5"
               checked={policy.rebate.assumeFullInvestment}
               disabled={!canWrite}
               onChange={(assumeFullInvestment) =>
@@ -425,30 +434,32 @@ export function TaxPanel() {
           </section>
 
           {/* --------------------------------------------------- minimum */}
+          {/* The switch row is the section: its title names it, and the
+              amount sits at the row's right while the floor is on. On a
+              phone-width card the row wraps and the amount drops under the
+              words (SwitchRow does that), so there is one box, not two. */}
           <section>
-            <h3 className="text-sm font-semibold">Minimum tax</h3>
-            <Toggle
-              className="mt-3"
+            <SwitchRow
               checked={policy.minimumTaxEnabled}
               disabled={!canWrite}
               onChange={(minimumTaxEnabled) => set({ minimumTaxEnabled })}
-              title="Apply a floor to anybody who is a taxpayer"
+              title="Minimum tax — apply a floor to anybody who is a taxpayer"
               description="Only above the first band. Somebody whose income is under the threshold owes nothing, not the minimum."
-            />
-            {policy.minimumTaxEnabled ? (
-              <Field label="Amount" className="mt-3 max-w-xs">
+            >
+              {policy.minimumTaxEnabled ? (
                 <Input
-                  className="col-amount"
+                  aria-label="Minimum tax amount"
+                  className="col-amount w-32.5 bg-(--sv-surface)"
                   value={policy.minimumTax}
                   disabled={!canWrite}
                   onChange={(e) => set({ minimumTax: e.target.value })}
                 />
-              </Field>
-            ) : null}
+              ) : null}
+            </SwitchRow>
           </section>
 
           {canWrite ? (
-            <div className="flex justify-end border-t border-border pt-4">
+            <div className="sv-card-note flex justify-end pt-3">
               <Button
                 variant="primary"
                 disabled={saving}
@@ -456,7 +467,9 @@ export function TaxPanel() {
               >
                 {saving ? (
                   <LoaderCircle className="size-4 animate-spin" />
-                ) : null}
+                ) : (
+                  <FloppyDiskIcon weight="duotone" size={18} />
+                )}
                 Save the rule for {label(year ?? 0)}
               </Button>
             </div>
@@ -520,7 +533,7 @@ function TdsCalculator({ year }: { year: number }) {
       />
       <CardBody className="flex flex-col gap-4">
         <form
-          className="flex flex-wrap items-end gap-3"
+          className="flex flex-wrap items-start gap-3"
           onSubmit={(event) => {
             event.preventDefault();
             void run();
@@ -547,18 +560,32 @@ function TdsCalculator({ year }: { year: number }) {
               onChange={(e) => setInvestment(e.target.value)}
             />
           </Field>
-          <Button type="submit" variant="secondary" disabled={busy}>
-            {busy ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <Calculator className="size-4" />
-            )}
-            Work it out
-          </Button>
+          {/* Lined up with the inputs rather than the bottom of the row: only
+              the second field has a hint under it, so aligning to the end left
+              the two inputs at different heights. The empty line stands where
+              a field's label does. */}
+          <div className="flex flex-col gap-1.5">
+            <span aria-hidden="true" className="text-[13px] font-extrabold">
+              &nbsp;
+            </span>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={busy}
+              className="h-10"
+            >
+              {busy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <CalculatorIcon weight="duotone" size={19} />
+              )}
+              Work it out
+            </Button>
+          </div>
         </form>
 
         {error ? (
-          <p className="rounded-lg bg-negative/10 px-3 py-2 text-sm text-negative">
+          <p className="rounded-[11px] bg-(--sv-neg-tint) px-4 py-3 text-sm text-(--sv-neg)">
             {error}
           </p>
         ) : null}
@@ -589,52 +616,38 @@ function Percent({
   onChange: (next: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       <Input
         type="number"
         step="0.01"
-        className="col-amount"
+        className="col-amount min-w-0"
         value={(value * 100).toString()}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
       />
-      <span className="text-sm text-muted-foreground">%</span>
+      <PercentSign />
     </div>
   );
 }
 
-function Toggle({
-  checked,
-  disabled,
-  onChange,
+/** The % after a rate field, violet and bold as the handoff draws it. */
+function PercentSign() {
+  return <span className="font-extrabold text-(--sv-violet)">%</span>;
+}
+
+/** A part of the rule: its name at 15px/800 and what it does under it. */
+function SectionHead({
   title,
-  description,
-  className,
+  children,
 }: {
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
   title: string;
-  description: string;
-  className?: string;
+  children: ReactNode;
 }) {
   return (
-    <label className={`flex items-start gap-3 ${className ?? ""}`}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 size-4 shrink-0"
-      />
-      <span className="text-sm">
-        <span className="font-medium">{title}</span>{" "}
-        {checked ? <Badge tone="positive">on</Badge> : <Badge>off</Badge>}
-        <span className="mt-0.5 block text-xs text-muted-foreground">
-          {description}
-        </span>
-      </span>
-    </label>
+    <>
+      <h3 className="text-[15px] font-extrabold">{title}</h3>
+      <p className="mb-2.5 text-[12.5px] text-(--sv-muted)">{children}</p>
+    </>
   );
 }
 

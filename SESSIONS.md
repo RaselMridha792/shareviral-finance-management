@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 94 | **Settings' last six sections, to the handoff — and a shared on/off switch** | **done** — the whole design is in |
 | 93 | **`.capsweep.mjs` and `.acctqa.mjs` brought up to date with the app** | **done** |
 | 92 | **Every root harness runs from any checkout — no more `d:/codes`** | **done** |
 | 91 | **Reports is headed "Finance statement"; `.sweep.mjs` and `.regpage.mjs` run again** | **done** |
@@ -71,6 +72,62 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 94. Settings' last six sections, to the handoff — 27 Sep 2026
+
+The owner: *"setting er jesob design akhono meleni oigulate hat daw and complete
+koro … multi agent diye"*. #90 left six Settings sections in the new look but
+short of the handoff's detail. Done by four agents in parallel, one set of files
+each, then checked and put together here. With this the September handoff is
+in, all of it.
+
+- **`ui/switch.tsx` (new, shared)**: `Switch` — the handoff's 44×24 on/off
+  pill, violet on, the track off, a sliding white knob; `role="switch"` so a
+  screen reader says on/off — and `SwitchRow`, a setting on its own row: the
+  switch, the name at 14.5px/800 (pressing the words flips it too), the line
+  that says what on and off mean, and any control that belongs to it at the
+  right, which drops under the words on a narrow card. Used by Salary TDS,
+  Email and Notifications only. CSS: `.sv-switch-row`, `.sv-chip` (a white
+  pill edged in the line), `.sv-chip-hover`.
+- **Categories**: "Money out" red and "Money in" green with their arrows; each
+  heading a line-edged box with its top row on the subtle ground (violet edge
+  under the pointer), 30px Edit / + Sub-category / Delete; sub-categories as
+  white pills (still click to edit; each one's trash appears on hover or
+  focus); Add heading lime.
+- **Salary TDS**: the two yes/no settings are switch rows (the "on/off" badges
+  went); the minimum-tax amount sits at its row's right; Exemption / Slabs /
+  Investment rebate as headings at 15px/800; Exemption's four fields in one
+  row on a wide card; the slabs tidied with a violet %; Save with its icon over
+  a hairline; the calculator's two inputs now line up.
+- **Your sign-in**: **"Change it" no longer breaks onto two lines** — it cannot
+  wrap now, and the row wraps instead of squeezing it. The card-password state
+  is a green (set) or amber (not set) note with a shield icon; two-step's "Not
+  set up" amber with ShieldWarning; the set-up button carries a QR icon; the
+  recovery-codes box's warn edge actually paints now (it was a Tailwind border
+  colour, which `* { border-color }` always beat).
+- **People who can sign in**: a round initials tile before each name, "· you"
+  on your own row, "must change password" in amber under the name (the DTO
+  carries `mustChangePassword`), the role as a pill (Super Admin lime, as the
+  handoff has it), status as the shared StatusPill.
+- **Email**: Send email and the CFO/super-admin copy are switch rows; the
+  missing-key warning in amber; Send a test / Run today's reminders with violet
+  icons (the reminders button now spins while it runs, as the test button
+  already did); "Making mail arrive" in two columns — the three steps in lime
+  numbered circles, SPF / DKIM / DMARC as pills.
+- **Notifications**: every notification type an on/off switch with its violet
+  icon; "Try it" on the lime band with Check now as the primary button.
+
+**Behaviour unchanged** — read in the diff, not assumed: the same API calls,
+handlers, state, permissions and submit buttons; only presentation moved.
+Nothing was saved, sent or switched while checking.
+
+**Proved**: `.uiqa.mjs settings` 20/20 and `.settingsqa.mjs` 16/16; every
+switch renders `role="switch"` with the right `aria-checked` and flips on a
+click (TDS at 1440 and 390, no write request sent); Email's and Notifications'
+switches read the same states the checkboxes held; "Change it" on one line at
+900px; the Salary TDS amount drops under its row at 390 (one box); your own row
+on People's page 2 reads "Super Admin · you", must change password, the lime
+pill; four CI steps and the web build pass.
 
 ## 93. Two harnesses brought up to date with the app — 27 Sep 2026
 

@@ -11,14 +11,10 @@ import {
   type UserDto,
   type UserStatus,
 } from "@finance/shared";
-import {
-  Check,
-  Copy,
-  LoaderCircle,
-  Plus,
-  ShieldAlert,
-} from "lucide-react";
+import { Check, Copy, LoaderCircle } from "lucide-react";
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/ssr/UserPlus";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import {
   useCallback,
   useEffect,
@@ -34,6 +30,7 @@ import { Card } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
+import { StatusPill } from "@/components/ui/patterns";
 import { useRowDelete } from "@/components/ui/use-row-delete";
 import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
@@ -76,6 +73,16 @@ const ROLE_SUMMARY: Record<Role, string> = {
   cfo: "All the day-to-day work — money, payroll, tax, the challans. Not Settings or accounts.",
   hr: "The team and their pay. Prepares payroll but cannot release it, and does not see the ledger.",
 };
+
+/** "Nabila Bhuiyan" -> "NB": the round tile before a name. */
+function initialsOf(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters =
+    words.length > 1
+      ? `${words[0][0]}${words[words.length - 1][0]}`
+      : (words[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
+}
 
 export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
   const me = useSession();
@@ -235,14 +242,19 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3.5">
+        <p className="max-w-[80ch] min-w-70 flex-1 text-sm leading-normal text-(--sv-muted)">
           A role decides what somebody sees and can change — the API enforces
-          it, so a hidden menu is never the only thing standing between HR and
-          a salary figure.
+          it, so a hidden menu is never the only thing standing between HR and a
+          salary figure.
         </p>
-        <Button variant="primary" size="md" onClick={() => setCreating(true)}>
-          <Plus className="size-4" />
+        <Button
+          variant="primary"
+          size="md"
+          className="flex-none whitespace-nowrap"
+          onClick={() => setCreating(true)}
+        >
+          <UserPlusIcon size={19} weight="duotone" />
           Add someone
         </Button>
       </div>
@@ -308,30 +320,52 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                         not a second row wearing the number 1. */}
                     <SerialCell n={serial(page, index)} />
                     <td>
-                      <span className="font-medium">{user.fullName}</span>
-                      {user.id === me?.id ? (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          you
+                      <span className="flex items-center gap-2.5">
+                        <span
+                          aria-hidden="true"
+                          className="grid size-8.5 flex-none place-items-center rounded-full bg-(--sv-violet-tint) text-[12px] font-extrabold text-(--sv-violet-ink)"
+                        >
+                          {initialsOf(user.fullName)}
                         </span>
-                      ) : null}
-                      {user.mustChangePassword ? (
-                        <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
-                          <ShieldAlert className="size-3" />
-                          must change password
+                        <span className="min-w-0">
+                          <span className="font-extrabold">
+                            {user.fullName}
+                          </span>
+                          {user.id === me?.id ? (
+                            <span className="text-[12px] text-(--sv-muted)">
+                              {" "}
+                              · you
+                            </span>
+                          ) : null}
+                          {user.mustChangePassword ? (
+                            <span className="flex items-center gap-1 text-[12px] font-extrabold text-(--sv-warn)">
+                              <WarningCircleIcon
+                                size={13}
+                                weight="duotone"
+                                className="flex-none"
+                              />
+                              must change password
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
+                      </span>
                     </td>
                     <td>
+                      {/* Lime for the one role that holds every key, violet
+                          for the rest — the handoff's two pill colours. */}
                       <Badge
-                        tone={
-                          user.role === "super_admin" ? "primary" : "neutral"
+                        tone="primary"
+                        className={
+                          user.role === "super_admin"
+                            ? "bg-(--sv-accent) text-(--sv-on-accent)"
+                            : undefined
                         }
                       >
                         {ROLE_LABELS[user.role]}
                       </Badge>
                     </td>
                     <td>
-                      <Badge
+                      <StatusPill
                         tone={
                           user.status === "active"
                             ? "positive"
@@ -341,14 +375,16 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                         }
                       >
                         {USER_STATUS_LABELS[user.status]}
-                      </Badge>
+                      </StatusPill>
                     </td>
-                    <td className="num text-muted-foreground">
-                      {user.lastLoginAt
-                        ? user.lastLoginAt.slice(0, 10)
-                        : "never"}
+                    <td className="num">
+                      {user.lastLoginAt ? (
+                        user.lastLoginAt.slice(0, 10)
+                      ) : (
+                        <span className="text-(--sv-muted)">never</span>
+                      )}
                     </td>
-                    <td className="text-muted-foreground">{user.email}</td>
+                    <td>{user.email}</td>
                     <RowActions
                       onEdit={() => setEditing(user)}
                       second="deactivate"

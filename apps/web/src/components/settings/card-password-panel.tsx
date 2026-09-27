@@ -1,7 +1,10 @@
 "use client";
 
 import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
-import { KeyRound, LoaderCircle, ShieldCheck, ShieldOff } from "lucide-react";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { ShieldWarningIcon } from "@phosphor-icons/react/dist/ssr/ShieldWarning";
+import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -11,7 +14,7 @@ import { Field, Input } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api-client";
 import { accountsApi, type CardPasswordStatus } from "@/lib/masters";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 /**
  * Where the card password is set.
@@ -109,18 +112,33 @@ export function CardPasswordPanel() {
         description="One shared secret that unlocks the card numbers and CVCs on file"
       />
       <CardBody className="flex flex-col gap-4">
-        <div className="flex items-start gap-3 rounded-lg bg-surface-muted px-4 py-3">
-          {status?.isSet ? (
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-positive" />
-          ) : (
-            <ShieldOff className="mt-0.5 size-4 shrink-0 text-warning" />
+        {/* Green when the lock is on, amber when there is none yet — the
+            handoff's tinted note, the icon in the note's own colour. */}
+        <div
+          className={cn(
+            "flex items-center gap-3 rounded-[11px] px-3.5 py-3",
+            status?.isSet
+              ? "bg-(--sv-pos-tint) text-(--sv-pos)"
+              : "bg-(--sv-warn-tint) text-(--sv-warn)",
           )}
-          <div className="text-sm">
+        >
+          {status?.isSet ? (
+            <ShieldCheckIcon size={22} weight="duotone" className="flex-none" />
+          ) : (
+            <ShieldWarningIcon
+              size={22}
+              weight="duotone"
+              className="flex-none"
+            />
+          )}
+          <div>
             {status?.isSet ? (
               <>
-                <p>A card password is set.</p>
+                <p className="text-sm font-extrabold">
+                  A card password is set.
+                </p>
                 {status.setAt ? (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="text-[12.5px] opacity-85">
                     Last changed {formatDate(status.setAt.slice(0, 10))}
                     {status.setBy ? ` by ${status.setBy}` : ""}
                   </p>
@@ -128,10 +146,12 @@ export function CardPasswordPanel() {
               </>
             ) : (
               <>
-                <p>No card password is set.</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Until one is, a card&rsquo;s number and CVC cannot be read back
-                  by anybody — including whoever typed them in.
+                <p className="text-sm font-extrabold">
+                  No card password is set.
+                </p>
+                <p className="text-[12.5px] opacity-85">
+                  Until one is, a card&rsquo;s number and CVC cannot be read
+                  back by anybody — including whoever typed them in.
                 </p>
               </>
             )}
@@ -177,24 +197,28 @@ export function CardPasswordPanel() {
 
             {error ? <p className="text-sm text-negative">{error}</p> : null}
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3.5">
               {/* What changes, and what does not — the question anybody about
                   to press this is actually asking. */}
-              <p className="text-xs text-muted-foreground">
+              <p className="min-w-65 flex-1 text-[12.5px] text-(--sv-muted)">
                 Everyone who reads a card uses this same password, so a change
                 takes effect at once for all of them. Nothing already stored is
                 re-encrypted, and no card number has to be typed in again.
               </p>
+              {/* Never squeezed: beside a long paragraph a shrinkable button
+                  broke into "Change / it". It keeps its width and the row
+                  wraps instead. */}
               <Button
                 type="button"
                 variant="primary"
+                className="flex-none whitespace-nowrap"
                 disabled={pending || !next || !again || (status?.isSet && !current)}
                 onClick={() => void save()}
               >
                 {pending ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
-                  <KeyRound className="size-4" />
+                  <KeyIcon size={18} weight="duotone" />
                 )}
                 {status?.isSet ? "Change it" : "Set it"}
               </Button>

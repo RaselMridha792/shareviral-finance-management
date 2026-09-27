@@ -1,13 +1,14 @@
 "use client";
 
+import { DeviceMobileIcon } from "@phosphor-icons/react/dist/ssr/DeviceMobile";
+import { QrCodeIcon } from "@phosphor-icons/react/dist/ssr/QrCode";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { ShieldWarningIcon } from "@phosphor-icons/react/dist/ssr/ShieldWarning";
 import {
   Check,
   Copy,
   KeyRound,
   LoaderCircle,
-  ShieldCheck,
-  ShieldOff,
   TriangleAlert,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -141,41 +142,46 @@ export function SecurityPanel() {
       <Card>
         <CardHeader
           title="Two-step sign-in"
-          icon={ShieldCheckIcon}
+          icon={DeviceMobileIcon}
           description="A six-digit code from your phone, on top of your password."
         />
         <CardBody className="flex flex-col gap-4">
-          <div className="flex items-start gap-3 rounded-lg bg-surface-muted px-4 py-3">
-            {status.enrolled ? (
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-positive" />
-            ) : (
-              <ShieldOff className="mt-0.5 size-4 shrink-0 text-warning" />
-            )}
-            <div className="text-sm">
-              {status.enrolled ? (
-                <>
-                  <p>
-                    Switched on for your account.{" "}
-                    <span className="text-muted-foreground">
-                      {status.recoveryCodesLeft} recovery code
-                      {status.recoveryCodesLeft === 1 ? "" : "s"} left.
-                    </span>
-                  </p>
-                  <p className="mt-1 text-muted-foreground">
-                    Sign-in does not ask for the code yet. It will once everyone
-                    has set this up — nothing you do here can lock you out in
-                    the meantime.
-                  </p>
-                </>
-              ) : (
-                <p>
-                  Not set up. Your password is currently the only thing between
-                  a stranger and this company&apos;s figures — and a password is
-                  the part that leaks.
+          {/* The handoff's tinted note: green once it is on, amber while it
+              is not — and the amber one is the whole message, in bold. */}
+          {status.enrolled ? (
+            <div className="flex items-center gap-3 rounded-[11px] bg-(--sv-pos-tint) px-3.5 py-3 text-(--sv-pos)">
+              <ShieldCheckIcon
+                size={22}
+                weight="duotone"
+                className="flex-none"
+              />
+              <div>
+                <p className="text-sm font-extrabold">
+                  Switched on for your account.{" "}
+                  <span className="font-normal opacity-85">
+                    {status.recoveryCodesLeft} recovery code
+                    {status.recoveryCodesLeft === 1 ? "" : "s"} left.
+                  </span>
                 </p>
-              )}
+                <p className="mt-0.5 text-[12.5px] opacity-85">
+                  Sign-in does not ask for the code yet. It will once everyone
+                  has set this up — nothing you do here can lock you out in the
+                  meantime.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="flex gap-2.5 rounded-[11px] bg-(--sv-warn-tint) px-3.5 py-3 text-[13.5px] leading-[1.45] font-extrabold text-(--sv-warn)">
+              <ShieldWarningIcon
+                size={20}
+                weight="duotone"
+                className="flex-none"
+              />
+              Not set up. Your password is currently the only thing between a
+              stranger and this company&apos;s figures — and a password is the
+              part that leaks.
+            </p>
+          )}
 
           {error ? (
             <p className="flex items-start gap-2 rounded-lg bg-negative/10 px-4 py-3 text-sm text-negative">
@@ -195,6 +201,7 @@ export function SecurityPanel() {
                   setStage({ name: "password" });
                 }}
               >
+                <QrCodeIcon size={18} weight="duotone" />
                 Set up two-step sign-in
               </Button>
             </div>
@@ -389,7 +396,7 @@ function RecoveryCodes({
   const [acknowledged, setAcknowledged] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-warning/40 bg-warning/5 p-4">
+    <div className="sv-warn-note flex flex-col gap-4 rounded-[11px] bg-(--sv-warn-tint) p-4">
       <div className="flex items-start gap-3">
         <KeyRound className="mt-0.5 size-4 shrink-0 text-warning" />
         <div className="text-sm">

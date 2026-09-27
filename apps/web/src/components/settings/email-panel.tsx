@@ -1,16 +1,20 @@
 "use client";
 
-import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
+import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
-import { Check, LoaderCircle, Send, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { PlayIcon } from "@phosphor-icons/react/dist/ssr/Play";
+import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
+import { Check, LoaderCircle } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/field";
 import { StatusPill } from "@/components/ui/patterns";
+import { SwitchRow } from "@/components/ui/switch";
 import {
   SerialCell,
   SerialHead,
@@ -126,7 +130,7 @@ export function EmailPanel() {
       <Card>
         <CardHeader
           title="Sending"
-          icon={PaperPlaneTiltIcon}
+          icon={EnvelopeSimpleIcon}
           description="Renewal reminders go out at 9am Dhaka time, three days before a plan renews."
           action={
             status.blockedBy ? (
@@ -138,8 +142,8 @@ export function EmailPanel() {
         />
         <CardBody className="flex flex-col gap-4">
           {status.blockedBy ? (
-            <p className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+            <p className="sv-warn-note flex items-start gap-2.5 rounded-[11px] bg-(--sv-warn-tint) px-3.5 py-3 text-[13.5px] leading-[1.45] font-extrabold text-(--sv-warn)">
+              <WarningIcon weight="duotone" size={19} className="flex-none" />
               {status.blockedBy}
             </p>
           ) : null}
@@ -163,6 +167,8 @@ export function EmailPanel() {
               />
               <Button
                 variant="secondary"
+                // As tall as the key box beside it, as the handoff lines them up.
+                className="h-10 px-3.5 text-[13.5px]"
                 disabled={!canWrite || !apiKey.trim() || busy !== null}
                 onClick={() =>
                   run("key", async () => {
@@ -179,7 +185,7 @@ export function EmailPanel() {
             </div>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <Field
               label="Mail appears to be from"
               hint="Must be on a domain Resend has verified — see below."
@@ -224,28 +230,18 @@ export function EmailPanel() {
             starts sending the moment somebody pastes a key is how a test
             message reaches a customer.
           */}
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
-            <input
-              type="checkbox"
-              checked={status.enabled}
-              disabled={!canWrite || busy !== null}
-              className="mt-0.5 size-4 accent-[var(--primary)]"
-              onChange={(e) =>
-                run("enabled", async () => {
-                  await emailApi.update({ enabled: e.target.checked });
-                  return e.target.checked
-                    ? "Email switched on."
-                    : "Email switched off.";
-                })
-              }
-            />
-            <span className="text-sm">
-              Send email
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                Nothing is sent while this is off, whatever else is saved.
-              </span>
-            </span>
-          </label>
+          <SwitchRow
+            title="Send email"
+            description="Nothing is sent while this is off, whatever else is saved."
+            checked={status.enabled}
+            disabled={!canWrite || busy !== null}
+            onChange={(next) =>
+              run("enabled", async () => {
+                await emailApi.update({ enabled: next });
+                return next ? "Email switched on." : "Email switched off.";
+              })
+            }
+          />
 
           {/*
             Who else a reminder reaches.
@@ -257,30 +253,20 @@ export function EmailPanel() {
             there bounces — and a provider that scores senders counts those
             against the mail that matters.
           */}
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
-            <input
-              type="checkbox"
-              checked={status.toStaff}
-              disabled={!canWrite || busy !== null}
-              className="mt-0.5 size-4 accent-[var(--primary)]"
-              onChange={(e) =>
-                run("staff", async () => {
-                  await emailApi.update({ toStaff: e.target.checked });
-                  return e.target.checked
-                    ? "Reminders will also go to everybody who can sign in."
-                    : "Reminders will go only to the addresses above.";
-                })
-              }
-            />
-            <span className="text-sm">
-              Also send to everybody who can sign in as CFO or super admin
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                Turn this off if those are logins rather than real mailboxes.
-                Mail to an address that does not exist bounces, and enough
-                bounces send the rest to spam.
-              </span>
-            </span>
-          </label>
+          <SwitchRow
+            title="Also send to everybody who can sign in as CFO or super admin"
+            description="Turn this off if those are logins rather than real mailboxes. Mail to an address that does not exist bounces, and enough bounces send the rest to spam."
+            checked={status.toStaff}
+            disabled={!canWrite || busy !== null}
+            onChange={(next) =>
+              run("staff", async () => {
+                await emailApi.update({ toStaff: next });
+                return next
+                  ? "Reminders will also go to everybody who can sign in."
+                  : "Reminders will go only to the addresses above.";
+              })
+            }
+          />
 
           <div className="flex flex-wrap gap-2">
             <Button
@@ -295,9 +281,13 @@ export function EmailPanel() {
               }
             >
               {busy === "test" ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <Send className="size-3.5" />
+                <PaperPlaneTiltIcon
+                  weight="duotone"
+                  size={17}
+                  className="text-(--sv-violet)"
+                />
               )}
               Send a test
             </Button>
@@ -312,22 +302,31 @@ export function EmailPanel() {
                 })
               }
             >
+              {busy === "reminders" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <PlayIcon
+                  weight="duotone"
+                  size={17}
+                  className="text-(--sv-violet)"
+                />
+              )}
               Run today&apos;s reminders now
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[12.5px] leading-normal text-(--sv-muted)">
             The test goes to you <em>and</em> to the address above, so it proves
             the key, the domain, and the inbox the copies are meant to reach —
             which is the one worth proving, since it is usually on somebody
             else&apos;s domain. The second button proves the reminder itself:
-            which plans it finds and who it tells. It obeys the same rule as
-            the daily job, so pressing it twice still sends once.
+            which plans it finds and who it tells. It obeys the same rule as the
+            daily job, so pressing it twice still sends once.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[12.5px] leading-normal text-(--sv-muted)">
             &ldquo;Sent&rdquo; means Resend accepted it, which is not the same
             as it arriving — an address with no mailbox behind it is accepted
-            and bounces afterwards. If a test says it sent and nothing turns
-            up, that address is where to look first.
+            and bounces afterwards. If a test says it sent and nothing turns up,
+            that address is where to look first.
           </p>
         </CardBody>
       </Card>
@@ -336,38 +335,37 @@ export function EmailPanel() {
       <Card>
         <CardHeader
           title="Making mail arrive"
-          icon={EnvelopeSimpleIcon}
+          icon={GlobeIcon}
           description="Pasting a key is not enough. Until the domain is verified, most of what you send lands in spam or is refused."
         />
-        <CardBody className="flex flex-col gap-3">
-          <ol className="flex flex-col gap-2 text-sm">
-            <li className="flex gap-2">
-              <span className="num text-muted-foreground">1.</span>
-              <span>
+        <CardBody className="flex flex-col gap-4">
+          {/* The steps on the left, the records they add on the right. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4.5">
+            <ol className="flex flex-col gap-2.5 text-sm">
+              <Step n={1}>
                 In Resend, add <strong>hellonizam.com</strong> under Domains.
-              </span>
-            </li>
-            <li className="flex gap-2">
-              <span className="num text-muted-foreground">2.</span>
-              <span>
+              </Step>
+              <Step n={2}>
                 It shows three records. Add them at whoever hosts your DNS.
-              </span>
-            </li>
-            <li className="flex gap-2">
-              <span className="num text-muted-foreground">3.</span>
-              <span>
+              </Step>
+              <Step n={3}>
                 Press Verify there. It usually takes minutes and can take a day.
-              </span>
-            </li>
-          </ol>
+              </Step>
+            </ol>
 
-          <div className="flex flex-col gap-2 border-t border-border pt-3">
-            {DNS_STEPS.map((step) => (
-              <div key={step.what} className="flex gap-3 text-sm">
-                <span className="w-14 shrink-0 font-medium">{step.what}</span>
-                <span className="text-muted-foreground">{step.why}</span>
-              </div>
-            ))}
+            <div className="flex flex-col gap-2">
+              {DNS_STEPS.map((step) => (
+                <div
+                  key={step.what}
+                  className="sv-chip flex gap-3 rounded-[11px] bg-(--sv-subtle) px-3 py-2.5 text-[13px]"
+                >
+                  <b className="w-14 flex-none font-extrabold text-(--sv-violet-ink)">
+                    {step.what}
+                  </b>
+                  <span className="text-(--sv-muted)">{step.why}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/*
@@ -377,7 +375,7 @@ export function EmailPanel() {
             worse than no guess at all, because verification then fails for a
             reason nobody can see.
           */}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[12.5px] leading-normal text-(--sv-muted)">
             The exact values are in Resend&apos;s dashboard, not here — the DKIM
             key is generated for your domain, so anything printed on this page
             would be a guess somebody pasted into DNS.
@@ -389,7 +387,7 @@ export function EmailPanel() {
       <Card className="overflow-hidden p-0">
         <CardHeader
           title="What has gone out"
-          icon={ClockCounterClockwiseIcon}
+          icon={TrayIcon}
           description="Every reminder, and whether it arrived at the provider."
         />
         <TableScroll>
@@ -439,5 +437,17 @@ export function EmailPanel() {
         </TableScroll>
       </Card>
     </div>
+  );
+}
+
+/** One step of verifying the domain, numbered in a lime circle. */
+function Step({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex items-center gap-2.5">
+      <span className="grid size-6.5 flex-none place-items-center rounded-full bg-(--sv-accent) text-[12px] font-extrabold text-(--sv-on-accent)">
+        {n}
+      </span>
+      <span>{children}</span>
+    </li>
   );
 }

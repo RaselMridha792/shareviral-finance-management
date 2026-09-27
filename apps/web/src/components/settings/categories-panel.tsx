@@ -1,14 +1,13 @@
 "use client";
 
+import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
+import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { CATEGORY_KIND_LABELS } from "@finance/shared";
-import {
-  ChevronRight,
-  LoaderCircle,
-  Plus,
-  SquarePen,
-  Trash2,
-} from "lucide-react";
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -123,18 +122,19 @@ export function CategoriesPanel({
           action={
             canWrite ? (
               <Button
-                size="sm"
-                variant="secondary"
+                size="md"
+                variant="primary"
+                className="gap-1.75 px-3.25 text-[13px]"
                 onClick={() => setForm({ mode: "create-parent" })}
               >
-                <Plus className="size-3.5" />
+                <PlusIcon weight="duotone" size={15} />
                 Add heading
               </Button>
             ) : null
           }
         />
-        <CardBody className="flex flex-col gap-6">
-          <p className="text-sm text-muted-foreground">
+        <CardBody className="flex flex-col gap-2.5 px-5 py-4">
+          <p className="text-[13px] text-(--sv-muted)">
             Deliberately not three levels — a third choice at the moment someone
             records a payment reliably produces money filed under the wrong
             heading.
@@ -142,6 +142,7 @@ export function CategoriesPanel({
 
           <Group
             title="Money out"
+            side="out"
             nodes={outGroups}
             canWrite={canWrite}
             onAddChild={(parent) => setForm({ mode: "create-child", parent })}
@@ -150,6 +151,7 @@ export function CategoriesPanel({
           />
           <Group
             title="Money in"
+            side="in"
             nodes={inGroups}
             canWrite={canWrite}
             onAddChild={(parent) => setForm({ mode: "create-child", parent })}
@@ -169,8 +171,16 @@ export function CategoriesPanel({
   );
 }
 
+/**
+ * A 30px icon tile in a heading's top row: the subtle ground, tinted under the
+ * pointer.
+ */
+const TILE =
+  "grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-lg bg-(--sv-subtle) transition-colors duration-300";
+
 function Group({
   title,
+  side,
   nodes,
   canWrite,
   onAddChild,
@@ -178,6 +188,7 @@ function Group({
   onDelete,
 }: {
   title: string;
+  side: "in" | "out";
   nodes: CategoryNode[];
   canWrite: boolean;
   onAddChild: (parent: CategoryNode) => void;
@@ -186,105 +197,129 @@ function Group({
 }) {
   if (nodes.length === 0) return null;
 
+  const SideIcon = side === "in" ? ArrowDownLeftIcon : ArrowUpRightIcon;
+
   return (
-    <section>
-      <h3 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+    <section className="flex flex-col gap-2.5">
+      <h3
+        className={cn(
+          "flex items-center gap-2 text-[11px] font-extrabold tracking-[0.14em] uppercase",
+          side === "in" ? "mt-2.5 text-(--sv-pos)" : "mt-1.5 text-(--sv-neg)",
+        )}
+      >
+        <SideIcon weight="duotone" size={15} />
         {title}
       </h3>
-      <div className="flex flex-col gap-3">
-        {nodes.map((node) => (
-          <div
-            key={node.id}
-            className={cn(
-              "rounded-lg border border-border",
-              !node.isActive && "opacity-55",
-            )}
-          >
-            <div className="flex items-center gap-2.5 border-b border-border px-4 py-2.5">
-              <span
-                className="size-3 shrink-0 rounded-full"
-                style={{ background: node.color }}
-              />
-              <span className="text-sm font-semibold">{node.name}</span>
-              {!node.isActive ? <Badge>inactive</Badge> : null}
-              <span className="ml-auto flex items-center gap-1">
-                {canWrite ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onEdit(node)}
-                    >
-                      <SquarePen className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onAddChild(node)}
-                    >
-                      <Plus className="size-3.5" />
-                      Sub-category
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Move to trash"
-                      title={
-                        node.children.length > 0
-                          ? `Move to trash with its ${node.children.length} sub-categories`
-                          : "Move to trash"
-                      }
-                      onClick={() => onDelete(node)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </>
-                ) : null}
-              </span>
-            </div>
+      {nodes.map((node) => (
+        <div
+          key={node.id}
+          className={cn(
+            // `sv-chip` is only the 1px line edge — a border-colour utility
+            // would lose to globals.css's `* { border-color }`. `sv-chip-hover`
+            // turns that edge violet-soft under the pointer, as the handoff does.
+            "sv-chip sv-chip-hover overflow-hidden rounded-[11px]",
+            !node.isActive && "opacity-55",
+          )}
+        >
+          <div className="flex items-center gap-2.5 bg-(--sv-subtle) px-3.5 py-2.75">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ background: node.color }}
+            />
+            <span className="min-w-0 text-[14.5px] font-extrabold">
+              {node.name}
+            </span>
+            {!node.isActive ? <Badge>inactive</Badge> : null}
+            <span className="ml-auto flex items-center gap-2.5">
+              {canWrite ? (
+                <>
+                  <button
+                    type="button"
+                    title="Edit"
+                    aria-label={`Edit ${node.name}`}
+                    onClick={() => onEdit(node)}
+                    className={cn(
+                      TILE,
+                      "text-(--sv-violet) hover:bg-(--sv-violet-tint)",
+                    )}
+                  >
+                    <PencilSimpleIcon weight="duotone" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAddChild(node)}
+                    className="sv-button-quiet inline-flex h-7.5 shrink-0 cursor-pointer items-center gap-1.25 rounded-lg bg-(--sv-surface) px-2.5 text-xs font-extrabold"
+                  >
+                    <PlusIcon
+                      weight="duotone"
+                      size={13}
+                      className="text-(--sv-violet)"
+                    />
+                    Sub-category
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Move to trash"
+                    title={
+                      node.children.length > 0
+                        ? `Move to trash with its ${node.children.length} sub-categories`
+                        : "Move to trash"
+                    }
+                    onClick={() => onDelete(node)}
+                    className={cn(
+                      TILE,
+                      "text-(--sv-neg) hover:bg-(--sv-neg-tint)",
+                    )}
+                  >
+                    <TrashIcon weight="duotone" size={14} />
+                  </button>
+                </>
+              ) : null}
+            </span>
+          </div>
 
-            {node.children.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-muted-foreground">
-                No sub-categories — payments can still be filed under the
-                heading itself.
-              </p>
-            ) : (
-              <ul className="flex flex-wrap gap-x-1 gap-y-1 px-3 py-3">
-                {node.children.map((child) => (
-                  <li key={child.id} className="group/chip flex items-center">
+          {node.children.length === 0 ? (
+            <p className="px-3.5 py-2.5 text-[13px] text-(--sv-muted)">
+              No sub-categories — payments can still be filed under the heading
+              itself.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5 px-3.5 py-2.75">
+              {node.children.map((child) => (
+                <li key={child.id} className="group/chip relative flex">
+                  <button
+                    type="button"
+                    onClick={() => canWrite && onEdit(child)}
+                    disabled={!canWrite}
+                    className={cn(
+                      "sv-chip rounded-full bg-(--sv-surface) px-2.75 py-1.25 text-[13px] transition-colors duration-200",
+                      canWrite
+                        ? "cursor-pointer hover:bg-(--sv-violet-tint) hover:text-(--sv-violet-ink)"
+                        : "cursor-default",
+                      !child.isActive && "line-through opacity-55",
+                    )}
+                  >
+                    {child.name}
+                  </button>
+                  {/* On the pill's corner rather than inside it, so showing
+                      it under the pointer never re-wraps the row. */}
+                  {canWrite ? (
                     <button
                       type="button"
-                      onClick={() => canWrite && onEdit(child)}
-                      disabled={!canWrite}
-                      className={cn(
-                        "flex items-center gap-1 rounded-md px-2 py-1 text-sm transition",
-                        canWrite
-                          ? "cursor-pointer hover:bg-surface-muted"
-                          : "cursor-default",
-                        !child.isActive && "opacity-55 line-through",
-                      )}
+                      aria-label={`Move ${child.name} to trash`}
+                      title={`Move ${child.name} to trash`}
+                      onClick={() => onDelete(child)}
+                      className="sv-chip absolute -top-1.5 -right-1.5 grid size-4.5 cursor-pointer place-items-center rounded-full bg-(--sv-surface) text-(--sv-neg) opacity-0 transition hover:bg-(--sv-neg-tint) focus-visible:opacity-100 group-hover/chip:opacity-100"
                     >
-                      <ChevronRight className="size-3 text-muted-foreground" />
-                      {child.name}
+                      <TrashIcon weight="duotone" size={10} />
                     </button>
-                    {canWrite ? (
-                      <button
-                        type="button"
-                        aria-label={`Move ${child.name} to trash`}
-                        title={`Move ${child.name} to trash`}
-                        onClick={() => onDelete(child)}
-                        className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 transition hover:text-negative focus-visible:opacity-100 group-hover/chip:opacity-100"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))}
-      </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
     </section>
   );
 }

@@ -427,6 +427,25 @@
     var(--sv-shadow);
 }
 
+/* A white pill edged in the line — a sub-category's name, a DNS record. */
+.sv-chip {
+  border: 1px solid var(--sv-line);
+}
+
+/* A chip-edged box whose edge turns violet-soft under the pointer. */
+.sv-chip-hover {
+  transition: border-color 0.4s ease;
+}
+
+.sv-chip-hover:hover {
+  border-color: var(--sv-violet-soft);
+}
+
+/* A setting on its own row with its switch (switch.tsx). */
+.sv-switch-row {
+  border: 1px solid var(--sv-line);
+}
+
 /* The empty state's round lime tile. */
 .sv-empty-tile {
   border: 1px solid var(--sv-lime-line);
