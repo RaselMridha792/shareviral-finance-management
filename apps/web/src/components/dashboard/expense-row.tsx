@@ -1,7 +1,11 @@
 "use client";
 
-import type { OverviewReport } from "@finance/shared";
-import { Check, Plus, RotateCcw, Settings2, X } from "lucide-react";
+import { formatMoney, type OverviewReport } from "@finance/shared";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
+import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import { useState, useSyncExternalStore } from "react";
 
 import {
@@ -11,18 +15,12 @@ import {
   placeholderFor,
   type CardSpec,
 } from "@/components/dashboard/expense-cards";
-import { formatMoney } from "@finance/shared";
-import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
 import {
-  SectionHeading,
-  ShareBar,
-  StatCell,
-  StatStrip,
-} from "@/components/ui/patterns";
-import { Card } from "@/components/ui/card";
+  FIGURE_GRID,
+  FigureCard,
+  SectionHead,
+} from "@/components/dashboard/figure-card";
 import { useDismissable } from "@/components/ui/overlay";
-import { cn } from "@/lib/utils";
 
 /**
  * Where the choice is kept, and why it is not in the database.
@@ -199,88 +197,83 @@ export function ExpenseRow({
   const full = chosen.length >= MAX_CARDS;
 
   return (
-    <section className="flex flex-col gap-3">
-      <SectionHeading
+    <section
+      className="sv-rise flex flex-col gap-3"
+      style={{ animationDelay: "0.2s" }}
+    >
+      <SectionHead
+        icon={ReceiptIcon}
+        tile="violet"
         title="Expense overview"
-        icon="receipt_long"
-        iconTone="text-negative"
-        qualifier={report.period.label}
+        subtitle={report.period.label}
         aside={
-          <span className="flex items-center gap-3">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setEditing((was) => !was);
-                setAdding(false);
-              }}
-            >
-              {editing ? (
-                <>
-                  <Check className="size-3.5" />
-                  Done
-                </>
-              ) : (
-                <>
-                  <Settings2 className="size-3.5" />
-                  {/* The owner's word. It both adds and removes, so "Add"
-                      undersells it — but the panel it opens says what it
-                      does, and this is the vocabulary they use. */}
-                  Add
-                </>
-              )}
-            </Button>
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing((was) => !was);
+              setAdding(false);
+            }}
+            className="sv-button-quiet inline-flex h-10 cursor-pointer items-center gap-[7px] rounded-lg bg-(--sv-surface) px-3.5 text-[13.5px] font-extrabold"
+          >
+            {editing ? (
+              <>
+                <CheckIcon
+                  weight="duotone"
+                  size={17}
+                  className="text-(--sv-violet)"
+                />
+                Done
+              </>
+            ) : (
+              <>
+                <PlusCircleIcon
+                  weight="duotone"
+                  size={17}
+                  className="text-(--sv-violet)"
+                />
+                {/* The owner's word. It both adds and removes, so "Add"
+                    undersells it — but the panel it opens says what it
+                    does, and this is the vocabulary they use. */}
+                Add
+              </>
+            )}
+          </button>
         }
       />
 
       {editing ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-[13px] text-(--sv-muted)">
           Pick the figures worth watching. {chosen.length} of {MAX_CARDS} shown
           — remove one with the cross, add one with the tile at the end. Kept in
           this browser.
         </p>
       ) : null}
 
-      {/* The same strip the account blocks use. It was a grid of separate
-          cards, which read as a different kind of thing on a page where the
-          two above it are strips — and they are all four-figures-in-a-row. */}
-      <StatStrip>
+      <div className={FIGURE_GRID}>
         {cards.map((card) => {
           const share = card.shareOfOutflow
             ? shareOf(card.value, report.totals.moneyOut)
             : null;
           return (
-            <div key={card.key} className="relative bg-surface">
-              <StatCell
-                label={card.label}
-                icon={card.symbol}
-                iconTone={card.iconTone}
-                // Formatted here, where the cell only renders what it is given.
-                // Passing the raw string printed "68875.00" under a heading whose
-                // neighbours read ৳11,83,000.00 — the same figures, one of them
-                // looking like a database column.
-                value={money(card.value)}
-                secondary={
-                  card.usd
-                    ? `≈ ${formatMoney(card.usd, { currency: "USD" })}`
-                    : null
-                }
-                footnote={
-                  // The share, then whatever the card had to say. A figure with
-                  // no denominator is a figure nobody can size: ৳68,875 means one
-                  // thing against a two-lakh month and another against a
-                  // twenty-four-lakh one.
-                  [share, card.hint].filter(Boolean).join(" · ")
-                }
-              >
-                {share ? (
-                  <ShareBar
-                    share={Number(card.value) / Number(report.totals.moneyOut)}
-                    tone="bg-primary"
-                  />
-                ) : null}
-              </StatCell>
+            <FigureCard
+              key={card.key}
+              icon={card.symbol}
+              label={card.label}
+              // Formatted here: the card only renders what it is given, and a
+              // raw "68875.00" beside neighbours reading ৳11,83,000.00 looks
+              // like a database column.
+              value={money(card.value)}
+              sub={
+                card.usd
+                  ? `≈ ${formatMoney(card.usd, { currency: "USD" })}`
+                  : null
+              }
+              // The share, then whatever the card had to say. A figure with no
+              // denominator is a figure nobody can size: ৳68,875 means one
+              // thing against a two-lakh month and another against a
+              // twenty-four-lakh one.
+              note={[share, card.hint].filter(Boolean).join(" · ") || null}
+            >
               {editing ? (
                 <button
                   type="button"
@@ -294,12 +287,12 @@ export function ExpenseRow({
                       ? "The row cannot be empty"
                       : `Remove ${card.label}`
                   }
-                  className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground shadow-e1 transition hover:border-negative hover:bg-negative/10 hover:text-negative disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-surface disabled:hover:text-muted-foreground"
+                  className="sv-button-quiet absolute top-2.5 right-2.5 grid size-7 cursor-pointer place-items-center rounded-full bg-(--sv-surface) text-(--sv-muted) disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <X className="size-3.5" />
+                  <XIcon weight="bold" size={13} />
                 </button>
               ) : null}
-            </div>
+            </FigureCard>
           );
         })}
 
@@ -307,22 +300,34 @@ export function ExpenseRow({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center gap-2 bg-surface text-sm text-muted-foreground transition hover:text-primary-text"
+            className="sv-add-card flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-[11px] text-[14px] font-extrabold text-(--sv-violet-ink)"
           >
-            <Plus className="size-5" />
+            <PlusCircleIcon
+              weight="duotone"
+              size={26}
+              className="text-(--sv-violet)"
+            />
             Add a card
           </button>
         ) : null}
-      </StatStrip>
+      </div>
 
       {editing ? (
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="ghost" onClick={reset}>
-            <RotateCcw className="size-3.5" />
+          <button
+            type="button"
+            onClick={reset}
+            className="sv-button-quiet inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-(--sv-surface) px-3 text-[13px] font-extrabold"
+          >
+            <ArrowCounterClockwiseIcon
+              weight="duotone"
+              size={16}
+              className="text-(--sv-violet)"
+            />
             Back to the usual four
-          </Button>
+          </button>
           {full ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-[12.5px] text-(--sv-muted)">
               That is as many as the row holds. Remove one to add another.
             </span>
           ) : null}
@@ -341,13 +346,6 @@ export function ExpenseRow({
 }
 
 /**
- * The list of everything that is not already on the row.
- *
- * Each option shows its figure, because "Office rent" and "Office rent —
- * ৳45,000" are different amounts of help when somebody is deciding whether it
- * is worth a card.
- */
-/**
  * What share of the month's spending this figure is.
  *
  * Null rather than "0%" when there is nothing to divide by — a percentage of a
@@ -360,6 +358,13 @@ function shareOf(value: string, total: string): string | null {
   return `${Math.round((Number(value) / whole) * 100)}% of outflow`;
 }
 
+/**
+ * The list of everything that is not already on the row.
+ *
+ * Each option shows its figure, because "Office rent" and "Office rent —
+ * ৳45,000" are different amounts of help when somebody is deciding whether it
+ * is worth a card.
+ */
 function CardChooser({
   open,
   options,
@@ -384,29 +389,29 @@ function CardChooser({
       className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-[10vh]"
       onClick={onClose}
     >
-      <Card
+      <div
         // Clicks inside must not reach the backdrop's dismiss.
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Add a card"
-        className="w-full max-w-lg overflow-hidden p-0"
+        className="sv-card w-full max-w-lg overflow-hidden rounded-[11px] bg-(--sv-surface)"
       >
-        <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          <h3 className="text-sm font-semibold">Add a card</h3>
+        <div className="flex items-center justify-between border-b px-5 py-3.5">
+          <h3 className="text-[16px] font-extrabold">Add a card</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            className="grid size-8 cursor-pointer place-items-center rounded-lg text-(--sv-muted) transition-colors hover:bg-(--sv-violet-tint) hover:text-(--sv-violet-ink)"
           >
-            <X className="size-4" />
+            <XIcon weight="bold" size={15} />
           </button>
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {options.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+            <p className="px-3 py-8 text-center text-[14px] text-(--sv-muted)">
               Everything is already on the row.
             </p>
           ) : (
@@ -415,7 +420,7 @@ function CardChooser({
               if (!inGroup.length) return null;
               return (
                 <div key={group} className="mb-1">
-                  <p className="px-3 pt-2 pb-1 text-[0.6875rem] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
+                  <p className="px-3 pt-2 pb-1 text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
                     {group}
                   </p>
                   {inGroup.map((card) => (
@@ -423,29 +428,22 @@ function CardChooser({
                       key={card.key}
                       type="button"
                       onClick={() => onPick(card)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition",
-                        "hover:bg-surface-muted",
-                      )}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-(--sv-violet-tint)"
                     >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-muted-foreground">
-                        <Icon
-                          name={card.symbol}
-                          size={18}
-                          className={card.iconTone}
-                        />
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--sv-violet-tint) text-(--sv-violet)">
+                        <card.symbol weight="duotone" size={18} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
+                        <span className="block truncate text-[14px] font-bold">
                           {card.label}
                         </span>
                         {card.hint ? (
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block truncate text-[12.5px] text-(--sv-muted)">
                             {card.hint}
                           </span>
                         ) : null}
                       </span>
-                      <span className="num shrink-0 text-sm text-muted-foreground">
+                      <span className="shrink-0 text-[14px] text-(--sv-muted) tabular-nums">
                         {money(card.value, { hideDecimals: true })}
                       </span>
                     </button>
@@ -455,7 +453,7 @@ function CardChooser({
             })
           )}
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,10 @@
 import type { PendingItem } from "@finance/shared";
-import { ArrowRight, Users } from "lucide-react";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import Link from "next/link";
 
+import { Greeting } from "@/components/dashboard/greeting";
 import { PendingCard } from "@/components/dashboard/pending-card";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
 
 /**
  * What HR sees when they sign in.
@@ -13,6 +13,9 @@ import { PageHeader } from "@/components/ui/page-header";
  * empty tile invites the question "why is this zero"; a page that never asked
  * for the figure has nothing to explain, and the boundary stays a fact about
  * the request rather than a rule about the rendering.
+ *
+ * It opens with the same greeting card as the overview, so the two dashboards
+ * are recognisably one app; under it, the handoff's empty-state card.
  */
 export function HrDashboard({
   firstName,
@@ -23,39 +26,40 @@ export function HrDashboard({
 }) {
   return (
     <>
-      <PageHeader
-        title={`Welcome, ${firstName}`}
-        icon="space_dashboard"
-        description="Your work lives under Team."
-      />
+      <Greeting lead="Welcome" name={firstName}>
+        <p className="mt-2 text-[14.5px] text-(--sv-muted)">
+          Your work lives under Team.
+        </p>
+      </Greeting>
 
-      <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-        <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-          <Users className="size-6" />
+      <div
+        className="sv-card sv-rise flex flex-col items-center gap-3 rounded-[14px] bg-(--sv-surface) px-6 py-14 text-center"
+        style={{ animationDelay: "0.08s" }}
+      >
+        <span className="grid size-16 place-items-center rounded-full bg-(--sv-lime-tint) text-(--sv-violet-ink)">
+          <UsersThreeIcon weight="duotone" size={30} />
         </span>
-        <div>
-          {/*
-            This said "balances, payroll and pay are held elsewhere", which
-            stopped being true when HR was given compensation and the salary
-            sheet. A dashboard that describes the wrong account is worse than
-            an empty one: the person believes it and stops looking.
-          */}
-          <p className="text-lg font-semibold">
-            The company&apos;s own figures are not on this account
-          </p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            Bank balances and the monthly reports sit with Finance. People, pay
-            and the salary sheet are yours — they are in the sidebar.
-          </p>
-        </div>
+        {/*
+          This said "balances, payroll and pay are held elsewhere", which
+          stopped being true when HR was given compensation and the salary
+          sheet. A dashboard that describes the wrong account is worse than an
+          empty one: the person believes it and stops looking.
+        */}
+        <p className="text-[19px] font-extrabold">
+          The company&apos;s own figures are not on this account
+        </p>
+        <p className="max-w-[46ch] text-[14.5px] text-(--sv-muted)">
+          Bank balances and the monthly reports sit with Finance. People, pay
+          and the salary sheet are yours — they are in the sidebar.
+        </p>
         <Link
           href="/team"
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 text-[14px] font-extrabold text-(--sv-violet-ink) hover:text-(--sv-ink)"
         >
           Go to Team
-          <ArrowRight className="size-3.5" />
+          <ArrowRightIcon weight="bold" size={14} />
         </Link>
-      </Card>
+      </div>
 
       {pending.length ? <PendingCard items={pending} /> : null}
     </>

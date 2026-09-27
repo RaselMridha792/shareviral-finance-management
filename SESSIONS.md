@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 81 | **The new design: the Dashboard** | **done** |
 | 80 | **The new design, the shell: palette, font, light default, rail, top bar, tables** | **done** — every screen; each screen's own layout is its own session |
 | 79 | **The new design, page one: sign-in and the preloader** | **done** — the rest of the app follows a page at a time |
 | 50 | Payslip: the company name printed twice | **done** |
@@ -58,6 +59,59 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 81. The new design: the Dashboard — 27 Sep 2026
+
+**No shared file changed.** The handoff's dashboard does not use the header
+card every other screen opens with — it has its own greeting card — so the
+page-header question (`components/ui/page-header.tsx`, 22 screens) is still
+open and still the next screen's to ask. The dashboard's card and heading are
+dashboard-local (`components/dashboard/figure-card.tsx`) until a second screen
+wants the same card; the Expense overview screen still draws the older strip
+from `ui/patterns`, untouched.
+
+**What it is now.** A violet greeting card (`greeting.tsx`): the day written
+out, "Overview, <name in violet>", three chips, the month and year, Edit, and
+**Total held** on the right. Then one section per account — a lime tile with
+the account's kind, its name and bank line, four separate cards (opening,
+in, out, current) with tinted tiles, green in and red out. Then Expense
+overview with the violet tile and the chosen cards. Sections rise in once,
+staggered; reduced motion gets none of it.
+
+**Decisions worth knowing.**
+
+- **Total held is the accounts' closings added up, in paisa** (`toMinorUnits`
+  / `fromMinorUnits`), so it cannot disagree with the cards under it. On a
+  month already over it reads "Held at the end of August".
+- **The chips are real.** Accounts = the blocks on screen (not "active": the
+  report includes archived ones, so the word was dropped). On payroll =
+  `headcount.employees`. **Renewals** has no field in the report and no
+  renewal filter on the register, so the page reads the active plans and
+  counts the ones whose next renewal is this month — **only for the current
+  month** ("next renewal" means nothing about a month gone) and only for a
+  role with `vendors.read`. A count, not money.
+- **Edit moved into the greeting card**, where the handoff has it; the account
+  blocks take `editing` from it and are remounted when it ends, so a draft
+  order never outlives its session. Arrows and drag unchanged.
+- **The share bars are gone** (the handoff has none); the percentage survives
+  as the card's note — "62% of total movement", "18% of outflow".
+- Every expense card is the same violet tile, as drawn; `CardSpec.symbol` is a
+  Phosphor component now and `iconTone` is gone.
+- HR's dashboard opens with the same greeting card ("Welcome, <name>") over
+  the handoff's empty-state card.
+- `stat-tile.tsx` had no user and was deleted.
+
+**Proved by `.dashboardqa.mjs`** — 30 checks in a browser: the day, the
+greeting, the chips against the API and the database, one block per account
+the API returned, **every card against the API's own report to the paisa**,
+opening + in − out = closing on every block, Total held = the closings,
+arranging sticks across a reload and the figures move with their block, the
+chooser adds and the cross removes, a finished month says "Held at the end of"
+and drops the renewals chip, dark on a phone, and HR shown no money.
+`.rolesweep`: the CEO is still offered only Edit and Add on the dashboard.
+Four CI steps and a production build green.
+
+**Open.** `/team` still 500s locally (#80, the unapplied migration).
 
 ## 80. The new design, the shell — every screen at once — 27 Sep 2026
 

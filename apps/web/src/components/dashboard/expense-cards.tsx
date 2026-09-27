@@ -1,6 +1,18 @@
 "use client";
 
 import type { OverviewReport } from "@finance/shared";
+import type { Icon } from "@phosphor-icons/react";
+import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { HourglassMediumIcon } from "@phosphor-icons/react/dist/ssr/HourglassMedium";
+import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
+import { ScalesIcon } from "@phosphor-icons/react/dist/ssr/Scales";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
+import { TrendDownIcon } from "@phosphor-icons/react/dist/ssr/TrendDown";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 /**
  * What a card on the expense row can show.
@@ -17,15 +29,11 @@ export type CardSpec = {
   /** For the chooser, which groups options under a heading. */
   group: "Spending" | "Tax" | "Position" | "By category";
   /**
-   * A Material Symbols name, and the colour its meaning gives it.
-   *
-   * Coloured by what the figure IS — green for money arriving, red for money
-   * leaving, amber for tax, lime for a balance — rather than to decorate. A row
-   * of four identically grey icons tells a reader nothing they could not get
-   * from the labels.
+   * The handoff's Phosphor icon for this figure. The September design draws
+   * every card on this row in the same violet tile, so the icon is the part
+   * that tells them apart.
    */
-  symbol: string;
-  iconTone: string;
+  symbol: Icon;
   accent?: "muted" | "primary" | "positive" | "negative" | "warning";
   tone?: "in" | "out" | "neutral";
   value: string;
@@ -112,8 +120,7 @@ export function buildCatalogue(
       shareOfOutflow: true,
       label: "Salary paid",
       group: "Spending",
-      symbol: "groups",
-      iconTone: "text-chart-1",
+      symbol: UsersThreeIcon,
       value: expense.salaryPaid,
       usd: usd.salaryPaid,
       change: percentChange(expense.salaryPaid, previous?.salaryPaid),
@@ -125,8 +132,7 @@ export function buildCatalogue(
       shareOfOutflow: true,
       label: "AI & other tools",
       group: "Spending",
-      symbol: "auto_awesome",
-      iconTone: "text-chart-6",
+      symbol: SparkleIcon,
       value: expense.toolsAndSubscriptions,
       usd: usd.toolsAndSubscriptions,
       hint: "subscriptions and the card",
@@ -135,8 +141,7 @@ export function buildCatalogue(
       key: "moneyOut",
       label: "Total spent",
       group: "Spending",
-      symbol: "trending_down",
-      iconTone: "text-negative",
+      symbol: TrendDownIcon,
       tone: "out",
       accent: "negative",
       value: totals.moneyOut,
@@ -149,8 +154,7 @@ export function buildCatalogue(
       key: "moneyIn",
       label: "Money in",
       group: "Position",
-      symbol: "savings",
-      iconTone: "text-positive",
+      symbol: ArrowDownLeftIcon,
       tone: "in",
       accent: "positive",
       value: totals.moneyIn,
@@ -161,8 +165,7 @@ export function buildCatalogue(
       key: "net",
       label: "Net for the period",
       group: "Position",
-      symbol: "balance",
-      iconTone: "text-chart-5",
+      symbol: ScalesIcon,
       value: totals.net,
       usd: dollars(totals.net),
       change: percentChange(totals.net, previous?.net),
@@ -172,8 +175,7 @@ export function buildCatalogue(
       key: "cashInHand",
       label: "Cash in hand",
       group: "Position",
-      symbol: "account_balance_wallet",
-      iconTone: "text-primary-text",
+      symbol: WalletIcon,
       accent: "primary",
       value: totals.cashInHand,
       usd: dollars(totals.cashInHand),
@@ -185,8 +187,7 @@ export function buildCatalogue(
       key: "funding",
       label: "Funding received",
       group: "Position",
-      symbol: "account_balance",
-      iconTone: "text-chart-1",
+      symbol: BankIcon,
       tone: "in",
       accent: "positive",
       value: totals.fundingReceived,
@@ -199,8 +200,7 @@ export function buildCatalogue(
       shareOfOutflow: true,
       label: "TDS withheld",
       group: "Tax",
-      symbol: "receipt_long",
-      iconTone: "text-negative",
+      symbol: PercentIcon,
       value: expense.taxWithheld,
       usd: usd.taxWithheld,
       hint: `${money(totals.taxDeposited, { hideDecimals: true })} deposited`,
@@ -210,8 +210,7 @@ export function buildCatalogue(
       shareOfOutflow: true,
       label: "TDS deposited",
       group: "Tax",
-      symbol: "payments",
-      iconTone: "text-chart-1",
+      symbol: ReceiptIcon,
       value: totals.taxDeposited,
       usd: dollars(totals.taxDeposited),
       hint: "by challan, this period",
@@ -220,8 +219,7 @@ export function buildCatalogue(
       key: "tdsOutstanding",
       label: "TDS still held",
       group: "Tax",
-      symbol: "event_upcoming",
-      iconTone: "text-warning",
+      symbol: HourglassMediumIcon,
       value: expense.taxOutstanding,
       usd: usd.taxOutstanding,
       accent: Number(expense.taxOutstanding) > 0 ? "warning" : "muted",
@@ -250,8 +248,7 @@ export function buildCatalogue(
       key: `category:${line.id}`,
       label: line.name,
       group: "By category" as const,
-      symbol: "sell",
-      iconTone: "text-faint",
+      symbol: TagIcon,
       tone: "out" as const,
       value: line.total,
       usd: inUsd(line.total, usdRate),
@@ -282,8 +279,7 @@ export function placeholderFor(key: string, label?: string): CardSpec | null {
     key,
     label: label ?? "A category with nothing in it",
     group: "By category",
-    symbol: "sell",
-    iconTone: "text-faint",
+    symbol: TagIcon,
     value: "0.00",
     hint: "nothing under this heading in this period",
   };
