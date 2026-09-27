@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 91 | **Reports is headed "Finance statement"; `.sweep.mjs` and `.regpage.mjs` run again** | **done** |
 | 90 | **The new design: TDS, Reports, Bank statement, AI Assistant, Import and Export — the last pages** | **done** — every screen is in the new design |
 | 89 | **The new design: Team and a person's profile, Payroll and the salary sheet** | **done** |
 | 88 | **The new design: Subscriptions and a plan's page, All transactions, an account's register** | **done** |
@@ -68,6 +69,36 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 91. "Finance statement", and two harnesses that run again — 27 Sep 2026
+
+The owner's answers to #90's two open questions.
+
+- **Reports is headed "Finance statement"** (`statement-screen.tsx`), as the
+  handoff heads it. Only the heading: the rail and the breadcrumb still say
+  Reports, which is how the handoff has them too, and `.dateqa.mjs` /
+  `.rolesweep.mjs` look for the rail's word, so they are unaffected.
+- **`.sweep.mjs` and `.regpage.mjs` find the repository from their own
+  location** (`import.meta.url`) instead of `d:/codes/…`, so they run on any
+  checkout. `.sweep.mjs` is in `.gitignore` on purpose — the fix is on this
+  machine only; take it out of `.gitignore` if it should travel.
+- `.regpage.mjs` had two more faults the path was hiding:
+  - it read the register's cells at fixed positions, eleven of them, from
+    before the table lost its Category column and folded the dollars into
+    Amount — so it matched no row and called every account empty. It finds
+    each column **by its heading** now;
+  - its newest-first check compared dates as text, and the screen prints
+    dd/mm/yyyy, so "01/09" after "31/08" would have failed. Compared as
+    yyyy-mm-dd now.
+  - Its page-3 test needs an account with 41+ entries. With fewer it now says
+    **SKIPPED** and why, rather than failing on a fact about the data.
+
+**Proved**: `.sweep.mjs` runs as-is (every screen 28px heading, 24 padding,
+18 gap, nothing sideways at 1440/1180/900); `.regpage.mjs` passes — every
+entry of all three accounts reaches the screen, 1..N in order, Closing card =
+top row's balance, the empty range shows its message and no pager; the page-3
+test skipped (largest local account: 4 entries). Many other root `.*.mjs`
+scripts still name `d:/codes/…`; not touched.
 
 ## 90. The new design: TDS, Reports, Bank statement, Assistant, Import/Export — 27 Sep 2026
 

@@ -10,11 +10,14 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
 
-const REPO = "d:/codes/Finance-Management-software";
+// The folder this script sits in — the repository root — wherever it has been
+// checked out. It named one machine's path, and failed on every other.
+const REPO = path.dirname(fileURLToPath(import.meta.url));
 const env = Object.fromEntries(
   fs
     .readFileSync(path.join(REPO, "apps/api/.env"), "utf8")
@@ -76,29 +79,47 @@ await p.setViewport({ width: 1440, height: 950 });
  * Everything on screen right now: the rows, the pager sentence, the four
  * figures above the table, and whatever message stands in for an empty table.
  *
- * Eleven cells with the register's flags — SL, Date, Description, Category,
- * Amount (BDT), Amount (USD), USD rate, Invoice number, Transaction number,
- * Balance, actions. Each is read down to its first line, because the money
- * cells carry a dollar counterpart underneath and the description carries the
- * party and the payment method.
+ * Cells are found BY THEIR HEADING, not by position. This read eleven cells at
+ * fixed indexes — SL, Date, Description, Category, Amount (BDT), Amount (USD),
+ * … — and when the register lost its Category column and folded the dollars
+ * into Amount it matched no row at all and reported every account as empty.
+ * Looking the column up by name survives the next change of shape; a heading
+ * that is gone reads as "" and fails a check by name, not silently.
+ *
+ * Each cell is read down to its first line, because the money cells carry a
+ * dollar counterpart underneath and the description carries the party.
  */
 const readPage = () =>
   p.evaluate(() => {
     const first = (s) => s.trim().split("\n")[0].trim();
     const table = document.querySelector(".table-data");
-    const cells = (tr) =>
-      [...tr.querySelectorAll("td")].map((td) => td.innerText);
+    const heads = [...(table?.querySelectorAll("thead th") ?? [])].map((th) =>
+      th.innerText.trim().toUpperCase(),
+    );
+    const col = (name) => heads.findIndex((h) => h.startsWith(name));
+    const at = {
+      sl: col("SL"),
+      date: col("DATE"),
+      description: col("DESCRIPTION"),
+      amount: col("AMOUNT"),
+      invoice: col("INVOICE"),
+      // The bank's transaction number lives under Reference now.
+      txnId: col("REFERENCE"),
+      balance: col("BALANCE"),
+    };
+    const cell = (r, i) => (i < 0 ? "" : first(r[i] ?? ""));
     const rows = [...(table?.querySelectorAll("tbody tr") ?? [])]
-      .map(cells)
-      .filter((r) => r.length >= 11)
+      .map((tr) => [...tr.querySelectorAll("td")].map((td) => td.innerText))
+      // A row with every column — not the one-cell message row.
+      .filter((r) => r.length === heads.length)
       .map((r) => ({
-        sl: Number(first(r[0])),
-        date: first(r[1]),
-        description: first(r[2]),
-        amount: first(r[4]),
-        invoice: first(r[7]),
-        txnId: first(r[8]),
-        balance: first(r[9]),
+        sl: Number(cell(r, at.sl)),
+        date: cell(r, at.date),
+        description: cell(r, at.description),
+        amount: cell(r, at.amount),
+        invoice: cell(r, at.invoice),
+        txnId: cell(r, at.txnId),
+        balance: cell(r, at.balance),
       }));
     // The four cards above the table: OPENING, MONEY IN, MONEY OUT, CLOSING.
     const figures = [...document.querySelectorAll("p")]
@@ -205,8 +226,16 @@ for (const account of targets) {
   const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
   if (dupes.length) fail(`${dupes.length} duplicated row(s), e.g. ${dupes[0]}`);
 
-  // Newest first, all the way down and across the page break.
-  const backwards = seen.findIndex((r, i) => i > 0 && r.date > seen[i - 1].date);
+  // Newest first, all the way down and across the page break. The screen
+  // prints dd/mm/yyyy, which does not sort as text ("01/09" < "31/08"), so the
+  // dates are turned round to yyyy-mm-dd before they are compared.
+  const sortable = (d) => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : d;
+  };
+  const backwards = seen.findIndex(
+    (r, i) => i > 0 && sortable(r.date) > sortable(seen[i - 1].date),
+  );
   if (backwards !== -1)
     fail(
       `order breaks at row ${backwards + 1}: ${seen[backwards - 1].date} then ${seen[backwards].date}`,
@@ -241,32 +270,44 @@ const big = accounts[0];
 
 // 1. Deep in the register, then narrow the dates: the page number must not
 //    survive into a shorter list.
-await p.goto(`http://localhost:3000/accounts/${big.id}/register`, {
-  waitUntil: "networkidle0",
-  timeout: 90000,
-});
-await clickNext();
-await clickNext();
-const deep = await readPage();
-await p.evaluate(() => {
-  const input = document.querySelector('input[type="date"]');
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  ).set;
-  setter.call(input, "2025-01-01");
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-});
-await new Promise((r) => setTimeout(r, 3000));
-const after = await readPage();
-console.log(
-  `\ndate filter: was page ${deep.page} of ${deep.totalPages} → page ${after.page ?? 1} of ${after.totalPages ?? 1}, ${after.rows.length} rows on screen`,
-);
-if (deep.page !== 3) fail(`could not reach page 3 of ${big.name}`);
-if ((after.page ?? 1) !== 1) fail(`page ${after.page} survived the date change`);
-if (after.rows.length && after.rows[0].sl !== 1)
-  fail(`the filtered list starts at serial ${after.rows[0].sl}`);
+//
+//    Page 3 needs forty-one entries. A database with fewer — a fresh local
+//    one has a handful — cannot show this either way, so it is SKIPPED and
+//    said so, rather than failed: "could not reach page 3" of a four-row
+//    register was a fact about the data, reported as a fault in the app.
+if (big.rows <= 40) {
+  console.log(
+    `\ndate filter: SKIPPED — needs an account with 41+ entries to reach page 3; the largest here, ${big.name}, has ${big.rows}`,
+  );
+} else {
+  await p.goto(`http://localhost:3000/accounts/${big.id}/register`, {
+    waitUntil: "networkidle0",
+    timeout: 90000,
+  });
+  await clickNext();
+  await clickNext();
+  const deep = await readPage();
+  await p.evaluate(() => {
+    const input = document.querySelector('input[type="date"]');
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    ).set;
+    setter.call(input, "2025-01-01");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 3000));
+  const after = await readPage();
+  console.log(
+    `\ndate filter: was page ${deep.page} of ${deep.totalPages} → page ${after.page ?? 1} of ${after.totalPages ?? 1}, ${after.rows.length} rows on screen`,
+  );
+  if (deep.page !== 3) fail(`could not reach page 3 of ${big.name}`);
+  if ((after.page ?? 1) !== 1)
+    fail(`page ${after.page} survived the date change`);
+  if (after.rows.length && after.rows[0].sl !== 1)
+    fail(`the filtered list starts at serial ${after.rows[0].sl}`);
+}
 
 // 2. A range with nothing in it: a message, and no pager to strand anybody on.
 await p.goto(

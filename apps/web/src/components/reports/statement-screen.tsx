@@ -41,8 +41,11 @@ export function StatementScreen({
 
   return (
     <>
+      {/* "Finance statement", as the handoff heads this page — it names the
+          document the page produces. The rail and the breadcrumb still say
+          Reports, which is where it is filed, as the handoff has them too. */}
       <PageHeader
-        title="Reports"
+        title="Finance statement"
         icon="bar_chart"
         description="The reconciled position for a period, with its notes and who signed it off."
       />
