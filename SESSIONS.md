@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 93 | **`.capsweep.mjs` and `.acctqa.mjs` brought up to date with the app** | **done** |
 | 92 | **Every root harness runs from any checkout — no more `d:/codes`** | **done** |
 | 91 | **Reports is headed "Finance statement"; `.sweep.mjs` and `.regpage.mjs` run again** | **done** |
 | 90 | **The new design: TDS, Reports, Bank statement, AI Assistant, Import and Export — the last pages** | **done** — every screen is in the new design |
@@ -70,6 +71,36 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 93. Two harnesses brought up to date with the app — 27 Sep 2026
+
+The owner: *"notun duto update kore felen"* — the two #92 left reporting
+decisions as faults.
+
+- **`.capsweep.mjs`** demanded the top bar's "FX locked" chip on every
+  screen. The chip was removed on the owner's instruction (topbar.tsx says
+  so), so it reported twenty failures about a decision. It now fails if the
+  chip — or the old rate caption — comes BACK, and still that every screen
+  draws. **20/20.**
+- **`.acctqa.mjs`** asked three questions of a layout that has moved:
+  - balances: it found an account by searching the page text for its name,
+    which on the new cards is also printed as another account's bank ("Standard
+    Chartered Bank" under M/S. EXPROVIA), and read that card's figure. It now
+    reads each account's OWN card, found by its title;
+  - Cash In: it counted every money-in entry ever held against a page that
+    shows ONE month and leaves out transfers between our own accounts. It now
+    picks the month with the most receipts, selects it on the page, and checks
+    the count and the total — summed in SQL — against what the page shows;
+  - the register: it walked oldest first against a page listed newest first.
+    The running balance is now a window sum in SQL, turned round to newest
+    first.
+  It also exits 1 on a disagreement (it always exited 0). **All pass:** 3
+  balances, August's 1 receipt of ৳1,20,000.00, 4 register rows.
+
+**Seen on the way, not changed:** Cash In adds its month's total with
+`Number(...)` in JavaScript (`cash-in-screen.tsx`, `totalBdt`), which CLAUDE.md
+rules out for money. It agrees with SQL today; it is one fix, in its own
+session, if the owner wants it.
 
 ## 92. Every root harness runs from any checkout — 27 Sep 2026
 

@@ -1,6 +1,12 @@
 /**
- * The rate caption is gone from every signed-in screen, and every screen still
- * draws.
+ * The rate caption AND the "FX locked" chip are gone from every signed-in
+ * screen, and every screen still draws.
+ *
+ * Both were removed on the owner's instruction — the caption first, then the
+ * top bar's chip (see topbar.tsx and SESSIONS.md). This script used to demand
+ * the chip on every screen, from the weeks when it was the one place the rate
+ * was stated; after it went, the script reported twenty failures about a
+ * decision, not a fault. It now fails if either comes BACK.
  *
  * Removing it was one line in the shell, which is exactly the kind of change
  * that reaches twenty screens and is invisible in a diff. So this visits all
@@ -134,7 +140,7 @@ for (const route of routes) {
       document.querySelector("h1, h2")?.innerText.trim() ??
       text.trim().split(/\r?\n/)[0].slice(0, 34);
     const drew = text.trim().length > 200 && !/page couldn.t load/i.test(text);
-    // The chip that now carries the rate on its own.
+    // The top bar's rate chip, removed on instruction — it must stay gone.
     const chip = /FX locked/.test(text);
     return {
       caption: /Dollar figures are approximate|recorded in BDT/.test(text),
@@ -152,8 +158,8 @@ for (const route of routes) {
     flags.push("NOTHING RENDERED");
     bad += 1;
   }
-  if (!view.chip) {
-    flags.push("no FX chip");
+  if (view.chip) {
+    flags.push("FX CHIP IS BACK");
     bad += 1;
   }
   console.log(
@@ -166,7 +172,7 @@ for (const route of routes) {
 await b.close();
 console.log(
   bad === 0
-    ? `\nOK — ${routes.length} routes, the caption is gone from every one and every one still draws.`
+    ? `\nOK — ${routes.length} routes, the caption and the FX chip are gone from every one and every one still draws.`
     : `\n${bad} FAILURE(S)`,
 );
 process.exit(bad === 0 ? 0 : 1);
