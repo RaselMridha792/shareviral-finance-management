@@ -4,7 +4,6 @@ import {
   BILLING_CYCLE_LABELS,
   PAYMENT_METHOD_LABELS,
   SUBSCRIPTION_CATEGORY_LABELS,
-  SUBSCRIPTION_STATUS_LABELS,
   formatMoney,
   type BillingCycle,
   type PaymentMethod,
@@ -12,7 +11,12 @@ import {
   payableBdt,
   payableUsd,
 } from "@finance/shared";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { ArmchairIcon } from "@phosphor-icons/react/dist/ssr/Armchair";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import Link from "next/link";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
@@ -20,6 +24,7 @@ import { useSettings } from "@/components/settings-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubscriptionStatusPill } from "./subscription-columns";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
 import type { SubscriptionDto } from "@/lib/subscriptions";
@@ -49,9 +54,9 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
     <>
       <Link
         href="/subscriptions"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
       >
-        <ArrowLeft className="size-3.5" />
+        <ArrowLeftIcon weight="bold" size={15} />
         All subscriptions
       </Link>
 
@@ -70,9 +75,13 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
               target="_blank"
               /* A third-party address typed by whoever added the plan. */
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 text-sm text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+              className="sv-button-quiet inline-flex h-9 items-center gap-2 rounded-lg bg-(--sv-surface) px-3.5 text-[14px] font-extrabold"
             >
-              <ExternalLink className="size-3.5" />
+              <ArrowSquareOutIcon
+                weight="duotone"
+                size={18}
+                className="text-(--sv-violet)"
+              />
               Open {plan.toolName ?? "the tool"}
             </a>
           ) : null
@@ -89,7 +98,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
         with nothing in the file to say which.
       */}
       <Card>
-        <CardHeader title="What it costs" />
+        <CardHeader title="What it costs" icon={MoneyIcon} />
         <CardBody>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             <Figure
@@ -124,7 +133,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
       </Card>
 
       <Card>
-        <CardHeader title="How it is paid" />
+        <CardHeader title="How it is paid" icon={CreditCardIcon} />
         <CardBody>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             <Figure
@@ -165,17 +174,13 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
       </Card>
 
       <Card>
-        <CardHeader title="Who it is for" />
+        <CardHeader title="Who it is for" icon={UsersThreeIcon} />
         <CardBody>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             <Figure
               label="Status"
               value={
-                <Badge
-                  tone={plan.status === "active" ? "positive" : "neutral"}
-                >
-                  {SUBSCRIPTION_STATUS_LABELS[plan.status]}
-                </Badge>
+                <SubscriptionStatusPill status={plan.status} />
               }
             />
             <Figure label="Department" value={plan.boughtFor ?? "N/A"} />
@@ -194,11 +199,11 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
             down is the sentence nobody would otherwise remember.
           */}
           {plan.notes ? (
-            <div className="mt-5 border-t border-border pt-4">
-              <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+            <div className="sv-card-note mt-5 pt-4">
+              <dt className="text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
                 Notes
               </dt>
-              <dd className="cell-prose mt-1 text-sm whitespace-pre-wrap">
+              <dd className="cell-prose mt-1.5 text-[14.5px] leading-relaxed whitespace-pre-wrap">
                 {plan.notes}
               </dd>
             </div>
@@ -216,6 +221,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
       <Card>
         <CardHeader
           title="Seats"
+          icon={ArmchairIcon}
           description={
             plan.users.length
               ? `${plan.users.length} ${plan.users.length === 1 ? "person" : "people"} on this plan — the price above is the whole plan's, not each`
@@ -246,7 +252,7 @@ export function SubscriptionScreen({ plan }: { plan: SubscriptionDto }) {
                       <td>
                         <Link
                           href={`/team/${seat.teamMemberId}`}
-                          className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+                          className="font-extrabold text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
                         >
                           {seat.fullName}
                         </Link>
@@ -298,12 +304,16 @@ function Figure({
 }) {
   return (
     <div className={wide ? "col-span-2" : undefined}>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+      <dt className="text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
         {label}
       </dt>
-      <dd className="mt-1 text-sm">{value}</dd>
+      <dd className="mt-1.5 text-[16px] font-extrabold tabular-nums">
+        {value}
+      </dd>
       {extra ? (
-        <dd className="num mt-0.5 text-xs text-muted-foreground">{extra}</dd>
+        <dd className="mt-0.5 text-[12.5px] text-(--sv-muted) tabular-nums">
+          {extra}
+        </dd>
       ) : null}
     </div>
   );

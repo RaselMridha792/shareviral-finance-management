@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 88 | **The new design: Subscriptions and a plan's page, All transactions, an account's register** | **done** |
 | 87 | **The new design: Cash In, Money Transfer, and the expense screens** | **done** |
 | 86 | **The new design: Settings gets its own sidebar** | **done** |
 | 85 | **The new design: the shared pieces — cards, fields, SL, row buttons, pills, tabs, stat cards, empty states, filter bar, pager, search** | **done** — every screen, asked first |
@@ -65,6 +66,31 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 88. The new design: Subscriptions, a plan's page, All transactions, a register — 27 Sep 2026
+
+- **AI tools and subscriptions**: each tool's name behind a 34px violet
+  sparkle tile, the start and renewal dates and the total at 800, account and
+  seat links at 800, Add a subscription with the plus-circle.
+  `SubscriptionStatusPill` is the shared `StatusPill` now — violet with its
+  dot for a running plan (the handoff's "Active"), amber paused, red
+  cancelled, grey expired. The plan's own page uses the same pill.
+- **A plan's page**: the violet way back, "Open <tool>" as a quiet button,
+  every card with its icon tile, the figures as 11px/800 captions over 16px/800
+  values, the note under a hairline.
+- **All transactions**: the Net card is plain white like the other two, as the
+  handoff draws it (it was on the lime tint); its violet tile is what sets it
+  apart. The rows are #87's shared table; the green and red rows stay.
+- **An account's register**: the violet way back, a register icon, the period
+  in the filter card (`DateRangeField`, with All entries), and the four figures
+  as the handoff's stat cards — Opening with its flag, Money in green, Money
+  out red, Closing on the lime tint with "Should equal the bank statement".
+- `ui/searchable-select.tsx`: its value is 800 like every other select (#85).
+
+**Proved** by `.uiqa.mjs` on each route, `.registerqa.mjs` (5/5 — still no
+Record button, edit and void still work), and screenshots. `.regpage.mjs`
+could not run: it reads `d:\codes\…ppspi\.env`, a path from another
+machine.
 
 ## 87. The new design: Cash In, Money Transfer, and the expense screens — 27 Sep 2026
 

@@ -222,7 +222,8 @@ export function SearchableSelect({
         onClick={() => (open ? setOpen(false) : openList())}
         className={cn(
           controlClass,
-          "flex items-center justify-between gap-2 text-left",
+          // Bold like every other select (field.tsx).
+          "flex items-center justify-between gap-2 text-left font-extrabold",
           !selected && "text-muted-foreground",
         )}
       >

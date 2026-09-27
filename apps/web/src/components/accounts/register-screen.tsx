@@ -1,7 +1,11 @@
 "use client";
 
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
-import { ArrowLeft, TriangleAlert } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { FlagBannerIcon } from "@phosphor-icons/react/dist/ssr/FlagBanner";
+import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
+import { ScalesIcon } from "@phosphor-icons/react/dist/ssr/Scales";
+import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -14,14 +18,14 @@ import { useTransactionDelete } from "@/components/ledger/use-transaction-delete
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { controlClass } from "@/components/ui/field";
+import { DateRangeField, FilterBar } from "@/components/ui/filters";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
+import { StatCell, StatStrip } from "@/components/ui/patterns";
 import { type RegisterResult, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 import { PAGE_SIZE, pageCount } from "@/lib/pagination";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 /**
  * The bank register: one account's entries, newest first, with the balance
@@ -109,15 +113,15 @@ export function RegisterScreen({
     <>
       <Link
         href={`/accounts/${account.id}`}
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
       >
-        <ArrowLeft className="size-3.5" />
+        <ArrowLeftIcon weight="bold" size={15} />
         {account.name}
       </Link>
 
       <PageHeader
         title={account.name}
-        icon="description"
+        icon={ListNumbersIcon}
         description={[
           ACCOUNT_TYPE_LABELS[account.type as AccountType] ?? account.type,
           account.bankName,
@@ -164,55 +168,57 @@ export function RegisterScreen({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">From</span>
-          <input
-            type="date"
-            defaultValue={range.from ?? ""}
-            onChange={(event) =>
-              setRange({ ...range, from: event.target.value || undefined })
-            }
-            className={cn(controlClass, "num w-40")}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">To</span>
-          <input
-            type="date"
-            defaultValue={range.to ?? ""}
-            onChange={(event) =>
-              setRange({ ...range, to: event.target.value || undefined })
-            }
-            className={cn(controlClass, "num w-40")}
-          />
-        </label>
+      {/* The period, in the handoff's filter card. Both ends open means every
+          entry since the account was added. */}
+      <FilterBar>
+        <DateRangeField
+          from={range.from}
+          to={range.to}
+          onChange={(next) => setRange(next)}
+          fromLabel="From"
+          toLabel="To"
+        />
         {range.from || range.to ? (
           <Button size="sm" variant="ghost" onClick={() => setRange({})}>
             All entries
           </Button>
         ) : null}
-      </div>
+      </FilterBar>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Figure
+      {/* No `currency` on these: `Amount` falls back to the base, which is what
+          every figure in this register is in — `account.currency` names the
+          account, not the money. */}
+      <StatStrip min={220}>
+        <StatCell
           label="Opening"
-          value={register.openingBalance}
-          hint={
+          icon={FlagBannerIcon}
+          value={<Amount value={register.openingBalance} tone="auto" />}
+          footnote={
             range.from
-              ? `Everything up to ${range.from}`
+              ? `Everything up to ${formatDate(range.from)}`
               : `Since ${formatDate(account.openingBalanceOn)}`
           }
         />
-        <Figure label="Money in" value={register.totalIn} tone="in" />
-        <Figure label="Money out" value={register.totalOut} tone="out" />
-        <Figure
-          label="Closing"
-          value={register.closingBalance}
-          hint="Should equal the bank statement"
-          emphasis
+        <StatCell
+          label="Money in"
+          icon="south_west"
+          iconTone="text-positive"
+          value={<Amount value={register.totalIn} tone="in" />}
         />
-      </div>
+        <StatCell
+          label="Money out"
+          icon="north_east"
+          iconTone="text-negative"
+          value={<Amount value={register.totalOut} tone="out" />}
+        />
+        <StatCell
+          label="Closing"
+          icon={ScalesIcon}
+          emphasis
+          value={<Amount value={register.closingBalance} tone="auto" />}
+          footnote="Should equal the bank statement"
+        />
+      </StatStrip>
 
       <TransactionTable
         rows={visible}
@@ -256,38 +262,5 @@ export function RegisterScreen({
       />
       {del.dialog}
     </>
-  );
-}
-
-function Figure({
-  label,
-  value,
-  hint,
-  tone = "neutral",
-  emphasis = false,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "in" | "out" | "neutral";
-  emphasis?: boolean;
-}) {
-  return (
-    <Card className={cn("p-5", emphasis && "border-primary/40")}>
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      {/* No `currency`: `Amount` falls back to the base, which is what every
-          figure in this register is in — `account.currency` names the account,
-          not the money. */}
-      <Amount
-        value={value}
-        tone={tone === "neutral" ? "auto" : tone}
-        className="mt-3 block text-xl font-semibold tracking-tight"
-      />
-      {hint ? (
-        <p className="num mt-1 text-xs text-muted-foreground">{hint}</p>
-      ) : null}
-    </Card>
   );
 }

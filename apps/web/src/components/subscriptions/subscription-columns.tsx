@@ -9,15 +9,17 @@ import {
   payableBdt,
   payableUsd,
 } from "@finance/shared";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { ImageIcon } from "lucide-react";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { Fragment } from "react";
 
 import { Amount } from "@/components/money/amount";
+import { StatusPill, type PillTone } from "@/components/ui/patterns";
 import { Th } from "@/components/ui/table";
 import type { SubscriptionDto } from "@/lib/subscriptions";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 /**
  * The fourteen columns of a subscription, written once.
@@ -115,8 +117,8 @@ export function SubscriptionBodyCells({
      had to pass for nothing is a prop that goes. */
   return (
     <>
-      <td className="text-sm">
-        <span className="num">{formatDate(row.startDate)}</span>
+      <td className="font-extrabold whitespace-nowrap tabular-nums">
+        {formatDate(row.startDate)}
       </td>
 
       <td>
@@ -129,7 +131,10 @@ export function SubscriptionBodyCells({
           somebody clicking a tool's name expects. The screenshot keeps its own
           affordance rather than losing one.
         */}
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2.5">
+          <span className="grid size-[34px] flex-none place-items-center rounded-lg bg-(--sv-violet-tint) text-(--sv-violet)">
+            <SparkleIcon weight="duotone" size={18} />
+          </span>
           {/*
             The NAME goes to the plan's own page now, not to the vendor's site.
 
@@ -145,7 +150,7 @@ export function SubscriptionBodyCells({
           <Link
             href={`/subscriptions/${row.id}`}
             title={`Everything about ${row.toolName}`}
-            className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+            className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
           >
             {row.toolName}
           </Link>
@@ -195,7 +200,7 @@ export function SubscriptionBodyCells({
               western, taka group in lakhs, and a figure written by hand here
               would read differently from the same figure everywhere else. */}
           {payableUsd(row) ? (
-            <span className="num text-sm font-medium">
+            <span className="font-extrabold whitespace-nowrap tabular-nums">
               {formatMoney(payableUsd(row) ?? "0", { currency: "USD" })}
             </span>
           ) : (
@@ -206,7 +211,7 @@ export function SubscriptionBodyCells({
               value={payableBdt(row) ?? "0"}
               tone="neutral"
               showCounterpart={false}
-              className="block text-[11px] leading-tight text-muted-foreground"
+              className="block text-[11.5px] leading-tight text-muted-foreground"
             />
           ) : null}
           {hasCharge(row) ? (
@@ -232,7 +237,7 @@ export function SubscriptionBodyCells({
           row.accountId ? (
             <Link
               href={`/accounts/${row.accountId}`}
-              className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+              className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
             >
               {row.accountName}
             </Link>
@@ -307,7 +312,9 @@ export function SubscriptionBodyCells({
 
       <td className="text-sm">
         {row.nextRenewalOn ? (
-          <span className="num">{formatDate(row.nextRenewalOn)}</span>
+          <span className="font-extrabold whitespace-nowrap tabular-nums">
+            {formatDate(row.nextRenewalOn)}
+          </span>
         ) : (
           /* The note cannot be typed any more, but rows written while it could
              still carry one, and it is the only thing this column has to say
@@ -350,7 +357,7 @@ function SeatNames({ row }: { row: SubscriptionDto }) {
           {index > 0 ? ", " : null}
           <Link
             href={`/team/${seat.teamMemberId}`}
-            className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+            className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
           >
             {seat.fullName}
           </Link>
@@ -365,20 +372,17 @@ export function SubscriptionStatusPill({
 }: {
   status: SubscriptionStatus;
 }) {
-  const tone: Record<SubscriptionStatus, string> = {
-    active: "bg-positive/10 text-positive",
-    paused: "bg-warning/10 text-warning",
-    canceled: "bg-negative/10 text-negative",
-    expired: "bg-surface-muted text-muted-foreground",
+  /* The handoff's: a running plan is violet with its dot, a paused one
+     amber, a cancelled one red, an expired one grey. */
+  const tone: Record<SubscriptionStatus, PillTone> = {
+    active: "primary",
+    paused: "warning",
+    canceled: "negative",
+    expired: "neutral",
   };
   return (
-    <span
-      className={cn(
-        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-        tone[status],
-      )}
-    >
+    <StatusPill tone={tone[status]}>
       {SUBSCRIPTION_STATUS_LABELS[status]}
-    </span>
+    </StatusPill>
   );
 }

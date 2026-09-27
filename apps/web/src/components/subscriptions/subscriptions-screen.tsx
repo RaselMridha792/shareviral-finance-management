@@ -10,7 +10,7 @@ import {
   type SubscriptionStatus,
 } from "@finance/shared";
 import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
-import { Image as Plus } from "lucide-react";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -321,7 +321,7 @@ export function SubscriptionsScreen({
         actions={
           canWrite ? (
             <Button variant="primary" size="md" onClick={() => setAdding(true)}>
-              <Plus className="size-4" />
+              <PlusCircleIcon weight="duotone" size={19} />
               Add a subscription
             </Button>
           ) : null

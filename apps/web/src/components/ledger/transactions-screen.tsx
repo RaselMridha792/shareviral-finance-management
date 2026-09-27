@@ -173,10 +173,9 @@ export function TransactionsScreen({
           approximate={summary?.usd ? !summary.usd.exact : false}
           tone="out"
         />
-        {/* The one that answers the question, so it sits on the raised surface
-            the way a closing figure does everywhere else. */}
+        {/* The one that answers the question — on a plain white card, as the
+            handoff draws all three; its violet tile is what sets it apart. */}
         <SummaryTile
-          emphasis
           label="Net"
           icon="account_balance_wallet"
           iconTone="text-primary-text"
