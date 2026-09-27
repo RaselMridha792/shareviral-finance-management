@@ -1,7 +1,7 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
-import { Link2 } from "lucide-react";
+import { PaperclipIcon } from "@phosphor-icons/react/dist/ssr/Paperclip";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { useState } from "react";
@@ -10,7 +10,11 @@ import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import {
+  RowActions,
+  RowActionsHead,
+  RowButton,
+} from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -547,15 +551,11 @@ export function TransactionTable({
                     }
                     extra={
                       row.receiptUrl ? (
-                        <a
+                        <RowButton
                           href={row.receiptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Open the receipt"
-                          className="rounded p-1 text-muted-foreground hover:bg-surface-muted hover:text-primary"
-                        >
-                          <Link2 className="size-3.5" />
-                        </a>
+                          label="Open the receipt"
+                          icon={PaperclipIcon}
+                        />
                       ) : null
                     }
                   />

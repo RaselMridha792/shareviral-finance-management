@@ -205,7 +205,7 @@ export function ExpenseOverviewScreen() {
       */}
       <StatStrip>
         {slices.map((slice) => (
-          <div key={slice.key} className="relative bg-surface">
+          <div key={slice.key} className="relative">
             <StatCell
               label={slice.label}
               icon={slice.icon}
@@ -228,7 +228,7 @@ export function ExpenseOverviewScreen() {
             <Link
               href={slice.href}
               aria-label={`${slice.label} — see the entries`}
-              className="absolute inset-0 rounded-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-link"
+              className="absolute inset-0 rounded-[11px]"
             />
           </div>
         ))}

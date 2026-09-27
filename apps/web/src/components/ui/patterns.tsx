@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Icon } from "@/components/ui/icon";
+import { Glyph, type GlyphSource } from "@/components/ui/glyph";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,26 +10,53 @@ import { cn } from "@/lib/utils";
  * the whole point: eighteen screens that each drew their own "four figures in a
  * row" is eighteen slightly different rows, and the difference is always
  * visible and never intended.
+ *
+ * Drawn to the September 2026 handoff: white cards on 11px corners, each icon
+ * in a tile tinted from its own colour (`.sv-tint-tile`), labels at 11px/800
+ * in capitals, figures at 800.
+ *
+ * `icon` takes a Phosphor component or the Material name screens have always
+ * passed (`glyph.tsx` maps it). `iconTone` is a text-colour class — the tile
+ * behind the icon takes its tint from it.
  */
+
+/** The tinted tile a figure's icon sits in. */
+function ToneTile({
+  icon,
+  iconTone,
+  size,
+  glyph,
+}: {
+  icon: GlyphSource;
+  iconTone?: string;
+  /** Tailwind size class for the tile. */
+  size: string;
+  glyph: number;
+}) {
+  return (
+    <span
+      className={cn(
+        "sv-tint-tile grid flex-none place-items-center rounded-[11px]",
+        size,
+        iconTone ?? "text-(--sv-violet)",
+      )}
+    >
+      <Glyph icon={icon} size={glyph} />
+    </span>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Stat strip                                                                 */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Several figures across one bordered panel.
+ * Several figures side by side, each its own card.
  *
- * The dividers are the trick, and the obvious way to draw them is wrong. A 1px
- * gap over a hairline-coloured background gives true hairlines that survive
- * wrapping — but when four cells wrap to three-and-one, the two empty columns
- * beside the last one show that hairline colour as a grey block the width of
- * half the card. It looked like a broken cell, because it was the panel's
- * background showing through where nothing was drawn.
- *
- * So the cells rule themselves instead: each paints a hairline on its own left
- * and top edge, and paint order puts that line over the neighbour it abuts.
- * The panel's own border covers the outermost ones, and empty space at the end
- * of a wrapped row is just the card.
+ * The handoff's stat cards: a grid of white cards 14px apart, wrapping at
+ * `min`. They used to be cells of one ruled panel; separate cards wrap without
+ * the empty-cell problem that panel had to be careful about, since the space
+ * at the end of a short row is simply the page.
  */
 export function StatStrip({
   children,
@@ -37,18 +64,15 @@ export function StatStrip({
   className,
 }: {
   children: ReactNode;
-  /** Narrowest a cell may get before the grid wraps. */
+  /** Narrowest a card may get before the grid wraps. */
   min?: number;
   className?: string;
 }) {
   return (
     <div
-      className={cn(
-        "grid overflow-hidden rounded-xl border border-border bg-surface shadow-e1",
-        className,
-      )}
+      className={cn("grid gap-3.5", className)}
       style={{
-        gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`,
+        gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`,
       }}
     >
       {children}
@@ -70,72 +94,73 @@ export function StatCell({
   children,
 }: {
   label: string;
-  /** A Material Symbols name, coloured by meaning rather than decoration. */
-  icon?: string;
+  /** Coloured by meaning rather than decoration. */
+  icon?: GlyphSource;
   iconTone?: string;
   value: ReactNode;
   /**
    * The figure's own colour. Money arriving is green and money leaving is red
-   * — the same rule the ledger rows follow, so a cell and a row never say
+   * — the same rule the ledger rows follow, so a card and a row never say
    * different things about the same direction.
    */
   tone?: StatTone;
   /** The "≈ $…" line under the figure. */
   secondary?: ReactNode;
   footnote?: ReactNode;
-  /** The closing figure of a set sits on the raised surface. */
+  /** The closing figure of a set sits on the lime tint, as "Total held" does. */
   emphasis?: boolean;
   children?: ReactNode;
 }) {
   const tones: Record<StatTone, string> = {
-    default: "text-foreground",
-    positive: "text-positive",
-    negative: "text-negative",
+    default: "text-(--sv-ink)",
+    positive: "text-(--sv-pos)",
+    negative: "text-(--sv-neg)",
   };
 
   return (
     <div
       className={cn(
-        // The hairlines. See StatStrip — a cell rules its own left and top.
-        "flex flex-col gap-3 px-[22px] pt-[22px] pb-5",
-        "shadow-[-1px_0_0_0_var(--border),0_-1px_0_0_var(--border)]",
-        emphasis ? "bg-surface-muted" : "bg-surface",
+        "sv-card sv-card-lift flex h-full flex-col gap-1.5 rounded-[11px] px-5 py-[18px]",
+        emphasis ? "sv-card-lime bg-(--sv-lime-tint)" : "bg-(--sv-surface)",
       )}
     >
-      <p className="flex items-center gap-[9px] text-2xs font-semibold tracking-[0.11em] text-muted-foreground uppercase">
+      <p className="flex items-center gap-2.5 text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
         {icon ? (
-          <Icon name={icon} size={17} className={iconTone ?? "text-faint"} />
+          <ToneTile icon={icon} iconTone={iconTone} size="size-9" glyph={20} />
         ) : null}
         {label}
       </p>
 
-      <div className="flex flex-col gap-[3px]">
+      <div className="mt-1.5 flex flex-col gap-0.5">
         <p
           className={cn(
-            "num text-[clamp(22px,1.8vw,28px)] leading-tight font-medium tracking-[-0.02em]",
+            "text-[clamp(23px,2vw,28px)] leading-tight font-extrabold tracking-[-0.02em] tabular-nums",
             tones[tone],
           )}
         >
           {value}
         </p>
         {secondary ? (
-          <p className="num text-[13.5px] text-faint">{secondary}</p>
+          <p className="text-[13px] text-(--sv-muted) tabular-nums">
+            {secondary}
+          </p>
         ) : null}
       </div>
 
       {/*
-        Pushed to the foot of the cell rather than left under the figure.
+        Pushed to the foot of the card rather than left under the figure.
 
-        Four cells in a strip are four different heights of content, and a
-        caption that follows its own figure lands at four different heights.
-        Anchored to the bottom they line up, and the strip reads as one row
-        instead of four boxes.
+        Cards in a row are different heights of content, and a caption that
+        follows its own figure lands at different heights. Anchored to the
+        bottom they line up, and the row reads as one row.
       */}
       {children || footnote ? (
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {children}
           {footnote ? (
-            <p className="text-[13px] text-muted-foreground">{footnote}</p>
+            <p className="sv-card-note pt-2.5 text-[13px] text-(--sv-muted)">
+              {footnote}
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -163,7 +188,7 @@ export function SummaryBar({
   actions,
 }: {
   label: string;
-  icon?: string;
+  icon?: GlyphSource;
   iconTone?: string;
   description?: ReactNode;
   value: ReactNode;
@@ -171,26 +196,35 @@ export function SummaryBar({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface px-6 py-[23px]">
-      <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-2xs font-semibold tracking-[0.11em] text-muted-foreground uppercase">
-          {icon ? (
-            <Icon name={icon} size={17} className={iconTone ?? "text-faint"} />
-          ) : null}
-          {label}
-        </p>
-        {description ? (
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+    <div className="sv-card sv-rise flex flex-wrap items-center justify-between gap-4 rounded-[11px] bg-(--sv-surface) px-6 py-5">
+      <div className="flex min-w-0 items-center gap-3.5">
+        {icon ? (
+          <ToneTile
+            icon={icon}
+            iconTone={iconTone}
+            size="size-[46px]"
+            glyph={24}
+          />
         ) : null}
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-muted) uppercase">
+            {label}
+          </p>
+          {description ? (
+            <p className="mt-1 text-[13px] text-(--sv-muted)">{description}</p>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <p className="num text-[clamp(25px,2vw,32px)] leading-tight font-semibold text-foreground">
+          <p className="text-[clamp(26px,2.4vw,34px)] leading-tight font-extrabold tracking-[-0.02em] tabular-nums">
             {value}
           </p>
           {secondary ? (
-            <p className="num text-xs text-faint">{secondary}</p>
+            <p className="text-[13px] text-(--sv-muted) tabular-nums">
+              {secondary}
+            </p>
           ) : null}
         </div>
         {actions}
@@ -221,7 +255,7 @@ export function DataPanel({
   className,
 }: {
   title?: string;
-  icon?: string;
+  icon?: GlyphSource;
   iconTone?: string;
   description?: ReactNode;
   actions?: ReactNode;
@@ -232,28 +266,29 @@ export function DataPanel({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-xl border border-border bg-surface",
+        "sv-card overflow-hidden rounded-[11px] bg-(--sv-surface)",
         className,
       )}
     >
       {title ? (
-        <header className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-[18px]">
-          <div className="min-w-0">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-              {icon ? (
-                <Icon
-                  name={icon}
-                  size={19}
-                  className={iconTone ?? "text-faint"}
-                />
-              ) : null}
-              {title}
-            </h2>
-            {description ? (
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {description}
-              </p>
+        <header className="sv-panel-head flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div className="flex min-w-0 items-center gap-[11px]">
+            {icon ? (
+              <ToneTile
+                icon={icon}
+                iconTone={iconTone}
+                size="size-9"
+                glyph={20}
+              />
             ) : null}
+            <div className="min-w-0">
+              <h2 className="text-[17px] font-extrabold">{title}</h2>
+              {description ? (
+                <p className="mt-px text-[12.5px] text-(--sv-muted)">
+                  {description}
+                </p>
+              ) : null}
+            </div>
           </div>
           {actions ? (
             <div className="flex items-center gap-2">{actions}</div>
@@ -264,7 +299,7 @@ export function DataPanel({
       <div className="overflow-x-auto">{children}</div>
 
       {footnote ? (
-        <p className="border-t border-border-soft px-6 py-3 text-xs text-muted-foreground">
+        <p className="sv-card-note px-5 py-3 text-[12.5px] text-(--sv-muted)">
           {footnote}
         </p>
       ) : null}
@@ -276,13 +311,15 @@ export function DataPanel({
 /*  Status pill                                                                */
 /* -------------------------------------------------------------------------- */
 
-export type PillTone = "positive" | "negative" | "warning" | "neutral";
+export type PillTone =
+  "positive" | "negative" | "warning" | "neutral" | "primary";
 
 /**
  * Active, Paid, Draft, Cash in.
  *
  * A tone rather than a colour at the call site, so "what does amber mean" has
- * one answer across the app instead of one per screen.
+ * one answer across the app instead of one per screen. The handoff's pills
+ * carry a dot in their own colour; `primary` is its violet "Active".
  */
 export function StatusPill({
   tone = "neutral",
@@ -294,19 +331,27 @@ export function StatusPill({
   className?: string;
 }) {
   const tones: Record<PillTone, string> = {
-    positive: "bg-tag-positive-bg text-tag-positive-fg",
-    negative: "bg-tag-negative-bg text-tag-negative-fg",
-    warning: "bg-warning/15 text-warning",
-    neutral: "bg-tag-bg text-tag-fg",
+    positive: "bg-(--sv-pos-tint) text-(--sv-pos)",
+    negative: "bg-(--sv-neg-tint) text-(--sv-neg)",
+    warning: "bg-(--sv-warn-tint) text-(--sv-warn)",
+    neutral: "bg-(--sv-subtle) text-(--sv-muted)",
+    primary: "bg-(--sv-violet-tint) text-(--sv-violet-ink)",
   };
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] leading-[1.2] font-extrabold whitespace-nowrap",
         tones[tone],
         className,
       )}
     >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-1.5 flex-none rounded-full",
+          tone === "primary" ? "bg-(--sv-violet)" : "bg-current",
+        )}
+      />
       {children}
     </span>
   );
@@ -331,12 +376,12 @@ export function ShareBar({
   return (
     <div
       className={cn(
-        "h-1 w-full overflow-hidden rounded-sm bg-border-soft",
+        "h-2 w-full overflow-hidden rounded-full bg-(--sv-track)",
         className,
       )}
     >
       <div
-        className={cn("h-full rounded-sm", tone ?? "bg-primary")}
+        className={cn("h-full rounded-full", tone ?? "bg-(--sv-violet)")}
         style={{ width: `${width}%` }}
       />
     </div>
@@ -360,21 +405,23 @@ export function EmptyState({
   children,
   action,
 }: {
-  icon: string;
+  icon: GlyphSource;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-[14px] px-6 py-14 text-center">
-      <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15">
-        <Icon name={icon} size={26} className="text-primary-text" />
+    <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+      <span className="sv-empty-tile grid size-16 place-items-center rounded-full bg-(--sv-lime-tint) text-(--sv-violet)">
+        <Glyph icon={icon} size={32} />
       </span>
-      <p className="text-lg font-semibold text-foreground">{title}</p>
+      <p className="text-[19px] font-extrabold">{title}</p>
       {children ? (
-        <p className="max-w-sm text-sm text-muted-foreground">{children}</p>
+        <p className="max-w-[46ch] text-[14px] leading-relaxed text-(--sv-muted)">
+          {children}
+        </p>
       ) : null}
-      {action}
+      {action ? <div className="mt-1">{action}</div> : null}
     </div>
   );
 }
@@ -393,7 +440,7 @@ export function SectionHeading({
   aside,
 }: {
   title: string;
-  icon?: string;
+  icon?: GlyphSource;
   iconTone?: string;
   qualifier?: ReactNode;
   /** A small line under the title — a bank's name under an account's. */
@@ -403,19 +450,23 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="flex flex-wrap items-center gap-x-[9px] gap-y-1 text-[17px] font-semibold text-foreground">
+        <h2 className="flex flex-wrap items-center gap-x-[9px] gap-y-1 text-[17px] font-extrabold">
           {icon ? (
-            <Icon name={icon} size={21} className={iconTone ?? "text-faint"} />
+            <Glyph
+              icon={icon}
+              size={21}
+              className={iconTone ?? "text-(--sv-violet)"}
+            />
           ) : null}
           {title}
           {qualifier ? (
-            <span className="ml-0.5 text-[13.5px] font-normal text-muted-foreground">
+            <span className="ml-0.5 text-[13.5px] font-medium text-(--sv-muted)">
               {qualifier}
             </span>
           ) : null}
         </h2>
         {subtitle ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-[12.5px] text-(--sv-muted)">
             {subtitle}
           </p>
         ) : null}

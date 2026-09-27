@@ -43,13 +43,18 @@ export function Th({
 }
 
 /**
- * The serial cell. Narrow, greyed, and not the point of the row.
+ * The serial cell. Greyed, boxed, and not the point of the row.
  *
  * It is first in every table by the owner's rule, and it should read as a
  * position rather than as data — the eye should skip it on the way to the date.
+ * The handoff draws it in a 28px box (`.sv-serial`).
  */
 export function SerialCell({ n }: { n: number }) {
-  return <td className="num text-xs text-faint">{n}</td>;
+  return (
+    <td>
+      <span className="sv-serial">{n}</span>
+    </td>
+  );
 }
 
 /**

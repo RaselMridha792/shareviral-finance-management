@@ -1,17 +1,15 @@
 "use client";
 
-import {
-  Ban,
-  Archive,
-  PowerOff,
-  SquarePen,
-  Trash2,
-  UserCog,
-} from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { PowerIcon } from "@phosphor-icons/react/dist/ssr/Power";
+import { ProhibitIcon } from "@phosphor-icons/react/dist/ssr/Prohibit";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { UserGearIcon } from "@phosphor-icons/react/dist/ssr/UserGear";
 import type { ReactNode } from "react";
 
 import { Th } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 
 /**
  * The two buttons every row ends with.
@@ -42,30 +40,67 @@ import { cn } from "@/lib/utils";
 export type SecondAction =
   "void" | "deactivate" | "archive" | "delete" | "status";
 
+/**
+ * The handoff's tones for the second slot: a void or a deactivation is a
+ * muted grey icon — it undoes nothing yet — and only an outright delete wears
+ * the red tint.
+ */
 const SECOND: Record<
   SecondAction,
-  { label: string; icon: typeof Ban; danger: boolean }
+  { label: string; icon: Icon; tone: RowButtonTone }
 > = {
-  void: { label: "Void", icon: Ban, danger: true },
-  deactivate: { label: "Deactivate", icon: PowerOff, danger: true },
-  archive: { label: "Archive", icon: Archive, danger: false },
-  delete: { label: "Delete", icon: Trash2, danger: true },
-  status: { label: "Change status", icon: UserCog, danger: false },
+  void: { label: "Void", icon: ProhibitIcon, tone: "muted" },
+  deactivate: { label: "Deactivate", icon: PowerIcon, tone: "muted" },
+  archive: { label: "Archive", icon: ArchiveIcon, tone: "muted" },
+  delete: { label: "Delete", icon: TrashIcon, tone: "danger" },
+  status: { label: "Change status", icon: UserGearIcon, tone: "violet" },
 };
 
-function IconButton({
+export type RowButtonTone = "violet" | "muted" | "danger";
+
+/**
+ * One of the 32px buttons a row ends with (`.sv-row-button`): violet icon on
+ * the subtle ground, violet-tint under the pointer; `danger` is the red tint.
+ *
+ * Exported so a row's own extra button — a receipt, a payment, a password
+ * reset — is the same button as the ones beside it.
+ */
+export function RowButton({
   label,
+  title = label,
   icon: Glyph,
   onClick,
+  href,
   disabled,
-  danger,
+  tone = "violet",
 }: {
+  /** What a screen reader hears — may name the row ("… for Cursor"). */
   label: string;
-  icon: typeof Ban;
+  /** The tooltip, when it should be shorter than the label. */
+  title?: string;
+  icon: Icon;
   onClick?: () => void;
+  /** A link instead of a button — opens in a new tab. */
+  href?: string;
   disabled?: boolean;
-  danger?: boolean;
+  tone?: RowButtonTone;
 }) {
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={label}
+        title={title}
+        data-tone={tone}
+        className="sv-row-button"
+      >
+        <Glyph weight="duotone" size={16} />
+      </a>
+    );
+  }
+
   /*
    * No handler, no button.
    *
@@ -87,15 +122,11 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      title={label}
-      className={cn(
-        "cursor-pointer rounded p-1 text-muted-foreground transition-colors",
-        "hover:bg-surface-muted",
-        danger ? "hover:text-negative" : "hover:text-foreground",
-        "disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
-      )}
+      title={title}
+      data-tone={tone}
+      className="sv-row-button"
     >
-      <Glyph className="size-3.5" />
+      <Glyph weight="duotone" size={16} />
     </button>
   );
 }
@@ -115,7 +146,7 @@ export function RowActions({
   onDelete?: () => void;
   extra?: ReactNode;
 }) {
-  const { label, icon, danger } = SECOND[second];
+  const { label, icon, tone } = SECOND[second];
 
   return (
     <td>
@@ -124,24 +155,19 @@ export function RowActions({
         column is sized by `RowActionsHead` — so a reader with no actions gets
         an empty cell rather than a table that changes shape under them.
       */}
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex items-center justify-end gap-1.5">
         {extra}
-        <IconButton label="Edit" icon={SquarePen} onClick={onEdit} />
-        <IconButton
-          label={label}
-          icon={icon}
-          onClick={onSecond}
-          danger={danger}
-        />
+        <RowButton label="Edit" icon={PencilSimpleIcon} onClick={onEdit} />
+        <RowButton label={label} icon={icon} onClick={onSecond} tone={tone} />
         {onDelete ? (
           // "Move to trash", not "Delete" — the owner's catch: the row is
           // recoverable from Settings → Trashed, and the word should promise
           // exactly what the click does.
-          <IconButton
+          <RowButton
             label="Move to trash"
-            icon={Trash2}
+            icon={TrashIcon}
             onClick={onDelete}
-            danger
+            tone="danger"
           />
         ) : null}
       </div>
@@ -152,9 +178,10 @@ export function RowActions({
 /**
  * The unlabelled heading above the buttons.
  *
- * Wider when a third one is there, because two icons under a `w-24` heading
- * fit and three do not — the column squeezes the one before it instead, which
- * is how a description column loses six characters on eight screens at once.
+ * Wider when a third one is there, because two 32px buttons under a `w-24`
+ * heading fit and three do not — the column squeezes the one before it
+ * instead, which is how a description column loses six characters on eight
+ * screens at once.
  */
 export function RowActionsHead({ deletable = false }: { deletable?: boolean }) {
   return <Th width={deletable ? "w-32" : "w-24"} align="right" />;

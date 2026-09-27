@@ -1,27 +1,6 @@
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
-import { ArrowsDownUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowsDownUp";
-import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
-import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
-import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
-import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
-import { ChartPieSliceIcon } from "@phosphor-icons/react/dist/ssr/ChartPieSlice";
-import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
-import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
-import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
-import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
-import { InvoiceIcon } from "@phosphor-icons/react/dist/ssr/Invoice";
-import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
-import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
-import { ShoppingCartIcon } from "@phosphor-icons/react/dist/ssr/ShoppingCart";
-import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
-import { TableIcon } from "@phosphor-icons/react/dist/ssr/Table";
-import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
-import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
-import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 import type { ReactNode } from "react";
 
-import { Icon } from "@/components/ui/icon";
+import { Glyph, type GlyphSource } from "@/components/ui/glyph";
 
 /**
  * The card every screen opens with, as the September 2026 handoff draws it.
@@ -34,36 +13,9 @@ import { Icon } from "@/components/ui/icon";
  * The owner saw the twenty-one screens this reaches before it changed, and
  * chose all of them at once over one screen at a time.
  *
- * THE ICON STILL ARRIVES AS A MATERIAL NAME, which is what every caller passes
- * today — `icon="account_balance"`. It is turned into the handoff's Phosphor
- * icon here, in one table, so twenty-one call sites did not have to change to
- * get the new tile. A caller rebuilt in its own session can pass the Phosphor
- * component instead. A name nobody has mapped still draws, in the old face,
- * rather than leaving an empty tile.
+ * The icon may still arrive as a Material name, which is what most callers
+ * pass — `Glyph` turns it into the handoff's Phosphor icon.
  */
-const PHOSPHOR: Record<string, PhosphorIcon> = {
-  account_balance: BankIcon,
-  account_balance_wallet: WalletIcon,
-  auto_awesome: SparkleIcon,
-  bar_chart: ChartBarIcon,
-  description: FileTextIcon,
-  grid_view: ChartPieSliceIcon,
-  groups: UsersThreeIcon,
-  north_east: ArrowUpRightIcon,
-  payments: MoneyIcon,
-  percent: PercentIcon,
-  receipt_long: InvoiceIcon,
-  savings: HandCoinsIcon,
-  sell: TagIcon,
-  settings: GearSixIcon,
-  shopping_basket: ShoppingCartIcon,
-  south_west: ArrowDownLeftIcon,
-  swap_horiz: ArrowsLeftRightIcon,
-  swap_vert: ArrowsDownUpIcon,
-  table_view: TableIcon,
-  upload_file: FileArrowUpIcon,
-};
-
 export function PageHeader({
   title,
   icon,
@@ -73,14 +25,12 @@ export function PageHeader({
   title: string;
   /**
    * The screen's icon: a Phosphor component, or the Material name the rail used
-   * to carry (mapped above).
+   * to carry (see `glyph.tsx`).
    */
-  icon?: string | PhosphorIcon;
+  icon?: GlyphSource;
   description?: ReactNode;
   actions?: ReactNode;
 }) {
-  const Glyph = typeof icon === "string" ? PHOSPHOR[icon] : icon;
-
   return (
     <div className="sv-page-head sv-rise relative isolate flex flex-wrap items-center gap-4 overflow-hidden rounded-[11px] bg-(--sv-surface) px-6 py-5.5">
       <div aria-hidden="true" className="sv-page-head-decor">
@@ -93,11 +43,7 @@ export function PageHeader({
       <div className="flex min-w-65 flex-1 items-center gap-3.5">
         {icon ? (
           <span className="sv-page-head-tile grid size-14 flex-none place-items-center rounded-[14px] bg-(--sv-accent) text-(--sv-on-accent)">
-            {Glyph ? (
-              <Glyph weight="fill" size={27} />
-            ) : (
-              <Icon name={icon as string} size={27} fill />
-            )}
+            <Glyph icon={icon} weight="fill" size={27} />
           </span>
         ) : null}
         <div className="min-w-0">

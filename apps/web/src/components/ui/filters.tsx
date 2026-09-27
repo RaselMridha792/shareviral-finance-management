@@ -23,10 +23,12 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * One row, wrapping.
+ * One row, wrapping, on its own white card — the handoff's filter bar.
  *
- * `items-center` and a 8px gap, which is what makes a select, a date pair and
+ * `items-center` and a 10px gap, which is what makes a select, a date pair and
  * a search box sit on one line and look deliberate rather than assembled.
+ * Inside it the controls take the handoff's slimmer shape (`.sv-filterbar
+ * .sv-control`: 1px, 8px corners).
  */
 export function FilterBar({
   children,
@@ -36,7 +38,12 @@ export function FilterBar({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div
+      className={cn(
+        "sv-card sv-filterbar flex flex-wrap items-center gap-2.5 rounded-[11px] bg-(--sv-surface) p-3",
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -75,7 +82,7 @@ export function DateRangeField({
   toLabel?: string;
 }) {
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-muted px-2 text-xs transition focus-within:border-primary focus-within:bg-surface">
+    <div className="sv-control flex h-10 shrink-0 items-center gap-1 rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-2 text-[13px]">
       <input
         type="date"
         aria-label={fromLabel}
@@ -86,7 +93,7 @@ export function DateRangeField({
         }
         className="num w-auto bg-transparent outline-none"
       />
-      <span aria-hidden="true" className="h-5 w-px bg-border" />
+      <span aria-hidden="true" className="h-5 w-px bg-(--sv-line)" />
       <input
         type="date"
         aria-label={toLabel}
@@ -132,7 +139,11 @@ export function FilterSelect({
       aria-label={label}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className={cn(controlClass, "w-auto shrink-0", wide && "max-w-34")}
+      className={cn(
+        controlClass,
+        "w-auto shrink-0 text-[13.5px] font-extrabold",
+        wide && "max-w-34",
+      )}
     >
       {children}
     </select>

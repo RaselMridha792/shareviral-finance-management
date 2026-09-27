@@ -9,7 +9,8 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { BanknoteArrowDown, Image as Plus } from "lucide-react";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { Image as Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
@@ -25,7 +26,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import {
+  RowActions,
+  RowActionsHead,
+  RowButton,
+} from "@/components/ui/row-actions";
 import { MonthFilter } from "@/components/expenses/month-picker";
 import { SearchField } from "@/components/ui/search-field";
 import { EmptyState } from "@/components/ui/patterns";
@@ -484,15 +489,12 @@ export function SubscriptionsScreen({
                            RowActions keeps for exactly this. */
                         extra={
                           canWrite ? (
-                            <button
-                              type="button"
+                            <RowButton
                               onClick={() => setPaying(row)}
-                              aria-label={`Record a payment for ${row.toolName}`}
+                              label={`Record a payment for ${row.toolName}`}
                               title="Record a payment"
-                              className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
-                            >
-                              <BanknoteArrowDown className="size-3.5" />
-                            </button>
+                              icon={CreditCardIcon}
+                            />
                           ) : null
                         }
                         onEdit={canWrite ? () => setEditing(row) : undefined}

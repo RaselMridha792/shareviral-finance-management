@@ -2,10 +2,16 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Every input, select and textarea, as the September 2026 handoff draws them:
+ * 11px corners, a 1.5px line on the subtle ground, violet while typing.
+ *
+ * The colours of that border live in `.sv-control` (new-design.css): globals
+ * sets `* { border-color }` outside any layer, which outranks a Tailwind
+ * border colour, so a `focus:border-*` utility here would never paint.
+ */
 export const controlClass =
-  "h-10 w-full rounded-lg border border-border bg-surface-muted px-3 text-sm outline-none transition " +
-  "focus-visible:border-primary focus-visible:bg-surface disabled:opacity-50 " +
-  "aria-[invalid=true]:border-negative";
+  "sv-control h-10 w-full rounded-[11px] border-[1.5px] bg-(--sv-subtle) px-3 text-sm outline-none disabled:opacity-50";
 
 export function Field({
   label,
@@ -24,19 +30,21 @@ export function Field({
 }) {
   return (
     <label className={cn("flex flex-col gap-1.5", className)}>
-      <span className="text-sm font-medium">
+      <span className="text-[13px] font-extrabold">
         {label}
         {required ? (
-          <span className="ml-0.5 text-negative" aria-hidden="true">
+          <span className="ml-0.5 text-(--sv-neg)" aria-hidden="true">
             *
           </span>
         ) : null}
       </span>
       {children}
       {error?.length ? (
-        <span className="text-xs text-negative">{error[0]}</span>
+        <span className="text-[12px] font-semibold text-(--sv-neg)">
+          {error[0]}
+        </span>
       ) : hint ? (
-        <span className="text-xs text-muted-foreground">{hint}</span>
+        <span className="text-[12px] text-(--sv-muted)">{hint}</span>
       ) : null}
     </label>
   );
@@ -47,7 +55,12 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
 }
 
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cn(controlClass, className)} {...props} />;
+  return (
+    <select
+      className={cn(controlClass, "font-extrabold", className)}
+      {...props}
+    />
+  );
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {

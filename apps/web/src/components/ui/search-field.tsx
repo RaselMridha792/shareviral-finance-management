@@ -1,6 +1,7 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import { useId, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,11 @@ export function SearchField({
       className={cn("flex max-w-lg flex-1 items-center gap-2", className)}
     >
       <div className="relative flex flex-1 items-center">
-        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
+        <MagnifyingGlassIcon
+          weight="duotone"
+          size={18}
+          className="pointer-events-none absolute left-3 z-1 text-(--sv-muted)"
+        />
         <label className="sr-only" htmlFor={id}>
           {label}
         </label>
@@ -79,16 +84,21 @@ export function SearchField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className={cn(controlClass, "pl-9", value && "pr-10", inputClassName)}
+          className={cn(
+            controlClass,
+            "pl-[38px]",
+            value && "pr-10",
+            inputClassName,
+          )}
         />
         {value ? (
           <button
             type="button"
             onClick={clear}
             aria-label="Clear the search"
-            className="absolute right-2 rounded-md p-1 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            className="absolute right-2 grid size-7 cursor-pointer place-items-center rounded-lg text-(--sv-muted) transition-colors hover:bg-(--sv-violet-tint) hover:text-(--sv-violet-ink)"
           >
-            <X className="size-4" />
+            <XIcon weight="bold" size={14} />
           </button>
         ) : null}
       </div>

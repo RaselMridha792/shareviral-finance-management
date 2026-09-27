@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 85 | **The new design: the shared pieces — cards, fields, SL, row buttons, pills, tabs, stat cards, empty states, filter bar, pager, search** | **done** — every screen, asked first |
 | 84 | **The new design: Accounts, and an account's own page** | **done** |
 | 83 | **The header card and the buttons, on every screen** | **done** — 21 screens, asked first |
 | 82 | **Every form opens in a popup, not a side drawer** | **done** — and a form-inside-a-form that saved transactions nobody asked for |
@@ -62,6 +63,51 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 85. The new design: the shared pieces, on every screen — 27 Sep 2026
+
+The owner was shown the screens each piece reaches and chose "all of them" at
+once. Everything under `components/ui/` that a screen is built from now draws
+the September handoff:
+
+- **`glyph.tsx`** (new): the Material-name → Phosphor table that lived in
+  `PageHeader`, shared. Stat cards, card headers, tab options and empty states
+  take a Phosphor component or the old Material name; an unmapped name still
+  draws in the old face rather than leaving a hole.
+- **Card / CardHeader**: `sv-card`, 11px; the header is 17px/800 over a 1.5px
+  rule, with an optional 36px violet tile (`icon`).
+- **Fields**: 11px corners, 1.5px line on the subtle ground, violet with a soft
+  halo while typing, red when refused (`.sv-control` — the colour has to be
+  plain CSS, `* { border-color }` outranks a layered utility, which is why the
+  old `focus-visible:border-primary` had never painted). Labels 13px/800,
+  selects 800. Heights unchanged (40px) so nothing beside them moves.
+- **SL** in a 28px box (`.sv-serial`); **row buttons** 32px on the subtle
+  ground, Phosphor, violet icon, a void muted, move-to-trash on the red tint.
+  `RowButton` is exported, and the three rows that carried an extra button —
+  a ledger row's receipt, a plan's payment, a user's password — use it.
+- **Badge / StatusPill**: the handoff's tinted pills at 12px/800; StatusPill
+  carries a dot and gained a violet `primary` ("Active").
+- **Segmented**: a white card with the lime active chip, count pills, optional
+  icons; wraps on a phone (Subscriptions' five tabs were 12px too wide at 390).
+- **StatStrip / StatCell**: separate cards 14px apart, a 36px tile tinted from
+  its icon's own colour (`.sv-tint-tile`, `color-mix` on `currentColor`),
+  figures at 800. **SummaryBar**: a 46px tile, 34px figure. **DataPanel**,
+  **EmptyState** (64px lime round tile, 19px/800), **SectionHeading**,
+  **ShareBar** (8px, round) likewise.
+- **FilterBar** is the handoff's white filter card, and the controls inside it
+  are its slimmer kind (1px, 8px). The audit trail wrapped its filters in a
+  card of its own; that wrapper is gone. **Pagination** and **SearchField**:
+  Phosphor, weights.
+
+**Proved by `.uiqa.mjs`**: every screen — detail pages with real ids, all ten
+Settings sections — at 1440 and 390: SL boxes 28px/800 and no bare ones, row
+buttons 32px with no lucide left, the lime active tab, a field's border and its
+violet focus in a popup, label 13px/800, nothing sideways, no console errors.
+Chrome snaps a 1.5px border to 1px at DPR 1, so the harness accepts either.
+
+**Left for each page's own pass** (seen in the screenshots, not shared): the
+transaction rows' red/green row tint, Team's tabs and search on one row, TDS
+and Import/Export's underline tabs, Settings' own sidebar.
 
 ## 84. The new design: Accounts, and an account's own page — 27 Sep 2026
 

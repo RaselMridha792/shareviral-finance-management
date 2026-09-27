@@ -300,6 +300,111 @@
 }
 
 /* --------------------------------------------------------------------------
+   The shared pieces under components/ui — every screen's fields, tables,
+   pills and stat cards. Only what Tailwind cannot do from a layer lives here:
+   a border's colour, and a rule that depends on where a control sits.
+   -------------------------------------------------------------------------- */
+
+/* A tile tinted from its own icon's colour: pos-tint behind a green icon,
+   violet-tint behind a violet one — whatever tone a screen passes. */
+.sv-tint-tile {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Every input, select and textarea (field.tsx). The 1.5px line, violet with a
+   soft violet halo while typing, red when the server refused it. */
+.sv-control {
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.sv-control:hover:not(:disabled, :focus, :focus-within) {
+  border-color: color-mix(in oklab, var(--sv-violet) 35%, var(--sv-line));
+}
+
+.sv-control:focus,
+.sv-control:focus-within {
+  outline: none;
+  border-color: var(--sv-violet);
+  background-color: var(--sv-surface);
+  box-shadow: 0 0 0 3px var(--sv-violet-tint);
+}
+
+.sv-control[aria-invalid="true"] {
+  border-color: var(--sv-neg);
+}
+
+/* In the filter card the controls are the handoff's slimmer kind: 1px, 8px. */
+.sv-filterbar .sv-control {
+  border-width: 1px;
+  border-radius: 8px;
+}
+
+/* SL, in a 28px box — a position, not data. */
+.sv-serial {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--sv-line);
+  background: var(--sv-subtle);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--sv-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The buttons a row ends with: 32px, borderless, on the subtle ground. */
+.sv-row-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--sv-subtle);
+  color: var(--sv-violet);
+  cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    transform 0.3s ease;
+}
+
+.sv-row-button:hover:not(:disabled) {
+  background: var(--sv-violet-tint);
+  transform: translateY(-1px);
+}
+
+.sv-row-button[data-tone="muted"] {
+  color: var(--sv-muted);
+}
+
+.sv-row-button[data-tone="danger"],
+.sv-row-button[data-tone="danger"]:hover:not(:disabled) {
+  background: var(--sv-neg-tint);
+  color: var(--sv-neg);
+}
+
+.sv-row-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+/* A closing figure on the lime tint, edged in lime. */
+.sv-card.sv-card-lime {
+  border-color: var(--sv-lime-line);
+}
+
+/* The empty state's round lime tile. */
+.sv-empty-tile {
+  border: 1px solid var(--sv-lime-line);
+}
+
+/* --------------------------------------------------------------------------
    Accounts
    -------------------------------------------------------------------------- */
 

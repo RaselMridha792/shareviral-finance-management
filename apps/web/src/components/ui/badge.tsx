@@ -4,12 +4,13 @@ import { cn } from "@/lib/utils";
 
 type Tone = "neutral" | "positive" | "negative" | "warning" | "primary";
 
+/** The handoff's pills: a tint behind its own colour, 12px/800. */
 const TONES: Record<Tone, string> = {
-  neutral: "bg-surface-muted text-muted-foreground",
-  positive: "bg-positive/12 text-positive",
-  negative: "bg-negative/12 text-negative",
-  warning: "bg-warning/15 text-warning",
-  primary: "bg-primary/12 text-primary",
+  neutral: "bg-(--sv-subtle) text-(--sv-muted)",
+  positive: "bg-(--sv-pos-tint) text-(--sv-pos)",
+  negative: "bg-(--sv-neg-tint) text-(--sv-neg)",
+  warning: "bg-(--sv-warn-tint) text-(--sv-warn)",
+  primary: "bg-(--sv-violet-tint) text-(--sv-violet-ink)",
 };
 
 export function Badge({
@@ -24,7 +25,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        "inline-flex items-center gap-[5px] rounded-full px-2.5 py-[3px] text-[12px] leading-[1.35] font-extrabold whitespace-nowrap",
         TONES[tone],
         className,
       )}

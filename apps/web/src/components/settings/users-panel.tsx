@@ -14,11 +14,11 @@ import {
 import {
   Check,
   Copy,
-  KeyRound,
   LoaderCircle,
   Plus,
   ShieldAlert,
 } from "lucide-react";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import {
   useCallback,
   useEffect,
@@ -38,7 +38,11 @@ import { useRowDelete } from "@/components/ui/use-row-delete";
 import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Pagination } from "@/components/ui/pagination";
-import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import {
+  RowActions,
+  RowActionsHead,
+  RowButton,
+} from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -363,16 +367,12 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                       // that out than the button never being live.
                       onDelete={user.id === me.id ? undefined : () => del.ask(user)}
                       extra={
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-1.5"
+                        <RowButton
                           onClick={() => setResetting(user)}
-                          aria-label={`Set a new password for ${user.fullName}`}
+                          label={`Set a new password for ${user.fullName}`}
                           title="Set a new password"
-                        >
-                          <KeyRound className="size-3.5" />
-                        </Button>
+                          icon={KeyIcon}
+                        />
                       }
                     />
                   </tr>

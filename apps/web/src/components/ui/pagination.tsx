@@ -1,5 +1,8 @@
 "use client";
 
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -52,14 +55,18 @@ export function Pagination({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 text-sm",
+        "flex flex-wrap items-center justify-between gap-3 text-[13.5px]",
         className,
       )}
     >
-      <span className="text-muted-foreground">
-        Page <span className="num">{page}</span> of{" "}
-        <span className="num">{totalPages}</span> ·{" "}
-        <span className="num">{total}</span> {total === 1 ? noun : plural}
+      <span className="text-(--sv-muted)">
+        Page{" "}
+        <b className="font-extrabold text-(--sv-ink) tabular-nums">{page}</b> of{" "}
+        <b className="font-extrabold text-(--sv-ink) tabular-nums">
+          {totalPages}
+        </b>{" "}
+        · <b className="font-extrabold text-(--sv-ink) tabular-nums">{total}</b>{" "}
+        {total === 1 ? noun : plural}
       </span>
 
       <span className="flex items-center gap-2">
@@ -69,6 +76,7 @@ export function Pagination({
           disabled={page <= 1}
           onClick={() => onPage(page - 1)}
         >
+          <CaretLeftIcon weight="bold" size={14} />
           Previous
         </Button>
         <Button
@@ -78,6 +86,7 @@ export function Pagination({
           onClick={() => onPage(page + 1)}
         >
           Next
+          <CaretRightIcon weight="bold" size={14} />
         </Button>
       </span>
     </div>
