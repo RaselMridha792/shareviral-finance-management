@@ -39,6 +39,8 @@ import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { reportsApi } from "@/lib/reports";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { TransactionDetails } from "@/components/ledger/transaction-details";
+import { rowOpener } from "@/components/ui/row-details";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { VoidDialog } from "@/components/ledger/void-dialog";
 import { MonthPicker } from "@/components/expenses/month-picker";
@@ -109,6 +111,9 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
     row: TransactionDto;
     kind: "invoice" | "bank_statement";
   } | null>(null);
+  /** The receipt whose whole record is open — a click on its row. The table
+      has no Description column; this is where it is read. */
+  const [showing, setShowing] = useState<TransactionDto | null>(null);
 
   /** The month's rate, straight from the API. Null when there is none. */
   const [rate, setRate] = useState<string | null>(null);
@@ -398,7 +403,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                 setBulkAsking(true);
               }}
             />
-            <table className="table-data min-w-[1416px] text-sm">
+            <table className="table-data min-w-[1192px] text-sm">
               <thead>
                 <tr className="text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
@@ -413,7 +418,6 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                   ) : null}
                   <SerialHead />
                   <Th width="w-28">Date</Th>
-                  <Th>Description</Th>
                   <Th align="right">Amount (BDT)</Th>
                   <Th align="right">Amount (USD)</Th>
                   <Th align="right">USD rate</Th>
@@ -441,7 +445,11 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                   // rather than missing if one ever reaches this table.
                   const voided = Boolean(row.voidedAt);
                   return (
-                    <tr key={row.id} className="row-finance">
+                    <tr
+                      key={row.id}
+                      className="row-finance"
+                      {...rowOpener(() => setShowing(row), row.id)}
+                    >
                       {bulk ? (
                         <TickCell
                           checked={bulk.isTicked(row.id)}
@@ -452,11 +460,6 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                       <SerialCell n={serial(currentPage, index)} />
                       <td>
                         <Dated>{formatDate(row.txnDate)}</Dated>
-                      </td>
-                      <td className="cell-prose">
-                        <span className="font-extrabold">
-                          {row.description}
-                        </span>
                       </td>
                       <td className="text-right">
                         <Amount
@@ -592,6 +595,18 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
         total={received.length}
         noun="entry"
         onPage={setPage}
+      />
+
+      <TransactionDetails
+        row={showing}
+        onClose={() => setShowing(null)}
+        onEdit={canWrite ? setEditing : undefined}
+        onOpenDocuments={(row, which) =>
+          setDocumentsFor({
+            row,
+            kind: which === "invoice" ? "invoice" : "bank_statement",
+          })
+        }
       />
 
       {documentsFor ? (

@@ -1,6 +1,12 @@
 "use client";
 
-import { formatMoney, fromMinorUnits, toMinorUnits } from "@finance/shared";
+import {
+  PAYMENT_METHOD_LABELS,
+  formatMoney,
+  fromMinorUnits,
+  toMinorUnits,
+  type PaymentMethod,
+} from "@finance/shared";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { LoaderCircle } from "lucide-react";
@@ -34,6 +40,12 @@ import { ledgerApi, type TransferRowDto } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
 import { cn, formatDate } from "@/lib/utils";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import {
+  RowDetails,
+  rowOpener,
+  type DetailSection,
+} from "@/components/ui/row-details";
 import { DocumentsDialog } from "./documents-dialog";
 import { TransferForm } from "./transfer-form";
 import { VoidDialog, type VoidableTransaction } from "./void-dialog";
@@ -73,6 +85,9 @@ export function TransfersScreen({
     row: TransferRowDto;
     kinds: ("invoice" | "bank_statement" | "receipt" | "other")[];
   } | null>(null);
+  /** The transfer whose whole record is open — a click on its row. The table
+      has no Description column; this is where it is read. */
+  const [showing, setShowing] = useState<TransferRowDto | null>(null);
 
   /*
    * Only the newest request may write the rows. Two quick clicks on the pager
@@ -219,7 +234,6 @@ export function TransfersScreen({
                   ) : null}
                   <SerialHead />
                   <Th width="w-28">Date</Th>
-                  <Th>Description</Th>
                   <Th>From</Th>
                   <Th width="w-8">
                     <span className="sr-only">to</span>
@@ -254,6 +268,7 @@ export function TransfersScreen({
                           "row-finance",
                           voided && "opacity-60 [&_td]:line-through",
                         )}
+                        {...rowOpener(() => setShowing(row), row.outId)}
                       >
                         {canWrite ? (
                           <TickCell
@@ -270,18 +285,6 @@ export function TransfersScreen({
                               hunts for them could not see a date sitting
                               against a serial number. */}
                           <Dated>{formatDate(row.txnDate)}</Dated>
-                        </td>
-                        <td>
-                          <div className="flex flex-col">
-                            <span className="font-extrabold">
-                              {row.description}
-                            </span>
-                            {voided ? (
-                              <span className="text-xs text-muted-foreground">
-                                voided
-                              </span>
-                            ) : null}
-                          </div>
                         </td>
                         <td>
                           <AccountCell
@@ -432,6 +435,22 @@ export function TransfersScreen({
         onClose={() => setVoiding(null)}
         onVoided={() => load(page)}
       />
+      {showing ? (
+        <TransferDetails
+          row={showing}
+          onClose={() => setShowing(null)}
+          onOpenDocuments={(row, which) =>
+            setDocumentsFor({
+              row,
+              kinds:
+                which === "invoice"
+                  ? ["invoice"]
+                  : ["bank_statement", "receipt", "other"],
+            })
+          }
+        />
+      ) : null}
+
       {documentsFor ? (
         <DocumentsDialog
           transactionId={documentsFor.row.outId}
@@ -537,5 +556,120 @@ function AccountCell({ id, name }: { id: string; name: string }) {
     >
       {name}
     </a>
+  );
+}
+
+/**
+ * One transfer, whole — what a click on its row opens: the description (the
+ * table no longer has that column), both accounts, the taka and the dollars
+ * recorded on it, the rate, the paperwork and how it was paid.
+ */
+function TransferDetails({
+  row,
+  onClose,
+  onOpenDocuments,
+}: {
+  row: TransferRowDto;
+  onClose: () => void;
+  onOpenDocuments: (row: TransferRowDto, which: "invoice" | "payment") => void;
+}) {
+  const paper = (
+    value: string | null,
+    count: number,
+    which: "invoice" | "payment",
+  ) =>
+    !value && count === 0 ? null : (
+      <span className="inline-flex items-center gap-2">
+        {value ?? `${count} attached`}
+        {count > 0 ? (
+          <button
+            type="button"
+            onClick={() => onOpenDocuments(row, which)}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1 text-[13px] font-extrabold text-link transition hover:bg-(--sv-violet-tint)"
+          >
+            <EyeIcon weight="duotone" size={15} />
+            View
+          </button>
+        ) : null}
+      </span>
+    );
+
+  const sections: DetailSection[] = [
+    {
+      items: [
+        { label: "Description", value: row.description, block: true },
+        {
+          label: "From",
+          value: (
+            <AccountCell id={row.fromAccountId} name={row.fromAccountName} />
+          ),
+        },
+        {
+          label: "To",
+          value: <AccountCell id={row.toAccountId} name={row.toAccountName} />,
+        },
+        row.voidedAt
+          ? { label: "Voided", value: formatDate(row.voidedAt) }
+          : null,
+      ].filter(Boolean) as DetailSection["items"],
+    },
+    {
+      title: "Money",
+      items: [
+        {
+          label: "Amount (BDT)",
+          value: (
+            <Amount value={row.amount} tone="neutral" showCounterpart={false} />
+          ),
+        },
+        {
+          label: "Amount (USD)",
+          value: row.usdAmount ? (
+            <Amount
+              value={row.usdAmount}
+              currency="USD"
+              tone="neutral"
+              showCounterpart={false}
+            />
+          ) : null,
+        },
+        {
+          label: "USD rate",
+          value: row.usdRate ? Number(row.usdRate).toFixed(2) : null,
+        },
+      ],
+    },
+    {
+      title: "Where and how",
+      items: [
+        { label: "Date", value: formatDate(row.txnDate) },
+        {
+          label: "Paid by",
+          value: row.paymentMethod
+            ? (PAYMENT_METHOD_LABELS[row.paymentMethod as PaymentMethod] ??
+              row.paymentMethod)
+            : null,
+        },
+        { label: "Entry No.", value: row.refNo },
+        {
+          label: "Invoice",
+          value: paper(row.invoiceNo, row.invoiceCount, "invoice"),
+        },
+        {
+          label: "Reference",
+          value: paper(row.reference, row.recordCount, "payment"),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <RowDetails
+      open
+      onClose={onClose}
+      title={row.description}
+      description={`${formatDate(row.txnDate)} · ${row.refNo}`}
+      sections={sections}
+    />
   );
 }

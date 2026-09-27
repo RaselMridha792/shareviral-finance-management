@@ -8,6 +8,8 @@ import { useState } from "react";
 import { formatMoney } from "@finance/shared";
 
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { TransactionDetails } from "@/components/ledger/transaction-details";
+import { rowOpener } from "@/components/ui/row-details";
 import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
 import { Dated } from "@/components/ui/dated";
@@ -25,7 +27,11 @@ import {
   TableScroll,
   Th,
 } from "@/components/ui/table";
-import type { RegisterResult, TransactionDto } from "@/lib/ledger";
+import type {
+  RegisterResult,
+  RegisterRow,
+  TransactionDto,
+} from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { formatDate, cn } from "@/lib/utils";
@@ -57,6 +63,9 @@ export function BankStatementScreen({
 }) {
   const router = useRouter();
   const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  /** The movement whose whole record is open — a click on its row. The
+      statement has no Description column; this is where it is read. */
+  const [showing, setShowing] = useState<RegisterRow | null>(null);
   const [page, setPage] = useState(1);
 
   /**
@@ -212,7 +221,7 @@ export function BankStatementScreen({
         </div>
 
         <TableScroll>
-          <table className="table-data min-w-[1000px] text-sm">
+          <table className="table-data min-w-[820px] text-sm">
             <thead>
               {/* Nine columns: SL, Date, Description, then this table's own
                   subject — the two figures and the total they move — the
@@ -225,7 +234,6 @@ export function BankStatementScreen({
               <tr className="text-left">
                 <SerialHead />
                 <Th width="w-28">Date</Th>
-                <Th>Description</Th>
                 <Th align="right">Debit</Th>
                 <Th align="right">Credit</Th>
                 <Th align="right">Balance</Th>
@@ -259,6 +267,7 @@ export function BankStatementScreen({
                 visible.map((row, index) => (
                   <tr
                     key={row.id}
+                    {...rowOpener(() => setShowing(row), row.id)}
                     /*
                       The whole row carries the direction, the same as the
                       transactions table — the owner asked for both screens to
@@ -288,16 +297,6 @@ export function BankStatementScreen({
                     <SerialCell n={serial(current, index)} />
                     <td>
                       <Dated>{formatDate(row.txnDate)}</Dated>
-                    </td>
-                    <td className="cell-prose">
-                      <span
-                        className={cn(
-                          "font-extrabold",
-                          row.voidedAt && "line-through",
-                        )}
-                      >
-                        {row.description}
-                      </span>
                     </td>
                     <td className="text-right">
                       {row.direction === "out" ? (
@@ -434,6 +433,12 @@ export function BankStatementScreen({
         Voided entries are shown struck through and left out of every total — a
         statement that hides a correction is the one an auditor is looking for.
       </p>
+
+      <TransactionDetails
+        row={showing}
+        onClose={() => setShowing(null)}
+        onOpenDocuments={(row) => setDocumentsFor(row)}
+      />
 
       {documentsFor ? (
         <DocumentsDialog

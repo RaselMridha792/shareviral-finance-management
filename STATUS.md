@@ -313,9 +313,22 @@ editing half a pair would leave the two accounts disagreeing, so it is void and 
 - Their month dropdown lists every month back to `RECORDS_START` (May 2026), newest first.
 - **AI tools and subscriptions** (`/subscriptions`) — see *Done: AI tools and subscriptions*.
 
+### A row opens its whole record (since 27 Sep 2026)
+
+No ledger table has a Description column any more — All transactions (so the heading pages and
+every register too), Cash In, Other expenses, Money Transfer, the bank statement. A click on a
+row (or Enter on a focused one) opens the whole entry in a popup: `ui/row-details.tsx` draws it,
+`ledger/transaction-details.tsx` fills it for a ledger entry — description, type, category,
+party, transfer, void; amount, dollars, rate, charge, tax withheld, balance after; date,
+account, method, Entry No., origin; invoice and reference with their paper; an incoming wire's
+sender; notes — and Money Transfer has its own. A click on a link, row button, tick box or input
+inside the row keeps its own job. Rows carry `data-row-id` (a transfer's `outId`), which is how
+the harnesses find them. Tables with a page of their own (Team, AI tools, Payroll, Settings'
+tables) do not open a popup. Proved by `.rowdetailqa.mjs`.
+
 ### All transactions
 
-Every ledger row: SL, Date, Description, Amount (taka, dollars small under it), USD rate, Account,
+Every ledger row: SL, Date, Amount (taka, dollars small under it), USD rate, Account,
 Invoice and Reference — each a link or an eye over the attached paper, N/A with none — and the
 row actions. The whole row is tinted, green for money in and red for out, and a link inside it
 takes the row's colour and is told apart by its underline; the owner asked for the tint and it

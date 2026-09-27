@@ -13,6 +13,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { TransactionDetails } from "@/components/ledger/transaction-details";
+import { rowOpener } from "@/components/ui/row-details";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { TransactionForm } from "@/components/ledger/transaction-form";
 import { VoidDialog } from "@/components/ledger/void-dialog";
@@ -163,6 +165,8 @@ export function OtherExpensesScreen({
     row: TransactionDto;
     kinds: readonly string[];
   } | null>(null);
+  /** The expense whose whole record is open — a click on its row. */
+  const [showing, setShowing] = useState<TransactionDto | null>(null);
 
   /**
    * A new month is a new and usually shorter list, and page 4 of it may not
@@ -379,7 +383,7 @@ export function OtherExpensesScreen({
                   setBulkAsking(true);
                 }}
               />
-              <table className="table-data min-w-[1408px] text-sm">
+              <table className="table-data min-w-[1184px] text-sm">
                 <thead>
                   <tr className="text-left">
                     {/* Row order, like the sheet's own SL — not a stored
@@ -395,7 +399,6 @@ export function OtherExpensesScreen({
                     ) : null}
                     <SerialHead />
                     <Th width="w-24">Date</Th>
-                    <Th>Description</Th>
                     <Th width="w-40">Category</Th>
                     <Th width="w-32" align="right">
                       Amount (BDT)
@@ -437,6 +440,7 @@ export function OtherExpensesScreen({
                       <tr
                         key={row.id}
                         className={cn("row-finance", voided && "opacity-55")}
+                        {...rowOpener(() => setShowing(row), row.id)}
                       >
                         {/* Counted across the pages rather than within
                             one: `index + 1` restarts at 1 on page two, and two
@@ -453,45 +457,6 @@ export function OtherExpensesScreen({
                         <td>
                           <Dated>{formatDate(row.txnDate)}</Dated>
                         </td>
-                        <td className="cell-prose">
-                          <span
-                            className={cn(
-                              "font-extrabold",
-                              voided && "line-through",
-                            )}
-                          >
-                            {row.description}
-                          </span>
-                          <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            {/* Who it was with. The account, the payment
-                                method and the dollars have columns of their
-                                own now, so this is all that is left under a
-                                description — any of those three here would
-                                print the same fact on the row twice. */}
-                            {row.vendorName ?? row.counterparty ?? null}
-                            {/* Own money moved between own accounts. It lands
-                                as a money-out row and is counted in the total
-                                above, so a row that is not really an expense
-                                has to say so. */}
-                            {row.transferGroupId ? (
-                              <Badge>transfer</Badge>
-                            ) : null}
-                            {Number(row.withheldTaxAmount) > 0 ? (
-                              <Badge tone="warning">
-                                tax withheld{" "}
-                                <span className="num">
-                                  {row.withheldTaxAmount}
-                                </span>
-                              </Badge>
-                            ) : null}
-                            {voided ? (
-                              <Badge tone="negative">
-                                voided
-                                {row.voidReason ? `: ${row.voidReason}` : ""}
-                              </Badge>
-                            ) : null}
-                          </span>
-                        </td>
                         <td>
                           {row.categoryName ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -503,6 +468,12 @@ export function OtherExpensesScreen({
                               />
                               {row.categoryName}
                             </span>
+                          ) : row.transferGroupId ? (
+                            /* Own money moved between own accounts: counted in
+                               the total above, and not really an expense, so
+                               the row says so — here, now the description
+                               that used to carry the mark is in the popup. */
+                            <Badge>transfer</Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               —
@@ -642,6 +613,21 @@ export function OtherExpensesScreen({
         noun="entry"
         nounPlural="entries"
         onPage={setPage}
+      />
+
+      <TransactionDetails
+        row={showing}
+        onClose={() => setShowing(null)}
+        onEdit={canWrite ? setEditing : undefined}
+        onOpenDocuments={(row, which) =>
+          setDocumentsFor({
+            row,
+            kinds:
+              which === "invoice"
+                ? ["invoice"]
+                : ["bank_statement", "receipt", "other"],
+          })
+        }
       />
 
       {documentsFor ? (

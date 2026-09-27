@@ -29,7 +29,9 @@ import {
 import type { TransactionDto } from "@/lib/ledger";
 import { serial } from "@/lib/pagination";
 import { formatDate, cn } from "@/lib/utils";
+import { rowOpener } from "@/components/ui/row-details";
 import { DocumentsDialog } from "./documents-dialog";
+import { TransactionDetails } from "./transaction-details";
 
 /**
  * The ledger table. Used by five screens — the same rows, the same rules:
@@ -129,6 +131,10 @@ export function TransactionTable({
    * bank's record of the payment are different papers and the two columns ask
    * for different ones.
    */
+  // The row whose whole record is open in the popup — a click on the row.
+  const [showing, setShowing] = useState<
+    (TransactionDto & { runningBalance?: string }) | null
+  >(null);
   const [documentsFor, setDocumentsFor] = useState<{
     row: TransactionDto;
     kinds: readonly string[];
@@ -164,7 +170,7 @@ export function TransactionTable({
     columns it never renders.
   */
   const minWidth =
-    1184 +
+    960 +
     (showAccount ? 128 : 0) +
     (showType ? 96 : 0) +
     (showPaymentMethod ? 128 : 0) +
@@ -182,13 +188,13 @@ export function TransactionTable({
               <SerialHead />
               <Th width="w-24">Date</Th>
               {/*
-                What happened comes before what it was filed under. A category
-                is somebody's later decision about the row; the description is
-                the row. Reading down a column of categories tells you less
-                than reading down the descriptions, so the descriptions take
-                the position the eye lands on after the date.
+                No Description column, on the owner's word: *"table gulate
+                descriptions name je field ta ache oita onek boro hoye jacche so
+                ami cai prottekta table theke description ta soriye niba"*. It
+                was the one column that made every row two and three lines
+                tall. A click on the row opens the whole entry — the
+                description first — in a popup (transaction-details.tsx).
               */}
-              <Th>Description</Th>
               {/*
                 No Category column, on the owner's word: "ekhane theke category
                 row ta remove korte hobe all transaction a etar dorkar nai".
@@ -277,6 +283,7 @@ export function TransactionTable({
               return (
                 <tr
                   key={row.id}
+                  {...rowOpener(() => setShowing(row), row.id)}
                   /*
                     The whole row carries the direction — its TEXT as well as
                     its background.
@@ -335,57 +342,6 @@ export function TransactionTable({
                   <td>
                     <Dated>{formatDate(row.txnDate)}</Dated>
                   </td>
-                  <td className="cell-prose">
-                    <span
-                      className={cn("font-extrabold", voided && "line-through")}
-                    >
-                      {row.description}
-                    </span>
-                    {/*
-                      Only what a reader cannot get from a column.
-
-                      The owner: "description er nicer choto text ta lagbena".
-                      What went: the payment method (its own column when the
-                      screen asks for one) and the "transfer" chip (the row's
-                      colour and its Type cell both say it). What stays: the
-                      party, which has no column of its own, the tax-withheld
-                      mark, and the voided reason — each a fact that appears
-                      nowhere else on the row.
-                    */}
-                    <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground empty:hidden">
-                      {/*
-                        Party used to be a column. It moved here when the
-                        sketches asked for SL, Type, USD and Rate — thirteen
-                        columns is a table nobody reads, and "who it was with"
-                        belongs beside what it was for. Nothing is lost.
-                      */}
-                      {row.vendorName ?? row.counterparty ?? null}
-
-                      {Number(row.withheldTaxAmount) > 0 ? (
-                        <Badge tone="warning">
-                          tax withheld{" "}
-                          <span className="num">{row.withheldTaxAmount}</span>
-                        </Badge>
-                      ) : null}
-                      {/*
-                        No "USD 39.00 @ 122.043217" badge here any more.
-
-                        It printed the same two figures the Amount (USD) and
-                        USD rate columns print, on the same row, three cells to
-                        the right — and it printed them in a green chip, which
-                        made the loudest thing in the description a repeat. The
-                        one fact it carried that the columns do not is whether
-                        the dollars were really sent or only converted, and the
-                        USD column already says that: a converted figure is
-                        marked "~", a recorded one is not.
-                      */}
-                      {voided ? (
-                        <Badge tone="negative">
-                          voided{row.voidReason ? `: ${row.voidReason}` : ""}
-                        </Badge>
-                      ) : null}
-                    </span>
-                  </td>
 
                   {/*
                     Three cells where there was one, and the third is what
@@ -438,7 +394,7 @@ export function TransactionTable({
                   </td>
 
                   <td className="num text-right text-xs text-muted-foreground">
-                    {rate ?? "N/A"}
+                    {rate ? Number(rate).toFixed(2) : "N/A"}
                   </td>
                   {showAccount ? (
                     <td className="text-muted-foreground">
@@ -575,6 +531,23 @@ export function TransactionTable({
           </tbody>
         </table>
       </TableScroll>
+
+      <TransactionDetails
+        row={showing}
+        onClose={() => setShowing(null)}
+        onEdit={canWrite && onEdit ? onEdit : undefined}
+        onOpenDocuments={(row, which) =>
+          setDocumentsFor(
+            which === "invoice"
+              ? { row, kinds: ["invoice"], label: "invoice" }
+              : {
+                  row,
+                  kinds: ["bank_statement", "receipt", "other"],
+                  label: "payment",
+                },
+          )
+        }
+      />
 
       {documentsFor ? (
         <DocumentsDialog

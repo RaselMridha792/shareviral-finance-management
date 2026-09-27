@@ -461,6 +461,17 @@
     var(--sv-shadow);
 }
 
+/* A table row that opens its whole record in a popup (row-details.tsx): the
+   hand says so, and a keyboard's focus is a violet edge inside the row. */
+.table-data tr[data-row-open] {
+  cursor: pointer;
+}
+
+.table-data tr[data-row-open]:focus-visible {
+  outline: 2px solid var(--sv-violet);
+  outline-offset: -2px;
+}
+
 /* A white pill edged in the line — a sub-category's name, a DNS record. */
 .sv-chip {
   border: 1px solid var(--sv-line);
