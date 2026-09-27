@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 82 | **Every form opens in a popup, not a side drawer** | **done** — and a form-inside-a-form that saved transactions nobody asked for |
 | 81 | **The new design: the Dashboard** | **done** |
 | 80 | **The new design, the shell: palette, font, light default, rail, top bar, tables** | **done** — every screen; each screen's own layout is its own session |
 | 79 | **The new design, page one: sign-in and the preloader** | **done** — the rest of the app follows a page at a time |
@@ -59,6 +60,57 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 82. Every form opens in a popup — 27 Sep 2026
+
+> *"prottekta add record a akhon drawer ber hoy ami cai eta sidebar drawer na
+> hoye popup window hobe sundor. sobgula drawer ke popup window diye replace
+> korba"* — and, shown the 26 forms in 20 files first, **"Yes, all 26"**.
+
+**One file.** `components/ui/drawer.tsx` keeps its name and its props, so none
+of the 26 callers changed; each now opens centred — the September design's
+white card, 14px corners, a dimmed and slightly blurred page behind, a short
+rise in. The title stays fixed and the form scrolls beneath it. Only the two
+callers that pass `footer` (subscription form, payslip breakdown) have their
+buttons fixed at the bottom; the rest still scroll to their Save at the end of
+the form, as they did in the panel. Moving those buttons into `footer` is a
+per-form change, not done here. Width 560px; a phone gets the width less a
+12px gutter. The mobile navigation drawer and the assistant's history panel
+are menus, not forms, and stay as they were.
+
+**It renders through a portal, at the end of `<body>`,** which retires three
+old faults: a form opened from a table row inherited the cell
+(`white-space: nowrap` — the #28 trap — alignment, a coloured row's ink); the
+category popup inside the transaction form was a `<form>` inside a `<form>`
+(React logged it on every open); and a popup inside a popup could be caught by
+its parent's box.
+
+**The real bug, found by driving it.** React bubbles events along the component
+tree, portal or not — so **submitting "Add a category" from inside the
+transaction form ALSO submitted the transaction form.** Measured, with the fix
+taken out for one run and every write refused at the network: the category
+submit sent `POST /api/categories` **and** `POST /api/transactions`. A
+half-typed entry went to the server; a complete one would have been saved while
+somebody only meant to add a heading. This predates the popup — the old inline
+drawer had the same tree. **Submits now stop at the popup's edge.** Nothing
+relied on one escaping: no file renders a Drawer inside its own `<form>`, and
+the six drawers without a form save from their own state. **Escape closes only
+the top popup** (it used to close both).
+
+**Proved by `.popupqa.mjs`**, 47 checks on seven screens and a phone: each
+popup opens with the right title, centred to the pixel, ≤ 560px and inside the
+window, its submit reachable, the page behind locked; Escape, the X and the
+backdrop each close it and hand the scroll back; the nested category popup is
+centred on the window, submits alone, and Escape takes only it; Settings'
+two; dark surface; no console errors. Four CI steps and a production build
+green.
+
+**Open.** Nine of the 26 were opened by the harness. The rest — Team's five,
+the payroll sheet's four, void, record a payment, the challan, the users
+panel's other two, card details, the heading chooser, the transfer form's
+second variant —
+are the same component and were not opened one by one. Team's cannot be
+locally until the 2026-09-22 migration reaches Neon (#80).
 
 ## 81. The new design: the Dashboard — 27 Sep 2026
 

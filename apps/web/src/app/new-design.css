@@ -167,6 +167,48 @@
   color: var(--sv-violet-ink);
 }
 
+/* The popup every form opens in (components/ui/drawer.tsx): a dimmed,
+   slightly blurred page behind, the card rising 14px as it arrives. The rise
+   has no forwards fill, so the card ends with no transform — a transformed
+   ancestor would trap a second popup opened from inside this one. */
+.sv-popup-backdrop {
+  background: rgb(6 8 0 / 0.42);
+  backdrop-filter: blur(3px);
+  animation: sv-popup-fade 0.22s ease both;
+}
+
+:root[data-theme="dark"] .sv-popup-backdrop {
+  background: rgb(0 0 0 / 0.62);
+}
+
+.sv-popup-panel {
+  border: 1px solid var(--sv-line);
+  box-shadow:
+    0 2px 4px rgb(6 8 0 / 0.05),
+    0 24px 60px rgb(6 8 0 / 0.2);
+  animation: sv-popup-in 0.34s var(--sv-ease) backwards;
+}
+
+@keyframes sv-popup-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sv-popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-popup-backdrop,
+  .sv-popup-panel {
+    animation: none;
+  }
+}
+
 /* --------------------------------------------------------------------------
    The dashboard
    -------------------------------------------------------------------------- */
