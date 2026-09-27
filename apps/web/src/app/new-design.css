@@ -1,80 +1,23 @@
 /* --------------------------------------------------------------------------
-   The new design — the September 2026 handoff.
+   The September 2026 design — the pieces that have to be plain CSS.
    --------------------------------------------------------------------------
    The handoff is `new version of the design.zip` at the repository root;
-   `source/*.dc.html` inside it are the readable files, and they are what these
-   values were copied from. The app is moving to it a page at a time. The
-   sign-in page and the preloader went first.
+   `source/*.dc.html` inside it are the readable files. Its tokens — `--sv-*`
+   — live in globals.css, with their dark values.
 
-   ITS TOKENS LIVE HERE, UNDER AN `--sv-` PREFIX, FOR THE LENGTH OF THE MOVE.
-   Two of the handoff's own names — `--surface` and `--accent` — already exist
-   in globals.css and mean something else there: this app's accent is a deep
-   lime TEXT colour, the new design's is a lime FILL. Written into :root under
-   their own names they would repaint every screen that has not moved yet.
-   Prefixed they collide with nothing, and the session that moves the shell
-   decides how the old names map onto these.
-
-   Light only, because that is how the handoff draws these two screens. Its
-   dark values are under `[data-fin-theme="dark"]` in Share Viral Finance.dc.html
-   and belong to the shell session, which is when the rest of the app can
-   follow them too.
+   Here: the shell (the rail and its rows), the sign-in page and the
+   preloader. The last two carry `.sv-light`, which pins the light table on
+   them whatever the theme: they are drawn light and the handoff has no dark
+   drawing of either.
 
    WHY SO MUCH OF THIS IS CSS AND NOT UTILITIES. globals.css sets
    `* { border-color }` and `:focus-visible { outline }` unlayered, and an
    unlayered rule beats anything in Tailwind's utilities layer whatever its
-   specificity. So a border colour or a focus ring written as a utility loses
-   silently. Written here, also unlayered, a class outranks `*` and `.sv
-   :focus-visible` outranks `:focus-visible` — by specificity, which is a fight
-   these rules can actually win.
+   specificity — measured: `border border-primary` computes globals.css's own
+   border colour. So a border colour or a focus ring written as a utility loses
+   silently. Written here, also unlayered, a class outranks `*` by specificity,
+   which is a fight these rules can actually win.
    -------------------------------------------------------------------------- */
-
-:root {
-  /* The handoff's token table, whole. */
-  --sv-bg: #f1f3ec;
-  --sv-surface: #ffffff;
-  --sv-subtle: #f4f6f0;
-  --sv-hover: #f8fcea;
-  --sv-ink: #060800;
-  --sv-muted: #6e7367;
-  --sv-line: #e7ebe0;
-  --sv-line-soft: #eef1e8;
-  --sv-track: #edefe6;
-  --sv-accent: #bfff00;
-  --sv-accent-hover: #a6e000;
-  --sv-on-accent: #060800;
-  --sv-lime-tint: #f6faea;
-  --sv-lime-line: #e3ebc8;
-  --sv-violet: #8558ec;
-  --sv-violet-mid: #a47cf1;
-  --sv-violet-soft: #cdb8fb;
-  --sv-violet-tint: #f1ecfe;
-  --sv-violet-tint-line: #dfd2fb;
-  --sv-violet-ink: #4b2a9e;
-  --sv-pos: #1e7a3c;
-  --sv-pos-tint: #e6f5ea;
-  --sv-neg: #b3261e;
-  --sv-neg-tint: #fce9e7;
-  --sv-warn: #8a5a00;
-  --sv-warn-tint: #fff4dc;
-  --sv-shadow:
-    0 1px 1px rgb(6 8 0 / 0.03), 0 4px 10px rgb(6 8 0 / 0.04),
-    0 18px 36px rgb(6 8 0 / 0.055);
-  --sv-shadow-hover:
-    0 2px 2px rgb(6 8 0 / 0.03), 0 10px 20px rgb(6 8 0 / 0.06),
-    0 26px 48px rgb(6 8 0 / 0.08);
-
-  /* Values the sign-in page and the preloader use that the table does not
-     name — the lime grid, its rings, and two shades of body text. */
-  --sv-grid: #e6efcb;
-  --sv-ring: #dce8b4;
-  --sv-lime-deep: #9bd400;
-  --sv-body: #4b5142;
-  --sv-ink-soft: #2a2f24;
-  --sv-placeholder: #9aa091;
-
-  --sv-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --sv-font: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
-}
 
 /* The root of anything drawn in the new design. */
 .sv {
@@ -104,6 +47,68 @@
     linear-gradient(var(--sv-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--sv-grid) 1px, transparent 1px);
   background-size: 44px 44px;
+}
+
+/* --------------------------------------------------------------------------
+   The rail
+   -------------------------------------------------------------------------- */
+
+/* Slides to nothing and back, at the handoff's own pace and curve. */
+.sv-rail {
+  box-shadow:
+    1px 0 1px rgb(6 8 0 / 0.03),
+    6px 0 30px rgb(6 8 0 / 0.05);
+  transition: width 0.45s var(--sv-ease);
+}
+
+/* Hidden, it keeps neither its hairline nor its shadow: at width 0 the 1px
+   border would otherwise stay behind as a line down the left of every page. */
+.sv-rail[inert] {
+  border-right-width: 0;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-rail {
+    transition: none;
+  }
+}
+
+/* A row carries a 5px left edge whether or not it is the current page, so the
+   text does not jump when it becomes one; only the colour changes. */
+.sv-nav-row {
+  border-left: 5px solid transparent;
+  color: var(--sv-ink);
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease;
+}
+
+.sv-nav-row:hover,
+.sv-nav-row[data-active] {
+  background-color: var(--sv-violet-tint);
+  color: var(--sv-violet-ink);
+}
+
+.sv-nav-row[data-active] {
+  border-left-color: var(--sv-violet);
+}
+
+.sv-nav-tile {
+  background-color: var(--sv-subtle);
+  color: var(--sv-violet-ink);
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease;
+}
+
+.sv-nav-row[data-active] .sv-nav-tile {
+  background-color: var(--sv-violet);
+  color: #ffffff;
+}
+
+.sv-user-card {
+  border: 1px solid var(--sv-violet-tint-line);
 }
 
 /* --------------------------------------------------------------------------

@@ -1,10 +1,14 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { ListIcon } from "@phosphor-icons/react/dist/ssr/List";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 import { trailFor, useLeafCrumb } from "@/components/layout/breadcrumb";
+import { CHROME_BUTTON } from "@/components/layout/chrome";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { MobileSidebar } from "@/components/layout/sidebar";
 import {
@@ -12,30 +16,22 @@ import {
   useSidebarCollapsed,
 } from "@/components/layout/sidebar-state";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Icon } from "@/components/ui/icon";
-import { useState } from "react";
-
 import { cn } from "@/lib/utils";
 
 /**
- * The bar across the top: where you are, what a dollar is worth, and the two
- * switches.
+ * The bar across the top: where you are, and the three switches — as the
+ * September 2026 handoff draws it.
  *
- * What is NOT here any more: the avatar, the role and the sign-out. They were
- * the least-used controls in the most prominent place on every screen, and they
- * have gone to the foot of the rail. There was also a permanently disabled
- * search box, searching nothing, which went earlier for the same reason — a
- * control that cannot do the thing it depicts teaches people not to trust the
- * chrome.
- *
- * The rate is stated rather than left to be looked up. Every dollar figure in
- * this app is a translation of a taka one, and this is the number they are all
- * translated at — so it belongs where it is visible from every screen instead
- * of only on the one that sets it.
+ * What is NOT here: the avatar, the role and the sign-out. They were the
+ * least-used controls in the most prominent place on every screen, and they
+ * live at the foot of the rail. There was also a permanently disabled search
+ * box, searching nothing, which went for the same reason — a control that
+ * cannot do the thing it depicts teaches people not to trust the chrome. And
+ * the "FX locked ৳x / $1" chip is off on the owner's instruction: with it and
+ * the dashboard's rate caption both gone, the rate the dollar figures are
+ * translated at is stated in Settings → Exchange rate and nowhere a reader
+ * passes by accident.
  */
-/** The bordered 36px square both chrome buttons are drawn as. */
-const TOGGLE =
-  "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border text-muted-foreground transition hover:bg-surface-muted hover:text-foreground";
 
 export function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -52,35 +48,28 @@ export function Topbar() {
 
   return (
     <>
-      <header
-        className="sticky top-0 z-40 flex min-h-[66px] flex-wrap items-center gap-3 border-b border-border bg-surface"
-        style={{ padding: "12px clamp(16px, 3vw, 32px)" }}
-      >
-        {/* One button, two jobs, matching the design: on a wide screen it
-            narrows and widens the rail; on a narrow one there is no rail to
-            narrow, so it opens the drawer. */}
+      <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[1.5px] bg-(--sv-surface) px-[clamp(16px,2vw,24px)] py-3">
+        {/* One job per width: on a wide screen it hides and shows the rail; on
+            a narrow one there is no rail, so it opens the drawer. */}
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
           aria-label="Open navigation"
-          className={cn(TOGGLE, "lg:hidden")}
+          className={cn(CHROME_BUTTON, "lg:hidden")}
         >
-          <Icon name="menu" size={21} />
+          <ListIcon weight="duotone" size={21} />
         </button>
         <button
           type="button"
           onClick={toggleSidebar}
-          aria-label={collapsed ? "Widen the sidebar" : "Narrow the sidebar"}
+          aria-label={collapsed ? "Show the menu" : "Hide the menu"}
           aria-pressed={collapsed}
-          title="Show or hide the sidebar"
-          className={cn(TOGGLE, "hidden lg:inline-flex")}
+          title={collapsed ? "Show the menu" : "Hide the menu"}
+          className={cn(CHROME_BUTTON, "hidden lg:inline-flex")}
         >
-          <Icon name={collapsed ? "menu" : "menu_open"} size={21} />
+          <SidebarSimpleIcon weight="duotone" size={21} />
         </button>
 
-        {/* Finance / <screen>. The first half never changes and is not a link:
-            it says which product you are in, which matters when this sits in a
-            browser beside four other tabs. */}
         {/*
           Finance, then every level down to here.
 
@@ -90,53 +79,51 @@ export function Topbar() {
           climbing one level is the whole reason this row exists. The last
           crumb is where you already are, so it stays plain.
         */}
-        <nav aria-label="Breadcrumb" className="min-w-0">
-          <p className="truncate text-sm">
-            <span className="text-muted-foreground">Finance</span>
+        <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
+          <ol className="flex flex-wrap items-center gap-2 text-[14px]">
+            <li className="font-medium text-(--sv-muted)">Finance</li>
             {crumbs.map((crumb, i) => {
               const last = i === crumbs.length - 1;
               return (
-                <span key={`${crumb.label}-${i}`}>
-                  <span className="mx-1.5 text-faint">/</span>
+                <li
+                  key={`${crumb.label}-${i}`}
+                  className="flex min-w-0 items-center gap-2"
+                >
+                  <CaretRightIcon
+                    weight="duotone"
+                    size={13}
+                    aria-hidden="true"
+                    className="flex-none text-(--sv-muted)"
+                  />
                   {crumb.href && !last ? (
                     <Link
                       href={crumb.href}
-                      className="rounded-sm text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      className="truncate font-medium text-(--sv-muted) underline-offset-2 transition-colors hover:text-(--sv-ink) hover:underline"
                     >
                       {crumb.label}
                     </Link>
                   ) : (
                     <span
-                      className={
+                      aria-current={last ? "page" : undefined}
+                      className={cn(
+                        "truncate",
                         last
-                          ? "font-medium text-foreground"
-                          : "text-muted-foreground"
-                      }
+                          ? "font-extrabold text-(--sv-ink)"
+                          : "font-medium text-(--sv-muted)",
+                      )}
                     >
                       {crumb.label}
                     </span>
                   )}
-                </span>
+                </li>
               );
             })}
-          </p>
+          </ol>
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* The "FX locked ৳x / $1" chip stood here on every screen. Off on
-              the owner's instruction.
-
-              Worth knowing what went with it: the dashboard's rate caption was
-              removed earlier on the understanding that this chip still stated
-              the rate everywhere. With both gone, no screen says what rate the
-              dollar figures were translated at — it is in Settings → Exchange
-              rate, and nowhere a reader passes by accident. */}
-          {/* Before the theme toggle: the bell is the one control up here
-              that can be asking for something, and it should be the last thing
-              a reader passes rather than the first thing after it. */}
-          <NotificationBell />
-
+        <div className="flex flex-none items-center gap-2.5">
           <ThemeToggle />
+          <NotificationBell />
         </div>
       </header>
 

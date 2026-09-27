@@ -1,26 +1,37 @@
 import type { Permission } from "@finance/shared";
+import type { Icon } from "@phosphor-icons/react";
+import { ArrowsDownUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowsDownUp";
+import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { ChartPieSliceIcon } from "@phosphor-icons/react/dist/ssr/ChartPieSlice";
+import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
+import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
+import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
+import { InvoiceIcon } from "@phosphor-icons/react/dist/ssr/Invoice";
+import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
+import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
+import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 export type NavItem = {
   /** Stable identity — the accordion's open/closed state is keyed by this. */
   key: string;
   label: string;
   /**
-   * A Material Symbols Rounded ligature — "account_balance", not a component.
+   * The handoff's Phosphor icon for this destination, drawn duotone in the
+   * rail's 32px tile and, on a rebuilt screen, filled in its header tile.
    *
-   * The design names every icon, so writing the name here means a reviewer can
-   * check this file against the handoff by reading it. See `<Icon>`.
+   * The component rather than its name, so a missing icon is a compile error
+   * instead of an empty square. Written here, a reviewer can still check this
+   * file against the handoff's NAV table by reading it.
    */
-  icon: string;
-  /**
-   * The hue this item's icon is drawn in, as an oklch hue angle.
-   *
-   * One per item and not one per section: the design colours the rail by
-   * destination rather than by group, so a glance finds Payroll by its green
-   * before the word is read. Lightness and chroma are fixed in CSS and swapped
-   * per theme; only the angle differs, which is what keeps fifteen colours
-   * looking like one family.
-   */
-  hue: number;
+  icon: Icon;
   /**
    * Omitted on a parent that only opens its children: that row navigates
    * nowhere, it toggles.
@@ -48,10 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "dashboard",
         href: "/",
         label: "Dashboard",
-        // A dial, not another panel grid: at 16px the round silhouette is the
-        // only one of its kind in the rail, so the first item is unmistakable.
-        icon: "space_dashboard",
-        hue: 250,
+        icon: SquaresFourIcon,
         permission: "dashboard.view",
       },
     ],
@@ -66,23 +74,20 @@ export const NAV_GROUPS: NavGroup[] = [
         // it you press.
         key: "accounts",
         label: "Accounts",
-        icon: "account_balance",
-        hue: 205,
+        icon: BankIcon,
         children: [
           {
             key: "accounts-overview",
             href: "/accounts",
             label: "Accounts overview",
-            icon: "account_balance_wallet",
-            hue: 205,
+            icon: WalletIcon,
             permission: "accounts.read",
           },
           {
             key: "accounts-cash-in",
             href: "/accounts/cash-in",
             label: "Cash In",
-            icon: "savings",
-            hue: 158,
+            icon: HandCoinsIcon,
             permission: "accounts.read",
           },
           {
@@ -91,8 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
             label: "Money Transfer",
             // Horizontal, against All transactions' vertical: money moving
             // *across* between our own accounts, not in or out of the company.
-            icon: "swap_horiz",
-            hue: 190,
+            icon: ArrowsLeftRightIcon,
             permission: "transactions.read",
           },
         ],
@@ -102,8 +106,7 @@ export const NAV_GROUPS: NavGroup[] = [
         // reachable as "Expense overview".
         key: "expenses",
         label: "Expenses",
-        icon: "receipt_long",
-        hue: 27,
+        icon: ReceiptIcon,
         children: [
           {
             /*
@@ -117,16 +120,14 @@ export const NAV_GROUPS: NavGroup[] = [
             key: "expenses-overview",
             href: "/expenses/overview",
             label: "Expense overview",
-            icon: "grid_view",
-            hue: 27,
+            icon: ChartPieSliceIcon,
             permission: "transactions.read",
           },
           {
             key: "expenses-operational",
             href: "/expenses",
             label: "Operational expenses",
-            icon: "receipt_long",
-            hue: 27,
+            icon: InvoiceIcon,
             permission: "transactions.read",
           },
           {
@@ -138,8 +139,7 @@ export const NAV_GROUPS: NavGroup[] = [
             key: "expenses-subscriptions",
             href: "/subscriptions",
             label: "AI tools and subscriptions",
-            icon: "auto_awesome",
-            hue: 295,
+            icon: SparkleIcon,
             permission: "vendors.read",
           },
           /*
@@ -161,8 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "transactions",
         href: "/transactions",
         label: "All transactions",
-        icon: "swap_vert",
-        hue: 225,
+        icon: ArrowsDownUpIcon,
         permission: "transactions.read",
       },
     ],
@@ -174,16 +173,14 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "team",
         href: "/team",
         label: "Team",
-        icon: "groups",
-        hue: 185,
+        icon: UsersThreeIcon,
         permission: "team.read",
       },
       {
         key: "payroll",
         href: "/payroll",
         label: "Payroll",
-        icon: "payments",
-        hue: 138,
+        icon: MoneyIcon,
         permission: "payroll.read",
       },
     ],
@@ -201,8 +198,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "TDS",
         // Withholding is a percentage taken off a bill — the percent badge says
         // that; a banknote said "money", which every other tax item is too.
-        icon: "percent",
-        hue: 340,
+        icon: PercentIcon,
         permission: "tds.read",
       },
     ],
@@ -222,8 +218,7 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "reports",
         href: "/reports",
         label: "Reports",
-        icon: "bar_chart",
-        hue: 265,
+        icon: ChartBarIcon,
         permission: "reports.view",
       },
       {
@@ -238,16 +233,14 @@ export const NAV_GROUPS: NavGroup[] = [
         key: "statement",
         href: "/statement",
         label: "Bank statement",
-        icon: "description",
-        hue: 45,
+        icon: FileTextIcon,
         permission: "transactions.read",
       },
       {
         key: "assistant",
         href: "/assistant",
         label: "AI Assistant",
-        icon: "smart_toy",
-        hue: 310,
+        icon: RobotIcon,
         permission: "ai.use",
       },
     ],
@@ -262,16 +255,14 @@ export const SECONDARY_NAV: NavItem[] = [
     // still answers, with a permanent redirect, for anything that bookmarked it.
     href: "/data",
     label: "Import and Export",
-    icon: "upload_file",
-    hue: 100,
+    icon: FileArrowUpIcon,
     permission: "imports.run",
   },
   {
     key: "settings",
     href: "/settings",
     label: "Settings",
-    icon: "settings",
-    hue: 240,
+    icon: GearSixIcon,
     permission: "settings.read",
   },
 ];

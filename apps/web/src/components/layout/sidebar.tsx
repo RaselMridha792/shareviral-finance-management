@@ -1,47 +1,44 @@
 "use client";
 
 import { hasPermission, type Role } from "@finance/shared";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { TrendUpIcon } from "@phosphor-icons/react/dist/ssr/TrendUp";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
-import { BrandMark } from "@/components/layout/brand-mark";
 import {
   NAV_GROUPS,
   SECONDARY_NAV,
   type NavItem,
 } from "@/components/layout/nav-items";
 import { SidebarFooter } from "@/components/layout/sidebar-footer";
-import {
-  toggleSidebar,
-  useSidebarCollapsed,
-} from "@/components/layout/sidebar-state";
-import { Icon } from "@/components/ui/icon";
+import { useSidebarCollapsed } from "@/components/layout/sidebar-state";
 import { cn } from "@/lib/utils";
 
 /**
- * The rail is coloured by destination, not by section.
+ * The rail, as the September 2026 handoff draws it.
  *
- * One hue per item, carried on the row as a custom property and turned into a
- * colour by CSS — see `.nav-icon` in globals.css. It has to work that way
- * rather than as a class per item: fifteen hues written out as fifteen
- * Tailwind classes is fifteen chances for one of them to drift, and the hue is
- * data the design supplies rather than a decision made here.
- *
- * The active row drops the hue and takes the brand lime, filled.
+ * A white panel with a hairline and a soft shadow on its right. Every row
+ * carries its icon in a 32px tile; the row you are on turns violet — tint
+ * behind it, white icon on a violet tile, a 5px violet bar at its left edge.
  *
  * Accounts and Expenses are accordions: the row opens the screens under it
  * rather than going anywhere itself, and the group holding the page you are on
- * starts open. Sub-items indent to 24px. This is what the owner asked for over
- * the always-visible list the prototype draws — with eighteen destinations, a
- * rail you can fold down to the part you are working in is the difference
- * between a menu and a wall.
+ * starts open. That was the owner's ask before this design, and the handoff
+ * draws the same thing — carets, children indented to 22px.
+ *
+ * NARROWING IS HIDING NOW. The August design folded the rail to an 84px strip
+ * of icons; the handoff's toggle takes it to nothing, and the content gets the
+ * width. So there is one rail, 270px or gone — which also retired the icons-only
+ * branch of every row, and the "widen first, then open" dance a parent needed
+ * in the strip.
  */
 
-/** Width in the two states. The narrow one is icons only, centred. */
-const FULL = 272;
-const RAIL = 86;
+/** The handoff's width. */
+const WIDTH = 270;
 
 /* -------------------------------------------------------------------------- */
 /*  Which row is the current page                                              */
@@ -110,77 +107,63 @@ function visibleFor(role: Role | undefined, item: NavItem): NavItem | null {
 /*  Rows                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** 3px, inset, lime. The design's marker for where you are. */
-function ActiveBar() {
+/**
+ * The row's shape, shared by links and the accordion parents.
+ *
+ * `sv-nav-row` (new-design.css) carries the 5px left edge and its violet when
+ * active: a border colour written as a utility loses to globals.css's
+ * unlayered `* { border-color }`, so it has to be plain CSS.
+ */
+function rowClass({ active, sub }: { active: boolean; sub?: boolean }) {
+  return cn(
+    "sv-nav-row flex w-full items-center gap-3 rounded-[11px] text-[15.5px] whitespace-nowrap",
+    sub ? "py-[5px] pr-2.5 pl-[22px]" : "px-2.5 py-1.5",
+    active ? "font-extrabold" : "font-bold",
+  );
+}
+
+function Tile({ icon: Glyph }: { icon: NavItem["icon"] }) {
   return (
-    <span
-      aria-hidden="true"
-      className="absolute inset-y-0 left-0 w-[3px] rounded-r-sm bg-sidebar-item-active"
-    />
+    <span className="sv-nav-tile grid size-8 flex-none place-items-center rounded-lg">
+      <Glyph weight="duotone" size={18} />
+    </span>
   );
 }
 
 function NavRow({
   item,
   active,
-  indent = false,
-  collapsed,
+  sub = false,
   onNavigate,
 }: {
   item: NavItem;
   active: boolean;
-  /** A sub-item: 24px in from the icon column, per the design. */
-  indent?: boolean;
-  collapsed?: boolean;
+  /** A child of Accounts or Expenses, indented. */
+  sub?: boolean;
   onNavigate?: () => void;
 }) {
   const { href, label, comingSoon } = item;
 
-  const className = cn(
-    "group relative flex w-full items-center rounded-[9px] py-[11px] text-[15px] transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
-    collapsed ? "justify-center px-3" : "gap-3 pr-3",
-    active
-      ? "bg-sidebar-item-active-bg font-semibold text-sidebar-item-active"
-      : "font-normal text-sidebar-item hover:bg-sidebar-item-active-bg/40 hover:text-foreground",
-    comingSoon &&
-      "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground",
-  );
-
-  const style = collapsed ? undefined : { paddingLeft: indent ? 24 : 12 };
-
   const body = (
     <>
-      {active ? <ActiveBar /> : null}
-      <Icon
-        name={item.icon}
-        size={21}
-        fill={active}
-        className="nav-icon shrink-0 transition-colors motion-reduce:transition-none"
-        style={{ "--nav-hue": item.hue } as React.CSSProperties}
-      />
-      {/* Narrow: the name is gone from the screen, so it has to still be
-          available to a screen reader and on hover — an unlabelled row of
-          icons is a guessing game. */}
-      {collapsed ? (
-        <span className="sr-only">{label}</span>
-      ) : (
-        <span className="truncate">{label}</span>
-      )}
-      {comingSoon && !collapsed ? (
-        <span className="ml-auto text-[10px] tracking-wide text-muted-foreground uppercase">
+      <Tile icon={item.icon} />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {comingSoon ? (
+        <span className="text-[10px] tracking-wide text-(--sv-muted) uppercase">
           soon
         </span>
       ) : null}
     </>
   );
 
-  // No destination: a parent whose children are the pages, or a screen that
-  // does not exist yet. Either way it is a label, not a link.
+  // No destination: a screen that does not exist yet. A label, not a link.
   if (comingSoon || !href) {
     return (
       <span
-        className={className}
-        style={style}
+        className={cn(
+          rowClass({ active: false, sub }),
+          "cursor-not-allowed opacity-45",
+        )}
         aria-disabled="true"
         title={label}
       >
@@ -194,12 +177,8 @@ function NavRow({
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      // Read by the stylesheet, which switches the icon off its hue and onto
-      // the brand. A CSS-only swap, so nothing has to be threaded down.
-      data-nav-active={active ? "true" : undefined}
-      title={label}
-      className={className}
-      style={style}
+      data-active={active || undefined}
+      className={rowClass({ active, sub })}
     >
       {body}
     </Link>
@@ -210,7 +189,7 @@ function NavRow({
  * A parent that navigates nowhere: the row is a button that opens and closes
  * the list under it.
  *
- * Only the chevron moves. Animating the panel's height would make every
+ * Only the caret changes. Animating the panel's height would make every
  * navigation feel slower than it is, and this list is opened and closed more
  * often than anything else on the screen.
  */
@@ -221,7 +200,6 @@ function NavGroupRow({
   onToggle,
   holdsCurrentPage,
   activeHref,
-  collapsed,
   onNavigate,
 }: {
   item: NavItem;
@@ -230,76 +208,46 @@ function NavGroupRow({
   onToggle: () => void;
   holdsCurrentPage: boolean;
   activeHref: string | null;
-  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   // Closed but holding the page you are on: the parent wears the marker, so
   // the rail still answers "where am I" at a glance. Open, the child does.
   const wearsActive = holdsCurrentPage && !open;
+  const Caret = open ? CaretDownIcon : CaretRightIcon;
 
   return (
-    <div className="flex flex-col gap-[3px]">
+    <div className="flex flex-col">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={panelId}
-        title={item.label}
+        data-active={wearsActive || undefined}
         className={cn(
-          "group relative flex w-full cursor-pointer items-center rounded-[9px] py-[11px] pr-3 text-left text-[15px] transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none",
-          collapsed ? "justify-center px-3" : "gap-3 pl-3",
-          wearsActive
-            ? "bg-sidebar-item-active-bg font-semibold text-sidebar-item-active"
-            : holdsCurrentPage
-              ? "font-semibold text-foreground hover:bg-sidebar-item-active-bg/40"
-              : "font-normal text-sidebar-item hover:bg-sidebar-item-active-bg/40 hover:text-foreground",
+          rowClass({ active: wearsActive }),
+          "cursor-pointer text-left",
         )}
       >
-        {wearsActive ? <ActiveBar /> : null}
-        <Icon
-          name={item.icon}
-          size={21}
-          fill={holdsCurrentPage}
-          className="nav-icon shrink-0 transition-colors motion-reduce:transition-none"
-          style={{ "--nav-hue": item.hue } as React.CSSProperties}
+        <Tile icon={item.icon} />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <Caret
+          weight="duotone"
+          size={15}
+          className="flex-none text-(--sv-muted)"
         />
-        {collapsed ? (
-          <span className="sr-only">{item.label}</span>
-        ) : (
-          <>
-            <span className="truncate">{item.label}</span>
-            <Icon
-              name="chevron_right"
-              size={17}
-              className={cn(
-                "ml-auto shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-                open && "rotate-90",
-              )}
-            />
-          </>
-        )}
       </button>
 
-      {/* There is nowhere to put an indented list sixteen pixels wide, so in
-          the narrow rail pressing the parent widens the rail and opens it. A
-          flyout would be a second navigation to build and keep working, for a
-          case that is one click away from the real one. */}
-      {collapsed ? null : (
-        <div
-          id={panelId}
-          className={cn("flex flex-col gap-[3px]", !open && "hidden")}
-        >
-          {(item.children ?? []).map((child) => (
-            <NavRow
-              key={child.key}
-              item={child}
-              active={Boolean(child.href) && child.href === activeHref}
-              indent
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-      )}
+      <div id={panelId} className={cn("flex flex-col", !open && "hidden")}>
+        {(item.children ?? []).map((child) => (
+          <NavRow
+            key={child.key}
+            item={child}
+            active={Boolean(child.href) && child.href === activeHref}
+            sub
+            onNavigate={onNavigate}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -308,13 +256,7 @@ function NavGroupRow({
 /*  The rail                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export function SidebarContent({
-  onNavigate,
-  collapsed = false,
-}: {
-  onNavigate?: () => void;
-  collapsed?: boolean;
-}) {
+export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const user = useSession();
   /**
@@ -350,20 +292,12 @@ export function SidebarContent({
           item={item}
           panelId={`${uid}-${item.key}`}
           open={toggled[item.key] ?? holds}
-          collapsed={collapsed}
-          onToggle={() => {
-            // Narrow: widen first, then open — otherwise the press appears to
-            // do nothing at all.
-            if (collapsed) {
-              toggleSidebar();
-              setToggled((current) => ({ ...current, [item.key]: true }));
-              return;
-            }
+          onToggle={() =>
             setToggled((current) => ({
               ...current,
               [item.key]: !(current[item.key] ?? holds),
-            }));
-          }}
+            }))
+          }
           holdsCurrentPage={holds}
           activeHref={activeHref}
           onNavigate={onNavigate}
@@ -376,7 +310,6 @@ export function SidebarContent({
         key={item.key}
         item={item}
         active={Boolean(item.href) && item.href === activeHref}
-        collapsed={collapsed}
         onNavigate={onNavigate}
       />
     );
@@ -395,54 +328,37 @@ export function SidebarContent({
 
   return (
     /* The nav is what scrolls, not the whole rail. The brand stays at the top
-       and the footer at the bottom; only the list between them moves. Left to
-       the column, a nav taller than the window was squeezed by flexbox instead
-       — and, having no scroll of its own, spilled its last few rows straight
-       over the footer. */
-    <div className="flex h-full flex-col overflow-hidden pt-5 pb-[18px]">
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-3 pb-[22px]",
-          collapsed ? "justify-center px-3" : "px-[18px]",
-        )}
-      >
-        {/* The mark itself, not "SFM" set in a coloured box. The rounded
-            square is part of the artwork, so it needs no container of its
-            own. */}
-        <BrandMark className="size-9 shrink-0" />
-        {collapsed ? null : (
-          <div className="flex min-w-0 flex-col leading-[1.25]">
-            <span className="truncate text-base font-semibold tracking-[-0.01em] text-foreground">
-              ShareViral
-            </span>
-            <span className="text-xs tracking-[0.07em] text-muted-foreground uppercase">
-              Finance
-            </span>
-          </div>
-        )}
+       and the footer at the bottom; only the list between them moves. */
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex flex-none items-center gap-[11px] border-b px-5 py-[18px]">
+        <span className="grid size-10 flex-none place-items-center rounded-[11px] bg-(--sv-accent) text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.3)]">
+          <TrendUpIcon weight="duotone" size={23} />
+        </span>
+        <div className="min-w-0 leading-[1.1]">
+          <p className="text-[17px] font-extrabold tracking-[-0.02em] whitespace-nowrap">
+            ShareViral
+          </p>
+          <p className="text-[10.5px] tracking-[0.16em] whitespace-nowrap text-(--sv-violet-ink) uppercase">
+            Finance
+          </p>
+        </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-[3px] overflow-x-hidden overflow-y-auto px-3">
+      <nav
+        aria-label="Main"
+        className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5 pt-1 pb-3.5"
+      >
         {groups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-[3px]">
-            {/* A heading has nowhere to go at this width. A rule keeps the
-                grouping visible without pretending to be readable text. */}
-            {collapsed ? (
-              <div aria-hidden="true" className="mx-2.5 my-3 h-px bg-border" />
-            ) : (
-              <p className="px-2.5 pt-[18px] pb-2 text-[11px] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
-                {group.title}
-              </p>
-            )}
-
+          <div key={group.title} className="flex flex-col gap-0.5">
+            <p className="px-3 pt-4 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
+              {group.title}
+            </p>
             {group.items.map((item) => renderItem(item))}
           </div>
         ))}
       </nav>
 
-      <div className="shrink-0 pt-6">
-        <SidebarFooter collapsed={collapsed} />
-      </div>
+      <SidebarFooter />
     </div>
   );
 }
@@ -452,14 +368,16 @@ export function Sidebar() {
 
   return (
     <aside
-      // Pure black in dark, light grey in light — the rail is the one surface
-      // that does not follow the card ladder, and the design gives it no
-      // border: the change of ground is the edge.
-      className="hidden shrink-0 bg-sidebar transition-[width] duration-200 lg:block motion-reduce:transition-none"
-      style={{ width: collapsed ? RAIL : FULL }}
+      // Hidden, not merely narrow: `inert` takes the links out of the tab
+      // order too, or a keyboard would walk through a rail nobody can see.
+      inert={collapsed}
+      aria-hidden={collapsed || undefined}
+      className="sv-rail sticky top-0 hidden h-dvh flex-none self-start overflow-hidden border-r bg-(--sv-surface) lg:block"
+      style={{ width: collapsed ? 0 : WIDTH }}
     >
-      <div className="sticky top-0 h-dvh">
-        <SidebarContent collapsed={collapsed} />
+      {/* Its own width, so the contents do not reflow while the rail slides. */}
+      <div className="h-full" style={{ width: WIDTH }}>
+        <SidebarContent />
       </div>
     </aside>
   );
@@ -482,7 +400,10 @@ export function MobileSidebar({
         onClick={onClose}
         className="absolute inset-0 bg-black/55"
       />
-      <div className="absolute inset-y-0 left-0 w-[282px] bg-sidebar">
+      <div
+        className="absolute inset-y-0 left-0 bg-(--sv-surface)"
+        style={{ width: WIDTH }}
+      >
         <SidebarContent onNavigate={onClose} />
       </div>
     </div>

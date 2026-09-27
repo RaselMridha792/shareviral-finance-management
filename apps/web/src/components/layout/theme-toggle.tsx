@@ -1,11 +1,15 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
 const THEME_EVENT = "ledgerly:themechange";
+
+/** The ground each theme paints behind the page, for overscroll. */
+const GROUND: Record<Theme, string> = { light: "#f1f3ec", dark: "#0c0f08" };
 
 /**
  * The <html data-theme> attribute is the source of truth — it's stamped by the
@@ -22,21 +26,24 @@ function getSnapshot(): Theme {
 }
 
 function getServerSnapshot(): Theme {
-  // Dark, matching the bootstrap script. A server render that guessed light
-  // would flash white before hydration corrected it.
-  return "dark";
+  // Light, matching the bootstrap script.
+  return "light";
 }
 
+/**
+ * The handoff's switch: a sun or a moon and the NAME of the theme it would
+ * switch to, so the button says what pressing it does rather than what is
+ * already on screen.
+ */
 export function ThemeToggle() {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const next: Theme = theme === "dark" ? "light" : "dark";
 
   function toggle() {
-    const next: Theme = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
-    // The overscroll ground, so a dark app does not bounce against a white
-    // edge — the same thing the bootstrap script does on first paint.
-    document.documentElement.style.backgroundColor =
-      next === "dark" ? "#141417" : "#f7f7f8";
+    // The overscroll ground, so the page does not bounce against the wrong
+    // colour — the same thing the bootstrap script does on first paint.
+    document.documentElement.style.backgroundColor = GROUND[next];
     try {
       localStorage.setItem("svf-theme-brand", next);
     } catch {
@@ -49,33 +56,34 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-      className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      aria-label={`Switch to ${next} theme`}
+      title="Switch theme"
+      className="inline-flex h-10.5 shrink-0 cursor-pointer items-center gap-2 rounded-lg border bg-(--sv-subtle) px-3.25 text-[12.5px] font-extrabold transition-colors hover:bg-(--sv-violet-tint)"
     >
       {theme === "dark" ? (
-        <Sun className="size-4" />
+        <SunIcon weight="duotone" size={19} className="text-(--sv-violet)" />
       ) : (
-        <Moon className="size-4" />
+        <MoonIcon weight="duotone" size={19} className="text-(--sv-violet)" />
       )}
+      <span className="hidden tracking-[0.08em] uppercase sm:inline">
+        {next}
+      </span>
     </button>
   );
 }
 
 /**
- * Applies the stored theme before first paint so a dark-mode user never sees
- * a light flash. Rendered in <head> as a blocking inline script.
- */
-/**
- * Dark unless somebody has said otherwise.
+ * Applies the stored theme before first paint so nobody sees a flash of the
+ * other one. Rendered in <head> as a blocking inline script.
  *
- * Not the operating system's preference, which is what this used to read. The
- * brand is a lime accent on near-black and it only works one way round: on a
- * white ground the same lime is about 1.4:1 and disappears. Somebody opening
- * the app for the first time should see the design, not a coin toss made by
- * their laptop.
+ * LIGHT unless somebody has said otherwise — the September handoff draws the
+ * app light by default. (The August design was the other way round, lime on
+ * near-black, and anybody who pressed the switch then keeps what they chose:
+ * only an empty preference follows the new default.) Not the operating
+ * system's preference: somebody opening the app for the first time should see
+ * the design, not a coin toss made by their laptop.
  *
  * The document background is painted here too, so the overscroll area matches
- * before React has rendered anything — otherwise a dark app bounces against a
- * white edge.
+ * before React has rendered anything.
  */
-export const themeScript = `(function(){try{var t=localStorage.getItem("svf-theme-brand");if(t!=="light"&&t!=="dark"){t="dark"}var d=document.documentElement;d.dataset.theme=t;d.style.backgroundColor=t==="dark"?"#141417":"#f7f7f8"}catch(e){document.documentElement.dataset.theme="dark"}})();`;
+export const themeScript = `(function(){try{var t=localStorage.getItem("svf-theme-brand");if(t!=="light"&&t!=="dark"){t="light"}var d=document.documentElement;d.dataset.theme=t;d.style.backgroundColor=t==="dark"?"${GROUND.dark}":"${GROUND.light}"}catch(e){document.documentElement.dataset.theme="light"}})();`;

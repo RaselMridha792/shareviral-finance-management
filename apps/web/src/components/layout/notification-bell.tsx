@@ -1,13 +1,12 @@
 "use client";
 
-import { Bell, LoaderCircle } from "lucide-react";
+import { BellIcon } from "@phosphor-icons/react/dist/ssr/Bell";
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  notificationsApi,
-  type NotificationRow,
-} from "@/lib/api-client";
+import { notificationsApi, type NotificationRow } from "@/lib/api-client";
+import { CHROME_BUTTON } from "@/components/layout/chrome";
 import { cn } from "@/lib/utils";
 
 /**
@@ -119,12 +118,12 @@ export function NotificationBell() {
           unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
         }
         aria-expanded={open}
-        className="relative cursor-pointer rounded-md border border-border bg-surface-muted p-1.5 text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className={cn(CHROME_BUTTON, "relative")}
       >
-        <Bell className="size-4" />
+        <BellIcon weight="duotone" size={21} />
         {unread > 0 ? (
           <span
-            className="num absolute -top-1.5 -right-1.5 min-w-[1.15rem] rounded-full bg-negative px-1 text-[10px] leading-[1.15rem] font-semibold text-white"
+            className="absolute -top-[3px] -right-[3px] grid h-[18px] min-w-[18px] place-items-center rounded-full bg-(--sv-violet) px-1 text-[10.5px] font-extrabold text-white tabular-nums"
             // Nine and a bit: the exact number stops mattering long before it
             // stops fitting, and a three-digit badge changes the header's shape.
           >
@@ -233,11 +232,19 @@ function NotificationItem({
     "block w-full border-b border-border px-3 py-2.5 text-left transition last:border-b-0 hover:bg-surface-muted";
 
   return row.href ? (
-    <Link href={row.href} onClick={onOpen} className={cn(className, "cursor-pointer")}>
+    <Link
+      href={row.href}
+      onClick={onOpen}
+      className={cn(className, "cursor-pointer")}
+    >
       {body}
     </Link>
   ) : (
-    <button type="button" onClick={onOpen} className={cn(className, "cursor-pointer")}>
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(className, "cursor-pointer")}
+    >
       {body}
     </button>
   );

@@ -1,79 +1,178 @@
 @import "tailwindcss";
 
 /* --------------------------------------------------------------------------
-   Design tokens — ShareViral Finance v2.
+   Design tokens — the September 2026 handoff.
+   --------------------------------------------------------------------------
+   `new version of the design.zip` at the repository root; the values are
+   copied from `source/Share Viral Finance.dc.html`, light from its :root and
+   dark from its [data-fin-theme="dark"]. Nothing here is invented except
+   where a comment says so.
 
-   Authored in oklch()/hex by the design handoff and kept at those values.
-   Light lives on :root, dark is swapped under [data-theme="dark"].
+   TWO LAYERS OF NAMES, ON PURPOSE.
 
-   Dark is the DEFAULT here, which is the one place this file disagrees with
-   how a theme is usually set up: the bootstrap script picks dark unless
-   somebody has chosen otherwise, rather than asking the operating system. The
-   brand is a lime accent on near-black, and it only works one way round.
+   `--sv-*` is the handoff's own table. New work uses it directly.
+
+   The older semantic names below it — `--background`, `--surface`,
+   `--muted-foreground` and the rest — are what four hundred class names across
+   twenty screens already say. They now POINT at the handoff's values rather
+   than holding their own, so every screen takes the new palette today, and a
+   screen rebuilt in its own session can move to `--sv-*` without anything
+   having to be renamed in one go. Two old names meant something different from
+   the handoff's same word — `--accent` and `--surface` — which is the whole
+   reason the new table is prefixed.
+
+   LIGHT IS THE DEFAULT NOW, as the handoff has it; the bootstrap script in
+   theme-toggle.tsx picks light unless somebody has chosen dark. Dark is
+   swapped under [data-theme="dark"] on the root, the same switch as before.
+
+   `.sv-light` pins the light table on one subtree whatever the theme: the
+   sign-in page and the preloader are drawn light and have no dark drawing.
    -------------------------------------------------------------------------- */
 
-:root {
+:root,
+.sv-light {
+  --sv-bg: #f1f3ec;
+  --sv-surface: #ffffff;
+  --sv-subtle: #f4f6f0;
+  --sv-hover: #f8fcea;
+  --sv-ink: #060800;
+  --sv-muted: #6e7367;
+  --sv-line: #e7ebe0;
+  --sv-line-soft: #eef1e8;
+  --sv-track: #edefe6;
+  --sv-accent: #bfff00;
+  --sv-accent-hover: #a6e000;
+  --sv-on-accent: #060800;
+  --sv-lime-tint: #f6faea;
+  --sv-lime-line: #e3ebc8;
+  --sv-violet: #8558ec;
+  --sv-violet-mid: #a47cf1;
+  --sv-violet-soft: #cdb8fb;
+  --sv-violet-tint: #f1ecfe;
+  --sv-violet-tint-line: #dfd2fb;
+  --sv-violet-ink: #4b2a9e;
+  --sv-pos: #1e7a3c;
+  --sv-pos-tint: #e6f5ea;
+  --sv-neg: #b3261e;
+  --sv-neg-tint: #fce9e7;
+  --sv-warn: #8a5a00;
+  --sv-warn-tint: #fff4dc;
+  --sv-shadow:
+    0 1px 1px rgb(6 8 0 / 0.03), 0 4px 10px rgb(6 8 0 / 0.04),
+    0 18px 36px rgb(6 8 0 / 0.055);
+  --sv-shadow-hover:
+    0 2px 2px rgb(6 8 0 / 0.03), 0 10px 20px rgb(6 8 0 / 0.06),
+    0 26px 48px rgb(6 8 0 / 0.08);
+
+  /* Values the sign-in page and the preloader use that the table does not
+     name — the lime grid, its rings, and two shades of body text. */
+  --sv-grid: #e6efcb;
+  --sv-ring: #dce8b4;
+  --sv-lime-deep: #9bd400;
+  --sv-body: #4b5142;
+  --sv-ink-soft: #2a2f24;
+  --sv-placeholder: #9aa091;
+
   /* Native dropdowns, date pickers and scrollbars follow the app's theme
      rather than the operating system's — without this a select's open list is
      white on a dark screen. */
   color-scheme: light;
+}
 
-  --background: oklch(0.975 0.003 255);
-  --surface: #ffffff;
-  --surface-muted: oklch(0.983 0.003 258);
-  --border: oklch(0.918 0.005 258);
-  /* Row separators, a step softer than a card's own edge. */
-  --border-soft: oklch(0.955 0.004 258);
-  --border-strong: oklch(0.905 0.005 258);
+:root[data-theme="dark"] {
+  --sv-bg: #0c0f08;
+  --sv-surface: #14180f;
+  --sv-subtle: #1d2216;
+  --sv-hover: #222a18;
+  --sv-ink: #ecf1e2;
+  --sv-muted: #9ba48e;
+  --sv-line: #2a3121;
+  --sv-line-soft: #232a1b;
+  --sv-track: #2a3121;
+  --sv-accent: #bfff00;
+  --sv-accent-hover: #d2ff4d;
+  --sv-on-accent: #060800;
+  --sv-lime-tint: #1a2010;
+  --sv-lime-line: #2e3a18;
+  --sv-violet: #9b76f2;
+  --sv-violet-mid: #7c51d9;
+  --sv-violet-soft: #4a3579;
+  --sv-violet-tint: #241a3d;
+  --sv-violet-tint-line: #3a2b5e;
+  --sv-violet-ink: #cdb8fb;
+  --sv-pos: #7fd99a;
+  --sv-pos-tint: #15291b;
+  --sv-neg: #f2a097;
+  --sv-neg-tint: #2e1714;
+  --sv-warn: #f2c46b;
+  --sv-warn-tint: #2b2412;
+  --sv-shadow:
+    0 1px 1px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.35),
+    0 20px 44px rgb(0 0 0 / 0.4);
+  --sv-shadow-hover:
+    0 2px 2px rgb(0 0 0 / 0.4), 0 10px 22px rgb(0 0 0 / 0.4),
+    0 26px 52px rgb(0 0 0 / 0.45);
 
-  --foreground: oklch(0.22 0.015 258);
-  --body: oklch(0.25 0.015 258);
-  --muted-foreground: oklch(0.55 0.012 258);
-  /* Dollar approximations, meta lines, em-dashes — present but receding. */
-  --faint: oklch(0.62 0.012 258);
+  color-scheme: dark;
+}
+
+:root {
+  --sv-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --sv-font: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* ---- The older names, pointed at the table above ---------------------- */
+
+  --background: var(--sv-bg);
+  --surface: var(--sv-surface);
+  --surface-muted: var(--sv-subtle);
+  --border: var(--sv-line);
+  --border-soft: var(--sv-line-soft);
+  /* A step past the line, for scrollbar thumbs. The handoff has no such
+     step, so it is mixed from two of its own values rather than made up. */
+  --border-strong: color-mix(in oklab, var(--sv-line), var(--sv-ink) 10%);
+
+  --foreground: var(--sv-ink);
+  --body: var(--sv-ink);
+  --muted-foreground: var(--sv-muted);
+  /* The handoff sets its "≈ $…" lines and em-dashes in the same muted grey as
+     every other secondary line, so the old fainter step collapses into it. */
+  --faint: var(--sv-muted);
 
   /**
-   * Lime is a FILL under near-black text, never type on white.
+   * Lime is still a FILL under near-black text, never type on white.
    *
-   * #BFFF00 as text on white is about 1.4:1 — invisible. So the accent keeps
-   * its job as a background and links take a deep lime of the same hue that
-   * actually carries on paper-coloured ground.
+   * What changed is what the brand looks like AS TYPE: the handoff uses its
+   * violet for that — icons, accents, the thing a reader's eye is sent to —
+   * so `text-primary`, which thirty-odd screens use to mean "the brand colour
+   * as type", reads violet now. See `.text-primary` further down.
    */
-  --primary: #bfff00;
-  --primary-foreground: #08090a;
-  --primary-text: oklch(0.45 0.1 122);
-  --accent: oklch(0.45 0.1 122);
+  --primary: var(--sv-accent);
+  --primary-foreground: var(--sv-on-accent);
+  --primary-text: var(--sv-violet);
+  --accent: var(--sv-violet-ink);
 
-  /* A link is blue and underlined, the convention older than the web being
-     styled at all — the owner's rule after watching a table where nothing
-     said which words could be clicked. Not the brand colour on purpose: lime
-     is what this app uses for emphasis, and a link has to read as an *exit*,
-     not a highlight. */
-  --link: oklch(0.5 0.19 259);
+  /* The handoff's links are violet-ink. They keep their underline: that is how
+     the owner asked for a link to be told apart, and the colour was the only
+     part of that rule that was ever about the palette. */
+  --link: var(--sv-violet-ink);
 
   /* Money semantics are deliberately not brand-coloured: in is green and out
      is red, whatever the brand is doing. */
-  --positive: oklch(0.46 0.1 158);
-  --negative: oklch(0.48 0.13 27);
-  --warning: oklch(0.52 0.13 62);
+  --positive: var(--sv-pos);
+  --negative: var(--sv-neg);
+  --warning: var(--sv-warn);
 
-  --sidebar: oklch(0.968 0.003 258);
-  --sidebar-item: oklch(0.42 0.012 258);
-  --sidebar-item-active: oklch(0.24 0.015 258);
-  --sidebar-item-active-bg: oklch(0.62 0.19 122 / 0.26);
-  --sidebar-mark: oklch(0.48 0.15 122);
+  --tag-bg: var(--sv-subtle);
+  --tag-fg: var(--sv-muted);
+  --tag-positive-bg: var(--sv-pos-tint);
+  --tag-positive-fg: var(--sv-pos);
+  --tag-negative-bg: var(--sv-neg-tint);
+  --tag-negative-fg: var(--sv-neg);
 
-  --tag-bg: oklch(0.955 0.004 258);
-  --tag-fg: oklch(0.42 0.012 258);
-  --tag-positive-bg: oklch(0.93 0.05 158);
-  --tag-positive-fg: oklch(0.38 0.1 158);
-  --tag-negative-bg: oklch(0.94 0.04 27);
-  --tag-negative-fg: oklch(0.42 0.13 27);
+  --row-hover: var(--sv-hover);
 
-  /* Lime at 7% — enough to follow a row across a wide table, not enough to
-     read as a selection. */
-  --row-hover: oklch(0.62 0.19 122 / 0.07);
-
+  /* Not in the handoff's table. Kept as they were until the screens that draw
+     charts are rebuilt — changing a chart's colours is that screen's call. */
   --chart-1: oklch(0.6 0.12 220);
   --chart-2: oklch(0.55 0.15 275);
   --chart-3: oklch(0.66 0.14 62);
@@ -81,74 +180,29 @@
   --chart-5: oklch(0.58 0.12 190);
   --chart-6: oklch(0.55 0.15 290);
 
-  --shadow-1: 0 1px 2px oklch(0.25 0.015 258 / 0.04);
-  --shadow-2: 0 4px 12px oklch(0.25 0.015 258 / 0.08);
+  --shadow-1: var(--sv-shadow);
+  --shadow-2: var(--sv-shadow-hover);
 
   /**
-   * Two faces, and neither is monospaced.
+   * One face.
    *
-   * Instrument Sans carries the prose; IBM Plex Sans carries every figure,
-   * date, rate and id — with tabular-nums, which is what actually makes a
-   * column of money line up. A monospaced font would do that too and would
-   * make a finance tool look like a terminal.
+   * The handoff sets figures in the same Plus Jakarta Sans as the prose, with
+   * `tabular-nums` — which is what makes a money column line up, and needs no
+   * second family to do it. `--font-num` survives as a name because sixty-odd
+   * files ask for it; it now answers with the same face.
    */
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-num: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-num);
+  --font-sans: var(--sv-font);
+  --font-num: var(--sv-font);
+  --font-mono: var(--sv-font);
 }
 
 :root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --background: #141417;
-  --surface: #1c1c21;
-  --surface-muted: #232329;
-  --border: #303037;
-  --border-soft: #2a2a31;
-  --border-strong: #35353d;
-
-  --foreground: oklch(0.965 0.003 258);
-  --body: oklch(0.92 0.004 258);
-  --muted-foreground: oklch(0.705 0.012 262);
-  --faint: oklch(0.62 0.012 262);
-
-  /* On a dark ground the lime reads as type, so links take it back. */
-  --primary: #bfff00;
-  --primary-foreground: #08090a;
-  --primary-text: #bfff00;
-  --accent: #bfff00;
-
-  /* Softened for dark ground; saturation down so it does not vibrate
-     against the lime. */
-  --link: oklch(0.74 0.12 254);
-
-  --positive: oklch(0.78 0.13 158);
-  --negative: oklch(0.74 0.14 27);
-  --warning: oklch(0.8 0.13 62);
-
-  --sidebar: #000000;
-  --sidebar-item: oklch(0.84 0.01 262);
-  --sidebar-item-active: #bfff00;
-  --sidebar-item-active-bg: oklch(0.72 0.2 122 / 0.16);
-  --sidebar-mark: #bfff00;
-
-  --tag-bg: #292930;
-  --tag-fg: oklch(0.8 0.02 262);
-  --tag-positive-bg: oklch(0.3 0.05 158);
-  --tag-positive-fg: oklch(0.86 0.11 158);
-  --tag-negative-bg: oklch(0.3 0.055 27);
-  --tag-negative-fg: oklch(0.85 0.11 27);
-
   --chart-1: oklch(0.7 0.12 220);
   --chart-2: oklch(0.68 0.15 275);
   --chart-3: oklch(0.76 0.14 62);
   --chart-4: oklch(0.7 0.16 8);
   --chart-5: oklch(0.7 0.12 190);
   --chart-6: oklch(0.68 0.15 290);
-
-  /* No shadows on dark. Depth comes from the surface steps instead. */
-  --shadow-1: none;
-  --shadow-2: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -199,12 +253,6 @@
   --color-body: var(--body);
   --color-faint: var(--faint);
   --color-row-hover: var(--row-hover);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-item: var(--sidebar-item);
-  --color-sidebar-item-active: var(--sidebar-item-active);
-  --color-sidebar-item-active-bg: var(--sidebar-item-active-bg);
-  --color-sidebar-mark: var(--sidebar-mark);
 
   --color-tag-bg: var(--tag-bg);
   --color-tag-fg: var(--tag-fg);
@@ -262,10 +310,10 @@ body {
 /**
  * Every figure, date, rate, id and reference.
  *
- * IBM Plex Sans rather than a monospaced face: `tabular-nums` is what actually
- * makes a money column line up, and it does not need fixed-width letters to do
- * it. A terminal font on a finance screen reads as a developer tool, which is
- * not what somebody signing a payslip should be looking at.
+ * The prose face with tabular figures, not a monospaced one: `tabular-nums` is
+ * what actually makes a money column line up, and it does not need fixed-width
+ * letters to do it. A terminal font on a finance screen reads as a developer
+ * tool, which is not what somebody signing a payslip should be looking at.
  */
 .num {
   font-family: var(--font-num);
@@ -427,14 +475,18 @@ tr.row-out > td .text-link {
    --------------------------------------------------------------------------
    Said once here rather than on eighteen screens. Every table in this app is
    the same object — a header band, rows separated by a softer rule than the
-   card's own edge, and a lime tint under the pointer — and eighteen hand-built
+   card's own edge, and a tint under the pointer — and eighteen hand-built
    versions of that is eighteen chances for one to come out slightly different.
 
-   The vertical rules are the part worth explaining. A hairline on every cell
-   but the first, pulled half the column gap to the left, puts the rule in the
-   MIDDLE of the gap instead of hard against the next column's text — and it
-   does it without shifting that text, because the padding it adds is taken
-   straight back by the negative margin.
+   The September handoff's version: a lime-tint band with violet-ink headings
+   over a 1.5px lime rule, hairline rows, and under the pointer the pale tint
+   plus a 4px violet bar at the row's left edge. No vertical rules between
+   columns — the August design had them and this one does not.
+
+   What did NOT change is the geometry. The handoff pads its cells 10px a
+   side; these keep 7px, because every table on every screen was sized to 7
+   and widening them all at once is twenty screens' worth of sideways scroll
+   nobody asked for. Each screen's own session can move its table if it wants.
    -------------------------------------------------------------------------- */
 
 .table-data {
@@ -448,18 +500,17 @@ tr.row-out > td .text-link {
 }
 
 .table-data thead tr {
-  background: var(--surface-muted);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  background: var(--sv-lime-tint);
+  border-bottom: 1.5px solid var(--sv-lime-line);
 }
 
 .table-data thead th {
-  font-size: 0.71875rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted-foreground);
-  padding: 0.75rem 0.4375rem;
+  color: var(--sv-violet-ink);
+  padding: 0.8125rem 0.4375rem;
   text-align: left;
 }
 
@@ -535,6 +586,12 @@ tr.row-out > td .text-link {
   background: var(--row-hover);
 }
 
+/* The bar goes on the first cell, not the row: a box-shadow on a <tr> is not
+   painted by every browser that renders this table. */
+.table-data tbody tr:hover > td:first-child {
+  box-shadow: inset 4px 0 0 var(--sv-violet);
+}
+
 .table-data tfoot tr {
   background: var(--surface-muted);
   border-top: 1px solid var(--border);
@@ -542,37 +599,6 @@ tr.row-out > td .text-link {
 
 .table-data tfoot td {
   padding: 0.9375rem 0.4375rem;
-}
-
-/**
- * One rule per column boundary.
- *
- * The handoff pulls the rule into the middle of the gap with a negative margin,
- * which works on the grid rows it was drawn as and not here: a table cell
- * ignores margin. Overriding the padding instead is what a first attempt does,
- * and it silently halved the left padding on every column but the first — the
- * rule landed right against the next column's text. So the rule sits on the
- * cell edge and the padding is left alone.
- */
-.table-data th + th,
-.table-data td + td {
-  border-left: 1px solid var(--border-strong);
-}
-
-/**
- * A tick column adds no rule of its own.
- *
- * The moment a table grows a leading tick, SL stops being the first cell and
- * becomes a `td + td` — so the rule above would give it a vertical hairline it
- * has never had, on that table only, and the two tables would stop matching.
- *
- * Written against `.tick` rather than `:first-child` so it reaches exactly the
- * tables that opted in: every `.table-data` is in the selector's blast radius
- * and none is in its effect's.
- */
-.table-data .tick + th,
-.table-data .tick + td {
-  border-left: 0;
 }
 
 .table-data .cell-prose {
@@ -597,10 +623,6 @@ tr.row-out > td .text-link {
   flex-shrink: 0;
 }
 
-::selection {
-  background: color-mix(in oklab, var(--primary) 25%, transparent);
-}
-
 /* Slim scrollbars that follow the theme instead of the OS. */
 * {
   scrollbar-width: thin;
@@ -620,17 +642,16 @@ tr.row-out > td .text-link {
 }
 
 /* --------------------------------------------------------------------------
-   Purple as type, everywhere it is used as type.
+   The brand as type
    --------------------------------------------------------------------------
-   `text-primary` and `bg-primary` both resolve to --color-primary, so one
-   value had to carry white on a filled button *and* stand as a label on a dark
-   card. It could not do both above 4.5:1 — see the dark block above.
+   `text-primary` and `bg-primary` both resolve to --color-primary, and the
+   brand is two colours doing two jobs: lime as a FILL under near-black text,
+   violet as TYPE and as icons. Lime as text is about 1.4:1 on white.
 
    Redirecting the utility here means the split is enforced in one place rather
-   than remembered at thirty-six call sites, and `text-primary` keeps reading
-   as "the brand colour" wherever it appears. Unlayered, so it wins over the
-   utility Tailwind generates; in light mode both tokens are the same value and
-   this rule changes nothing.
+   than remembered at forty call sites, and `text-primary` keeps reading as
+   "the brand colour" wherever it appears. Unlayered, so it wins over the
+   utility Tailwind generates.
    -------------------------------------------------------------------------- */
 .text-primary {
   color: var(--primary-text);
@@ -664,46 +685,22 @@ tr.row-out > td .text-link {
 }
 
 /* --------------------------------------------------------------------------
-   Focus, selection and the row tint
+   Focus and selection
    --------------------------------------------------------------------------
-   All three are the lime, which is the one place the brand touches something
-   that is not a control — and all three are stated once rather than repeated
-   on every component that could have got them slightly wrong.
+   Violet, as the handoff has them. A lime ring was fine on the old near-black
+   ground and is close to invisible on white — a focus ring nobody can see is
+   the same as none for somebody working by keyboard.
+
+   Unlayered, so these beat any `focus-visible:outline-*` utility: stated once
+   rather than trusted to every component.
    -------------------------------------------------------------------------- */
 
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--sv-violet);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: oklch(0.62 0.19 122 / 0.28);
-  color: var(--foreground);
-}
-
-/* --------------------------------------------------------------------------
-   The rail's colour-coded icons
-   --------------------------------------------------------------------------
-   One hue per destination, so a glance finds Payroll by its green before the
-   word is read. Lightness and chroma are fixed and only the angle differs,
-   which is what keeps fifteen colours reading as one family rather than as a
-   crayon box. The angle arrives as `--nav-hue` on the element.
-
-   Written here rather than as fifteen Tailwind classes: the hue is data the
-   design supplies, and fifteen hand-written classes is fifteen chances for one
-   to drift.
-   -------------------------------------------------------------------------- */
-
-.nav-icon {
-  color: oklch(0.56 0.16 var(--nav-hue));
-}
-
-:root[data-theme="dark"] .nav-icon {
-  color: oklch(0.78 0.16 var(--nav-hue));
-}
-
-/* Where you are drops the hue and takes the brand, filled. */
-[data-nav-active="true"] .nav-icon,
-[data-nav-active="true"] .nav-icon:where(*) {
-  color: var(--sidebar-mark);
+  background: var(--sv-violet-tint-line);
+  color: var(--sv-ink);
 }

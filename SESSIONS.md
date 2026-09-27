@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 80 | **The new design, the shell: palette, font, light default, rail, top bar, tables** | **done** — every screen; each screen's own layout is its own session |
 | 79 | **The new design, page one: sign-in and the preloader** | **done** — the rest of the app follows a page at a time |
 | 50 | Payslip: the company name printed twice | **done** |
 | 51 | **Payroll: invoice and reference upload** when a run is created | **done** |
@@ -57,6 +58,113 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 80. The new design, the shell — every screen at once — 27 Sep 2026
+
+> *"porer kajta koro"* — and then, asked with the full list of screens in
+> front of him, **"Yes, all of it"**.
+
+**This one is a shared change on purpose, and it was asked for properly.** The
+first attempt to edit globals.css's tables and focus ring was stopped by the
+permission check as a shared-resource change made without the owner's word —
+which was right: CLAUDE.md says to name every screen a shared change reaches
+and wait. He was given the list (every screen, all 21 tables) and what would
+change on them, and chose all of it.
+
+**Colours, two layers.** globals.css now holds the handoff's own table as
+`--sv-*`, light on `:root` and dark on `:root[data-theme="dark"]`, copied
+from `Share Viral Finance.dc.html`. The older names every screen already uses
+— `--background`, `--surface`, `--border`, `--muted-foreground`, `--primary`,
+`--positive`… — now POINT at those values instead of holding their own, so all
+twenty screens took the new palette without a class being renamed. A rebuilt
+screen can use `--sv-*` directly. The prefix exists because two old names
+(`--surface`, `--accent`) meant something else. `.sv-light` pins the light
+table on a subtree: sign-in and the preloader wear it and stay light in a dark
+app.
+
+**What every screen now shows, and the decisions inside it.**
+
+- **Light by default.** The bootstrap script picks light unless the stored
+  preference says dark; anybody who pressed the switch before keeps what they
+  chose. The switch reads LIGHT/DARK — the theme it would switch TO.
+- **One face**: Plus Jakarta Sans for prose and figures, figures with
+  `tabular-nums`. `--font-num` still exists (sixty-odd files ask for it) and
+  answers with the same face. The Instrument Sans / IBM Plex imports are gone;
+  their packages are still in `apps/web/package.json` — removing them is a
+  lockfile edit (see #79 on this machine's npm and `libc`), left for a quiet
+  moment.
+- **Brand as type is violet.** `text-primary` (forty screens) reads violet;
+  lime stays a fill. **Links are violet-ink and keep their underline** — the
+  owner's older rule was "blue and underlined"; the colour follows the new
+  design, the underline is kept because that was the part about recognising a
+  link. `--faint` collapsed into the muted grey, as the handoff sets its
+  "≈ $" lines.
+- **Tables**: lime-tint header band, violet-ink 800 headings over a 1.5px
+  lime rule, a 4px violet bar on the hovered row. **The vertical rules between
+  columns are gone** — the August design had them, this one does not. **The
+  cell padding was NOT changed** (handoff 10px a side, app 7px): every table
+  was sized to 7 and widening them all at once is twenty screens of new
+  sideways scroll. A screen's own session can.
+- **Focus ring violet**, selection violet-tint — a lime ring is nearly
+  invisible on white.
+- **The rail** — white, violet current row with a 5px edge, 32px icon tiles,
+  Phosphor icons from the handoff's NAV table, the user card at the foot.
+  **Hiding is hiding now**: the toggle takes it to 0px (and `inert`, so a
+  keyboard cannot walk through it), not the August 84px icon strip — that
+  branch of every row is gone. The accordions and the permission filter are
+  unchanged. `nav-items.ts` carries Phosphor components; `hue` and `.nav-icon`
+  are gone. `BrandMark` had no user left and was deleted (the favicon still
+  draws the mark).
+- **Top bar**: 42px buttons, breadcrumb with caret separators, the theme
+  switch, then the bell — whose badge is violet now, not red.
+- **Main column**: 24px, blocks 18px apart, max 1560px centred.
+
+**What did NOT change**: every page's own layout. The page-header card, stat
+cards, buttons and pills of the handoff are each screen's session — and the
+header card is `components/ui/page-header.tsx`, shared by 22 screens, so its
+change is the next ask-first. Page headings still draw their Material icon
+until then. Chart colours are untouched. Settings' own sidebar (the handoff
+replaces the main nav while Settings is open) belongs to the Settings session.
+
+**Proved.** `.shellqa.mjs`, 37 checks in a real browser: light on a first
+visit, #F1F3EC ground, the face loaded, rail 270px white with a hairline, the
+current row's violet edge/tint/tile and the idle rows' transparent 5px, the
+card, the breadcrumb, hiding to 0px and inert and surviving a reload, dark with
+the design's values and surviving a reload, sign-in light inside a dark app,
+the table band/headings/no rules/hover bar, a violet focus ring, and the phone
+drawer. **One real bug it caught**: hidden, the rail kept its 1px border — a
+line down every page — now dropped with the shadow. `.sweep.mjs`: 0px sideways
+scroll on all fourteen routes at 1440/1180/900, h1 28, padding 24, gap 18.
+`.rolesweep.mjs`: every role's rail and write controls as before. `.loginqa`
+58/58. Four CI steps and a production build green.
+
+**Watch out.**
+
+- **`/team` 500s LOCALLY** — `column "previous_org_salary" does not exist`.
+  `2026-09-22-team-previous-org-salary.sql` reached the live database and never
+  the local Neon one (nor, probably, `2026-09-23-hr-file-kinds.sql`). Live is
+  fine. Apply them to Neon with `.apply1.mjs` before trusting a local run of
+  anything that reads the team.
+- **Neon drops connections from this machine**: `ENOTFOUND` and "connection
+  terminated" turned nine Super Admin screens into errors on one `.rolesweep`
+  run and none on the next. A block of page errors is the network until the
+  log says otherwise.
+- **`TaskStop` on a background `npm run dev` does not kill its children on
+  Windows.** The API and web from a previous run kept ports 4001 and 3000, the
+  new API died on `EADDRINUSE`, and requests went to the OLD process. Kill the
+  whole tree (`Stop-Process` on every node.exe whose command line names this
+  repo) and check the ports are free.
+- **`.sweep.mjs` has `REPO = "d:/codes/…"`** baked in from another machine; it
+  is gitignored, so run a copy with `REPO = process.cwd()`.
+- **globals.css's unlayered `* { border-color }` still beats every Tailwind
+  border-colour utility** (#79). The shell's violet edges are plain CSS in
+  `new-design.css` for that reason. Moving the rule into `@layer base` would
+  make ~50 existing `border-*` colour utilities in 26 files start working —
+  a visible change to those screens, and its own decision.
+
+**Next**: the screens, one per session, in the handoff's order — Dashboard
+first. The page-header card goes with the first of them and reaches all 22
+screens, so it is asked about before it is built.
 
 ## 79. The new design, page one: sign-in and the preloader — 27 Sep 2026
 

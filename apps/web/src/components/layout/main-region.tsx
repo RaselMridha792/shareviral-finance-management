@@ -25,33 +25,25 @@ export function MainRegion({ children }: { children: ReactNode }) {
 
   return (
     /**
-     * No max width, and the gutter grows with the viewport.
+     * The September handoff's column: 24px all round, blocks 18px apart, and
+     * a ceiling of 1560px, centred.
      *
-     * It was `max-w-7xl mx-auto`, which put two columns of empty space either
-     * side of every screen on any monitor wider than 1280px — while a table of
-     * fourteen columns scrolled sideways inside a card that had room to spare.
-     * The handoff has no such column: the gutter is clamp(16px, 3vw, 32px) and
-     * the content takes what is left.
+     * The ceiling is not the old `max-w-7xl`. That one stopped at 1280px and
+     * left two columns of empty space either side of every screen on an
+     * ordinary monitor while a fourteen-column table scrolled sideways inside a
+     * card with room to spare. 1560 is wide enough that only a genuinely large
+     * screen meets it, and there a line of figures stops stretching across a
+     * width nobody reads at. Phones keep a 16px gutter rather than 24.
      */
-    <main
-      className="flex-1"
-      style={{
-        padding: "clamp(22px, 3vw, 34px) clamp(16px, 3vw, 32px) 32px",
-      }}
-    >
+    <main className="w-full max-w-[1560px] flex-1 self-center p-[clamp(16px,2vw,24px)]">
       {/*
-        20px, not 24. The handoff stacks its blocks at 16–20, and at 24 the
-        three sections of the dashboard read as three pages.
-
-        Nothing follows the last block any more. A rate caption used to close
-        every screen but the dashboard — "Dollar figures are approximate,
-        translated from BDT at 121.50 per USD…" — so that a translated figure
-        said what rate produced it. The owner had it removed app-wide, and the
-        promise it carried is kept by the top bar, which states the same rate
-        as "FX locked ৳121.50 / $1" on every screen including this one. If that
-        chip ever goes, the sentence has to come back somewhere.
+        Nothing follows the last block. A rate caption used to close every
+        screen but the dashboard — "Dollar figures are approximate, translated
+        from BDT at 121.50 per USD…" — and then a rate chip in the top bar kept
+        that promise. The owner had both removed; the rate lives in Settings →
+        Exchange rate.
       */}
-      <div className="flex flex-col gap-5">{children}</div>
+      <div className="flex flex-col gap-[18px]">{children}</div>
     </main>
   );
 }

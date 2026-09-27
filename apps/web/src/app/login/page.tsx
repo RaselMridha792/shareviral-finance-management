@@ -28,7 +28,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         : null;
 
   return (
-    <main className="sv sv-login">
+    <main className="sv sv-light sv-login">
       <section className="flex min-w-0 flex-1 flex-col bg-(--sv-surface) px-[clamp(24px,3vw,44px)] py-[clamp(14px,3vh,28px)]">
         <LoginForm next={next} notice={notice} />
 

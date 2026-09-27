@@ -3,26 +3,14 @@ import type { Metadata } from "next";
 // Self-hosted, not Google CDN: no third-party request at render time, and no
 // layout jump if a CDN is slow or blocked.
 //
-// Instrument Sans carries the prose. IBM Plex Sans carries every figure, date,
-// rate and id — as a proportional face with tabular figures, not a monospaced
-// one, because `tabular-nums` is what makes a money column align and a terminal
-// font on a payslip reads as somebody's developer tool.
-import "@fontsource/instrument-sans/400.css";
-import "@fontsource/instrument-sans/500.css";
-import "@fontsource/instrument-sans/600.css";
-import "@fontsource/instrument-sans/700.css";
-import "@fontsource/ibm-plex-sans/400.css";
-import "@fontsource/ibm-plex-sans/500.css";
-import "@fontsource/ibm-plex-sans/600.css";
-import "@fontsource/ibm-plex-sans/700.css";
-// The icon face. `index.css` is the outline axis at FILL 0, which is the
-// default the design asks for; the active nav item switches to FILL 1 through
-// `font-variation-settings` rather than a second file.
-import "@fontsource-variable/material-symbols-rounded";
-// The new design's face (see new-design.css). Declaring it costs nothing on a
-// screen that does not use it: a browser fetches a font file only for text
-// actually set in that family.
+// One face for everything, as the September handoff has it: Plus Jakarta Sans
+// for prose AND figures, the figures with `tabular-nums` so a money column
+// lines up. (Instrument Sans and IBM Plex Sans were the August design's pair.)
 import "@fontsource-variable/plus-jakarta-sans";
+// The August icon face, still drawn by <Icon> on every screen that has not
+// been rebuilt yet. The new design's icons are Phosphor components; this goes
+// when the last <Icon> does.
+import "@fontsource-variable/material-symbols-rounded";
 
 import { BootOverlay } from "@/components/boot/boot-overlay";
 import { themeScript } from "@/components/layout/theme-toggle";

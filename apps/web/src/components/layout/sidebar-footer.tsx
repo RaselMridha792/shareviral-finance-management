@@ -1,25 +1,26 @@
 "use client";
 
 import { ROLE_LABELS } from "@finance/shared";
+import { SignOutIcon } from "@phosphor-icons/react/dist/ssr/SignOut";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
-import { Icon } from "@/components/ui/icon";
 import { logout } from "@/lib/api-client";
-import { cn } from "@/lib/utils";
 
 /**
  * Who is signed in, at the foot of the rail.
  *
  * It used to sit in the top bar, which put the least-used control on every
  * screen in the most prominent place. Down here it is out of the way and still
- * always reachable — and the top bar gets the space back for the breadcrumb and
- * the rate, which are things somebody actually reads.
+ * always reachable — and the top bar gets the space back for the breadcrumb,
+ * which is something somebody actually reads.
  *
- * In rail mode only the avatar and the sign-out remain, stacked.
+ * The handoff draws it as a violet card: a lime avatar with the initials, the
+ * name over the sign-in address, and the way out. The role is not printed —
+ * the handoff has the address there — so it rides on the avatar's tooltip.
  */
-export function SidebarFooter({ collapsed = false }: { collapsed?: boolean }) {
+export function SidebarFooter() {
   const user = useSession();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
@@ -46,31 +47,18 @@ export function SidebarFooter({ collapsed = false }: { collapsed?: boolean }) {
       .join("") || user.email[0].toUpperCase();
 
   return (
-    <div
-      className={cn(
-        "mx-3 flex items-center gap-[11px] border-t border-border px-2.5 pt-3.5 pb-1",
-        collapsed && "flex-col gap-2",
-      )}
-    >
+    <div className="sv-user-card mx-2.5 mb-3 flex flex-none items-center gap-[11px] rounded-[11px] bg-(--sv-violet-tint) p-3">
       <span
-        className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-sidebar-item-active"
-        title={
-          collapsed ? `${user.fullName} — ${ROLE_LABELS[user.role]}` : undefined
-        }
+        className="grid size-[38px] flex-none place-items-center rounded-full bg-(--sv-accent) text-[13px] font-extrabold text-(--sv-on-accent)"
+        title={`${user.fullName} — ${ROLE_LABELS[user.role]}`}
       >
         {initials}
       </span>
 
-      {collapsed ? null : (
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-sm font-medium text-foreground">
-            {user.fullName}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {ROLE_LABELS[user.role]}
-          </p>
-        </div>
-      )}
+      <div className="min-w-0 flex-1 leading-[1.25]">
+        <p className="truncate text-[14px] font-extrabold">{user.fullName}</p>
+        <p className="truncate text-[12px] text-(--sv-muted)">{user.email}</p>
+      </div>
 
       <button
         type="button"
@@ -78,9 +66,9 @@ export function SidebarFooter({ collapsed = false }: { collapsed?: boolean }) {
         disabled={signingOut}
         aria-label="Sign out"
         title="Sign out"
-        className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground disabled:opacity-50"
+        className="grid size-[34px] flex-none cursor-pointer place-items-center rounded-lg text-(--sv-violet-ink) transition-colors hover:bg-(--sv-surface) disabled:opacity-50"
       >
-        <Icon name="logout" size={18} />
+        <SignOutIcon weight="duotone" size={19} />
       </button>
     </div>
   );

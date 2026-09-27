@@ -197,7 +197,7 @@ export function Preloader({
     : MESSAGES[index];
 
   return (
-    <div className="sv sv-preloader" data-leaving={phase === "leave"}>
+    <div className="sv sv-light sv-preloader" data-leaving={phase === "leave"}>
       <div aria-hidden="true" className="paper" />
       <div aria-hidden="true" className="light" />
       <div aria-hidden="true" className="sv-pl-decor">
