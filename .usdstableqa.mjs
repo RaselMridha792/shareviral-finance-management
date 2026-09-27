@@ -10,6 +10,17 @@
  * under another, and then $7,000 taken out — the subtraction the owner did.
  *
  *     node .usdstableqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the plain expense states `usdRate`, required
+ * on every entry since #67; a rateless row can now only be a legacy one, so it
+ * is made by clearing that row's rate, and is read at its own day's rate on
+ * file (#64) rather than contributing nothing; the transfer table's amount
+ * cell is found by its "Amount (BDT)" heading, not by a column number.
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone. The transfer row is found by the pair's `outId`
+ * — the money-out half's id, which is what POST /transactions/transfer
+ * returns — since the row no longer prints "USQA seven thousand…".
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -208,7 +219,13 @@ const cat = (
  * Asserted, not fired and forgotten. The first version ignored the status,
  * the create came back 400, no row was ever written — and the check that was
  * supposed to catch an unvalued row passed because there was no row to catch.
+ *
+ * It states its rate: every entry must since #67 ("puro application a joto
+ * dhoroner transaction a hok na keno manually prottekbar rate bosate hobe",
+ * packages/shared/src/transactions.ts). No dollars, but its own rate — and
+ * `ownCurrencyBalance` reads a row at its own rate before anything else.
  */
+const PLAIN_RATE = 120.0;
 const blind = await call("POST", "/transactions", {
   direction: "out",
   txnDate: "2026-07-20",
@@ -217,22 +234,64 @@ const blind = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "USQA a row with no dollars recorded",
   paymentMethod: "card",
+  usdRate: PLAIN_RATE.toFixed(2),
 });
 check(
   "a plain expense records on the dollar account",
   blind.status === 201,
   `HTTP ${blind.status} ${JSON.stringify(blind.body?.errors ?? blind.body?.message ?? "")}`.slice(0, 140),
 );
+const afterPlain = await read();
+check(
+  "a row with no dollars but its own rate keeps the figure exact",
+  afterPlain.exact === true,
+  `exact ${afterPlain.exact}`,
+);
+check(
+  "and takes off its taka at its own rate — ৳1,200 / 120 = $10",
+  Number(afterPlain.own) === 7000 - 1200 / PLAIN_RATE,
+  `own ${afterPlain.own}`,
+);
+
+/*
+ * A row with neither dollars nor a rate can no longer be written (#67), but
+ * rows from before that rule exist — so one is made the way they were: the
+ * same row with its rate cleared.
+ */
+if (blind.body?.id) {
+  await db.query("update transactions set usd_rate = null where id = $1", [
+    blind.body.id,
+  ]);
+}
 const afterBlind = await read();
 check(
   "a row with neither dollars nor a rate makes the figure approximate",
   afterBlind.exact === false,
   `exact ${afterBlind.exact}`,
 );
+/*
+ * #64, the owner's "money add korle change hoyna": such a row used to
+ * contribute nothing and now is read at the rate on file for ITS OWN DAY
+ * (else the earliest on file; with none on file, still nothing) — never at
+ * today's governing rate, which this file has just moved to 122.50.
+ */
+const dayRate = Number(
+  (
+    await db.query(
+      `select coalesce(
+         (select rate from fx_rates where base_currency = 'USD' and quote_currency = 'BDT'
+             and rate_date <= '2026-07-20' order by rate_date desc limit 1),
+         (select rate from fx_rates where base_currency = 'USD' and quote_currency = 'BDT'
+           order by rate_date asc limit 1))::text as r`,
+    )
+  ).rows[0]?.r ?? 0,
+);
+const expectBlind = dayRate > 0 ? 7000 - 1200 / dayRate : 7000;
 check(
-  "and it does not silently change the dollars it cannot value",
-  Number(afterBlind.own) === 7000,
-  `own ${afterBlind.own}`,
+  "and it is read at its own day's rate on file, never today's",
+  Math.abs(Number(afterBlind.own) - expectBlind) < 0.006 &&
+    Math.abs(Number(afterBlind.own) - (7000 - 1200 / 122.5)) >= 0.006,
+  `own ${afterBlind.own}, expected ${expectBlind.toFixed(2)} (rate on file ${dayRate || "none"}; today's would give ${(7000 - 1200 / 122.5).toFixed(2)})`,
 );
 
 /* -------------------- a taka account is untouched by all this ----------- */
@@ -314,26 +373,37 @@ const pageState = () =>
     showing: (document.body.innerText ?? "").replace(/\s+/g, " ").slice(0, 120),
   }));
 
-const rowArrived = await waitFor(
-  (needle) =>
-    [...document.querySelectorAll("tbody tr")].some((r) =>
-      (r.textContent ?? "").includes(needle),
-    ),
-  "USQA seven thousand",
-);
-const whenRowRead = rowArrived ? null : JSON.stringify(await pageState());
+/*
+ * The row by the id it carries, not by its words: the Description column is
+ * gone. A transfer row's `data-row-id` is the pair's out half — the id the
+ * transfer call above returned.
+ */
+const outId = out.body?.id ?? null;
+const rowArrived =
+  Boolean(outId) &&
+  (await waitFor(
+    (id) => Boolean(document.querySelector(`tbody tr[data-row-id="${id}"]`)),
+    outId,
+  ));
+const whenRowRead = rowArrived
+  ? null
+  : outId
+    ? JSON.stringify(await pageState())
+    : "(the transfer call returned no id)";
 
-const table = await page.evaluate(() => {
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("USQA seven thousand"),
-  );
+const table = await page.evaluate((id) => {
+  const row = id ? document.querySelector(`tbody tr[data-row-id="${id}"]`) : null;
+  // By its heading: the new design added a tick column and an arrow column,
+  // so a fixed index (it was 6) now lands on the To account.
+  const column = [...(row?.closest("table")?.querySelectorAll("thead th") ?? [])]
+    .findIndex((th) => /Amount \(BDT\)/.test(th.textContent ?? ""));
   return {
     found: Boolean(row),
-    amountCell: (row?.querySelectorAll("td")[6]?.textContent ?? "")
+    amountCell: (row?.querySelectorAll("td")[column]?.textContent ?? "")
       .replace(/\s+/g, " ")
       .trim(),
   };
-});
+}, outId);
 check(
   "the transfer row leads with the dollars that were recorded on it",
   table.found && /\$7,000\.00/.test(table.amountCell),

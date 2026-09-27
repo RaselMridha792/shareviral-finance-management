@@ -20,6 +20,11 @@
  * again, which is exactly what the owner asked to be rid of.
  *
  *     node .refkindqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone. Other expenses no longer prints a row's
+ * description (a click on the row opens it in a popup), so each fixture row is
+ * found by the transaction id its `<tr>` carries — the id the insert returned.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -158,12 +163,13 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 1100 });
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** What the reference column drew for a row, by its description. */
-const cellFor = (needle) =>
-  page.evaluate((text) => {
-    const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-      (r.textContent ?? "").includes(text),
-    );
+/**
+ * What the reference column drew for a row, by its transaction id — the
+ * `data-row-id` on its `<tr>`. The description is no longer on the row.
+ */
+const cellFor = (id) =>
+  page.evaluate((rowId) => {
+    const row = document.querySelector(`tbody tr[data-row-id="${rowId}"]`);
     if (!row) return null;
     const cells = [...row.querySelectorAll("td")];
     // The reference cell is the one holding an eye, a number-styled button,
@@ -177,37 +183,47 @@ const cellFor = (needle) =>
       hasNumber: Boolean(numbered),
       text: row.textContent?.includes("FT-RK-001") ?? false,
     };
-  }, needle);
+  }, id);
 
 await page.goto(`${WEB}/expenses/other`, { waitUntil: "networkidle0", timeout: 120000 });
 await settle(3000);
+// The fixtures' own rows, rather than only a sleep: the three reads below
+// report null on their own terms if they never arrive.
+await page
+  .waitForFunction(
+    (ids) => ids.every((id) => document.querySelector(`tbody tr[data-row-id="${id}"]`)),
+    { timeout: 15000, polling: 150 },
+    [withNumber, paperOnly, neither],
+  )
+  .catch(() => null);
 
-const numbered = await cellFor("RK numbered with paper");
+const numbered = await cellFor(withNumber);
 check(
   "a numbered row still shows its clickable number",
   numbered?.hasNumber === true && numbered?.hasEye === false,
   JSON.stringify(numbered),
 );
-const paper = await cellFor("RK paper only");
+const paper = await cellFor(paperOnly);
 check(
   "a paper-only row shows the eye instead of a dash",
   paper?.hasEye === true,
   JSON.stringify(paper),
 );
-const bare = await cellFor("RK nothing at all");
+const bare = await cellFor(neither);
 check(
   "a row with neither shows no eye",
   bare !== null && bare.hasEye === false && bare.hasNumber === false,
   JSON.stringify(bare),
 );
 
-// The eye opens the same drawer the number would.
-await page.evaluate(() => {
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("RK paper only"),
-  );
-  row.querySelector('button[aria-label="Show the attached record"]').click();
-});
+// The eye opens the same drawer the number would. Clicked only if it is
+// there: a missing row or eye reads as the check below failing, not a crash.
+await page.evaluate((rowId) => {
+  document
+    .querySelector(`tbody tr[data-row-id="${rowId}"]`)
+    ?.querySelector('button[aria-label="Show the attached record"]')
+    ?.click();
+}, paperOnly);
 await settle(1800);
 const opened = await page.evaluate(() => ({
   hasFile: /refkind-b\.pdf/.test(document.body.innerText),

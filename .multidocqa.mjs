@@ -14,6 +14,11 @@
  * third and back round to the first.
  *
  *     node .multidocqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the form's USD Rate box is filled, since
+ * #67 made it required and an empty one blocked the submit; and the account
+ * is chosen explicitly rather than left to the default, which can be another
+ * harness's fixture account while one is running.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -255,9 +260,8 @@ check(
 );
 
 /*
- * The form is submitted by reading `new FormData(form)`, so the hidden inputs
- * behind the category and account pickers can be filled directly — the DOM is
- * what FormData reads. The account already defaults to one; the category has
+ * The form is submitted by reading `new FormData(form)`, so the plain inputs
+ * can be filled directly — the DOM is what FormData reads. The category has
  * no default and the entry is refused without it, which is why the first
  * attempt saved nothing and reported it as a failure to upload.
  */
@@ -266,6 +270,46 @@ const catId = (
     "select id from categories where kind='out' and deleted_at is null limit 1",
   )
 ).rows[0].id;
+
+/*
+ * The account is CHOSEN, not left at its default. The default is whichever
+ * account sorts first, and while any other harness is mid-run that is one of
+ * its fixtures ("CCQA …", "LOCKQA Bank" sort ahead of every real account) —
+ * an MDQ row left on it breaks that harness's cleanup, and its cleanup ours.
+ * A real taka account: a USD one swaps the Amount box for a dollar one.
+ */
+const bdtAccount = (
+  await db.query(
+    `select id, name from accounts
+      where currency = 'BDT' and is_active and deleted_at is null
+        and name !~ 'QA( |$)'
+      order by sort_order, name limit 1`,
+  )
+).rows[0];
+await page.evaluate(() => {
+  const d = document.querySelector('[role="dialog"]');
+  d?.querySelector('input[name="accountId"]')
+    ?.parentElement?.querySelector('button[role="combobox"]')
+    ?.click();
+});
+await settle(900);
+await page.evaluate((name) => {
+  const d = document.querySelector('[role="dialog"]');
+  [...(d?.querySelectorAll('button[role="option"]') ?? [])]
+    .find((b) => (b.querySelector("span span")?.textContent ?? "").trim() === name)
+    ?.click();
+}, bdtAccount?.name);
+await settle(900);
+const accountNow = await page.evaluate(
+  () =>
+    document.querySelector('[role="dialog"] input[name="accountId"]')?.value ??
+    null,
+);
+check(
+  "a real taka account is chosen, not whichever sorts first",
+  Boolean(bdtAccount) && accountNow === bdtAccount.id,
+  `${bdtAccount?.name ?? "no BDT account"}: ${accountNow === bdtAccount?.id ? "chosen" : `form holds ${accountNow}`}`,
+);
 
 await page.evaluate(
   ({ categoryId, today }) => {
@@ -284,6 +328,9 @@ await page.evaluate(
     set("txnDate", today);
     set("description", "MDQ three papers on one entry");
     set("amount", "1200");
+    /* Required on every entry since #67, and not pre-filled on purpose — the
+       browser refused the submit with this box empty, so nothing was saved. */
+    set("usdRate", "122.50");
     void categoryId;
   },
   {
@@ -352,13 +399,18 @@ check(
 
 const entry = (
   await db.query(
-    "select id from transactions where description like 'MDQ%' limit 1",
+    "select id, account_id, usd_rate from transactions where description like 'MDQ%' limit 1",
   )
 ).rows[0];
 check(
   "the entry itself was recorded",
   Boolean(entry),
   entry ? entry.id : "no MDQ transaction — the form did not submit",
+);
+check(
+  "on the account chosen, at the rate typed",
+  entry?.account_id === bdtAccount?.id && Number(entry?.usd_rate) === 122.5,
+  entry ? `rate ${entry.usd_rate}` : "no entry",
 );
 
 const stored = (

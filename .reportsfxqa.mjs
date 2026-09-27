@@ -20,6 +20,11 @@
  *
  *     node .reportsfxqa.mjs      (local only — writes and deletes; puts the
  *                                 Settings rate back where it found it)
+ *
+ * Brought up to date 27 Sep 2026: `usdRate` is required on every entry since
+ * #67 (packages/shared/src/transactions.ts, above `usdRate`), so the entry
+ * with no rate is recorded with one and then has it cleared in the database —
+ * the state every row written before that rule is in.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -104,7 +109,15 @@ const withRate = await call("POST", "/transactions/cash-in", {
   usdRate: "122.00",
   usdSent: "1000.00",
 });
-/* And one that carries none — an ordinary taka expense. */
+/*
+ * And one that carries none — an ordinary taka expense.
+ *
+ * The API refuses a rateless entry since #67 ("puro application a joto
+ * dhoroner transaction a hok na keno manually prottekbar rate bosate hobe"),
+ * but rows written before that rule have none, and they are exactly what a
+ * fallback to the Settings rate would have priced. So it is recorded with a
+ * rate and the rate is then cleared, leaving it as those older rows are.
+ */
 const noRate = await call("POST", "/transactions", {
   direction: "out",
   txnDate: month + "12",
@@ -113,11 +126,26 @@ const noRate = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "RFXQA expense with no rate",
   paymentMethod: "bank_transfer",
+  usdRate: "122.00",
 });
+if (noRate.body?.id) {
+  await db.query(
+    "update transactions set usd_rate = null, fx_rate = null where id = $1",
+    [noRate.body.id],
+  );
+}
+const rates = (
+  await db.query(
+    "select description, usd_rate::text r from transactions where description like 'RFXQA%' order by description",
+  )
+).rows;
 check(
   "one entry carries a rate and one does not",
-  withRate.status === 201 && noRate.status === 201,
-  `HTTP ${withRate.status}/${noRate.status}`,
+  withRate.status === 201 &&
+    noRate.status === 201 &&
+    rates.find((r) => r.description.startsWith("RFXQA funding"))?.r != null &&
+    rates.find((r) => r.description.startsWith("RFXQA expense"))?.r == null,
+  `HTTP ${withRate.status}/${noRate.status}; ${rates.map((r) => `${r.description.slice(6, 20)}: ${r.r}`).join(", ")}`,
 );
 
 /* ------------------------- the Settings rate, saved -------------------- */

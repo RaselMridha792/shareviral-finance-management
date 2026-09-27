@@ -15,6 +15,15 @@
  * one save at a time.
  *
  *     node .refuploadqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the entry states `usdRate` — required on
+ * every transaction by the owner's rule (packages/shared/src/transactions.ts,
+ * above `usdRate`) — and a refused entry now reports instead of throwing;
+ * All transactions has no Entry No. column since #45, so that check now
+ * asks for Invoice and Reference with no TXN- number on the row.
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -103,16 +112,18 @@ const made = await call("POST", "/transactions", {
   description: "REFQA entry with a bank reference",
   paymentMethod: "bank_transfer",
   reference: BANKREF,
+  usdRate: "122.50",
 });
 check(
   "the contract still ACCEPTS a stored reference",
   made.status === 201,
-  `HTTP ${made.status} ${JSON.stringify(made.body?.message ?? "").slice(0, 80)}`,
+  `HTTP ${made.status} ${JSON.stringify(made.body?.errors ?? made.body?.message ?? "").slice(0, 80)}`,
 );
 const entry = made.body;
+// Null-safe: with no row it reads as a FAIL, not a TypeError and no summary.
 const storedRef = async () =>
-  (await db.query("select reference from transactions where id=$1", [entry.id]))
-    .rows[0].reference;
+  (await db.query("select reference from transactions where id=$1", [entry?.id ?? null]))
+    .rows[0]?.reference ?? null;
 check(
   "and it is on the row",
   (await storedRef()) === BANKREF,
@@ -202,27 +213,50 @@ for (const [label, url, pattern] of FORMS) {
 
 await page.goto(`${WEB}/transactions`, { waitUntil: "networkidle0", timeout: 120000 });
 await settle(2600);
-const table = await page.evaluate(() => {
+/* The row is found by what it IS (`data-row-id`), not by its description —
+   the Description column is gone from every ledger table, so that text is no
+   longer on the row, and a row looked up by it read as empty: the "no TXN-"
+   half of the check below then passed on nothing. The bank's number is read
+   off the Reference cell, found by its heading rather than by position. */
+const cellUnder = (heading, id) => {
   const heads = [...document.querySelectorAll("thead th")].map((h) =>
     (h.textContent ?? "").trim(),
   );
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("REFQA entry"),
-  );
+  const at = heads.indexOf(heading);
+  const row = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+  const cell = at >= 0 ? row?.querySelectorAll("td")[at] : undefined;
   return {
     heads,
+    found: Boolean(row),
     row: (row?.textContent ?? "").replace(/\s+/g, " "),
+    cell: (cell?.textContent ?? "").replace(/\s+/g, " ").trim(),
   };
-});
+};
+const table = await page.evaluate(cellUnder, "Reference", entry?.id ?? "");
+/*
+ * Changed on purpose since this was written — SESSIONS.md #45, the owner:
+ * "ekhaneo same vabe invoice and reference thakbe entry no thakbena". All
+ * transactions now carries Invoice and Reference (the bank's) and no Entry
+ * No. at all; our own TXN- number lives on the bank statement and exports.
+ * What still must hold: nothing of ours sits under the bank's name.
+ */
 check(
-  "the table calls our own number Entry No., not Reference",
-  table.heads.includes("Entry No.") && !table.heads.includes("Reference"),
-  table.heads.filter((h) => /entry|reference|invoice|transaction/i.test(h)).join(" | "),
+  "the table carries Invoice and the bank's Reference, and no Entry No. (#45)",
+  table.heads.includes("Invoice") &&
+    table.heads.includes("Reference") &&
+    !table.heads.includes("Entry No.") &&
+    table.found &&
+    !/TXN-/.test(table.row),
+  table.heads.filter((h) => /entry|reference|invoice|transaction/i.test(h)).join(" | ") +
+    (!table.found ? " — the entry's row is not on the page" : "") +
+    (/TXN-/.test(table.row) ? " — and a TXN- number is on the row" : ""),
 );
 check(
   "and the bank's number typed before this change still shows on the row",
-  table.row.includes(BANKREF),
-  table.row.slice(0, 150),
+  table.found && table.cell.includes(BANKREF),
+  table.found
+    ? `Reference cell "${table.cell}" — ${table.row.slice(0, 110)}`
+    : "row not found",
 );
 
 /* THE DANGEROUS ONE: editing the row must not silently erase it. */
@@ -242,24 +276,17 @@ await page.goto(`${WEB}/statement?account=${account.id}`, {
   timeout: 120000,
 });
 await settle(2600);
-const stmt = await page.evaluate(() => {
-  const heads = [...document.querySelectorAll("thead th")].map((h) =>
-    (h.textContent ?? "").trim(),
-  );
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("REFQA entry"),
-  );
-  return { heads, row: (row?.textContent ?? "").replace(/\s+/g, " ") };
-});
+const stmt = await page.evaluate(cellUnder, "Entry No.", entry?.id ?? "");
 check(
-  "the bank statement names the column the same way",
+  // All transactions dropped the column (#45); the statement keeps it.
+  "the bank statement still names our own number Entry No.",
   stmt.heads.includes("Entry No."),
   stmt.heads.join(" | ").slice(0, 140),
 );
 check(
   "and shows both numbers there — ours, and the bank's under it",
-  /TXN-/.test(stmt.row) && stmt.row.includes(BANKREF),
-  stmt.row.slice(0, 160),
+  stmt.found && /TXN-/.test(stmt.cell) && stmt.cell.includes(BANKREF),
+  stmt.found ? `Entry No. cell "${stmt.cell}"` : "row not found",
 );
 
 await browser.close();

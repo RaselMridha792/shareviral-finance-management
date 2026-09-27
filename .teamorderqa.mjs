@@ -1,13 +1,15 @@
 /**
- * Seniority order, and an employee ID that is optional.
+ * Employee ID order, and an employee ID that is optional.
  *
  * Two of the owner's asks, and the trap in each:
  *
- *   - the list is ordered by JOINING DATE, so SL 1 is the first hire. The trap
- *     is `joined_on` being a DATE: two people hired the same day have no
- *     defined order, and this list is paged with OFFSET — without a unique
- *     final key one of them appears on two pages and the other on none. So the
- *     fixture deliberately hires four people on ONE day.
+ *   - the list is ordered by EMPLOYEE ID, somebody with no ID at the bottom
+ *     (Postgres puts NULLs last on ASC), and joining date, name and id behind
+ *     it as tiebreaks. The trap is the tie: `joined_on` is a DATE and two
+ *     uncoded people hired the same day have no order of their own, and this
+ *     list is paged with OFFSET — without a unique final key one of them
+ *     appears on two pages and the other on none. So the fixture deliberately
+ *     hires three people on ONE day, two of them with no ID.
  *   - the employee ID is OPTIONAL. It was once required and unique, which is
  *     why it was removed; the whole difference this time is that somebody with
  *     no ID is a normal person. And a duplicate must name who holds it rather
@@ -16,6 +18,12 @@
  * Nothing here rewrites anybody's data: the ordering change touches no column.
  *
  *     node .teamorderqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the Team list is in employee ID order now,
+ * not oldest joiner first (SESSIONS "39b — the Team list is ordered by employee
+ * ID"; team-members.service.ts list() orders by employeeCode, joinedOn,
+ * fullName, id). The payroll picker deliberately stays on seniority, so that
+ * check is unchanged. Paging is still checked for no row on two pages.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -69,7 +77,10 @@ const check = (name, pass, detail) => {
 /*
  * Five people. Zed joined first and Alice last, so alphabetical and seniority
  * order are opposites — an ordering that only looks sorted cannot pass. Three
- * of them share one joining date, which is where offset paging breaks.
+ * of them share one joining date, which is where offset paging breaks. By
+ * employee ID the list reads Zed, Bilal, Alice and then the two with no ID,
+ * Nadia and Yara — so Alice (hired 2025) sits above two people hired in 2021,
+ * which seniority would never do.
  */
 const PEOPLE = [
   { name: "TOQA Zed Oldest", joined: "2019-03-01", code: "TOQA-0001" },
@@ -161,25 +172,57 @@ check(
 // Put it back for the screen check below.
 await call("PATCH", `/team-members/${target}`, { employeeCode: "TOQA-0001" });
 
-/* --------------------------- seniority, not the alphabet ---------------- */
+/* -------------------- employee ID, not seniority or the alphabet -------- */
+
+/*
+ * The list's own leading keys, as the service orders them: the code with the
+ * uncoded last, then the joining date. Name and id come after, but a JS string
+ * compare is not Postgres's collation, so those two are pinned by the fixture's
+ * exact sequence below rather than compared here.
+ */
+const inOrder = (a, b) => {
+  const ca = a.employeeCode ?? null;
+  const cb = b.employeeCode ?? null;
+  if (ca !== cb) {
+    if (ca === null) return false; // an uncoded person never precedes a coded one
+    if (cb === null) return true;
+    return ca < cb;
+  }
+  return a.joinedOn <= b.joinedOn;
+};
+const EXPECTED = [
+  "TOQA Zed Oldest",
+  "TOQA Bilal Same Day",
+  "TOQA Alice Newest",
+  "TOQA Nadia Same Day",
+  "TOQA Yara Same Day",
+];
 
 const listed = await call("GET", "/team-members?page=1&pageSize=100");
 const ours = (listed.body?.items ?? []).filter((m) =>
   m.fullName.startsWith("TOQA "),
 );
-const joinDates = ours.map((m) => m.joinedOn);
+// Was: "the list runs oldest joiner first" — changed by the owner, SESSIONS 39b.
 check(
-  "the list runs oldest joiner first",
-  joinDates.length === 5 &&
-    joinDates.every((d, i) => i === 0 || joinDates[i - 1] <= d) &&
-    ours[0].fullName === "TOQA Zed Oldest" &&
-    ours[4].fullName === "TOQA Alice Newest",
-  ours.map((m) => `${m.joinedOn} ${m.fullName.replace("TOQA ", "")}`).join(" | "),
+  "the list runs in employee ID order, the people with no ID last",
+  ours.length === 5 &&
+    ours.every((m, i) => i === 0 || inOrder(ours[i - 1], m)) &&
+    ours.map((m) => m.fullName).join("|") === EXPECTED.join("|"),
+  ours
+    .map((m) => `${m.employeeCode ?? "—"} ${m.joinedOn} ${m.fullName.replace("TOQA ", "")}`)
+    .join(" | "),
 );
 check(
   "which is the OPPOSITE of alphabetical — so this cannot be a name sort",
-  ours[0].fullName > ours[4].fullName,
-  `${ours[0].fullName} before ${ours[4].fullName}`,
+  ours.length === 5 && ours[0].fullName > ours[2].fullName,
+  `${ours[0]?.fullName} before ${ours[2]?.fullName}`,
+);
+check(
+  "nor the old seniority sort — Alice, hired 2025, reads above the 2021 people with no ID",
+  ours.length === 5 &&
+    ours[2].fullName === "TOQA Alice Newest" &&
+    ours[2].joinedOn > ours[3].joinedOn,
+  `${ours[2]?.joinedOn} ${ours[2]?.fullName} before ${ours[3]?.joinedOn} ${ours[3]?.fullName}`,
 );
 
 /* ------------- the tie that breaks offset paging, if it is going to ------ */
@@ -198,14 +241,35 @@ check(
   new Set(ids).size === ids.length,
   `${ids.length} rows, ${new Set(ids).size} distinct`,
 );
-const paged = pages.flat().map((m) => m.joinedOn);
+// Was: join dates monotonic — the old leading key. The leading keys now are
+// the employee ID (uncoded last) and then the joining date (SESSIONS 39b).
+const paged = pages.flat();
 check(
-  "and the join dates stay monotonic across every page boundary",
-  paged.every((d, i) => i === 0 || paged[i - 1] <= d),
-  paged.join(" | "),
+  "and the employee IDs stay in order across every page boundary",
+  paged.every((m, i) => i === 0 || inOrder(paged[i - 1], m)),
+  paged.map((m) => `${m.employeeCode ?? "—"} ${m.joinedOn}`).join(" | "),
+);
+/*
+ * The whole directory's first eight rows need not include the fixture at all
+ * now that other people's IDs sort ahead of it, so the tie is also paged where
+ * it lives: the five TOQA people, two to a page. Nadia and Yara have no ID and
+ * one joining date, so only the name and id tiebreaks keep them apart.
+ */
+const ourPage = async (n) =>
+  (await call("GET", `/team-members?q=TOQA&page=${n}&pageSize=2`)).body?.items ?? [];
+const ourPages = [await ourPage(1), await ourPage(2), await ourPage(3)];
+const ourIds = ourPages.flat().map((m) => m.id);
+check(
+  "the fixture paged two at a time: all five, nobody twice, in the list's order",
+  ourIds.length === 5 &&
+    new Set(ourIds).size === 5 &&
+    ourPages.flat().map((m) => m.fullName).join("|") === EXPECTED.join("|"),
+  ourPages
+    .map((p) => p.map((m) => m.fullName.replace("TOQA ", "")).join(", "))
+    .join(" / "),
 );
 
-/* --------------- the sheet agrees with the directory about row 1 -------- */
+/* ------------- the sheet keeps seniority, whatever the directory does ----- */
 
 const eligible = await call(
   "GET",
@@ -214,8 +278,10 @@ const eligible = await call(
 const pickerOurs = (eligible.body ?? eligible.body?.items ?? []).filter?.((m) =>
   (m.fullName ?? "").startsWith("TOQA "),
 ) ?? [];
+// Unchanged on purpose: payroll stays on seniority while the directory moved
+// to employee ID (SESSIONS 39b; team-members.service.ts list() comment).
 check(
-  "the payroll picker reads in the same seniority order",
+  "the payroll picker reads in seniority order",
   pickerOurs.length === 0 ||
     (pickerOurs[0].fullName === "TOQA Zed Oldest" &&
       pickerOurs[pickerOurs.length - 1].fullName === "TOQA Alice Newest"),
@@ -288,11 +354,14 @@ check(
   idAt !== -1 && screen.rows.some((cells) => cells[idAt] === "N/A"),
   JSON.stringify(screen.rows.map((c) => c[idAt])),
 );
+// Was: "run oldest first" (Zed first, Alice last) — employee ID order since
+// SESSIONS 39b, so Alice is third and the two with no ID close the list.
 check(
-  "and the rows on screen run oldest first",
+  "and the rows on screen run in employee ID order, the people with no ID last",
   screen.rows.length === 5 &&
-    screen.rows[0].some((c) => c.includes("Zed Oldest")) &&
-    screen.rows[4].some((c) => c.includes("Alice Newest")),
+    EXPECTED.every((name, i) =>
+      screen.rows[i].some((c) => c.includes(name.replace("TOQA ", ""))),
+    ),
   // Detail prints the Name column; it used to print c[2], which the extra
   // column turned into the employee ID and made unreadable as an ordering.
   screen.rows.map((c) => (nameAt === -1 ? c.join("/") : c[nameAt])).join(" | "),

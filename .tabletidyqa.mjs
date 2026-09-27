@@ -19,6 +19,16 @@
  * way round.
  *
  *     node .tabletidyqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the expense states the `usdRate` every entry
+ * now requires (#67); the tints are read off a cell, where `tr.row-in > td`
+ * paints them; and the Reference cell is found by its heading, since #45 took
+ * the TXN- entry number off this table.
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone. The tints are read off the Date cell, and #26
+ * ("no small line under the description") now asks that the payment method is
+ * not on the row and is in the row's popup, with the description.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -111,12 +121,28 @@ const spend = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "TIDYQA money leaving",
   paymentMethod: "bank_transfer",
+  usdRate: "122.00", // required on every entry now (SESSIONS #67)
 });
 check(
   "one movement in and one out are recorded",
   cashIn.status === 201 && spend.status === 201,
   `HTTP ${cashIn.status}/${spend.status}`,
 );
+
+/* The rows are found by what they ARE — `tr[data-row-id]` — and not by their
+   description, which is no longer on any ledger table. The id comes from the
+   response that made the entry, or from the row by its description. */
+const idOf = async (res, description) =>
+  res.body?.id ??
+  (
+    await db.query(
+      "select id from transactions where description=$1 and deleted_at is null limit 1",
+      [description],
+    )
+  ).rows[0]?.id ??
+  "";
+const IN_ID = await idOf(cashIn, "TIDYQA money arriving");
+const OUT_ID = await idOf(spend, "TIDYQA money leaving");
 
 /* -------------------------------- browser ------------------------------ */
 
@@ -171,16 +197,50 @@ await page.goto(`${WEB}/transactions`, {
 });
 await settle(2800);
 
+/*
+ * One row, read by its id: its text, its tint, and the cells under the
+ * headings asked for. The tint is painted on the CELLS — `tr.row-in > td` in
+ * globals.css, since 9c03cdb ("the row's colour", 1 Sep) coloured the text
+ * with it — and the <tr> itself stays transparent. It used to be read off the
+ * description cell; that column is gone, so it is read off the Date cell,
+ * which every ledger table still has.
+ */
+const readRow = (id, wanted) => {
+  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+    (h.textContent ?? "").trim(),
+  );
+  const all = [...document.querySelectorAll("tbody tr")];
+  const row = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+  const cells = [...(row?.querySelectorAll("td") ?? [])];
+  const under = (heading) => cells[heads.indexOf(heading)];
+  const byHead = Object.fromEntries(
+    wanted.map((h) => {
+      const c = under(h);
+      return [
+        h,
+        {
+          text: (c?.textContent ?? "").replace(/\s+/g, " ").trim(),
+          isButton: Boolean(c?.querySelector("button")),
+        },
+      ];
+    }),
+  );
+  const dateCell = under("Date");
+  return {
+    found: Boolean(row),
+    index: row ? all.indexOf(row) : -1,
+    text: (row?.textContent ?? "").replace(/\s+/g, " "),
+    bg: dateCell ? getComputedStyle(dateCell).backgroundColor : undefined,
+    cells: byHead,
+  };
+};
+
 const txn = await page.evaluate(() => {
   const heads = [...document.querySelectorAll("thead th")].map((h) =>
     (h.textContent ?? "").trim(),
   );
   const first = document.querySelector("tbody tr");
   const cells = first ? first.querySelectorAll("td").length : 0;
-  const rows = [...document.querySelectorAll("tbody tr")].map((r) => ({
-    text: (r.textContent ?? "").replace(/\s+/g, " "),
-    bg: getComputedStyle(r).backgroundColor,
-  }));
   const filters = (document.querySelector("main")?.textContent ?? "").replace(
     /\s+/g,
     " ",
@@ -188,7 +248,7 @@ const txn = await page.evaluate(() => {
   const options = [...document.querySelectorAll("select option")].map((o) =>
     (o.textContent ?? "").trim(),
   );
-  return { heads, cells, rows, filters, options };
+  return { heads, cells, filters, options };
 });
 
 check(
@@ -218,47 +278,83 @@ check(
   txn.options.slice(0, 6).join(" | "),
 );
 
-const inRow = txn.rows.find((r) => r.text.includes("TIDYQA money arriving"));
-const outRow = txn.rows.find((r) => r.text.includes("TIDYQA money leaving"));
+const inRow = await page.evaluate(readRow, IN_ID, ["Amount"]);
+const outRow = await page.evaluate(readRow, OUT_ID, ["Amount", "Reference"]);
+const notFound = (r) => (r.found ? "" : " (row not found)");
 check(
   "25: the money-in row is tinted green",
-  tint(inRow?.bg) === "green",
-  `${inRow?.bg} -> ${tint(inRow?.bg)}`,
+  inRow.found && tint(inRow.bg) === "green",
+  `${inRow.bg} -> ${tint(inRow.bg)}${notFound(inRow)}`,
 );
 check(
   "25: and the money-out row red",
-  tint(outRow?.bg) === "red",
-  `${outRow?.bg} -> ${tint(outRow?.bg)}`,
+  outRow.found && tint(outRow.bg) === "red",
+  `${outRow.bg} -> ${tint(outRow.bg)}${notFound(outRow)}`,
 );
+
+/* 26, re-expressed now the description has left the table. The small line
+   that used to sit under it (payment method, transfer chip) must not have
+   moved onto the row in some other cell — All transactions draws no payment
+   method — and it is still there to be read, in the popup a click on the row
+   opens, which is where the description itself lives now. */
 check(
-  "26: the payment method and transfer chip are gone from under the description",
-  !/TIDYQA money leaving Bank transfer/i.test(
-    (outRow?.text ?? "").replace(/\s+/g, " "),
-  ),
-  (outRow?.text ?? "").slice(0, 110),
+  "26: the payment method and transfer chip are not on the row",
+  outRow.found && !/Bank transfer|\btransfer\b/i.test(outRow.text),
+  outRow.found ? outRow.text.slice(0, 110) : "row not found",
+);
+const popup = await (async () => {
+  const opened = await page.evaluate((id) => {
+    const row = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+    /* On the Date cell: a click that lands on a link or a button inside the
+       row is left to that control and does not open the popup. */
+    const target = row?.querySelectorAll("td")[
+      [...document.querySelectorAll("thead th")].findIndex(
+        (h) => (h.textContent ?? "").trim() === "Date",
+      )
+    ];
+    if (!target) return false;
+    target.click();
+    return true;
+  }, OUT_ID);
+  if (!opened) return { found: false, title: "", text: "" };
+  await settle(900);
+  const read = await page.evaluate(() => {
+    const p = [...document.querySelectorAll("[data-popup]")].pop();
+    const heading = p?.querySelector("h1, h2, h3, [id$='title']");
+    return {
+      found: Boolean(p),
+      title: (heading?.textContent ?? "").trim(),
+      text: (p?.textContent ?? "").replace(/\s+/g, " "),
+    };
+  });
+  await page.keyboard.press("Escape");
+  await settle(500);
+  return read;
+})();
+check(
+  "26: the description, and how it was paid, are in the row's popup instead",
+  popup.found &&
+    popup.title === "TIDYQA money leaving" &&
+    /Paid by\s*Bank transfer/i.test(popup.text),
+  popup.found
+    ? `title "${popup.title}" — ${popup.text.slice(0, 140)}`
+    : "no popup opened",
 );
 check(
   "24: the dollars still show, small, on the row that has them",
-  /409\.84|\$409/.test(inRow?.text ?? ""),
-  (inRow?.text ?? "").slice(0, 130),
+  inRow.found && /409\.84|\$409/.test(inRow.cells.Amount?.text ?? ""),
+  inRow.found ? `Amount cell "${inRow.cells.Amount?.text}"` : "row not found",
 );
 
-/* 27: a reference with no document is not a link. */
-const refCell = await page.evaluate(() => {
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("TIDYQA money leaving"),
-  );
-  const cells = [...(row?.querySelectorAll("td") ?? [])];
-  const withRef = cells.find((c) => /TXN-/.test(c.textContent ?? ""));
-  return {
-    text: (withRef?.textContent ?? "").replace(/\s+/g, " ").trim(),
-    isButton: Boolean(withRef?.querySelector("button")),
-  };
-});
+/* 27: a reference with no document is not a link.
+   Found by its heading. It used to be the cell holding the TXN- number, but
+   #45 took Entry No. off this table ("entry no thakbena") and Reference is
+   its own `ReferenceCell` column, so no cell on the row says TXN- any more. */
+const refCell = outRow.cells.Reference ?? { text: "", isButton: false };
 check(
   "27: a reference with nothing attached says N/A and is not clickable",
-  refCell.text.includes("N/A") && !refCell.isButton,
-  `"${refCell.text}", button ${refCell.isButton}`,
+  outRow.found && refCell.text.includes("N/A") && !refCell.isButton,
+  `"${refCell.text}", button ${refCell.isButton}${notFound(outRow)}`,
 );
 
 /* ---------------------------- the statement ---------------------------- */
@@ -272,21 +368,20 @@ await page.goto(`${WEB}/statement?account=${account.id}`, {
 });
 await settle(2800);
 
-const stmt = await page.evaluate(() => {
-  const rows = [...document.querySelectorAll("tbody tr")].map((r) => ({
-    text: (r.textContent ?? "").replace(/\s+/g, " "),
-    bg: getComputedStyle(r).backgroundColor,
-  }));
-  return {
-    rows,
-    blurb: (document.querySelector("main")?.textContent ?? "")
+/* Off a cell, as above: the statement uses the same `row-in`/`row-out`, and
+   its rows carry the same `data-row-id`. */
+const stmtIn = await page.evaluate(readRow, IN_ID, []);
+const stmtOut = await page.evaluate(readRow, OUT_ID, []);
+const stmt = {
+  blurb: await page.evaluate(() =>
+    (document.querySelector("main")?.textContent ?? "")
       .replace(/\s+/g, " ")
       .slice(0, 200),
-  };
-});
+  ),
+};
 
-const firstIdx = stmt.rows.findIndex((r) => r.text.includes("TIDYQA money arriving"));
-const lastIdx = stmt.rows.findIndex((r) => r.text.includes("TIDYQA money leaving"));
+const firstIdx = stmtIn.index;
+const lastIdx = stmtOut.index;
 check(
   "31: the statement reads oldest first",
   firstIdx >= 0 && lastIdx >= 0 && firstIdx < lastIdx,
@@ -299,9 +394,8 @@ check(
 );
 check(
   "31: the statement rows carry the same colours",
-  tint(stmt.rows[firstIdx]?.bg) === "green" &&
-    tint(stmt.rows[lastIdx]?.bg) === "red",
-  `${tint(stmt.rows[firstIdx]?.bg)} / ${tint(stmt.rows[lastIdx]?.bg)}`,
+  tint(stmtIn.bg) === "green" && tint(stmtOut.bg) === "red",
+  `${tint(stmtIn.bg)} / ${tint(stmtOut.bg)}`,
 );
 
 /*

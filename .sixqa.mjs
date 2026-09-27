@@ -8,11 +8,17 @@
  *   3. The expense drawer lost its Receipt link; a typed "N/A" into any link
  *      box counts as blank; nothing is type="url" any more.
  *   4. Subscriptions: Payment Method is a method again, Account/Card is its
- *      own field, and the table shows both.
+ *      own field, and both are shown — Account/Card on the register, Payment
+ *      Method on the plan's own page.
  *   5. The team drawer no longer offers Mobile wallet or PSR.
  *   6. Empty table cells read N/A.
  *
  *     node .sixqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the account cards are read in the new
+ * markup (SESSIONS #84) and the tilde follows the API's ownBalanceExact; the
+ * N/A entry carries the usdRate every entry now requires; Payment Method is
+ * checked on the plan's own page, where #22 moved it off the register.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -274,25 +280,34 @@ await page.setViewport({ width: 1550, height: 1200 });
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- 2 in the browser: the accounts page cards
+/*
+ * Was: a card found by "Opened at" in its parent, its big figure by a
+ * "clamp"-sized class, and a "~" required on the dollars. Accounts was rebuilt
+ * in the new design (SESSIONS #84, accounts-screen.tsx AccountCard): a card is
+ * a .sv-card with the name in its first <p> and the balance block right-aligned
+ * under it, the lead figure at 30px and the other at 13px. And the tilde is
+ * now the API's to decide: the dollars are the account's OWN figure
+ * (ownBalance) and "only an inexact one wears the ~" — this fixture states no
+ * opening in dollars, so the API calls it inexact and the card must say so.
+ */
+const listedAccounts = await call("GET", "/accounts");
+const usdListed = (listedAccounts.body ?? []).find?.((a) => a.id === usdAcct.body?.id) ?? null;
 await page.goto(`${WEB}/accounts`, { waitUntil: "networkidle0", timeout: 120000 });
 await settle(2800);
 const cards = await page.evaluate(() => {
   const read = (name) => {
-    const card = [...document.querySelectorAll("div")].find(
-      (d) =>
-        d.querySelector("p")?.textContent === name &&
-        (d.parentElement?.textContent ?? "").includes("Opened at"),
-    )?.closest(".p-5, [class*='p-5']") ??
-      [...document.querySelectorAll("[class]")].find(
-        (d) => d.textContent?.includes(name) && d.textContent?.includes("Opened at") && d.querySelectorAll("p").length < 8,
-      );
+    const card = [...document.querySelectorAll(".sv-card")].find(
+      (c) => c.querySelector("p")?.textContent?.trim() === name,
+    );
     if (!card) return null;
-    // The big figure is the clamp-sized element; the small line follows it.
-    const big = card.querySelector('[class*="clamp"]');
-    const small = big?.nextElementSibling;
+    const block = card.querySelector("div.text-right");
+    const [big, small] = [...(block?.children ?? [])];
+    const size = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : null);
     return {
       big: big?.textContent?.trim() ?? null,
       small: small?.textContent?.trim() ?? null,
+      bigPx: size(big),
+      smallPx: size(small),
     };
   };
   return { usd: read("SIXQA Dollar Card"), bdt: read("SIXQA Taka Bank") };
@@ -301,12 +316,22 @@ check(
   "the USD-primary card leads with dollars, taka small underneath",
   Boolean(cards.usd?.big?.includes("$")) &&
     Boolean(cards.usd?.small?.includes("৳")) &&
-    Boolean(cards.usd?.big?.includes("~")),
+    /1,22,000/.test(cards.usd?.small ?? "") &&
+    cards.usd.bigPx > cards.usd.smallPx,
   JSON.stringify(cards.usd),
 );
 check(
+  "  and the dollars wear a ~ exactly when the API calls them inexact",
+  usdListed !== null &&
+    Boolean(cards.usd?.big) &&
+    cards.usd.big.startsWith("~") === (usdListed.ownBalanceExact === false),
+  `API ownBalance ${usdListed?.ownBalance}, exact ${usdListed?.ownBalanceExact}; card ${JSON.stringify(cards.usd?.big)}`,
+);
+check(
   "and the BDT card still leads with taka",
-  Boolean(cards.bdt?.big?.includes("৳")),
+  Boolean(cards.bdt?.big?.includes("৳")) &&
+    /50,000/.test(cards.bdt?.big ?? "") &&
+    cards.bdt.bigPx > cards.bdt.smallPx,
   JSON.stringify(cards.bdt),
 );
 
@@ -406,6 +431,10 @@ const naSpend = await call("POST", "/transactions", {
   description: "SIXQA typed NA into the receipt box",
   paymentMethod: "cash",
   receiptUrl: "N/A",
+  // Was absent, and the entry got a 400 for it: usdRate became REQUIRED on
+  // every entry (packages/shared transactions.ts, "REQUIRED, on every entry,
+  // everywhere" — SESSIONS #64/#66). Not the N/A rule, which is unchanged.
+  usdRate: "122.00",
 });
 const naStored = (
   await db.query(
@@ -415,7 +444,7 @@ const naStored = (
 check(
   'a typed "N/A" into a link field is accepted and stored as nothing',
   naSpend.status === 201 && naStored?.receipt_url === null,
-  `HTTP ${naSpend.status}, stored ${JSON.stringify(naStored?.receipt_url)}`,
+  `HTTP ${naSpend.status}, stored ${JSON.stringify(naStored?.receipt_url)} ${naSpend.status >= 400 ? JSON.stringify(naSpend.body?.errors ?? naSpend.body?.message ?? "") : ""}`,
 );
 
 // --- 4: the subscription drawer and table
@@ -463,15 +492,46 @@ const subsTable = await page.evaluate(() => {
   );
   return {
     heads: heads.filter((h) => /Payment Method|Account\/Card/.test(h)),
-    method: row?.textContent?.includes("Bank transfer") ?? false,
     account: row?.textContent?.includes("SIXQA Taka Bank") ?? false,
   };
 });
+/*
+ * Was: "the table carries Payment Method and Account/Card as separate
+ * columns". The owner cut the register from seventeen columns to eleven
+ * (SESSIONS #22, "baki gula single page a jabe"): Payment Method went to the
+ * plan's own page, /subscriptions/[id], and Account/Card stayed on the register
+ * (subscription-columns.tsx). The item's claim — method and account shown as
+ * two separate facts — is checked where each one lives now.
+ */
 check(
-  "the table carries Payment Method and Account/Card as separate columns",
-  subsTable.heads.length === 2 && subsTable.method && subsTable.account,
+  "the register carries Account/Card, and Payment Method is off it",
+  subsTable.heads.length === 1 &&
+    subsTable.heads[0] === "Account/Card" &&
+    subsTable.account,
   JSON.stringify(subsTable),
 );
+await page.goto(`${WEB}/subscriptions/${subCreated.body?.id}`, {
+  waitUntil: "networkidle0",
+  timeout: 120000,
+});
+await settle(2200);
+const planPage = await page.evaluate(() => {
+  const fact = (label) => {
+    const dt = [...document.querySelectorAll("dt")].find(
+      (d) => (d.textContent ?? "").trim() === label,
+    );
+    return dt?.nextElementSibling?.textContent?.trim() ?? null;
+  };
+  return { method: fact("Payment method"), account: fact("Account or card") };
+});
+check(
+  "the plan's own page shows Payment method and Account or card as separate facts",
+  planPage.method === "Bank transfer" && planPage.account === "SIXQA Taka Bank",
+  JSON.stringify(planPage),
+);
+// Back to the register, where the drawer below is opened from.
+await page.goto(`${WEB}/subscriptions`, { waitUntil: "networkidle0", timeout: 120000 });
+await settle(2800);
 
 const subDrawer = await (async () => {
   await page.evaluate(() => {

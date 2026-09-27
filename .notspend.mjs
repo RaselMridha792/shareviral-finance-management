@@ -13,6 +13,11 @@
  * carry it. A fix that made the ledger tidy would make the balance wrong.
  *
  *     node .notspend.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the transfer states `usdRate` — required on
+ * every transfer by the owner's rule (packages/shared/src/transactions.ts,
+ * `transferSchema`). Without it nothing moved and the "does not appear"
+ * checks passed on an empty ledger, so a refused transfer now says why.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -115,8 +120,13 @@ const made = await call("POST", "/transactions/transfer", {
   toAccountId: accounts[1].id,
   amount: `${AMOUNT}.00`,
   description: "NSQA bank to card",
+  usdRate: "122.50",
 });
-check("a transfer records", made.status === 201, `HTTP ${made.status}`);
+check(
+  "a transfer records",
+  made.status === 201,
+  `HTTP ${made.status}${made.status !== 201 ? " " + JSON.stringify(made.body?.errors ?? made.body?.message) : ""}`,
+);
 const after = await read();
 
 /* ------------------------- it is not an expense ------------------------- */

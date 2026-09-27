@@ -6,6 +6,11 @@
  * and none of those can be read off the source with any confidence. So this
  * clicks the button, reads whether Confirm is disabled, types the wrong word,
  * types the right one, and checks the row afterwards.
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone. The ledger table no longer prints a row's
+ * description — a click on the row opens it in a popup — so the rows are aimed
+ * at by the transaction id each `<tr>` carries, the one this file seeded.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -52,12 +57,11 @@ const make = async (desc) =>
   ).rows[0];
 
 /*
- * Leftovers first. This harness aims at a row by the words in it, so a row
- * from a run that died before its cleanup — the API going down mid-run is
- * enough — leaves a second row wearing the same description. The next run then
- * opens the dialog on the stranger, trashes that one instead, and reports its
- * own freshly-seeded row as untouched: three failures that look exactly like
- * a broken delete and are nothing of the sort.
+ * Leftovers first. This harness used to aim at a row by the words in it, so a
+ * row from a run that died before its cleanup — the API going down mid-run is
+ * enough — left a second row wearing the same description, and the next run
+ * opened the dialog on the stranger. It aims by id now, which a leftover
+ * cannot share; the sweep stays so dead runs do not pile up in the ledger.
  */
 await db.query("delete from transactions where description like 'UI QA:%'");
 
@@ -100,6 +104,11 @@ const settle = (ms = 900) => new Promise((r) => setTimeout(r, ms));
 
 await page.goto(`${WEB}/transactions`, { waitUntil: "networkidle0", timeout: 120000 });
 await settle(1500);
+// The seeded row itself, rather than a guess at how long the table takes. If
+// it never arrives the checks below fail on their own terms.
+await page
+  .waitForSelector(`tbody tr[data-row-id="${first.id}"]`, { timeout: 15000 })
+  .catch(() => null);
 
 const buttons = await page.$$('button[aria-label="Move to trash"]');
 check(
@@ -130,23 +139,24 @@ const dialogState = () =>
     };
   });
 
-/** Open the dialog on the row whose text contains `needle`. */
-const openOn = async (needle) => {
-  const opened = await page.evaluate((text) => {
-    const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-      (r.textContent ?? "").includes(text),
-    );
+/**
+ * Open the dialog on the row whose transaction id is `id` — the `data-row-id`
+ * every ledger row carries, now the description is no longer printed on it.
+ */
+const openOn = async (id) => {
+  const opened = await page.evaluate((rowId) => {
+    const row = document.querySelector(`tbody tr[data-row-id="${rowId}"]`);
     if (!row) return false;
     const button = row.querySelector('button[aria-label="Move to trash"]');
     if (!button) return false;
     button.click();
     return true;
-  }, needle);
+  }, id);
   await settle(500);
   return opened;
 };
 
-check("the target row is on the page", await openOn("UI QA: the row to delete"), "");
+check("the target row is on the page", await openOn(first.id), "");
 
 let state = await dialogState();
 check(
@@ -263,7 +273,7 @@ check("saying no leaves the row alone", !afterCancel.deleted_at, "");
 
 /* --------------- and reopening starts from nothing, not from last time */
 
-await openOn("UI QA: the row to delete");
+await openOn(first.id);
 state = await dialogState();
 check(
   "reopening is disarmed again, not still holding the typed word",
@@ -326,11 +336,23 @@ check(
   "",
 );
 
-const stillOnScreen = await page.evaluate(
-  (text) => document.body.innerText.includes(text),
-  "UI QA: the row to delete",
+/*
+ * By id, and against its neighbour. Looking for the description would pass on
+ * any table now — no row prints one — so what says "it left" is that its own
+ * row is gone while the row seeded beside it is still drawn.
+ */
+const onScreen = await page.evaluate(
+  (ids) => ({
+    deleted: Boolean(document.querySelector(`tbody tr[data-row-id="${ids[0]}"]`)),
+    neighbour: Boolean(document.querySelector(`tbody tr[data-row-id="${ids[1]}"]`)),
+  }),
+  [first.id, second.id],
 );
-check("it has left the table without a reload", !stillOnScreen, "");
+check(
+  "it has left the table without a reload",
+  !onScreen.deleted && onScreen.neighbour,
+  `deleted row drawn ${onScreen.deleted}, neighbour drawn ${onScreen.neighbour}`,
+);
 
 const neighbourSurvived = (
   await db.query("select deleted_at from transactions where id = $1", [second.id])

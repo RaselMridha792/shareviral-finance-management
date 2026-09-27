@@ -12,6 +12,10 @@
  * the dashboard's rule that untouched zero accounts stay off it.
  *
  *     node .overdraftqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: every entry, transfer and challan that
+ * writes a ledger row now states `usdRate` — required on every transaction by
+ * the owner's rule (packages/shared/src/transactions.ts, above `usdRate`).
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -103,6 +107,9 @@ const catId = (await db.query("select id from categories where kind='out' and de
 const inCatId = (await db.query("select id from categories where kind='in' and deleted_at is null limit 1"))
   .rows[0].id;
 
+// Required on every entry since the owner's rule — any realistic day's rate.
+const RATE = "122.50";
+
 const entry = (direction, amount, txnDate, description) =>
   call("POST", "/transactions", {
     direction,
@@ -112,6 +119,7 @@ const entry = (direction, amount, txnDate, description) =>
     categoryId: direction === "out" ? catId : inCatId,
     description,
     paymentMethod: "bank_transfer",
+    usdRate: RATE,
   });
 
 /* ------------------------------------------------- the eleven doors, driven */
@@ -185,6 +193,7 @@ const bigTransfer = await call("POST", "/transactions/transfer", {
   txnDate: "2026-08-21",
   description: "QA transfer beyond means",
   paymentMethod: "bank_transfer",
+  usdRate: RATE,
 });
 check(
   "a transfer past the balance is refused",
@@ -222,6 +231,7 @@ const challan = await call("POST", "/tds/deposits", {
   periodMonth: 7,
   depositType: "salary",
   accountId: acct,
+  usdRate: RATE,
 });
 check(
   "a challan whose ledger row would overdraw is refused",
@@ -243,6 +253,7 @@ const legacyIn = await call("POST", "/transactions", {
   categoryId: inCatId,
   description: "QA legacy deposit",
   paymentMethod: "bank_transfer",
+  usdRate: RATE,
 });
 check(
   "an account negative from before the rule still accepts deposits",
@@ -257,10 +268,12 @@ const legacyOut = await call("POST", "/transactions", {
   categoryId: catId,
   description: "QA legacy spend",
   paymentMethod: "bank_transfer",
+  usdRate: RATE,
 });
 check(
   "but spending that digs it deeper is refused",
-  legacyOut.status === 400,
+  // For the balance, not for any 400 — a missing usdRate once passed this.
+  legacyOut.status === 400 && /below zero/i.test(msgOf(legacyOut)),
   `HTTP ${legacyOut.status} ${msgOf(legacyOut).slice(0, 70)}`,
 );
 

@@ -12,6 +12,15 @@
  * quietly stops displaying a fact is indistinguishable from one that lost it.
  *
  *     node .refqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the entry states the `usdRate` every entry
+ * now requires (#67), and Reference is expected as a clip with no box, since
+ * #34 made it attach-only like the invoice. Fixtures are REFONEQA-prefixed:
+ * `.refuploadqa.mjs` also wiped `REFQA%`, so each deleted the other's rows.
+ * A receipt is seeded so Cash In has a table to measure (it is month-scoped).
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -63,8 +72,8 @@ const check = (name, pass, detail) => {
 /* ------------------------------------------------------------- fixtures */
 
 const wipe = async () => {
-  await db.query("delete from transactions where description like 'REFQA%'");
-  await db.query("delete from accounts where name like 'REFQA %'");
+  await db.query("delete from transactions where description like 'REFONEQA%'");
+  await db.query("delete from accounts where name like 'REFONEQA %'");
 };
 await wipe();
 
@@ -73,7 +82,7 @@ const TODAY = (
 ).rows[0].d;
 const account = (
   await call("POST", "/accounts", {
-    name: "REFQA Bank",
+    name: "REFONEQA Bank",
     type: "bank",
     currency: "BDT",
     openingBalance: "500000.00",
@@ -93,10 +102,11 @@ const old = await call("POST", "/transactions", {
   accountId: account.id,
   amount: "1000.00",
   categoryId: cat.id,
-  description: "REFQA an older entry that has an invoice number",
+  description: "REFONEQA an older entry that has an invoice number",
   paymentMethod: "bank_transfer",
   invoiceNo: "INV-REFQA-77",
   reference: "FT26REFQA0001",
+  usdRate: "122.50", // required on every entry now (SESSIONS #67)
 });
 check(
   "an entry with an invoice number still records",
@@ -113,6 +123,18 @@ check(
   old.body?.reference === "FT26REFQA0001",
   `${old.body?.reference}`,
 );
+
+/* A receipt this month, so Cash In draws its table. It shows only the open
+   month and swaps to an empty state when that has none — and "no Transaction
+   ID heading" then passed on a page with no headings at all. */
+const receipt = await call("POST", "/transactions/cash-in", {
+  txnDate: TODAY,
+  accountId: account.id,
+  amount: "500.00",
+  description: "REFONEQA a receipt so Cash In has a table",
+  usdRate: "122.50",
+});
+check("a receipt for Cash In to list", receipt.status === 201, `HTTP ${receipt.status}`);
 
 /* -------------------------------- screens ------------------------------ */
 
@@ -150,9 +172,11 @@ for (const [label, url] of [
   );
   check(
     `${label}: no "Transaction ID" column`,
-    !heads.some((h) => /transaction id/i.test(h)),
-    heads.filter((h) => /reference|invoice|transaction/i.test(h)).join(" | ") ||
-      "no such columns here",
+    heads.length > 0 && !heads.some((h) => /transaction id/i.test(h)),
+    heads.length === 0
+      ? "no table on the page — nothing was measured"
+      : heads.filter((h) => /reference|invoice|transaction/i.test(h)).join(" | ") ||
+          "no such columns here",
   );
 }
 
@@ -162,19 +186,29 @@ await page.goto(`${WEB}/expenses/other`, {
   timeout: 120000,
 });
 await settle(2400);
-const stillShows = await page.evaluate(() => {
-  const row = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes("REFQA an older entry"),
+/* Found by what the row IS (`data-row-id`), not by its description: the
+   Description column is gone from every ledger table, so that text is no
+   longer on the row. The number is read off the Invoice cell, found by its
+   heading rather than by position. */
+const stillShows = await page.evaluate((id) => {
+  const heads = [...document.querySelectorAll("thead th")].map((h) =>
+    (h.textContent ?? "").trim(),
   );
+  const at = heads.findIndex((h) => /^Invoice$/i.test(h));
+  const row = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+  const cell = at >= 0 ? row?.querySelectorAll("td")[at] : undefined;
   return {
     found: Boolean(row),
+    invoice: (cell?.textContent ?? "").replace(/\s+/g, " ").trim(),
     text: (row?.textContent ?? "").replace(/\s+/g, " "),
   };
-});
+}, old.body?.id ?? "");
 check(
   "THE RULE: an entry recorded with an invoice number still shows it",
-  stillShows.found && stillShows.text.includes("INV-REFQA-77"),
-  stillShows.found ? stillShows.text.slice(0, 130) : "row not found",
+  stillShows.found && stillShows.invoice.includes("INV-REFQA-77"),
+  stillShows.found
+    ? `Invoice cell "${stillShows.invoice}" — ${stillShows.text.slice(0, 110)}`
+    : "row not found",
 );
 
 /* The drawer: one Reference, no toggle, and the invoice is a clip. */
@@ -198,6 +232,7 @@ const drawer = await page.evaluate(() => {
     saysReference: /Reference/i.test(text),
     hasInvoiceNoBox: Boolean(d?.querySelector('input[name="invoiceNo"]')),
     hasReferenceBox: Boolean(d?.querySelector('input[name="reference"]')),
+    saysNoReferenceAttached: /No reference attached/i.test(text),
     fileInputs: (d?.querySelectorAll('input[type="file"]') ?? []).length,
   };
 });
@@ -207,10 +242,15 @@ check(
   !drawer.saysTransactionId && !drawer.saysReferenceOnly,
   `id ${drawer.saysTransactionId}, toggle ${drawer.saysReferenceOnly}`,
 );
+/* Reference is attached, not typed, since #34 ("sobgula table eri reference
+   upload only hobe ekhane field dorkar nai") — the box this once required is
+   now the thing that must be absent. */
 check(
-  "just Reference, with its own box",
-  drawer.saysReference && drawer.hasReferenceBox,
-  "",
+  "just Reference, attached like the invoice — no box to type in",
+  drawer.saysReference &&
+    !drawer.hasReferenceBox &&
+    drawer.saysNoReferenceAttached,
+  `reference box ${drawer.hasReferenceBox}, "No reference attached" ${drawer.saysNoReferenceAttached}`,
 );
 check(
   "THE ASK: the invoice has no number box, only somewhere to attach it",

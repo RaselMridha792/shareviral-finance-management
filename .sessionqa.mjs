@@ -63,7 +63,7 @@ const makeUser = async () => {
   await wipe();
   await db.query(
     `insert into users (email, password_hash, full_name, role, status, token_version, must_change_password)
-     values ($1, $2, 'Session Probe', 'admin', 'active', 0, false)`,
+     values ($1, $2, 'Session Probe', 'cfo', 'active', 0, false)`,
     [EMAIL, await bcrypt.hash(secret, 10)],
   );
 };

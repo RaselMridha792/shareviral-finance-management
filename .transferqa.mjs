@@ -10,6 +10,16 @@
  * void strikes it through, delete removes it and the trash gives it back.
  *
  *     node .transferqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: every transfer states `usdRate` — required
+ * on every transfer by the owner's rule (packages/shared/src/transactions.ts,
+ * `transferSchema`) — through the API and through the form's "USD rate" box.
+ *
+ * Brought up to date 27 Sep 2026 (2): rows found by data-row-id, the
+ * Description column is gone. A transfer's row carries the pair's `outId` (the
+ * money-out half's transaction id) as `data-row-id`, and its description is
+ * read in the popup a click on the row opens. "Struck through" is now read off
+ * the row's own cells, which is where the voided styling lives.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -85,12 +95,16 @@ const bankB = await mk("QA Transfer Cash", "500.00");
 
 /* ------------------------------------------------------------- API half */
 
+// Required on every transfer since the owner's rule — any realistic day's rate.
+const RATE = "122.50";
+
 const zero = await call("POST", "/transactions/transfer", {
   txnDate: "2026-08-20",
   fromAccountId: bankA,
   toAccountId: bankB,
   amount: "0.00",
   description: "QA zero transfer",
+  usdRate: RATE,
 });
 check(
   "a zero transfer is refused by name",
@@ -104,6 +118,7 @@ const same = await call("POST", "/transactions/transfer", {
   toAccountId: bankA,
   amount: "100.00",
   description: "QA same account",
+  usdRate: RATE,
 });
 check(
   "same account on both sides is refused",
@@ -117,6 +132,7 @@ const beyond = await call("POST", "/transactions/transfer", {
   toAccountId: bankA,
   amount: "9999.00",
   description: "QA beyond means",
+  usdRate: RATE,
 });
 check(
   "a transfer past the balance is refused, naming the account",
@@ -132,6 +148,7 @@ const made = await call("POST", "/transactions/transfer", {
   description: "QA to petty cash",
   invoiceNo: "INV-QA-77",
   reference: "TRF-QA-1",
+  usdRate: RATE,
 });
 check("a real transfer records", made.status === 201, `HTTP ${made.status} ${msgOf(made)}`);
 
@@ -294,20 +311,33 @@ await waitFor(() =>
 );
 // The table's own rows, rather than a guess at how long they take. If they
 // never arrive the check below fails on its own terms, which is the point.
-await waitFor((text) => document.body.innerText.includes(text), "QA to petty cash");
+// Found by the pair's out-half id — the row no longer prints its description.
+await waitFor(
+  (id) => Boolean(document.querySelector(`tbody tr[data-row-id="${id}"]`)),
+  row.outId,
+);
 
-const opened = await page.evaluate(() => ({
-  heading: document.querySelector("h1")?.textContent?.trim() ?? null,
-  navItem: [...document.querySelectorAll("nav a, aside a")].some((a) =>
-    (a.textContent ?? "").includes("Money Transfer"),
-  ),
-  hasNewButton: [...document.querySelectorAll("button")].some((b) =>
-    /New transfer/.test(b.textContent ?? ""),
-  ),
-  sideways:
-    document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  voidedListed: document.body.innerText.includes("QA to petty cash"),
-}));
+const opened = await page.evaluate((id) => {
+  const tr = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+  const cells = [...(tr?.querySelectorAll("td") ?? [])];
+  return {
+    heading: document.querySelector("h1")?.textContent?.trim() ?? null,
+    navItem: [...document.querySelectorAll("nav a, aside a")].some((a) =>
+      (a.textContent ?? "").includes("Money Transfer"),
+    ),
+    hasNewButton: [...document.querySelectorAll("button")].some((b) =>
+      /New transfer/.test(b.textContent ?? ""),
+    ),
+    sideways:
+      document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    voidedListed: Boolean(tr),
+    // What the eye sees as struck through: each cell's computed decoration.
+    cells: cells.length,
+    struck: cells.filter((td) =>
+      getComputedStyle(td).textDecorationLine.includes("line-through"),
+    ).length,
+  };
+}, row.outId);
 check(
   // The h1's textContent carries the icon's ligature ("swap_horiz") along
   // with the words — the glyph is text to the DOM even though it draws as an
@@ -319,9 +349,63 @@ check(
 check("nothing scrolls sideways", opened.sideways === 0, `${opened.sideways}px`);
 check(
   "the voided transfer is on the page, struck through",
-  opened.voidedListed,
-  "",
+  opened.voidedListed && opened.cells > 0 && opened.struck === opened.cells,
+  opened.voidedListed
+    ? `${opened.struck} of ${opened.cells} cells struck through`
+    : "no row carries its id",
 );
+
+/*
+ * The description is no longer a column, so where it is read now is checked:
+ * a click on the row (on a plain cell, not a link or the tick box) opens the
+ * whole record, titled by the description and saying it was voided.
+ */
+const plainCell = await page.evaluate((id) => {
+  const tr = document.querySelector(`tbody tr[data-row-id="${id}"]`);
+  if (!tr) return 0;
+  const cells = [...tr.querySelectorAll("td")];
+  const at = cells.findIndex(
+    (td) =>
+      (td.textContent ?? "").trim() &&
+      !td.querySelector(
+        "a, button, input, select, textarea, label, [role='switch'], [data-row-ignore]",
+      ),
+  );
+  return at + 1; // nth-child is 1-based; 0 means none found
+}, row.outId);
+const cellHandle = plainCell
+  ? await page.$(`tbody tr[data-row-id="${row.outId}"] td:nth-child(${plainCell})`)
+  : null;
+if (cellHandle) await cellHandle.click();
+const popupUp =
+  Boolean(cellHandle) &&
+  (await waitFor(
+    () => Boolean(document.querySelector("[data-popup] h2")),
+    undefined,
+    8000,
+  ));
+const popup = popupUp
+  ? await page.evaluate(() => {
+      const box = [...document.querySelectorAll("[data-popup]")].pop();
+      return {
+        title: box?.querySelector("h2")?.textContent?.trim() ?? null,
+        text: (box?.innerText ?? "").replace(/\s+/g, " "),
+      };
+    })
+  : null;
+check(
+  "a click on the row opens its record, titled by the description, marked voided",
+  popup?.title === "QA to petty cash" && /Voided/.test(popup?.text ?? ""),
+  popup
+    ? `title ${JSON.stringify(popup.title)}, voided ${/Voided/.test(popup.text)}`
+    : cellHandle
+      ? "no popup opened"
+      : "no plain cell on the row to click",
+);
+if (popupUp) {
+  await page.keyboard.press("Escape");
+  await waitFor(() => !document.querySelector("[data-popup]"), undefined, 5000);
+}
 
 /*
  * Opening the form, filling it and submitting it, each reporting what it
@@ -352,9 +436,18 @@ const fillForm = (values) =>
       (d) => /Move money between accounts/.test(d.textContent ?? ""),
     );
     if (!drawer) return ["the drawer itself"];
+    // The USD rate box is controlled and carries no name — found by its
+    // Field label instead ("USD rate", the text before the required star).
+    const byLabel = (text) =>
+      [...drawer.querySelectorAll("label")]
+        .find(
+          (l) =>
+            l.querySelector("span")?.textContent?.replace("*", "").trim() === text,
+        )
+        ?.querySelector("input, select") ?? null;
     const missing = [];
     for (const [name, value] of Object.entries(vals)) {
-      const el = drawer.querySelector(`[name="${name}"]`);
+      const el = drawer.querySelector(`[name="${name}"]`) ?? byLabel(name);
       if (!el) {
         missing.push(name);
         continue;
@@ -438,29 +531,59 @@ const missingFields = await fillForm({
   toAccountId: bankB,
   amount: "1200.00",
   description: "QA UI transfer",
+  "USD rate": RATE,
 });
-// The four a transfer is still typed into. A field that disappears now reads
-// as a FAIL naming it, instead of a TypeError from the setter.
+// The five a transfer is still typed into — the rate joined them with the
+// owner's every-entry rule. A field that disappears now reads as a FAIL
+// naming it, instead of a TypeError from the setter.
 check(
   "the form still carries the fields a transfer is typed into",
   missingFields.length === 0,
   missingFields.length ? `missing: ${missingFields.join(", ")}` : "",
 );
 const submitted = await submitForm();
-// Wait for the table to carry it, rather than for 2.5s and a hope. The row
-// arriving is also what says the request landed, so the balances read below
-// are read after the money moved and not during.
+/*
+ * Wait for the table to carry it, rather than for 2.5s and a hope. The row no
+ * longer prints its description, so the new pair's out half is looked up by
+ * the description the form was given — polled, since the request is still in
+ * flight — and the table is then waited on for a row carrying that id. The
+ * lookup finding it is also what says the request landed, so the balances
+ * read below are read after the money moved and not during.
+ */
+const formOutId = submitted
+  ? await (async () => {
+      for (let tries = 0; tries < 60; tries += 1) {
+        const found = (
+          await db.query(
+            `select id from transactions
+              where description = 'QA UI transfer' and direction = 'out'
+                and account_id = $1 and deleted_at is null`,
+            [bankA],
+          )
+        ).rows[0];
+        if (found) return found.id;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      return null;
+    })()
+  : null;
 const landed =
-  submitted &&
+  Boolean(formOutId) &&
   (await waitFor(
-    (text) => document.body.innerText.includes(text),
-    "QA UI transfer",
+    (id) => Boolean(document.querySelector(`tbody tr[data-row-id="${id}"]`)),
+    formOutId,
   ));
 
 check(
   "a transfer recorded through the form lands in the table without a reload",
   Boolean(landed),
-  submitted ? "" : "no Record the transfer button",
+  !submitted
+    ? "no Record the transfer button"
+    : !formOutId
+      ? "the form's transfer never reached the ledger"
+      : landed
+        ? ""
+        : "recorded, but no row in the table carries its id",
 );
 bal = await balances();
 check(
@@ -476,6 +599,7 @@ await fillForm({
   toAccountId: bankA,
   amount: "999999.00",
   description: "QA beyond means UI",
+  "USD rate": RATE,
 });
 await submitForm();
 // Poll for the refusal instead of sleeping past it: a slow API answer used to

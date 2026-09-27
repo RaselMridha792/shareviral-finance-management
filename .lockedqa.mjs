@@ -19,6 +19,10 @@
  * stops a mistake already in it from being marked as one.
  *
  *     node .lockedqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: every entry states the `usdRate` the
+ * contract now requires (#67) — including the one the lock must refuse, so it
+ * is refused for the closed month and not for a missing field.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -102,6 +106,7 @@ const entry = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "LOCKQA an entry inside the month we are about to close",
   paymentMethod: "bank_transfer",
+  usdRate: "122.50",
 });
 check("an entry records while the month is open", entry.status === 201, `HTTP ${entry.status}`);
 
@@ -122,6 +127,7 @@ const newOne = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "LOCKQA money appearing in a filed month",
   paymentMethod: "bank_transfer",
+  usdRate: "122.50",
 });
 /*
  * 403, not 400. A closed month is a refusal of permission, not a malformed
@@ -196,6 +202,7 @@ const second = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "LOCKQA an open-month entry to trash",
   paymentMethod: "bank_transfer",
+  usdRate: "122.50",
 });
 const trashed = await call("POST", `/trash/transaction/${second.body.id}`, {
   reason: "LOCKQA",

@@ -34,6 +34,9 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 100 | **Paying a subscription with a malformed id: a 400, not a 500** | **done** |
+| 99 | **No Description column on any table; a row click opens the whole record** | **done** — seven screens |
+| 98 | **Every acceptance harness passes again — 43 scripts, and a new one** | **done** — no app fault among the failures |
 | 97 | **STATUS.md rewritten for the app as it is** | **done** |
 | 96 | **Buttons, fields and every control at the handoff's own sizes** | **done** |
 | 95 | **Cash In adds money in paisa, not floats** | **done** |
@@ -75,6 +78,114 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 100. Paying a subscription with a malformed id: a 400, not a 500 — 27 Sep 2026
+
+`POST /subscriptions/:id/pay` passed the raw `:id` to the service, unlike every
+other `:id` route in `transactions.controller.ts`, so a malformed one reached
+Postgres and came back as a **500**. It is `uuidSchema.parse(id)` now, like its
+neighbours: a malformed id is a 400 "Not a valid id", an unknown one the
+service's 404 "That subscription is not here". Found by the agent that rewrote
+`.subpayqa.mjs` (#98). Probed: `not-a-uuid` → 400, an unknown uuid → 404.
+
+## 99. No Description column on any table; a row click opens the whole record — 27 Sep 2026
+
+The owner: *"site er table gulate descriptions name je field ta ache oita onek
+boro hoye jacche so ami cai prottekta table theke description ta soriye niba.
+also table item gula clickable hobe jegulay click korle popup open hoye puro
+data dekhabe jegula hide thakbe."*
+
+- **The Description column is gone** from every table that had one: All
+  transactions — and so the heading pages and every account's register, which
+  draw the same `ledger/transaction-table.tsx` — Cash In, Other expenses, Money
+  Transfer and the bank statement. The tables' minimum widths came down by the
+  column's 14rem.
+- **A click on a row opens its whole record** in the centred popup:
+  `ui/row-details.tsx` (new, shared) draws it — a muted label and the value at
+  800 over a hairline, long text on its own line, "N/A" for what was never
+  recorded — and `rowOpener(open, id)` is what a row spreads on: a click
+  anywhere, or Enter/Space when it has focus, opens it; a click on a link, a
+  row button, the tick box or an input keeps its own job; a click that ends a
+  text selection does not open it. Rows carry `data-row-id` (the entry's id; a
+  transfer's `outId`) and show a pointer and a violet focus edge.
+- **What the popup shows** (`ledger/transaction-details.tsx`, used by every
+  ledger table so an entry reads the same wherever it is clicked): the
+  description, Cash In / Cash Out, the category, the party, "Transfer —
+  between the company's own accounts" where it is one, voided and why; the
+  amount, the dollars (sent, or `~` at the row's rate), the rate, the bank
+  charge, the bill before tax and the tax withheld, the balance after (in a
+  register); the date, the account, how it was paid, the Entry No., how it was
+  recorded; the invoice and the reference with a View for the attached paper;
+  the sender of an incoming wire; the notes. Edit from the popup where the row
+  may be edited. Money Transfer has its own (both accounts, taka and dollars,
+  rate, paperwork).
+- Other expenses marked a transfer between our own accounts inside the
+  description cell; the "transfer" badge now sits in the Category cell, which a
+  transfer leaves blank, and in the popup.
+- All transactions printed its rate as `122.500000`; two places now, as Money
+  Transfer does.
+
+**Not yet:** tables that already lead to a page of their own (Team, AI tools,
+Payroll, People, What changed, Trashed) are unchanged — the owner said every
+table; which of those should also open a popup is theirs to say.
+
+**Proved** by `.rowdetailqa.mjs` (new), on all seven screens with real rows: no
+Description heading; a click opens exactly one popup titled with that row's
+description as the API has it, carrying the description, amount and date;
+Escape closes it; a click on a link or a row button inside the row does not
+open it; Enter on a focused row does; no console errors (a failed request is
+logged by address). 49/49. Plus the full battery (#98).
+
+## 98. Every acceptance harness passes again — 27 Sep 2026
+
+The owner: *"amar production site a kono error caina ami jodi site a kono khoti
+kore ba kono ekta single jaygay error dekhay tahole problem."*
+
+The full battery (`.battery.sh`, run alone) failed **14 of its 41** scripts and
+**6 of the 13** after it. Every failure was examined; **none was a fault in the
+app** — each was a script left behind by a decision the owner made since it
+was written:
+
+- **`usdRate` is required on every entry** (#67, the owner's rule) and the
+  scripts posted entries without it: `.overdraftqa`, `.transferqa`,
+  `.optionalref`, `.notspend`, `.usdstableqa`, `.refuploadqa`, `.reportsfxqa`,
+  `.nofxqa`, `.refqa`, `.lockedqa`, `.trashbulkqa`, `.tabletidyqa`,
+  `.multidocqa` (the form's USD rate box, too).
+- **The screens changed on purpose**: Entry No. off All transactions (#45),
+  links violet-ink (#80), the account cards (#84), Payment Method on the plan's
+  page (#22/#65), payroll without paisa (#66), Team in employee-ID order (#39b),
+  a trashed salary row left in the trash when pay is recorded on its date (the
+  2 Sep partial index), the Settings rail (#86), and today's Description
+  column (#99): `.fivefixui`, `.sixqa`, `.prorataqa`, `.teamorderqa`,
+  `.salaryhistoryqa`, `.popupqa`, `.trashui`, `.refkindqa`.
+- **A withdrawn role**: `.sessionqa` made its account an `admin`, a role that
+  no longer exists — that account cannot open the dashboard, so the idle
+  sign-out it tests never mounted. It is a `cfo` now; the idle warning,
+  "Stay signed in" and the sign-out at two hours all work (15/15).
+- **The old plan model**: `.subpayqa` made its "plan" a vendor; payments look
+  plans up in `subscriptions` since that bug was fixed. Rewritten against real
+  subscriptions (15/15) — and it found #100.
+
+Each changed expectation carries a comment citing the decision. Several checks
+that had been passing without measuring anything (a row never found, a text
+test on an empty string) now require what they claim. Two scripts that shared a
+fixture prefix and deleted each other's rows were separated.
+
+**Proved**: the whole battery run alone — all 41 in the loop exit 0, all 13
+after it pass; `.rowdetailqa` 49/49, `.uiqa` 67/67, `.popupqa` 47/47.
+
+**Noticed, not changed — for the owner:**
+- The dashboard layout asks for `settings.read`; all four live roles have it,
+  but a user left on a withdrawn role (`admin`, `finance`) would get a 500 on
+  every page. The roles were migrated; worth one query on the live database.
+- A USD account whose opening balance was never stated in dollars leads its
+  card with `~$0.00`, and the account form has no field to state it.
+- The old global rate still feeds a fallback (`fx_rates`' newest row → the
+  "~ $" line; `GET /fx/governing` → the Accounts overview). See #97.
+- **The API's integration suite (`npm run test:integration`) was not run**: it
+  begins by deleting every ledger row the demo seed did not write, which on the
+  local database is the owner's own test entries. Its suite 13 also still
+  expects a void in a closed month to be refused (allowed since 31 Aug).
 
 ## 97. STATUS.md rewritten for the app as it is — 27 Sep 2026
 

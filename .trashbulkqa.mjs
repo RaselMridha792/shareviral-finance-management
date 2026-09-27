@@ -16,6 +16,9 @@
  * half-restore, and what did not come back is still visibly in the trash.
  *
  *     node .trashbulkqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the expenses state the `usdRate` every entry
+ * now requires (#67); without it none was created and every later check failed.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -99,6 +102,7 @@ for (let i = 1; i <= 3; i += 1) {
     categoryId: cat.id,
     description: `TBQA expense ${i}`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.50", // required on every entry now (SESSIONS #67)
   });
   txns.push(r.body?.id);
 }

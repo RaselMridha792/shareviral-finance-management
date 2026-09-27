@@ -14,11 +14,13 @@
  *                 ticking and "move to trash" removes the ticked ones; the
  *                 current salary is not in the list and cannot be ticked
  *
- *   TRAP 1        `compensation_effective_idx` is (member, effective_from) and
- *                 is NOT partial, so a trashed row still occupies its date.
+ *   TRAP 1        `compensation_effective_idx` was (member, effective_from)
+ *                 and NOT partial, so a trashed row still occupied its date.
  *                 Recording pay on that same date used to write the figure
  *                 INTO the trashed row: 200, a refresh, and nothing on screen.
- *                 It must bring the row back out of the trash.
+ *                 The index is partial now (deleted_at is null), so it must
+ *                 insert a NEW live row the panel shows, and leave the trashed
+ *                 one in the trash, untouched.
  *
  *   TRAP 2        nothing resolves a salary through `effective_to` — payroll
  *                 takes the newest row starting on or before the date. So
@@ -30,6 +32,11 @@
  * And the one that must NOT be true: a finalised sheet's figures cannot move.
  *
  *     node .salaryhistoryqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: TRAP 1 no longer expects the trashed row to
+ * be revived — deploy/sql/2026-09-02-compensation-partial.sql made the unique
+ * index partial, and its comment states the intended behaviour: a new live
+ * row is inserted and the trashed one stays where it is.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -300,36 +307,61 @@ check(
 /* -------------------------------- TRAP 1 ------------------------------- */
 
 /*
- * Recording pay on the same date as a TRASHED row. The unique index is not
- * partial, so this lands on the trashed row — and it has to come back out.
+ * Recording pay on the same date as a TRASHED row.
+ *
+ * WAS: "brings the row back" — the index was not partial, so the insert landed
+ * on the trashed row and the fix un-deleted it. Since
+ * deploy/sql/2026-09-02-compensation-partial.sql the index is partial on
+ * deleted_at, and that file's own comment names the new behaviour: "it inserts
+ * a new live row and leaves the trashed one where it is". The failure this
+ * trap guards against is unchanged — a figure written somewhere nobody can see
+ * it — so it is asserted from both sides: the figure is live and on screen,
+ * and the trashed row neither came back nor took the figure.
  */
 const again = await call("POST", `/team-members/${member.id}/compensation`, {
   grossAmount: "999000.00",
   effectiveFrom: victim.f,
   changeReason: "PAYHIST recorded again on a trashed date",
 });
-const revived = (
+const trashed = (
   await db.query(
     "select gross_amount, deleted_at, delete_reason from compensation_history where id=$1",
     [victim.id],
   )
 ).rows[0];
+const liveOnDate = (
+  await db.query(
+    `select id, gross_amount from compensation_history
+      where team_member_id=$1 and effective_from=$2 and deleted_at is null`,
+    [member.id, victim.f],
+  )
+).rows;
 check(
-  "TRAP 1: recording pay on a trashed row's date brings the row back",
+  "TRAP 1: recording pay on a trashed row's date inserts a new live row with the figure",
   again.status < 300 &&
-    revived.deleted_at === null &&
-    String(revived.gross_amount) === "999000.00",
-  `HTTP ${again.status}, deleted_at ${revived.deleted_at}, gross ${revived.gross_amount}`,
+    liveOnDate.length === 1 &&
+    liveOnDate[0].id !== victim.id &&
+    String(liveOnDate[0].gross_amount) === "999000.00",
+  `HTTP ${again.status}, live rows on ${victim.f}: ${JSON.stringify(liveOnDate.map((r) => ({ same: r.id === victim.id, gross: r.gross_amount })))}`,
 );
 check(
-  "and it clears the delete reason with it",
-  revived.delete_reason === null,
-  `reason ${JSON.stringify(revived.delete_reason)}`,
+  "and the trashed row stays in the trash, its figure and delete reason untouched",
+  trashed.deleted_at !== null &&
+    String(trashed.gross_amount) === String(victim.gross_amount) &&
+    trashed.delete_reason === "PAYHIST middle row",
+  `deleted_at ${trashed.deleted_at}, gross ${trashed.gross_amount} (was ${victim.gross_amount}), reason ${JSON.stringify(trashed.delete_reason)}`,
 );
 
 /* --------------------------- the ticks, driven ------------------------- */
 
 panel = await readPanel();
+/* The original trap's symptom was "nothing on screen" — so read the screen. */
+const newRow = panel?.body.find((r) => r.cells.includes(dmy(victim.f)));
+check(
+  "  and the panel shows the new figure on that date",
+  Boolean(newRow) && newRow.cells.some((c) => c.replace(/[^\d.]/g, "") === "999000.00"),
+  newRow ? JSON.stringify(newRow.cells) : `no row dated ${dmy(victim.f)} on this page`,
+);
 const ticked = await page.evaluate(() => {
   const heading = [...document.querySelectorAll("*")].find(
     (el) => el.children.length === 0 && (el.textContent ?? "").trim() === "Salary changes",

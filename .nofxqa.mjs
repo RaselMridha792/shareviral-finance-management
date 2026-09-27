@@ -12,6 +12,10 @@
  * again. Anything that moved was being converted.
  *
  *     node .nofxqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the expense now states the `usdRate` every
+ * entry requires (#67); stated dollars are still what the report sums. The
+ * Settings check reads `sections.ts`, where the sidebar's list now lives (#86).
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -154,6 +158,10 @@ const blind = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "NOFXQA spend with no dollars typed",
   paymentMethod: "bank_transfer",
+  /* A rate is required on every entry now (SESSIONS #67). It is a reference
+     rate, not stated dollars: `own-dollars.ts` sums only `original_amount`,
+     so this row still carries no dollar figure of its own. */
+  usdRate: "122.50",
 });
 check("an expense with no dollar figure records", blind.status === 201, `HTTP ${blind.status}`);
 
@@ -184,14 +192,21 @@ check(
 
 /* ---------------------- and Settings has no rate tab ------------------- */
 
+/* The sections moved out of settings-screen.tsx into the rail's own list,
+   `sections.ts` (#86) — reading the old file found no labels at all and
+   passed without looking. So it also proves it is reading the real list. */
 const settingsFile = fs.readFileSync(
-  "apps/web/src/components/settings/settings-screen.tsx",
+  "apps/web/src/components/settings/sections.ts",
   "utf8",
+);
+const sectionLabels = [...settingsFile.matchAll(/label: "([^"]+)"/g)].map(
+  (m) => m[1],
 );
 check(
   'THE ASK: Settings no longer offers an "Exchange rate" tab',
-  !settingsFile.includes('label: "Exchange rate"'),
-  "",
+  sectionLabels.includes("Categories") &&
+    !sectionLabels.some((l) => /exchange rate|fx rate/i.test(l)),
+  sectionLabels.join(" | "),
 );
 
 /* The recorded history is NOT destroyed. */

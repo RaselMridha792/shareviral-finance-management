@@ -12,6 +12,10 @@
  * drawer that asks for them rather than checking the one that was wrong.
  *
  *     node .optionalref.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: the expense it records now states `usdRate`
+ * — required on every transaction by the owner's rule
+ * (packages/shared/src/transactions.ts, above `usdRate`).
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -85,6 +89,8 @@ const spend = await call("POST", "/transactions", {
   categoryId: cat.id,
   description: "OPTQA a spend with no paperwork numbers",
   paymentMethod: "cash",
+  // Required on every entry now; the two numbers under test still are not.
+  usdRate: "125.00",
 });
 check(
   "an expense records with neither number",

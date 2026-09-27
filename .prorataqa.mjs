@@ -17,6 +17,10 @@
  *     already-shrunk gross.
  *
  *     node .prorataqa.mjs      (local only — writes and deletes)
+ *
+ * Brought up to date 27 Sep 2026: payroll carries no paisa (SESSIONS #66), so
+ * every expected gross is the whole-taka figure the service works out —
+ * Math.round(salary * (days / length)), mirrored by `prorate` below.
  */
 import fs from "node:fs";
 import jwt from "jsonwebtoken";
@@ -132,6 +136,15 @@ const mkRun = async (year, month, label) => {
   return { runId: run.body.id, lineId: line.id, gross: line.gross_amount };
 };
 
+/*
+ * The pro-rated gross, as payroll.service.ts updateLine works it: rounded to a
+ * whole taka (SESSIONS #66 "No paisa in payroll" — 90,000 x 18/31 is 52,258,
+ * not 52,258.0645). Same expression, same order of operations, so a .5 lands
+ * the way the service lands it.
+ */
+const prorate = (salary, days, length) =>
+  Math.round(salary * (days / length)).toFixed(2);
+
 const lineNow = async (lineId) =>
   (
     await db.query(
@@ -157,7 +170,8 @@ for (const c of cases) {
     workingDays: c.days,
   });
   const row = await lineNow(c.run.lineId);
-  const expect = ((31000 * c.days) / c.dim).toFixed(2);
+  // Was ((31000 * days) / dim).toFixed(2) = 10689.66 — paisa, gone since #66.
+  const expect = prorate(31000, c.days, c.dim);
   check(
     `${c.name}: 10 days of 31,000 = ${expect}`,
     set.status === 200 && row.gross_amount === expect,
@@ -211,7 +225,7 @@ await call("PATCH", `/payroll/lines/${may.lineId}`, { workingDays: 20 });
 const twice = await lineNow(may.lineId);
 check(
   "changing 10 days to 20 pro-rates from the salary, not from the shrunk gross",
-  twice.gross_amount === ((31000 * 20) / 31).toFixed(2),
+  twice.gross_amount === prorate(31000, 20, 31),
   `gross ${twice.gross_amount}`,
 );
 
@@ -243,8 +257,9 @@ check(
   fyFullTds > 0,
   `tds ${fyFull.tds_amount}`,
 );
-// March 2027 has 31 days; 10 days of 150,000 = 48,387.10.
-const prorated = ((150000 * 10) / 31).toFixed(2);
+// March 2027 has 31 days; 10 days of 150,000 = 48,387 (was 48,387.10 before
+// #66 took the paisa out of payroll).
+const prorated = prorate(150000, 10, 31);
 await call("PATCH", `/payroll/lines/${fy.lineId}`, { grossAmount: prorated });
 const byHand = await lineNow(fy.lineId);
 await call("PATCH", `/payroll/lines/${fy.lineId}`, { workingDays: 10 });
@@ -258,6 +273,25 @@ check(
   "and it is less than the full month's tax — the owner's 10-of-30k rule",
   Number(byDays.tds_amount) < fyFullTds,
   `${byDays.tds_amount} < ${fyFull.tds_amount}`,
+);
+/*
+ * Under today's fiscal-2026 rule 10 days of 150,000 (48,387) owes no tax at
+ * all, so the two checks above compare 0.00 with 0.00 and prove nothing about
+ * money. 20 days (96,774) does owe tax, so the same equality is put where the
+ * figure is not zero — the "with money in it" this section was written for.
+ */
+const prorated20 = prorate(150000, 20, 31);
+await call("PATCH", `/payroll/lines/${fy.lineId}`, { grossAmount: prorated20 });
+const byHand20 = await lineNow(fy.lineId);
+await call("PATCH", `/payroll/lines/${fy.lineId}`, { workingDays: 20 });
+const byDays20 = await lineNow(fy.lineId);
+check(
+  "  with money in it: 20 days' tax equals a hand-set gross of the same figure, and is below the full month's",
+  byDays20.gross_amount === prorated20 &&
+    byDays20.tds_amount === byHand20.tds_amount &&
+    Number(byDays20.tds_amount) > 0 &&
+    Number(byDays20.tds_amount) < fyFullTds,
+  `days ${byDays20.tds_amount} vs hand ${byHand20.tds_amount} on ${prorated20}, full month ${fyFull.tds_amount}`,
 );
 
 /* ------------------------------- the guards ----------------------------- */
@@ -458,7 +492,8 @@ const waitScreen = async (ok, ms = 20000) => {
   return seen;
 };
 
-const expect15 = ((31000 * 15) / 29).toFixed(2);
+// Whole taka since #66: 16,034, not 16,034.48.
+const expect15 = prorate(31000, 15, 29);
 const typed15 = await typeDays("15");
 const after = await waitRow(feb.lineId, (r) => String(r.working_days) === "15");
 check(
