@@ -1,11 +1,12 @@
 "use client";
 
 import { formatMoney, monthRange, todayInDhaka } from "@finance/shared";
+import { TrendDownIcon } from "@phosphor-icons/react/dist/ssr/TrendDown";
+import { VaultIcon } from "@phosphor-icons/react/dist/ssr/Vault";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useSettings } from "@/components/settings-provider";
-import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ShareBar, StatCell, StatStrip } from "@/components/ui/patterns";
 import { ledgerApi, type ExpenseOverview } from "@/lib/ledger";
@@ -98,10 +99,11 @@ export function ExpenseOverviewScreen() {
           usd: data.usd?.salary ?? null,
           href: "/payroll",
           icon: "groups",
-          /* The dashboard's own tones for the two slices it also shows, so the
-             same money is the same colour on both screens. */
-          text: "text-chart-1",
-          bar: "bg-chart-1",
+          /* Violet, all four, as the handoff draws them: a slice is a share
+             of one month's spending, and four colours made them read as four
+             different kinds of thing. */
+          text: "text-(--sv-violet)",
+          bar: "bg-(--sv-violet)",
         },
         {
           key: "tooling",
@@ -110,8 +112,8 @@ export function ExpenseOverviewScreen() {
           usd: data.usd?.tooling ?? null,
           href: "/subscriptions",
           icon: "auto_awesome",
-          text: "text-chart-6",
-          bar: "bg-chart-6",
+          text: "text-(--sv-violet)",
+          bar: "bg-(--sv-violet)",
         },
         {
           key: "rent",
@@ -124,8 +126,8 @@ export function ExpenseOverviewScreen() {
              on that page is where it lands. */
           href: "/expenses/office-premises",
           icon: "home_work",
-          text: "text-chart-3",
-          bar: "bg-chart-3",
+          text: "text-(--sv-violet)",
+          bar: "bg-(--sv-violet)",
         },
         {
           key: "operational",
@@ -134,8 +136,8 @@ export function ExpenseOverviewScreen() {
           usd: data.usd?.operational ?? null,
           href: "/expenses",
           icon: "receipt_long",
-          text: "text-chart-5",
-          bar: "bg-chart-5",
+          text: "text-(--sv-violet)",
+          bar: "bg-(--sv-violet)",
         },
       ]
     : [];
@@ -170,23 +172,27 @@ export function ExpenseOverviewScreen() {
         actions={<MonthPicker range={range} onChange={setRange} />}
       />
 
-      {/* The headline the four add to. */}
-      <Card>
-        <CardBody>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Spent in {range.label}
-          </p>
-          <p className="col-amount mt-1 text-2xl font-semibold">
+      {/* The headline the four add to, on the handoff's lime band. */}
+      <div className="sv-total sv-rise relative flex flex-wrap items-center gap-4 overflow-hidden rounded-[11px] bg-(--sv-lime-tint) px-6 py-[22px]">
+        <span aria-hidden="true" className="sv-total-blob" />
+        <span className="sv-total-tile relative grid size-[46px] flex-none place-items-center rounded-[11px] bg-(--sv-surface) text-(--sv-neg)">
+          <TrendDownIcon weight="duotone" size={24} />
+        </span>
+        <p className="relative min-w-50 flex-1 text-[11px] font-extrabold tracking-[0.14em] text-(--sv-violet-ink) uppercase">
+          Spent in {range.label}
+        </p>
+        <div className="relative text-right">
+          <p className="text-[clamp(28px,2.6vw,34px)] leading-tight font-extrabold tracking-[-0.02em] tabular-nums">
             {data ? money(data.total) : loading ? "…" : money("0")}
           </p>
           {data?.usd ? (
-            <p className="col-amount text-sm text-muted-foreground">
+            <p className="text-[13px] text-(--sv-muted) tabular-nums">
               {data.usd.exact ? "" : "~ "}
               {usd(data.usd.total)}
             </p>
           ) : null}
-        </CardBody>
-      </Card>
+        </div>
+      </div>
 
       {/*
         The dashboard's cards, not four bordered boxes of this page's own.
@@ -203,7 +209,7 @@ export function ExpenseOverviewScreen() {
         chart palette rather than from the semantic tones — green and red mean
         money in and money out here, and every one of these is money out.
       */}
-      <StatStrip>
+      <StatStrip min={230}>
         {slices.map((slice) => (
           <div key={slice.key} className="relative">
             <StatCell
@@ -218,6 +224,9 @@ export function ExpenseOverviewScreen() {
               }
             >
               <ShareBar share={shareOf(slice.value)} tone={slice.bar} />
+              <p className="text-[12.5px] text-(--sv-muted) tabular-nums">
+                {Math.round(shareOf(slice.value) * 100)}% of the month
+              </p>
             </StatCell>
             {/*
               The whole cell is the link, laid over it rather than wrapped
@@ -242,36 +251,35 @@ export function ExpenseOverviewScreen() {
         own test: if the four ever stop adding to the headline, it shows here.
       */}
       {data ? (
-        <p className="col-amount text-xs text-muted-foreground">
+        <p className="self-end text-[13px] text-(--sv-muted) tabular-nums">
           {money(data.salary)} + {money(data.tooling)} + {money(data.rent)} +{" "}
           {money(data.operational)} ={" "}
-          <span className="font-medium text-foreground">
-            {money(data.total)}
-          </span>
+          <b className="font-extrabold text-(--sv-ink)">{money(data.total)}</b>
         </p>
       ) : null}
 
       {/* Held, not spent — outside the four and outside the total. */}
-      <Card>
-        <CardBody>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Tax withheld
-          </p>
-          <p className="col-amount mt-1 text-lg font-semibold">
-            {data ? money(data.withheld) : money("0")}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+      <div className="sv-card flex flex-wrap items-center gap-4 rounded-[11px] bg-(--sv-surface) px-6 py-5">
+        <span className="grid size-11 flex-none place-items-center rounded-[11px] bg-(--sv-warn-tint) text-(--sv-warn)">
+          <VaultIcon weight="duotone" size={23} />
+        </span>
+        <div className="min-w-60 flex-1">
+          <p className="text-[16px] font-extrabold">Tax withheld</p>
+          <p className="mt-[3px] text-[13.5px] text-(--sv-muted)">
             Held against a tax liability, not spent.{" "}
             <Link
               href="/tax/withholding"
-              className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+              className="font-extrabold text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
             >
               The register
             </Link>{" "}
             has it person by person.
           </p>
-        </CardBody>
-      </Card>
+        </div>
+        <p className="text-[26px] font-extrabold tabular-nums">
+          {data ? money(data.withheld) : money("0")}
+        </p>
+      </div>
 
     </>
   );

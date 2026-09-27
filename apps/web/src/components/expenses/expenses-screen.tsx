@@ -1,13 +1,12 @@
 "use client";
 
-import { Receipt } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Amount } from "@/components/money/amount";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { SummaryBar } from "@/components/ui/patterns";
+import { EmptyState, SummaryBar } from "@/components/ui/patterns";
 import { ApiError } from "@/lib/api-client";
 import { ledgerApi, type ExpenseSummary } from "@/lib/ledger";
 import { categoriesApi, type CategoryNode } from "@/lib/masters";
@@ -148,31 +147,29 @@ export function ExpensesScreen({
       />
 
       {cards.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Receipt className="size-6" />
-          </span>
+        <Card>
           {/* An empty grid has two causes and they are not the same news:
               nothing was spent, or everything that was is ticked off. */}
-          <div>
-            <p className="text-lg font-semibold">
-              {summary.groups.length === 0
+          <EmptyState
+            icon="receipt_long"
+            title={
+              summary.groups.length === 0
                 ? `Nothing spent in ${range.label}`
-                : "Every heading is ticked off this screen"}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              {summary.groups.length === 0
-                ? "Record an expense, step back a month to see an earlier one, or use add category to keep a heading on screen from now on."
-                : "The money is still in the total above. Use add category to put the cards back."}
-            </p>
-          </div>
+                : "Every heading is ticked off this screen"
+            }
+          >
+            {summary.groups.length === 0
+              ? "Record an expense, step back a month to see an earlier one, or use Add category to keep a heading on screen from now on."
+              : "The money is still in the total above. Use Add category to put the cards back."}
+          </EmptyState>
         </Card>
       ) : (
         <div
           aria-busy={loading}
-          className={`grid gap-4 transition-opacity ${loading ? "opacity-60" : ""}`}
+          className={`grid gap-3.5 transition-opacity ${loading ? "opacity-60" : ""}`}
           style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(min(290px, 100%), 1fr))",
           }}
         >
           {cards.map((group) => {
@@ -186,23 +183,23 @@ export function ExpensesScreen({
                 key={group.id}
                 href={`/expenses/${group.slug}?from=${range.from}&to=${range.to}`}
                 prefetch={false}
-                className="rounded-xl border border-border bg-surface p-5 shadow-e1 transition hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="sv-card sv-card-lift flex flex-col rounded-[11px] bg-(--sv-surface) px-5 py-[18px]"
               >
                 <div className="flex items-center gap-2.5">
                   <span
                     className="size-3 shrink-0 rounded-full"
                     style={{ background: group.color }}
                   />
-                  <span className="truncate text-sm font-semibold">
+                  <span className="truncate text-[15px] font-extrabold">
                     {group.name}
                   </span>
                 </div>
                 <Amount
                   value={group.total}
                   tone="neutral"
-                  className="mt-4 block text-xl font-semibold tracking-tight"
+                  className="mt-3 block text-[27px] font-extrabold tracking-[-0.02em]"
                 />
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-(--sv-track)">
                   <div
                     className="h-full rounded-full"
                     style={{
@@ -211,7 +208,7 @@ export function ExpensesScreen({
                     }}
                   />
                 </div>
-                <p className="num mt-2 text-xs text-muted-foreground">
+                <p className="mt-2.5 text-[12.5px] text-(--sv-muted) tabular-nums">
                   {share.toFixed(0)}% · {group.entries} entr
                   {group.entries === 1 ? "y" : "ies"}
                 </p>

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -109,9 +110,9 @@ export function CategoryDetailScreen({
     <>
       <Link
         href="/expenses"
-        className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
       >
-        <ArrowLeft className="size-3.5" />
+        <ArrowLeftIcon weight="bold" size={15} />
         All expenses
       </Link>
 
@@ -132,7 +133,7 @@ export function CategoryDetailScreen({
                 size="md"
                 onClick={() => setCreating(true)}
               >
-                <Plus className="size-4" />
+                <PlusCircleIcon weight="duotone" size={19} />
                 add {heading.name}
               </Button>
             ) : null}

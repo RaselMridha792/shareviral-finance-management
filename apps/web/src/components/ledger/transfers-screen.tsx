@@ -1,13 +1,16 @@
 "use client";
 
 import { formatMoney, fromMinorUnits, toMinorUnits } from "@finance/shared";
-import { ArrowRight, LoaderCircle, Plus } from "lucide-react";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dated } from "@/components/ui/dated";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/patterns";
@@ -157,7 +160,7 @@ export function TransfersScreen({
         actions={
           canWrite ? (
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4" />
+              <PlusCircleIcon weight="duotone" size={19} />
               New transfer
             </Button>
           ) : undefined
@@ -260,17 +263,17 @@ export function TransfersScreen({
                           />
                         ) : null}
                         <SerialCell n={serial(page, index)} />
-                        <td className="num whitespace-nowrap text-muted-foreground">
+                        <td>
                           {/* Day/month/year, like the rest of the app. This was
                               the last table still printing the raw ISO date,
                               and it survived #1 and #37 because the sweep that
                               hunts for them could not see a date sitting
                               against a serial number. */}
-                          {formatDate(row.txnDate)}
+                          <Dated>{formatDate(row.txnDate)}</Dated>
                         </td>
                         <td>
                           <div className="flex flex-col">
-                            <span className="font-medium">
+                            <span className="font-extrabold">
                               {row.description}
                             </span>
                             {voided ? (
@@ -287,8 +290,10 @@ export function TransfersScreen({
                           />
                         </td>
                         <td>
-                          <ArrowRight
-                            className="size-3.5 text-muted-foreground"
+                          <ArrowRightIcon
+                            weight="duotone"
+                            size={14}
+                            className="text-(--sv-muted)"
                             aria-hidden
                           />
                         </td>
@@ -313,7 +318,7 @@ export function TransfersScreen({
                                 currency="USD"
                                 tone="neutral"
                                 showCounterpart={false}
-                                className="block font-medium"
+                                className="block font-extrabold"
                               />
                               <Amount
                                 value={row.amount}
@@ -326,7 +331,7 @@ export function TransfersScreen({
                             <Amount
                               value={row.amount}
                               tone="neutral"
-                              className="block font-medium"
+                              className="block font-extrabold"
                             />
                           )}
                         </td>
@@ -528,7 +533,7 @@ function AccountCell({ id, name }: { id: string; name: string }) {
   return (
     <a
       href={`/accounts/${id}`}
-      className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+      className="font-extrabold whitespace-nowrap text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
     >
       {name}
     </a>

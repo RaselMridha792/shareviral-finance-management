@@ -7,7 +7,8 @@ import {
   monthRange,
   todayInDhaka,
 } from "@finance/shared";
-import { Landmark, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { LoaderCircle, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -18,7 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { StatCell, StatStrip } from "@/components/ui/patterns";
+import { Dated } from "@/components/ui/dated";
+import { EmptyState, SummaryBar } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import {
@@ -296,6 +298,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
       <PageHeader
         title="Cash in"
         icon="savings"
+        description="Money arriving from outside the company."
         actions={
           <>
             <MonthPicker
@@ -313,7 +316,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                 size="md"
                 onClick={() => setRecording(true)}
               >
-                <Plus className="size-4" />
+                <PlusCircleIcon weight="duotone" size={19} />
                 Add cash
               </Button>
             ) : null}
@@ -322,7 +325,9 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
       />
 
       {/*
-        One figure, in a strip rather than a card.
+        One figure, on the handoff's summary card: the green tile, the month
+        named in the label, the dollars under it and the taka large on the
+        right.
 
         There was a second cell here — "Rate this month", the rate the month's
         first funding landed at and the entry that set it. The owner took it
@@ -335,27 +340,25 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
         dollar figure under it and what fills the USD column for a row that
         carries no rate of its own — it is simply no longer a cell.
       */}
-      <StatStrip min={280}>
-        <StatCell
-          label={`Received in ${range.label}`}
-          icon="south_west"
-          iconTone="text-positive"
-          value={<Amount value={totalBdt} tone="in" showCounterpart={false} />}
-          secondary={
-            totalUsd ? (
-              <Amount
-                value={totalUsd}
-                currency="USD"
-                tone="neutral"
-                approximate
-                showCounterpart={false}
-              />
-            ) : rateStatus === "ready" ? (
-              "No rate on record for this month"
-            ) : null
-          }
-        />
-      </StatStrip>
+      <SummaryBar
+        label={`Received in ${range.label}`}
+        icon="south_west"
+        iconTone="text-positive"
+        value={<Amount value={totalBdt} tone="in" showCounterpart={false} />}
+        description={
+          totalUsd ? (
+            <Amount
+              value={totalUsd}
+              currency="USD"
+              tone="neutral"
+              approximate
+              showCounterpart={false}
+            />
+          ) : rateStatus === "ready" ? (
+            "No rate on record for this month"
+          ) : null
+        }
+      />
 
       {error ? (
         <p
@@ -372,19 +375,14 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
           Loading…
         </Card>
       ) : received.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Landmark className="size-6" />
-          </span>
-          <div>
-            <p className="text-lg font-semibold">
-              Nothing received in {range.label}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Record a transfer as it arrives — the rate it lands at is the one
-              the whole month is read in.
-            </p>
-          </div>
+        <Card>
+          <EmptyState
+            icon="account_balance"
+            title={`Nothing received in ${range.label}`}
+          >
+            Record a transfer as it arrives — the rate it lands at is the one
+            the whole month is read in.
+          </EmptyState>
         </Card>
       ) : (
         <Card className="overflow-hidden">
@@ -456,9 +454,13 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                         />
                       ) : null}
                       <SerialCell n={serial(currentPage, index)} />
-                      <td className="num">{formatDate(row.txnDate)}</td>
+                      <td>
+                        <Dated>{formatDate(row.txnDate)}</Dated>
+                      </td>
                       <td className="cell-prose">
-                        <span className="font-medium">{row.description}</span>
+                        <span className="font-extrabold">
+                          {row.description}
+                        </span>
                       </td>
                       <td className="text-right">
                         <Amount
@@ -500,7 +502,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                         {row.accountName ? (
                           <Link
                             href={`/accounts/${row.accountId}`}
-                            className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+                            className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
                           >
                             {row.accountName}
                           </Link>

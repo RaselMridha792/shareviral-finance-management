@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 87 | **The new design: Cash In, Money Transfer, and the expense screens** | **done** |
 | 86 | **The new design: Settings gets its own sidebar** | **done** |
 | 85 | **The new design: the shared pieces — cards, fields, SL, row buttons, pills, tabs, stat cards, empty states, filter bar, pager, search** | **done** — every screen, asked first |
 | 84 | **The new design: Accounts, and an account's own page** | **done** |
@@ -64,6 +65,45 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 87. The new design: Cash In, Money Transfer, and the expense screens — 27 Sep 2026
+
+Page by page against the handoff, on top of #85's shared pieces:
+
+- **Cash In**: the header's line ("Money arriving from outside the company."),
+  Add cash with the plus-circle; the month's figure on the summary card (green
+  tile, the dollars under the label, the taka large and green); the bank
+  empty state.
+- **Money Transfer**: New transfer with the plus-circle; dates with the violet
+  calendar, descriptions and account links at 800, the Phosphor arrow.
+- **Expense overview**: "Spent in" on the lime band with a white tile and the
+  red trend-down; the four slices violet, as the handoff draws them (they were
+  four chart colours), each with "N% of the month" under its bar; the sum line
+  right-aligned with the total in ink; **Tax withheld** as its own card with
+  the amber vault tile.
+- **Operational expenses**: the heading cards lift like the handoff's (800
+  name, 27px figure, an 8px bar); Add category with the violet plus; the
+  shared empty state. The **heading page**: the violet way back, "add <heading>"
+  with the plus-circle, the summary panel in the new card with violet-ink
+  caption and 800 figures.
+- **Other expenses**: the plus-circle, the shared empty state, the row styles.
+- Shared between these screens, not under `components/ui/`:
+  `ledger/transaction-table.tsx` (All transactions, the heading pages, an
+  account's register) — calendar dates, 800 descriptions, amounts and account
+  links, an arrow in the Cash In / Cash Out pill; `ledger/reference-kind.tsx`
+  (six tables) — the eye and "View" at 800; `expenses/month-picker.tsx` (seven
+  screens) — its `font-medium` was overriding #85's bold select.
+- **`ui/dated.tsx`** is new: a date with the violet calendar before it. A new
+  file, used only by the screens above, so no other screen changed.
+
+**Kept on purpose:** All transactions' green and red row tint. The handoff has
+none, but the owner asked for exactly that ("puro row green thakbe … red
+hobe"), and the handoff is not a reason to undo an instruction.
+
+**Proved** by `.uiqa.mjs` on each route (SL box, row buttons, fields, nothing
+sideways at 390, no console errors) and screenshots at 1440 of each, with data
+where the local database has it. `.shotqa.mjs` is new: screenshots of any
+paths, for looking at a page with data in it.
 
 ## 86. The new design: Settings gets its own sidebar — 27 Sep 2026
 

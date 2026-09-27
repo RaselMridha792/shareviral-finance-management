@@ -126,9 +126,9 @@ export function CategorySummaryPanel({
   const average = entries > 0 ? (Number(total) / entries).toFixed(2) : "0.00";
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-surface">
+    <section className="sv-card sv-rise overflow-hidden rounded-[11px] bg-(--sv-surface)">
       <div
-        className="flex flex-col border-b border-border-soft"
+        className="sv-row-rule flex flex-col"
         style={{
           padding:
             "clamp(18px,2.4vw,26px) clamp(18px,2.4vw,28px) clamp(16px,2vw,22px)",
@@ -142,7 +142,7 @@ export function CategorySummaryPanel({
           style={{ gap: "20px 28px" }}
         >
           <div className="flex min-w-[260px] flex-col gap-2.5">
-            <p className="flex items-center gap-2.5 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+            <p className="flex items-center gap-2.5 text-[11px] font-extrabold tracking-[0.14em] text-(--sv-violet-ink) uppercase">
               <span
                 aria-hidden
                 className="size-[7px] shrink-0 rounded-full"
@@ -157,7 +157,7 @@ export function CategorySummaryPanel({
             >
               <span
                 aria-hidden
-                className="text-faint"
+                className="font-bold text-(--sv-muted)"
                 style={{ fontSize: "clamp(19px,2vw,25px)" }}
               >
                 ৳
@@ -171,11 +171,11 @@ export function CategorySummaryPanel({
                 tone="neutral"
                 hideSymbol
                 showCounterpart={false}
-                className="leading-none font-semibold tracking-[-0.02em]"
+                className="leading-none font-extrabold tracking-[-0.02em]"
               />
             </p>
 
-            <p className="flex flex-wrap items-center gap-2.5 text-[13px] text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-2.5 text-[13px] text-(--sv-muted)">
               {usd ? (
                 <>
                   <Amount
@@ -251,7 +251,7 @@ export function CategorySummaryPanel({
           // more of the card. The tabs wrap onto as many rows as they need —
           // never a sideways scroller, which hides the one nobody thought to
           // look for.
-          className="bg-background"
+          className="bg-(--sv-subtle)"
           style={{
             padding: "clamp(12px,1.5vw,16px) clamp(12px,1.6vw,18px)",
           }}
@@ -281,11 +281,11 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col items-start gap-[7px]" style={{ minWidth }}>
-      <span className="text-[10px] tracking-[0.16em] text-faint uppercase">
+      <span className="text-[11px] font-extrabold tracking-[0.12em] text-(--sv-muted) uppercase">
         {caption}
       </span>
       <span
-        className="num font-semibold text-body"
+        className="font-extrabold tabular-nums"
         style={{ fontSize: "clamp(15px,1.4vw,17px)" }}
       >
         {value}

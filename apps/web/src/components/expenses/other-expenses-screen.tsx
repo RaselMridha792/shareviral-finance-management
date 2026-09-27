@@ -6,7 +6,8 @@ import {
   PAYMENT_METHOD_LABELS,
   toMinorUnits,
 } from "@finance/shared";
-import { LoaderCircle, Plus, ShoppingBag, TriangleAlert } from "lucide-react";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { LoaderCircle, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -18,11 +19,12 @@ import { VoidDialog } from "@/components/ledger/void-dialog";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dated } from "@/components/ui/dated";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { SummaryBar } from "@/components/ui/patterns";
+import { EmptyState, SummaryBar } from "@/components/ui/patterns";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
 import { useTransactionDelete } from "@/components/ledger/use-transaction-delete";
 import {
@@ -298,7 +300,7 @@ export function OtherExpensesScreen({
                 size="md"
                 onClick={() => setCreating(true)}
               >
-                <Plus className="size-4" />
+                <PlusCircleIcon weight="duotone" size={19} />
                 Add expense
               </Button>
             ) : null}
@@ -338,19 +340,12 @@ export function OtherExpensesScreen({
               Loading…
             </p>
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-              <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-                <ShoppingBag className="size-6" />
-              </span>
-              <div>
-                <p className="text-lg font-semibold">
-                  Nothing but subscriptions in {range.label}
-                </p>
-                <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-                  Record an expense, or step back a month to see an earlier one.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon="shopping_basket"
+              title={`Nothing but subscriptions in ${range.label}`}
+            >
+              Record an expense, or step back a month to see an earlier one.
+            </EmptyState>
           ) : (
             /*
               The owner's sheet, column for column.
@@ -455,13 +450,13 @@ export function OtherExpensesScreen({
                           />
                         ) : null}
                         <SerialCell n={serial(current, index)} />
-                        <td className="num whitespace-nowrap">
-                          {formatDate(row.txnDate)}
+                        <td>
+                          <Dated>{formatDate(row.txnDate)}</Dated>
                         </td>
                         <td className="cell-prose">
                           <span
                             className={cn(
-                              "font-medium",
+                              "font-extrabold",
                               voided && "line-through",
                             )}
                           >
@@ -526,7 +521,7 @@ export function OtherExpensesScreen({
                             showCounterpart={false}
                             tone="out"
                             className={cn(
-                              "block font-semibold",
+                              "block font-extrabold",
                               voided && "line-through",
                             )}
                           />
@@ -562,7 +557,7 @@ export function OtherExpensesScreen({
                           {row.accountName ? (
                             <Link
                               href={`/accounts/${row.accountId}`}
-                              className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+                              className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
                             >
                               {row.accountName}
                             </Link>

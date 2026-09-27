@@ -1,6 +1,8 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@finance/shared";
+import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
+import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/ssr/Paperclip";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
@@ -10,6 +12,7 @@ import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Dated } from "@/components/ui/dated";
 import {
   RowActions,
   RowActionsHead,
@@ -329,10 +332,12 @@ export function TransactionTable({
                     />
                   ) : null}
                   <SerialCell n={serial(page, index)} />
-                  <td className="num">{formatDate(row.txnDate)}</td>
+                  <td>
+                    <Dated>{formatDate(row.txnDate)}</Dated>
+                  </td>
                   <td className="cell-prose">
                     <span
-                      className={cn("font-medium", voided && "line-through")}
+                      className={cn("font-extrabold", voided && "line-through")}
                     >
                       {row.description}
                     </span>
@@ -413,7 +418,7 @@ export function TransactionTable({
                       currency={row.currency}
                       showCounterpart={false}
                       className={cn(
-                        "block font-semibold",
+                        "block font-extrabold",
                         voided && "line-through",
                       )}
                     />
@@ -446,7 +451,7 @@ export function TransactionTable({
                       {row.accountName ? (
                         <Link
                           href={`/accounts/${row.accountId}`}
-                          className="text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
+                          className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
                         >
                           {row.accountName}
                         </Link>
@@ -460,6 +465,11 @@ export function TransactionTable({
                       <Badge
                         tone={row.direction === "in" ? "positive" : "negative"}
                       >
+                        {row.direction === "in" ? (
+                          <ArrowDownLeftIcon weight="duotone" size={13} />
+                        ) : (
+                          <ArrowUpRightIcon weight="duotone" size={13} />
+                        )}
                         {row.direction === "in" ? "Cash In" : "Cash Out"}
                       </Badge>
                     </td>

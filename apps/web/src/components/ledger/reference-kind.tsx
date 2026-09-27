@@ -1,6 +1,7 @@
 "use client";
 
-import { Eye, TriangleAlert } from "lucide-react";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -97,10 +98,10 @@ export function ReferenceCell({
           onClick={onOpen}
           title={`${documentCount} attached — no transaction id was given`}
           aria-label="Show the attached record"
-          className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-link transition hover:bg-surface-muted"
+          className="inline-flex cursor-pointer items-center gap-[5px] rounded-md px-1 py-0.5 text-[13px] font-extrabold text-link transition hover:bg-(--sv-violet-tint)"
         >
-          <Eye className="size-3.5" />
-          <span className="text-xs">view</span>
+          <EyeIcon weight="duotone" size={15} />
+          View
         </button>
       </td>
     );
@@ -116,7 +117,7 @@ export function ReferenceCell({
             ? `${documentCount} attached`
             : "Nothing attached to this entry"
         }
-        className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 font-extrabold text-link tabular-nums underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
       >
         {documentCount === 0 ? (
           <TriangleAlert className="size-3 shrink-0 text-warning" />

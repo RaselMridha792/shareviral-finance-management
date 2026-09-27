@@ -76,7 +76,7 @@ export function MonthPicker({
   return (
     <Select
       aria-label="Month"
-      className="w-auto shrink-0 font-medium"
+      className="w-auto shrink-0"
       value={range.from}
       onChange={(event) => {
         const picked = options.find(
@@ -125,7 +125,7 @@ export function MonthFilter({
   return (
     <Select
       aria-label="Month"
-      className="w-auto shrink-0 font-medium"
+      className="w-auto shrink-0"
       value={range?.from ?? ""}
       onChange={(event) => {
         const value = event.target.value;

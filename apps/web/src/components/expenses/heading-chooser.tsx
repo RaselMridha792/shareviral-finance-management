@@ -1,5 +1,6 @@
 "use client";
 
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { Plus } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
@@ -229,7 +230,11 @@ export function HeadingChooser({
         what it is.
       */}
       <Button variant="secondary" size="md" onClick={() => setOpen(true)}>
-        <Plus className="size-4" />
+        <PlusCircleIcon
+          weight="duotone"
+          size={19}
+          className="text-(--sv-violet)"
+        />
         {canCreate ? "add category" : "Choose cards"}
       </Button>
 
