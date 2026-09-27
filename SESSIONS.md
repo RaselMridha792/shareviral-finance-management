@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 95 | **Cash In adds money in paisa, not floats** | **done** |
 | 94 | **Settings' last six sections, to the handoff — and a shared on/off switch** | **done** — the whole design is in |
 | 93 | **`.capsweep.mjs` and `.acctqa.mjs` brought up to date with the app** | **done** |
 | 92 | **Every root harness runs from any checkout — no more `d:/codes`** | **done** |
@@ -72,6 +73,29 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 95. Cash In adds money in paisa, not floats — 27 Sep 2026
+
+The owner: *"accha etao thik kore daw"* — the float sum #93 noticed.
+
+`cash-in-screen.tsx` added money three times with `Number(a) + Number(b)` then
+`.toFixed(2)`: the month's taka total ("Received in …"), its dollar total, and
+the total of the ticked rows in the bulk bar. Floating point, which CLAUDE.md
+rules out for money — correct today, a paisa out on a long enough month. All
+three now go through one local `sumAmounts`, which adds `toMinorUnits` and
+hands back `fromMinorUnits` — the same way Accounts, Other expenses and
+Transfers already add. Every figure is `numeric(14,2)` (the per-row dollars are
+rounded to two places by `inDollars`), so each converts exactly. The per-row
+division into dollars is a translation, not a sum, and stays as it was.
+
+**Proved**: `.acctqa.mjs` — August's receipts, counted and totalled in SQL,
+equal the page's (৳1,20,000.00, 1 receipt); `.uiqa.mjs cash-in` passes at 1440
+and 390; four CI steps and the build pass.
+
+Also checked, nothing changed: six screens in **dark mode** (the dashboard,
+All transactions, Salary TDS, Team, Expense overview, Reports) — the dark
+palette applies throughout, and no light-only colour (a white block) is left
+on any of them.
 
 ## 94. Settings' last six sections, to the handoff — 27 Sep 2026
 

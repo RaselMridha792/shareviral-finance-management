@@ -3,8 +3,10 @@
 import {
   formatMoney,
   fiscalYearOf,
+  fromMinorUnits,
   monthIndexInFiscalYear,
   monthRange,
+  toMinorUnits,
   todayInDhaka,
 } from "@finance/shared";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
@@ -225,9 +227,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
    */
   const received = rows.filter((row) => !row.transferGroupId);
 
-  const totalBdt = received
-    .reduce((sum, row) => sum + Number(row.amount), 0)
-    .toFixed(2);
+  const totalBdt = sumAmounts(received.map((row) => row.amount));
 
   // The same rule as the column below, through the same function. Dividing the
   // total by one rate would quietly restate a transfer that arrived at a
@@ -235,9 +235,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
   // would disagree on exactly the rows where the bank took a charge, which is
   // most of them.
   const totalUsd = rate
-    ? received
-        .reduce((sum, row) => sum + Number(dollarsOf(row, rate) ?? 0), 0)
-        .toFixed(2)
+    ? sumAmounts(received.map((row) => dollarsOf(row, rate) ?? "0"))
     : null;
 
   /**
@@ -275,9 +273,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkAsking, setBulkAsking] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const bulkTotal = bulk.selected
-    .reduce((sum, r) => sum + Number(r.amount), 0)
-    .toFixed(2);
+  const bulkTotal = sumAmounts(bulk.selected.map((row) => row.amount));
 
   return (
     <>
@@ -781,6 +777,22 @@ function dollarsOf(
 
 function inDollars(amountBdt: string, rate: string): string {
   return (Number(amountBdt) / Number(rate)).toFixed(2);
+}
+
+/**
+ * Amounts added in paisa, never as floats.
+ *
+ * All three sums on this screen — the month in taka, the month in dollars, and
+ * what is ticked — were `Number(a) + Number(b)`, which is floating point: a long
+ * enough month of receipts lands a paisa out, and CLAUDE.md rules it out for
+ * money. Every figure here is `numeric(14,2)` (the per-row dollars are rounded
+ * to two places by `inDollars`), so each converts exactly. `BigInt(0)` rather
+ * than `0n` because the build targets ES2017.
+ */
+function sumAmounts(amounts: string[]): string {
+  return fromMinorUnits(
+    amounts.reduce((sum, amount) => sum + toMinorUnits(amount), BigInt(0)),
+  );
 }
 
 /** 122.770000 reads as a database artefact; 122.77 reads as a rate. */
