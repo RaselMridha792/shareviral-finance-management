@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 84 | **The new design: Accounts, and an account's own page** | **done** |
+| 83 | **The header card and the buttons, on every screen** | **done** — 21 screens, asked first |
 | 82 | **Every form opens in a popup, not a side drawer** | **done** — and a form-inside-a-form that saved transactions nobody asked for |
 | 81 | **The new design: the Dashboard** | **done** |
 | 80 | **The new design, the shell: palette, font, light default, rail, top bar, tables** | **done** — every screen; each screen's own layout is its own session |
@@ -60,6 +62,62 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 84. The new design: Accounts, and an account's own page — 27 Sep 2026
+
+**Accounts** (`accounts-screen.tsx`): the header card with the as-of month and
+Add account; the handoff's lime **Total held** band with a piggy-bank tile;
+each account a card — violet tile with its kind's icon, name, bank line and a
+type pill, the balance large and right-aligned with the other currency under
+it, the opening date between two hairlines, then View details, Edit, Archive.
+Archived accounts sit apart on the subtle ground with Restore and a red-edged
+Delete. Every rule the old card carried is kept: USD-primary leads with its own
+dollars, `~` only on an inexact figure, the "cannot be right" note on a
+negative tin or wallet.
+
+**One real fix.** The total was `Number(a) + Number(b)` — floating point,
+the one way this app promises money is never added. It is `toMinorUnits` /
+`fromMinorUnits` now. And when a month is chosen the band says which:
+"Held at the end of August 2026", not "Total held".
+
+**An account's page** (`account-detail-screen.tsx`): the way back, the header
+card with the kind's icon, a violet "holds now" band, then the handoff's
+panels — **Account** (the fields over hairlines, copy buttons on the numbers a
+bank's website wants), the **Card** panel on a card, **Where the records
+start** (two tiles and the violet note), **Notes**. `panel.tsx` is the panel,
+in its own file because the card block uses it too.
+
+**Proved by `.accountsqa.mjs`**, 20 checks: one card per active account, every
+balance the API's to the paisa, **Total held = the balances added, to the
+paisa**, now and at the end of a chosen month (against the API's `asOf`), the
+pills, the hover, the detail page's back link, title, balance against the API,
+panels, field order, opening tiles, the register link, a card's Card panel,
+and no sideways scroll at 900 and 390.
+
+## 83. The header card and the buttons, on every screen — 27 Sep 2026
+
+Both shared and both asked first: the owner saw the 21 screens `PageHeader`
+reaches and chose all at once, and chose the buttons everywhere.
+
+**`PageHeader`** draws the handoff's card: white, a masked lime grid from the
+right, a lime blob, a dashed violet ring, a small square, a 56px lime tile with
+the screen's icon **filled**, the title 28/800. Callers still pass Material
+names (`icon="account_balance"`); one table in `page-header.tsx` maps them to
+Phosphor, so no caller changed. A caller can pass a Phosphor component
+instead (the account page does). Other expenses and a plan's page passed no
+icon and now pass one.
+
+**`Button`**: 800 weight, the lime primary with a soft lime shadow that lifts a
+pixel, a white secondary whose edge turns violet (`sv-button-quiet` — a border
+utility would lose to globals.css's `*`). **Heights unchanged** (36/32), so no
+filter row or form moved.
+
+**Proved by `.headerqa.mjs`**, 66 checks: every one of the 19 screens that open
+locally (Team 500s, #80) at 1440 — one card, white, a lime tile holding a
+Phosphor svg and not the old font, h1 28px/800, primary buttons 800 with the
+lime shadow — and every one fitting at 900 and 390 with no sideways scroll.
+The one console error on the run is the subscriptions screen's team fetch
+hitting the missing local column (#80).
 
 ## 82. Every form opens in a popup — 27 Sep 2026
 

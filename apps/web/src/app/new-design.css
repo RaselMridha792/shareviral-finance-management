@@ -276,6 +276,99 @@
   }
 }
 
+/* A destructive button drawn quiet — red text and a red edge — for the
+   one action on a card that cannot be taken back. */
+.sv-button-danger {
+  border-color: color-mix(in oklab, var(--sv-neg) 45%, transparent);
+}
+
+.sv-button-danger:hover:not(:disabled) {
+  border-color: var(--sv-neg);
+  color: var(--sv-neg);
+  background-color: var(--sv-neg-tint);
+}
+
+/* Two hairlines, above and below a line inside a card. */
+.sv-card-rules {
+  border-top: 1px solid var(--sv-line-soft);
+  border-bottom: 1px solid var(--sv-line-soft);
+}
+
+/* A warning inside a card: the warn tint with a warn edge. */
+.sv-warn-note {
+  border: 1px solid color-mix(in oklab, var(--sv-warn) 30%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   Accounts
+   -------------------------------------------------------------------------- */
+
+/* The "Total held" band: lime tint, a lime blob in the corner, a white tile. */
+.sv-total {
+  border: 1px solid var(--sv-lime-line);
+  box-shadow: var(--sv-shadow);
+}
+
+.sv-total-blob {
+  position: absolute;
+  right: -50px;
+  top: -70px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--sv-accent);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.sv-total-tile {
+  border: 1px solid var(--sv-lime-line);
+}
+
+/* An account's page: the violet "holds now" band, the panels' rule, the rows'
+   hairlines, the two opening tiles and the violet note. */
+.sv-holds {
+  border: 1px solid var(--sv-violet-tint-line);
+  box-shadow: var(--sv-shadow);
+}
+
+.sv-holds-blob {
+  position: absolute;
+  right: -40px;
+  bottom: -90px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: var(--sv-violet-soft);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.sv-panel-head {
+  border-bottom: 1.5px solid var(--sv-line);
+}
+
+.sv-row-rule {
+  border-bottom: 1px solid var(--sv-line-soft);
+}
+
+.sv-row-rule:last-child {
+  border-bottom: 0;
+}
+
+.sv-tile {
+  border: 1px solid var(--sv-line);
+}
+
+.sv-note-violet {
+  border: 1px solid var(--sv-violet-tint-line);
+}
+
+/* Archived accounts sit apart, on the subtle ground. */
+.sv-archived {
+  border: 1px solid var(--sv-line);
+}
+
 /* --------------------------------------------------------------------------
    The dashboard
    -------------------------------------------------------------------------- */

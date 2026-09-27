@@ -2,21 +2,28 @@
 
 import {
   ACCOUNT_TYPE_LABELS,
+  fromMinorUnits,
   isBeforeRecords,
   monthRange,
+  toMinorUnits,
   todayInDhaka,
   type AccountType,
   type CreateAccountInput,
 } from "@finance/shared";
-import {
-  Archive,
-  ArchiveRestore,
-  Plus,
-  SquarePen,
-  SquareArrowOutUpRight,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { CalendarBlankIcon } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { DeviceMobileIcon } from "@phosphor-icons/react/dist/ssr/DeviceMobile";
+import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { PiggyBankIcon } from "@phosphor-icons/react/dist/ssr/PiggyBank";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -24,13 +31,9 @@ import { useMemo, useState } from "react";
 import { useCan } from "@/components/auth/session-provider";
 import { useSettings } from "@/components/settings-provider";
 import { Amount } from "@/components/money/amount";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/field";
-import { Icon } from "@/components/ui/icon";
-import { SummaryBar } from "@/components/ui/patterns";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { ApiError } from "@/lib/api-client";
 import {
@@ -74,12 +77,12 @@ function monthEnds(): { value: string; label: string }[] {
   return months;
 }
 
-/** The handoff's own four, by name. */
-const ICONS: Record<AccountType, string> = {
-  bank: "account_balance",
-  cash: "payments",
-  mobile_wallet: "smartphone",
-  card: "credit_card",
+/** The handoff's own four. */
+const ICONS: Record<AccountType, Icon> = {
+  bank: BankIcon,
+  cash: MoneyIcon,
+  mobile_wallet: DeviceMobileIcon,
+  card: CreditCardIcon,
 };
 
 export function AccountsScreen({
@@ -135,10 +138,13 @@ export function AccountsScreen({
    * ৳40,000 left it showing ৳40,000, and the only clue was the caption on each
    * card. The figure comes from the API now, where it is computed once and
    * shared with the dashboard.
+   *
+   * Added in paisa, as whole numbers. It was `Number(a) + Number(b)`, which is
+   * floating point — the one way this app promises money is never added.
    */
-  const total = active
-    .reduce((sum, a) => sum + Number(a.balance), 0)
-    .toFixed(2);
+  const total = fromMinorUnits(
+    active.reduce((sum, a) => sum + toMinorUnits(a.balance), BigInt(0)),
+  );
 
   async function refresh() {
     setAccounts(await accountsApi.list(true, asOf ?? undefined));
@@ -214,9 +220,7 @@ export function AccountsScreen({
               className="w-auto shrink-0 font-medium"
               value={asOf ?? ""}
               disabled={loadingAsOf}
-              onChange={(event) =>
-                void showAsOf(event.target.value || null)
-              }
+              onChange={(event) => void showAsOf(event.target.value || null)}
             >
               <option value="">As it stands now</option>
               {months.map((month) => (
@@ -231,7 +235,7 @@ export function AccountsScreen({
                 size="md"
                 onClick={() => setCreating(true)}
               >
-                <Plus className="size-4" />
+                <PlusCircleIcon weight="duotone" size={19} />
                 Add account
               </Button>
             ) : null}
@@ -249,62 +253,70 @@ export function AccountsScreen({
       ) : null}
 
       {active.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Icon
-              name="account_balance"
-              size={22}
-              className="text-primary-text"
-            />
+        <div className="sv-card flex flex-col items-center gap-3 rounded-[14px] bg-(--sv-surface) px-6 py-14 text-center">
+          <span className="grid size-16 place-items-center rounded-full bg-(--sv-lime-tint) text-(--sv-violet-ink)">
+            <BankIcon weight="duotone" size={30} />
           </span>
-          <div>
-            <p className="text-lg font-semibold">No accounts yet</p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Add your bank accounts and petty cash, each with the balance it
-              held on the day your records start here.
-            </p>
-          </div>
+          <p className="text-[19px] font-extrabold">No accounts yet</p>
+          <p className="max-w-[46ch] text-[14.5px] text-(--sv-muted)">
+            Add your bank accounts and petty cash, each with the balance it held
+            on the day your records start here.
+          </p>
           {canWrite ? (
             <Button
               variant="primary"
               size="md"
               onClick={() => setCreating(true)}
             >
-              <Plus className="size-4" />
+              <PlusCircleIcon weight="duotone" size={19} />
               Add the first account
             </Button>
           ) : null}
-        </Card>
+        </div>
       ) : (
         <>
-          <SummaryBar
-            label="Total held"
-            icon="savings"
-            iconTone="text-primary-text"
-            description={
-              <>
+          {/*
+            What every active account holds, added up — the handoff's lime band
+            with the piggy-bank tile. The dollars stay small underneath, the
+            same rule as every other taka figure here.
+          */}
+          <div
+            className="sv-total sv-rise relative flex flex-wrap items-center gap-[18px] overflow-hidden rounded-[11px] bg-(--sv-lime-tint) px-6 py-[22px]"
+            style={{ animationDelay: "0.05s" }}
+          >
+            <span aria-hidden="true" className="sv-total-blob" />
+            <span className="sv-total-tile relative grid size-[46px] flex-none place-items-center rounded-[11px] bg-(--sv-surface) text-(--sv-violet)">
+              <PiggyBankIcon weight="duotone" size={25} />
+            </span>
+            <div className="relative min-w-60 flex-1">
+              <p className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-violet-ink) uppercase">
+                {asOf
+                  ? `Held at the end of ${months.find((month) => month.value === asOf)?.label ?? "the month"}`
+                  : "Total held"}
+              </p>
+              <p className="mt-[3px] text-[13.5px] text-(--sv-muted)">
                 {active.length} active account{active.length === 1 ? "" : "s"} ·
                 opening balance plus every entry since, voided rows excluded
-              </>
-            }
-            // `Amount` draws its own dollar line underneath, so the bar's
-            // secondary slot would be a second one saying the same thing.
-            value={<Amount value={total} currency={base} />}
-          />
+              </p>
+            </div>
+            <div className="relative text-right">
+              <Amount
+                value={total}
+                currency={base}
+                className="text-[34px] font-extrabold tracking-[-0.02em] tabular-nums"
+              />
+            </div>
+          </div>
 
-          <div
-            className="grid gap-4"
-            style={{
-              gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
-            }}
-          >
-            {active.map((account) => (
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+            {active.map((account, index) => (
               <AccountCard
                 key={account.id}
                 account={account}
                 usdRate={usdRate}
                 base={base}
                 canWrite={canWrite}
+                delay={0.1 + index * 0.05}
                 onEdit={() => setEditing(account)}
                 onArchive={() => archive(account)}
               />
@@ -314,16 +326,11 @@ export function AccountsScreen({
       )}
 
       {archived.length > 0 ? (
-        <div>
-          <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        <section className="sv-archived flex flex-col gap-3 rounded-[11px] bg-(--sv-subtle) p-4">
+          <h2 className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-muted) uppercase">
             Archived
           </h2>
-          <div
-            className="grid gap-4"
-            style={{
-              gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
-            }}
-          >
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
             {archived.map((account) => (
               <AccountCard
                 key={account.id}
@@ -331,13 +338,14 @@ export function AccountsScreen({
                 usdRate={usdRate}
                 base={base}
                 canWrite={canWrite}
+                delay={0}
                 onEdit={() => setEditing(account)}
                 onRestore={() => restore(account)}
                 onDelete={() => setDeleting(account)}
               />
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
 
       <AccountForm
@@ -432,8 +440,12 @@ function impossiblyNegative(account: AccountWithBalance): boolean {
  */
 function ImpossibleBalanceNote() {
   return (
-    <p className="mt-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-      <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
+    <p className="sv-warn-note flex items-start gap-2 rounded-[11px] bg-(--sv-warn-tint) px-3 py-2.5 text-[12.5px] leading-normal text-(--sv-ink)">
+      <WarningIcon
+        weight="duotone"
+        size={17}
+        className="mt-px flex-none text-(--sv-warn)"
+      />
       <span>
         <span className="font-medium">This balance cannot be right.</span> Cash
         and wallets cannot hold less than nothing, so something is missing from
@@ -449,6 +461,7 @@ function AccountCard({
   usdRate,
   base,
   canWrite,
+  delay,
   onEdit,
   onArchive,
   onRestore,
@@ -460,6 +473,8 @@ function AccountCard({
   /** The company's base currency, from Settings. */
   base: string;
   canWrite: boolean;
+  /** Seconds before this card rises in, so a grid of them staggers. */
+  delay: number;
   onEdit: () => void;
   onArchive?: () => void;
   onRestore?: () => void;
@@ -469,23 +484,32 @@ function AccountCard({
   // Taka in, dollars out — the figure is BDT whatever the account is called.
   const equivalent = otherCurrency(account.balance, base, base, usdRate);
 
-  const symbol = ICONS[account.type];
+  const Glyph = ICONS[account.type];
 
   return (
-    <Card className={account.isActive ? "p-5" : "p-5 opacity-60"}>
+    <div
+      className={
+        account.isActive
+          ? "sv-card sv-card-lift sv-rise flex flex-col gap-3.5 rounded-[11px] bg-(--sv-surface) p-5"
+          : "sv-card flex flex-col gap-3.5 rounded-[11px] bg-(--sv-surface) p-5 opacity-70"
+      }
+      style={delay ? { animationDelay: `${delay}s` } : undefined}
+    >
       <div className="flex items-start gap-3">
-        <span className="flex size-[42px] shrink-0 items-center justify-center rounded-xl bg-primary/15">
-          <Icon name={symbol} size={21} className="text-primary-text" />
+        <span className="grid size-[42px] flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+          <Glyph weight="duotone" size={23} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{account.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-[16px] font-extrabold">{account.name}</p>
+          <p className="truncate text-[12.5px] text-(--sv-muted)">
             {[account.bankName, account.accountNumber]
               .filter(Boolean)
               .join(" · ") || ACCOUNT_TYPE_LABELS[account.type]}
           </p>
         </div>
-        <Badge>{ACCOUNT_TYPE_LABELS[account.type]}</Badge>
+        <span className="flex-none rounded-full bg-(--sv-subtle) px-2.5 py-1 text-[11px] font-extrabold text-(--sv-muted)">
+          {ACCOUNT_TYPE_LABELS[account.type]}
+        </span>
       </div>
 
       {/*
@@ -495,138 +519,128 @@ function AccountCard({
         `account.currency` says which account is the foreign-spend one. It does
         not say what this figure is denominated in: every amount this system
         stores is BDT, the card's included, with the foreign figure kept beside
-        the transaction that recorded it. Reading the account's label as the
-        figure's currency printed "$29,562.00" over "~৳35,10,487.50" — one
-        balance, stated twice, a hundred and eighteen times apart.
+        the transaction that recorded it.
 
-        The second line is a translation and is marked as one — `~`, greyed,
-        with the rate in its tooltip. This app is careful never to let a
-        converted figure look like a recorded one, and a balance is exactly
-        where that would matter.
+        Which figure sits on top follows the account's PRIMARY currency, on the
+        owner's instruction: a USD-primary card leads with the dollars and keeps
+        the taka underneath, a BDT account the reverse. The dollars are the
+        account's OWN figure — `ownBalance` sums what each row carried — and
+        only an inexact one wears the `~`. With no recorded rate there is no
+        dollar figure, so a USD-primary card falls back to taka-first rather
+        than promoting a blank.
+
+        Right-aligned, so a grid of cards lines its figures up against one edge.
       */}
-      {/* Right-aligned, so a column of cards lines its figures up against one
-          edge instead of leaving the eye to find each one. */}
-      {/*
-        Which figure sits on top follows the account's PRIMARY currency, on
-        the owner's instruction: a USD-primary card leads with the dollars and
-        keeps the taka underneath, a BDT account the reverse. What must not
-        move is the honesty rule above — the dollars are still a translation
-        however large they are printed, so the `~` and the grey second line
-        swap places with the figure rather than being dropped. And with no
-        recorded rate there IS no dollar figure, so a USD-primary card falls
-        back to taka-first rather than promoting a blank.
-      */}
-      {/*
-        The dollars are the account's OWN figure now, not a division of its
-        taka. That is the whole of the owner's complaint: $14,000 put in at
-        118.00 and read back at 122.50 became $13,485, because the card divided
-        a taka balance instead of adding up the dollars each row already
-        carried. `ownBalance` sums them; `ownBalanceExact` says whether every
-        row had one, and only an inexact figure wears the `~`.
-      */}
-      {account.currency === "USD" ? (
-        <>
-          <Amount
-            value={account.ownBalance}
-            currency="USD"
-            approximate={!account.ownBalanceExact}
-            showCounterpart={false}
-            className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
-          />
-          <Amount
-            value={account.balance}
-            currency={base}
-            showCounterpart={false}
-            className="num block text-right text-sm text-faint"
-          />
-        </>
-      ) : (
-        <>
-          <Amount
-            value={account.balance}
-            currency={base}
-            showCounterpart={false}
-            className="mt-5 block text-right text-[clamp(22px,1.8vw,28px)] font-semibold tracking-tight"
-          />
-          {equivalent ? (
+      <div className="py-1.5 text-right">
+        {account.currency === "USD" ? (
+          <>
             <Amount
-              value={equivalent.value}
-              currency={equivalent.currency}
-              approximate
+              value={account.ownBalance}
+              currency="USD"
+              approximate={!account.ownBalanceExact}
               showCounterpart={false}
-              className="num block text-right text-sm text-faint"
+              className="block text-[30px] font-extrabold tracking-[-0.02em] tabular-nums"
             />
-          ) : (
-            <span
-              className="num block text-right text-sm text-faint"
-              title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
-            >
-              N/A
-            </span>
-          )}
-        </>
-      )}
+            <Amount
+              value={account.balance}
+              currency={base}
+              showCounterpart={false}
+              className="block text-[13px] text-(--sv-muted) tabular-nums"
+            />
+          </>
+        ) : (
+          <>
+            <Amount
+              value={account.balance}
+              currency={base}
+              showCounterpart={false}
+              className="block text-[30px] font-extrabold tracking-[-0.02em] tabular-nums"
+            />
+            {equivalent ? (
+              <Amount
+                value={equivalent.value}
+                currency={equivalent.currency}
+                approximate
+                showCounterpart={false}
+                className="block text-[13px] text-(--sv-muted) tabular-nums"
+              />
+            ) : (
+              <span
+                className="block text-[13px] text-(--sv-muted)"
+                title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
+              >
+                N/A
+              </span>
+            )}
+          </>
+        )}
+      </div>
 
-      <p className="num mt-3 border-t border-border-soft pt-3 text-xs text-muted-foreground">
-        Opened at{" "}
-        <Amount
-          value={account.openingBalance}
-          currency={base}
-          showCounterpart={false}
-        />{" "}
-        on {formatDate(account.openingBalanceOn)}
+      <p className="sv-card-rules flex items-center gap-2 py-2.5 text-[12.5px] text-(--sv-muted)">
+        <CalendarBlankIcon
+          weight="duotone"
+          size={16}
+          className="flex-none text-(--sv-violet)"
+        />
+        <span>
+          Opened at{" "}
+          <Amount
+            value={account.openingBalance}
+            currency={base}
+            showCounterpart={false}
+            className="tabular-nums"
+          />{" "}
+          on {formatDate(account.openingBalanceOn)}
+        </span>
       </p>
 
       {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}
 
       {/*
-        Outside the canWrite check, and that is the point of adding it.
-        Until now this card had no link to the account at all — the register
-        and everything the account holds were reachable only by typing a URL —
-        and reading is not writing. The CEO can read and never edit.
+        View details is outside the canWrite check, and that is the point of
+        it: reading is not writing, and the CEO can read and never edit.
       */}
-      <div className="mt-4 flex gap-2 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/accounts/${account.id}`}
-          className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-primary transition hover:bg-primary/10"
+          className="inline-flex flex-1 items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) hover:text-(--sv-ink)"
         >
-          <SquareArrowOutUpRight className="size-3.5" />
+          <ArrowSquareOutIcon weight="duotone" size={17} />
           View details
         </Link>
-      </div>
 
-      {canWrite ? (
-        <div className="mt-1 flex gap-2">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
-            <SquarePen className="size-3.5" />
-            Edit
-          </Button>
-          {onArchive ? (
-            <Button size="sm" variant="ghost" onClick={onArchive}>
-              <Archive className="size-3.5" />
-              Archive
+        {canWrite ? (
+          <>
+            <Button size="sm" onClick={onEdit}>
+              <PencilSimpleIcon weight="duotone" size={15} />
+              Edit
             </Button>
-          ) : null}
-          {onRestore ? (
-            <Button size="sm" variant="ghost" onClick={onRestore}>
-              <ArchiveRestore className="size-3.5" />
-              Restore
-            </Button>
-          ) : null}
-          {onDelete ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto text-negative hover:bg-negative/10 hover:text-negative"
-              onClick={onDelete}
-            >
-              <Trash2 className="size-3.5" />
-              Delete
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </Card>
+            {onArchive ? (
+              <Button size="sm" onClick={onArchive}>
+                <ArchiveIcon weight="duotone" size={15} />
+                Archive
+              </Button>
+            ) : null}
+            {onRestore ? (
+              <Button size="sm" onClick={onRestore}>
+                <ArrowCounterClockwiseIcon weight="duotone" size={15} />
+                Restore
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                size="sm"
+                className="sv-button-danger text-(--sv-neg)"
+                onClick={onDelete}
+              >
+                <TrashIcon weight="duotone" size={15} />
+                Delete
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

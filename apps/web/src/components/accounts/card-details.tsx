@@ -1,14 +1,18 @@
 "use client";
 
-import { Eye, LoaderCircle, Lock } from "lucide-react";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
+import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { accountsApi, type AccountDto, type CardSecrets } from "@/lib/masters";
+
+import { Panel } from "./panel";
 
 /**
  * What a card is, on the card's own page.
@@ -41,54 +45,70 @@ export function CardDetails({ account }: { account: AccountDto }) {
   const rows: Array<[string, string | null]> = [
     ["Card holder", account.cardHolderName],
     ["Card name", account.cardLabel],
-    ["Card number", account.cardLast4 ? `•••• •••• •••• ${account.cardLast4}` : null],
+    [
+      "Card number",
+      account.cardLast4 ? `•••• •••• •••• ${account.cardLast4}` : null,
+    ],
     ["Expires", account.cardExpiry],
     ["CVC", account.cardSecretsSetAt ? "•••" : null],
   ];
 
   return (
-    <Card>
-      <CardHeader
-        title="Card"
-        description="What is printed on it"
-        action={
-          account.cardSecretsSetAt ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setSecrets(null);
-                setRevealing(true);
-              }}
+    <Panel
+      icon={CreditCardIcon}
+      title="Card"
+      description="What is printed on it"
+      aside={
+        account.cardSecretsSetAt ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setSecrets(null);
+              setRevealing(true);
+            }}
+          >
+            <EyeIcon
+              weight="duotone"
+              size={15}
+              className="text-(--sv-violet)"
+            />
+            Show the number
+          </Button>
+        ) : null
+      }
+    >
+      <dl className="px-5 pt-1.5 pb-3">
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            className="sv-row-rule flex items-center gap-3 py-[11px] text-[14px]"
+          >
+            <dt className="flex-1 text-(--sv-muted)">{label}</dt>
+            <dd
+              className={
+                value ? "font-extrabold tabular-nums" : "text-(--sv-muted)"
+              }
             >
-              <Eye className="size-3.5" />
-              Show the number
-            </Button>
-          ) : null
-        }
-      />
-      <CardBody>
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex items-baseline justify-between gap-4">
-              <dt className="text-sm text-muted-foreground">{label}</dt>
-              <dd className={value ? "num text-sm" : "text-sm text-muted-foreground"}>
-                {value ?? "N/A"}
-              </dd>
-            </div>
-          ))}
-        </dl>
+              {value ?? "N/A"}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
-        {!account.cardSecretsSetAt ? (
-          <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-            <Lock className="mt-0.5 size-3.5 shrink-0" />
-            {/* Said plainly rather than left as an empty row: a card with no
-                number on file is a card somebody meant to finish adding. */}
-            No number or CVC is on file for this card. Add them by editing the
-            account.
-          </p>
-        ) : null}
-      </CardBody>
+      {!account.cardSecretsSetAt ? (
+        <p className="mx-5 mb-4 flex items-start gap-2 text-[12.5px] text-(--sv-muted)">
+          <LockSimpleIcon
+            weight="duotone"
+            size={15}
+            className="mt-px flex-none text-(--sv-violet)"
+          />
+          {/* Said plainly rather than left as an empty row: a card with no
+              number on file is a card somebody meant to finish adding. */}
+          No number or CVC is on file for this card. Add them by editing the
+          account.
+        </p>
+      ) : null}
 
       {revealing ? (
         <RevealDrawer
@@ -101,7 +121,7 @@ export function CardDetails({ account }: { account: AccountDto }) {
           }}
         />
       ) : null}
-    </Card>
+    </Panel>
   );
 }
 
