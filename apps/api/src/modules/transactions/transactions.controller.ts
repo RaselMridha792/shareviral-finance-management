@@ -235,7 +235,13 @@ export class TransactionsController {
     @ZodBody(paySubscriptionSchema) body: PaySubscriptionInput,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.transactions.payForSubscription(id, body, actor);
+    // Parsed like every other `:id` here: a malformed one reached Postgres
+    // raw and came back as a 500 rather than a 400.
+    return this.transactions.payForSubscription(
+      uuidSchema.parse(id),
+      body,
+      actor,
+    );
   }
 
   @Post("transactions/transfer")
