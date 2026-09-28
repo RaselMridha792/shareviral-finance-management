@@ -11,7 +11,7 @@ import { UserPlusIcon } from "@phosphor-icons/react/dist/ssr/UserPlus";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
 import { useBulkSelect } from "@/components/ui/use-bulk-select";
@@ -33,6 +33,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { RowActions, RowActionsHead } from "@/components/ui/row-actions";
+import { rowOpener } from "@/components/ui/row-details";
 import { SearchField } from "@/components/ui/search-field";
 import {
   SerialCell,
@@ -387,6 +388,7 @@ export function TeamScreen({
                 past={tab === "past"}
                 showPay={canSeePay}
                 salaries={salaries}
+                onOpen={goToProfile}
                 onEdit={canWrite ? setEditing : undefined}
                 onStatus={canWrite ? goToProfile : undefined}
                 onDelete={canWrite ? del.ask : undefined}
@@ -488,6 +490,7 @@ function Section({
   past = false,
   showPay,
   salaries,
+  onOpen,
   onEdit,
   onStatus,
   onDelete,
@@ -503,6 +506,8 @@ function Section({
   title: string;
   subtitle: string;
   members: TeamMemberDto[];
+  /** The person's own page — what a click anywhere on their row opens. */
+  onOpen: (member: TeamMemberDto) => void;
   /**
    * Left undefined for a role that cannot write, which renders the pair
    * disabled rather than dropping it. A blank cell where every other row has
@@ -524,6 +529,33 @@ function Section({
   };
 }) {
   if (members.length === 0) return null;
+
+  /*
+   * A click anywhere on a row opens that person's page, not only their name.
+   *
+   * The owner: *"team table tay ami jekono jaygay click korlei jate single
+   * page a jay. akhon only name er opor click korle single page a jay."*
+   *
+   * The same row behaviour as the ledger tables — `rowOpener` leaves links,
+   * buttons, the tick box and a text selection alone, and gives the row its
+   * focus and its Enter — with two differences. It goes to a page rather than
+   * opening a popup, so the row does not claim `aria-haspopup`. And the tick's
+   * whole cell is left alone, not only its box: the cell is 23px of padding
+   * around a 14px square, and a near miss that navigated away would take every
+   * tick already made with it.
+   */
+  const openerFor = (member: TeamMemberDto) => {
+    const opener = rowOpener(() => onOpen(member), member.id);
+    return {
+      ...opener,
+      "aria-haspopup": undefined,
+      onClick: (event: MouseEvent<HTMLElement>) => {
+        if (event.target instanceof Element && event.target.closest("td.tick"))
+          return;
+        opener.onClick(event);
+      },
+    };
+  };
 
   return (
     /*
@@ -611,7 +643,7 @@ function Section({
         </thead>
         <tbody>
           {members.map((member, index) => (
-            <tr key={member.id} className="row-finance">
+            <tr key={member.id} className="row-finance" {...openerFor(member)}>
               {bulk ? (
                 <TickCell
                   checked={bulk.isTicked(member.id)}
