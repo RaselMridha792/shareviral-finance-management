@@ -1,20 +1,52 @@
 "use client";
 
+import type { Icon } from "@phosphor-icons/react";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
+import { AtIcon } from "@phosphor-icons/react/dist/ssr/At";
 import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
+import { BookOpenIcon } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { BriefcaseIcon } from "@phosphor-icons/react/dist/ssr/Briefcase";
+import { CakeIcon } from "@phosphor-icons/react/dist/ssr/Cake";
+import { CalendarBlankIcon } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
+import { CalendarCheckIcon } from "@phosphor-icons/react/dist/ssr/CalendarCheck";
+import { CalendarXIcon } from "@phosphor-icons/react/dist/ssr/CalendarX";
 import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { DropIcon } from "@phosphor-icons/react/dist/ssr/Drop";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
+import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
+import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
+import { GenderIntersexIcon } from "@phosphor-icons/react/dist/ssr/GenderIntersex";
+import { GitBranchIcon } from "@phosphor-icons/react/dist/ssr/GitBranch";
+import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/ssr/GraduationCap";
+import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
+import { HashIcon } from "@phosphor-icons/react/dist/ssr/Hash";
+import { HourglassIcon } from "@phosphor-icons/react/dist/ssr/Hourglass";
+import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
 import { IdentificationCardIcon } from "@phosphor-icons/react/dist/ssr/IdentificationCard";
+import { MapPinIcon } from "@phosphor-icons/react/dist/ssr/MapPin";
+import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
+import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
 import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil";
+import { PathIcon } from "@phosphor-icons/react/dist/ssr/Path";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { PhoneIcon } from "@phosphor-icons/react/dist/ssr/Phone";
+import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
 import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
+import { UserSquareIcon } from "@phosphor-icons/react/dist/ssr/UserSquare";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import {
   EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   EMPLOYMENT_STATUSES,
+  EMPLOYMENT_TYPE_LABELS,
   ENGAGEMENT_LABELS,
   GENDER_LABELS,
   PAYROLL_STATUS_LABELS,
@@ -135,6 +167,20 @@ export function TeamMemberScreen({
   const [editing, setEditing] = useState(false);
   const [settingPay, setSettingPay] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  /** Which section the tabs show; Overview is every one of them. */
+  const [tab, setTab] = useState<ProfileTab>("overview");
+  const shows = (section: Exclude<ProfileTab, "overview">) =>
+    tab === "overview" || tab === section;
+  /** The papers on file against the ones expected — told by the list. */
+  const [docs, setDocs] = useState<{
+    expected: number;
+    received: number;
+  } | null>(null);
+  /** How many of the record's details are filled in. */
+  const filled = RECORD_FIELDS.filter((field) => {
+    const value = member[field];
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  }).length;
 
   const refresh = () => router.refresh();
 
@@ -248,712 +294,802 @@ export function TeamMemberScreen({
 
   return (
     <>
-      <Link
-        href="/team"
-        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
-      >
-        <ArrowLeftIcon weight="bold" size={15} />
-        All team
-      </Link>
-
-      {/* The profile's own header card: the photo where a screen's lime tile
-          would be, and the handoff's decoration behind the words. */}
-      <Card className="sv-page-head sv-rise relative isolate flex flex-wrap items-center gap-4 overflow-hidden px-6 py-5">
-        <div aria-hidden="true" className="sv-page-head-decor">
-          <span className="grid-paper" />
-          <span className="blob" />
-          <span className="loop" />
-          <span className="square" />
-        </div>
-        <div className="flex flex-col items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => photoSrc && setViewingPhoto(true)}
-            className={cn(
-              "rounded-xl",
-              photoSrc ? "cursor-zoom-in" : "cursor-default",
-            )}
-            aria-label={
-              photoSrc ? `View ${member.fullName}'s photo` : undefined
-            }
+      {/*
+        The profile, drawn after the HR portal's own (the owner's reference,
+        28 Sep 2026: "screenshots a jevabe header sundor vabe add kora tarpor
+        section gular jonne sundor nevigation. prottekta item er jonne icons").
+        Nothing on it is new: every field, card and action is the one the page
+        already had, arranged under a banner, two progress figures and a row of
+        tabs. `sv-profile` scopes the card-heading style in new-design.css to
+        this page, so the cards other components draw here (social accounts,
+        e-returns, the documents list) wear it too.
+      */}
+      <div className="sv-profile flex flex-col gap-[18px]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/team"
+            className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
           >
-            <MemberPhoto
-              // Resets the broken-image state when the picture itself changes,
-              // including the moment a new one finishes uploading.
-              key={member.photoFileId ?? member.photoUrl ?? "none"}
-              fullName={member.fullName}
-              src={photoSrc}
-            />
-          </button>
+            <ArrowLeftIcon weight="bold" size={15} />
+            All team
+          </Link>
           {canWrite ? (
-            <PhotoUpload memberId={member.id} onUploaded={refresh} />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Separate from Edit on purpose. Somebody resigning is not the
+                  same kind of act as correcting a phone number: it is the one
+                  change that takes a person off the salary sheet, and it should
+                  be reachable in one click and read as a decision. */}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setChangingStatus(true)}
+              >
+                <UserGearIcon
+                  weight="duotone"
+                  size={18}
+                  className="text-(--sv-violet)"
+                />
+                Change status
+              </Button>
+              <Button variant="primary" size="md" onClick={() => setEditing(true)}>
+                <PencilSimpleIcon weight="duotone" size={18} />
+                Edit record
+              </Button>
+            </div>
           ) : null}
         </div>
 
-        <ImageLightbox
-          open={viewingPhoto}
-          src={photoSrc}
-          alt={member.fullName}
-          onClose={() => setViewingPhoto(false)}
-        />
-
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
-            {member.fullName}
-          </h1>
-          <p className="mt-0.5 text-[14.5px] text-(--sv-muted)">
-            {[member.designation, member.department]
-              .filter(Boolean)
-              .join(" · ") || ENGAGEMENT_LABELS[member.engagementType]}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusPill tone={STATUS_TONES[member.status]}>
-              {EMPLOYMENT_STATUS_LABELS[member.status]}
-            </StatusPill>
+        {/* The banner: the violet band, the photo over its edge, the name and
+            the four facts somebody looks for first. */}
+        <Card className="sv-profile-hero sv-rise overflow-hidden">
+          <div aria-hidden="true" className="sv-profile-banner">
+            <span className="sv-profile-banner-sun" />
+            <span className="sv-profile-banner-moon" />
           </div>
-        </div>
-
-        {canWrite ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Separate from Edit on purpose. Somebody resigning is not the
-                same kind of act as correcting a phone number: it is the one
-                change that takes a person off the salary sheet, and it should
-                be reachable in one click and read as a decision. */}
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => setChangingStatus(true)}
-            >
-              <UserGearIcon
-                weight="duotone"
-                size={18}
-                className="text-(--sv-violet)"
-              />
-              Change status
-            </Button>
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => setEditing(true)}
-            >
-              <PencilSimpleIcon
-                weight="duotone"
-                size={18}
-                className="text-(--sv-violet)"
-              />
-              Edit
-            </Button>
-          </div>
-        ) : null}
-      </Card>
-
-      {/* Everything the sheet carries, in the sheet's own order and its own
-          words, so a row here and a column there are the same field. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Employee details" icon={IdentificationCardIcon} />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="Name of Employee" value={member.fullName} />
-            <Row label="Designation" value={member.designation} />
-            <Row label="Age">
-              {age !== null ? (
-                <>
-                  <span className="num">{age}</span> yrs
-                </>
-              ) : null}
-            </Row>
-            <Row
-              label="Gender"
-              value={member.gender ? GENDER_LABELS[member.gender] : null}
-            />
-            <Row label="Blood Group" value={member.bloodGroup} />
-            <Row
-              label="Date Of Birth"
-              mono
-              value={formatDate(member.dateOfBirth)}
-            />
-            <Row label="NID Number" mono value={member.nid} />
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="Contact" icon={AddressBookIcon} />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="Contact No." mono value={member.phone} />
-            <Row label="Email" value={member.personalEmail} />
-            <Row label="Work email" value={member.workEmail} />
-            <Row label="Present Address" value={member.address} />
-            <Row label="Permanent Address" value={member.permanentAddress} />
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Employment"
-            icon={BriefcaseIcon}
-            description="Joining Salary is what was agreed at hire — what they are paid now is below"
-          />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row
-              label="Date of Joining"
-              mono
-              value={formatDate(member.joinedOn)}
-            />
-            <Row label="Joining Salary">
-              {member.joiningSalary ? (
-                <Amount value={member.joiningSalary} className="font-medium" />
-              ) : null}
-            </Row>
-            {/* What SOMEBODY ELSE paid them, from the HR app. Read-only
-                context, never arithmetic -- and deliberately not styled like
-                the line above it, because the two are opposite facts and a
-                reader glancing down this card must not add them. */}
-            <Row label="Previous Employer Salary">
-              {member.previousOrgSalary ? (
-                <Amount value={member.previousOrgSalary} />
-              ) : null}
-            </Row>
-            <Row
-              label="Education Level"
-              value={
-                member.educationLevel
-                  ? EDUCATION_LEVEL_LABELS[member.educationLevel]
-                  : null
-              }
-            />
-            <Row label="Education Major" value={member.educationMajor} />
-          </CardBody>
-        </Card>
-
-        {/* Not on the sheet. These are the app's own — the code it files
-            people under, and the status the salary sheet reads. */}
-        <Card>
-          <CardHeader title="Record" icon={ClipboardTextIcon} />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row
-              label="Engaged as"
-              value={ENGAGEMENT_LABELS[member.engagementType]}
-            />
-            <Row label="Department" value={member.department} />
-            <Row label="Status">
-              <StatusPill tone={STATUS_TONES[member.status]}>
-                {EMPLOYMENT_STATUS_LABELS[member.status]}
-              </StatusPill>
-            </Row>
-            {/*
-              Only for somebody who has one.
-
-              A row reading "Last day —" against a person who is working says
-              nothing, and reads as a gap in the record rather than as the
-              absence of an event. It appears the moment a status is set that
-              implies leaving, which is also the moment the form asks for the
-              date.
-            */}
-            {member.endedOn || !working ? (
-              <Row label="Last day" mono value={formatDate(member.endedOn)} />
-            ) : null}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Tax"
-            icon={PercentIcon}
-            description="Missing PSR raises the withholding rate by half"
-          />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            <Row label="e-TIN" mono value={member.etin} />
-            <Row label="Return filed">
-              <Badge
-                tone={
-                  member.psrStatus === "submitted"
-                    ? "positive"
-                    : member.psrStatus === "not_submitted"
-                      ? "negative"
-                      : "warning"
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-3 px-6 pb-5">
+            <div className="relative z-[1] -mt-12 flex flex-col items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => photoSrc && setViewingPhoto(true)}
+                className={cn(
+                  "sv-profile-avatar rounded-full",
+                  photoSrc ? "cursor-zoom-in" : "cursor-default",
+                )}
+                aria-label={
+                  photoSrc ? `View ${member.fullName}'s photo` : undefined
                 }
               >
-                {PSR_STATUS_LABELS[member.psrStatus]}
-              </Badge>
-            </Row>
-            <Row
-              label="Assessment year"
-              mono
-              value={member.psrAssessmentYear}
+                <MemberPhoto
+                  // Resets the broken-image state when the picture itself
+                  // changes, including the moment a new one finishes uploading.
+                  key={member.photoFileId ?? member.photoUrl ?? "none"}
+                  fullName={member.fullName}
+                  src={photoSrc}
+                />
+              </button>
+              {canWrite ? (
+                <PhotoUpload memberId={member.id} onUploaded={refresh} />
+              ) : null}
+            </div>
+
+            <ImageLightbox
+              open={viewingPhoto}
+              src={photoSrc}
+              alt={member.fullName}
+              onClose={() => setViewingPhoto(false)}
             />
-          </CardBody>
-        </Card>
 
-        <Card>
-          <CardHeader title="Where they are paid" icon={BankIcon} />
-          <CardBody className="flex flex-col gap-2.5 text-sm">
-            {/*
-              The six a salary transfer actually needs, in the order a bank
-              form asks for them.
-
-              The account HOLDER is new and is the one most likely to be the
-              reason a payment bounced: a salary often goes to an account in a
-              name that is not exactly the employee's — a father's name, a
-              joint account, a maiden name — and the bank refuses a transfer
-              whose beneficiary name does not match. The app had nowhere to
-              record it.
-
-              Wallet and Wallet number are gone on the owner's word. They were
-              N/A for everybody; the columns stay in the database, so nothing
-              recorded is lost if a wallet is ever wanted again.
-            */}
-            <Row label="Bank" value={member.bankName} />
-            <Row label="Account holder" value={member.bankAccountHolder} />
-            <Row label="Account" mono value={member.bankAccountNumber} />
-            <Row label="Branch" value={member.bankBranch} />
-            <Row label="Routing" mono value={member.bankRouting} />
-            <Row label="SWIFT" mono value={member.bankSwift} />
-          </CardBody>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Documents"
-            icon={FilesIcon}
-            description="Every paper this record should hold, and which are missing"
-          />
-          <CardBody>
-            <DocumentSlots
-              memberId={member.id}
-              canWrite={canWrite}
-              /* `working` counts on_leave as still here, which is right: a
-                 person on leave has not resigned. */
-              hasLeft={!working}
-            />
-          </CardBody>
-        </Card>
-
-        {/* The "Linked elsewhere" card is gone on the owner's instruction: every
-          paper now lives in the app's own store, uploaded from the drawer or
-          the Documents card above. The three URL columns keep their values in
-          the database — removing a column to satisfy a screen would destroy
-          what somebody typed — they are simply no longer shown or written. */}
-
-        {/* `min-w-0` is load-bearing, not tidying. A grid item's default
-            `min-width: auto` sizes it to its contents, so the sixteen-column
-            tools table below pushed this card wider than its track and the
-            whole profile scrolled sideways by a thousand pixels — the inner
-            `overflow-x-auto` never got the chance to scroll, because nothing
-            had told the card it was allowed to be narrower than its table. */}
-        <Card className="min-w-0 overflow-hidden lg:col-span-2">
-          <CardHeader
-            title="Paid tools"
-            icon={SparkleIcon}
-            description="What this person has a seat on, and what they used to"
-          />
-          <CardBody>
-            <MemberTools
-              memberId={member.id}
-            />
-          </CardBody>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader title="Notes" icon={NotePencilIcon} />
-          <CardBody className="text-sm">
-            {member.notes ? (
-              <p className="whitespace-pre-line">{member.notes}</p>
-            ) : (
-              <p className="text-muted-foreground">Nothing noted.</p>
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Pay closes the page rather than hiding behind a tab. The gate is
-          unchanged — HR sees the locked card and the server refuses them
-          independently — it is just no longer a click away from the rest. */}
-      {!canSeePay ? (
-        <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
-            <Lock className="size-6" />
-          </span>
-          <div>
-            <p className="text-lg font-semibold">Pay is not visible to you</p>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-              Your role manages people but not what they earn. The server
-              refuses this independently — it is not simply hidden here.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Card className="flex-1 px-5 py-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Current gross, monthly
+            <div className="min-w-0 flex-1 pt-3.5">
+              <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
+                {member.fullName}
+              </h1>
+              <p className="mt-0.5 text-[14.5px] text-(--sv-muted)">
+                {[member.designation, member.department]
+                  .filter(Boolean)
+                  .join(" · ") || ENGAGEMENT_LABELS[member.engagementType]}
               </p>
-              {currentPay ? (
-                <>
-                  <Amount
-                    value={currentPay.grossAmount}
-                    className="mt-2 block text-2xl font-semibold"
-                  />
-                  <p className="num mt-1 text-xs text-muted-foreground">
-                    Since {formatDate(currentPay.effectiveFrom)}
-                  </p>
-
-                  {/* The four lines behind the one figure. On the person, not
-                      on a month — this is what they are paid, and the payslip
-                      is where a particular month's version of it lives.
-
-                      Each carries its share as well as its amount. The amount
-                      is the fact and the share is the rule, and somebody
-                      checking a payslip against the offer letter is reading
-                      for the rule. */}
-                  {currentPay.components?.length ? (
-                    <dl className="mt-3 flex flex-col gap-1 border-t border-border pt-3 text-sm">
-                      {currentPay.components.map((part) => (
-                        <div
-                          key={part.label}
-                          className="flex items-baseline justify-between gap-3"
-                        >
-                          <dt className="text-muted-foreground">
-                            {part.label}
-                            <span className="num ml-1.5 text-xs text-faint">
-                              {shareOf(part.amount, currentPay.grossAmount)}
-                            </span>
-                          </dt>
-                          <dd>
-                            <Amount
-                              value={part.amount}
-                              showCounterpart={false}
-                            />
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                </>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Nothing recorded yet — they will be left off the salary sheet
-                  until a figure exists.
-                </p>
-              )}
-            </Card>
-            {canSetPay ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => setSettingPay(true)}
-              >
-                <Plus className="size-4" />
-                Record a change
-              </Button>
-            ) : null}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {member.employeeCode ? (
+                  <span className="sv-profile-chip">{member.employeeCode}</span>
+                ) : null}
+                <StatusPill tone={STATUS_TONES[member.status]}>
+                  {EMPLOYMENT_STATUS_LABELS[member.status]}
+                </StatusPill>
+                {member.employmentType ? (
+                  <span className="sv-profile-chip">
+                    {EMPLOYMENT_TYPE_LABELS[member.employmentType]}
+                  </span>
+                ) : null}
+                <span className="sv-profile-chip">
+                  Joined {formatDate(member.joinedOn)}
+                </span>
+              </div>
+            </div>
           </div>
+        </Card>
 
-          {/*
-            What pay HAS been, not only what it is.
-
-            Nothing new is recorded here: every change already writes a row
-            with its own effective date and reason — that is what the "Since
-            2026-08-30" above is reading — and the whole list was already on
-            the wire. The card only stops throwing it away.
-
-            The current figure is left out: it is the large number directly
-            above, and printing it twice invites somebody to read two rows as
-            two raises. So this is the history BEFORE now, and it says nothing
-            at all when there is none rather than showing an empty table,
-            because a person hired last month has no history and that is not a
-            gap.
-          */}
-          {/*
-            Where they can be found — its own section, above the money.
-
-            Always rendered, unlike Salary changes: an empty one is an
-            invitation to add the first account, and this is the card somebody
-            comes to the profile to fill in. It carries its own drawer, so
-            nothing about the big edit form has to change.
-          */}
-          <SocialAccounts
-            memberId={member.id}
-            memberName={member.fullName}
-            socials={socials}
-            canWrite={canWrite}
-            onSaved={refresh}
+        {/* Two figures that say how complete this record is. */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ProgressCard
+            icon={FilesIcon}
+            label="Documents"
+            value={docs ? `${docs.received} of ${docs.expected}` : "…"}
+            ratio={docs && docs.expected ? docs.received / docs.expected : 0}
+            note={
+              docs
+                ? docs.expected - docs.received === 0
+                  ? "Every expected paper is on file"
+                  : `${docs.expected - docs.received} still to come`
+                : "Reading the papers on file"
+            }
           />
-
-          {/* Tax: the year, the acknowledgement, and nothing invented. The
-              e-TIN itself is a field on the person, above. */}
-          <Ereturns
-            memberId={member.id}
-            memberName={member.fullName}
-            ereturns={ereturns}
-            canWrite={canWrite}
-            onSaved={refresh}
+          <ProgressCard
+            icon={ClipboardTextIcon}
+            label="Record"
+            value={`${Math.round((filled / RECORD_FIELDS.length) * 100)}%`}
+            ratio={filled / RECORD_FIELDS.length}
+            note={
+              filled === RECORD_FIELDS.length
+                ? "Every detail is filled in"
+                : `${RECORD_FIELDS.length - filled} of ${RECORD_FIELDS.length} details still blank`
+            }
           />
+        </div>
 
-          {history.length > 0 ? (
+        {/* The sections, one tab each — Overview is all of them. */}
+        <nav
+          aria-label="Sections of this profile"
+          className="sv-card sv-profile-tabs flex flex-wrap gap-1 rounded-[11px] bg-(--sv-surface) p-1.5"
+        >
+          {PROFILE_TABS.map((one) => (
+            <button
+              key={one.key}
+              type="button"
+              aria-pressed={tab === one.key}
+              data-active={tab === one.key ? "" : undefined}
+              onClick={() => setTab(one.key)}
+              className="sv-profile-tab"
+            >
+              <one.icon weight="duotone" size={18} />
+              {one.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Everything the sheet carries, in the sheet's own words, so a row
+            here and a column there are the same field. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {shows("personal") ? (
+            <Card>
+              <CardHeader title="Employee details" icon={IdentificationCardIcon} />
+              <CardBody className="sv-profile-rows">
+                <Row icon={UserIcon} label="Name of Employee" value={member.fullName} />
+                <Row icon={MedalIcon} label="Designation" value={member.designation} />
+                <Row icon={HourglassIcon} label="Age">
+                  {age !== null ? (
+                    <>
+                      <span className="num">{age}</span> yrs
+                    </>
+                  ) : null}
+                </Row>
+                <Row
+                  icon={GenderIntersexIcon}
+                  label="Gender"
+                  value={member.gender ? GENDER_LABELS[member.gender] : null}
+                />
+                <Row icon={DropIcon} label="Blood Group" value={member.bloodGroup} />
+                <Row
+                  icon={CakeIcon}
+                  label="Date Of Birth"
+                  mono
+                  value={formatDate(member.dateOfBirth)}
+                />
+                <Row icon={IdentificationCardIcon} label="NID Number" mono value={member.nid} />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("personal") ? (
+            <Card>
+              <CardHeader title="Contact" icon={AddressBookIcon} />
+              <CardBody className="sv-profile-rows">
+                <Row icon={PhoneIcon} label="Contact No." mono value={member.phone} />
+                <Row icon={EnvelopeSimpleIcon} label="Email" value={member.personalEmail} />
+                <Row icon={AtIcon} label="Work email" value={member.workEmail} />
+                <Row icon={HouseIcon} label="Present Address" value={member.address} />
+                <Row icon={MapPinIcon} label="Permanent Address" value={member.permanentAddress} />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("employment") ? (
             <Card>
               <CardHeader
-                title="Salary changes"
-                icon={ChartLineUpIcon}
-                description="What they were paid before, and why it changed"
+                title="Employment"
+                icon={BriefcaseIcon}
+                description="Joining Salary is what was agreed at hire — what they are paid now is below"
+              />
+              <CardBody className="sv-profile-rows">
+                <Row
+                  icon={CalendarCheckIcon}
+                  label="Date of Joining"
+                  mono
+                  value={formatDate(member.joinedOn)}
+                />
+                <Row icon={MoneyIcon} label="Joining Salary">
+                  {member.joiningSalary ? (
+                    <Amount value={member.joiningSalary} className="font-medium" />
+                  ) : null}
+                </Row>
+                {/* What SOMEBODY ELSE paid them, from the HR app. Read-only
+                    context, never arithmetic -- and deliberately not styled like
+                    the line above it, because the two are opposite facts and a
+                    reader glancing down this card must not add them. */}
+                <Row icon={ClockCounterClockwiseIcon} label="Previous Employer Salary">
+                  {member.previousOrgSalary ? (
+                    <Amount value={member.previousOrgSalary} />
+                  ) : null}
+                </Row>
+                <Row
+                  icon={GraduationCapIcon}
+                  label="Education Level"
+                  value={
+                    member.educationLevel
+                      ? EDUCATION_LEVEL_LABELS[member.educationLevel]
+                      : null
+                  }
+                />
+                <Row icon={BookOpenIcon} label="Education Major" value={member.educationMajor} />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {/* Not on the sheet. These are the app's own — the code it files
+              people under, and the status the salary sheet reads. */}
+          {shows("employment") ? (
+            <Card>
+              <CardHeader title="Record" icon={ClipboardTextIcon} />
+              <CardBody className="sv-profile-rows">
+                <Row
+                  icon={HandshakeIcon}
+                  label="Engaged as"
+                  value={ENGAGEMENT_LABELS[member.engagementType]}
+                />
+                <Row icon={UsersThreeIcon} label="Department" value={member.department} />
+                <Row icon={PulseIcon} label="Status">
+                  <StatusPill tone={STATUS_TONES[member.status]}>
+                    {EMPLOYMENT_STATUS_LABELS[member.status]}
+                  </StatusPill>
+                </Row>
+                {/*
+                  Only for somebody who has one.
+
+                  A row reading "Last day —" against a person who is working
+                  says nothing, and reads as a gap in the record rather than as
+                  the absence of an event. It appears the moment a status is set
+                  that implies leaving, which is also the moment the form asks
+                  for the date.
+                */}
+                {member.endedOn || !working ? (
+                  <Row
+                    icon={CalendarXIcon}
+                    label="Last day"
+                    mono
+                    value={formatDate(member.endedOn)}
+                  />
+                ) : null}
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("pay") ? (
+            <Card>
+              <CardHeader
+                title="Tax"
+                icon={PercentIcon}
+                description="Missing PSR raises the withholding rate by half"
+              />
+              <CardBody className="sv-profile-rows">
+                <Row icon={HashIcon} label="e-TIN" mono value={member.etin} />
+                <Row icon={FileTextIcon} label="Return filed">
+                  <Badge
+                    tone={
+                      member.psrStatus === "submitted"
+                        ? "positive"
+                        : member.psrStatus === "not_submitted"
+                          ? "negative"
+                          : "warning"
+                    }
+                  >
+                    {PSR_STATUS_LABELS[member.psrStatus]}
+                  </Badge>
+                </Row>
+                <Row
+                  icon={CalendarBlankIcon}
+                  label="Assessment year"
+                  mono
+                  value={member.psrAssessmentYear}
+                />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("pay") ? (
+            <Card>
+              <CardHeader title="Where they are paid" icon={BankIcon} />
+              <CardBody className="sv-profile-rows">
+                {/*
+                  The six a salary transfer actually needs, in the order a bank
+                  form asks for them.
+
+                  The account HOLDER is the one most likely to be the reason a
+                  payment bounced: a salary often goes to an account in a name
+                  that is not exactly the employee's — a father's name, a joint
+                  account, a maiden name — and the bank refuses a transfer whose
+                  beneficiary name does not match.
+
+                  Wallet and Wallet number are gone on the owner's word. They
+                  were N/A for everybody; the columns stay in the database, so
+                  nothing recorded is lost if a wallet is ever wanted again.
+                */}
+                <Row icon={BankIcon} label="Bank" value={member.bankName} />
+                <Row icon={UserSquareIcon} label="Account holder" value={member.bankAccountHolder} />
+                <Row icon={CreditCardIcon} label="Account" mono value={member.bankAccountNumber} />
+                <Row icon={GitBranchIcon} label="Branch" value={member.bankBranch} />
+                <Row icon={PathIcon} label="Routing" mono value={member.bankRouting} />
+                <Row icon={GlobeIcon} label="SWIFT" mono value={member.bankSwift} />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("documents") ? (
+            <Card className="lg:col-span-2">
+              <CardHeader
+                title="Documents"
+                icon={FilesIcon}
+                description="Every paper this record should hold, and which are missing"
+              />
+              <CardBody>
+                <DocumentSlots
+                  memberId={member.id}
+                  canWrite={canWrite}
+                  /* `working` counts on_leave as still here, which is right: a
+                     person on leave has not resigned. */
+                  hasLeft={!working}
+                  onSummary={setDocs}
+                />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {/* The "Linked elsewhere" card is gone on the owner's instruction:
+            every paper now lives in the app's own store, uploaded from the
+            drawer or the Documents card above. The three URL columns keep their
+            values in the database — they are simply no longer shown or
+            written. */}
+
+          {/* `min-w-0` is load-bearing, not tidying. A grid item's default
+              `min-width: auto` sizes it to its contents, so the sixteen-column
+              tools table below pushed this card wider than its track and the
+              whole profile scrolled sideways by a thousand pixels. */}
+          {shows("tools") ? (
+            <Card className="min-w-0 overflow-hidden lg:col-span-2">
+              <CardHeader
+                title="Paid tools"
+                icon={SparkleIcon}
+                description="What this person has a seat on, and what they used to"
+              />
+              <CardBody>
+                <MemberTools memberId={member.id} />
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {shows("employment") ? (
+            <Card className="lg:col-span-2">
+              <CardHeader title="Notes" icon={NotePencilIcon} />
+              <CardBody className="text-sm">
+                {member.notes ? (
+                  <p className="whitespace-pre-line">{member.notes}</p>
+                ) : (
+                  <p className="text-muted-foreground">Nothing noted.</p>
+                )}
+              </CardBody>
+            </Card>
+          ) : null}
+        </div>
+
+        {/* Pay closes the page rather than hiding behind a tab of its own. The
+            gate is unchanged — HR sees the locked card and the server refuses
+            them independently. */}
+        {!shows("pay") && !shows("personal") ? null : !canSeePay ? (
+          shows("pay") ? (
+            <Card className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <span className="flex size-[52px] items-center justify-center rounded-full bg-primary/15 text-primary-text">
+                <Lock className="size-6" />
+              </span>
+              <div>
+                <p className="text-lg font-semibold">Pay is not visible to you</p>
+                <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                  Your role manages people but not what they earn. The server
+                  refuses this independently — it is not simply hidden here.
+                </p>
+              </div>
+            </Card>
+          ) : null
+        ) : (
+          <>
+            {shows("pay") ? (
+              <Card>
+                <CardHeader
+                  title="Pay"
+                  icon={MoneyIcon}
+                  description="Current gross, monthly — what the salary sheet reads"
+                  action={
+                    canSetPay ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setSettingPay(true)}
+                      >
+                        <Plus className="size-4" />
+                        Record a change
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <CardBody>
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Current gross, monthly
+                  </p>
+                {currentPay ? (
+                  <>
+                    <Amount
+                      value={currentPay.grossAmount}
+                      className="mt-2 block text-2xl font-semibold"
+                    />
+                    <p className="num mt-1 text-xs text-muted-foreground">
+                      Since {formatDate(currentPay.effectiveFrom)}
+                    </p>
+
+                    {/* The four lines behind the one figure. On the person, not
+                        on a month — this is what they are paid, and the payslip
+                        is where a particular month's version of it lives.
+
+                        Each carries its share as well as its amount. The amount
+                        is the fact and the share is the rule, and somebody
+                        checking a payslip against the offer letter is reading
+                        for the rule. */}
+                    {currentPay.components?.length ? (
+                      <dl className="mt-3 flex flex-col gap-1 border-t border-border pt-3 text-sm">
+                        {currentPay.components.map((part) => (
+                          <div
+                            key={part.label}
+                            className="flex items-baseline justify-between gap-3"
+                          >
+                            <dt className="text-muted-foreground">
+                              {part.label}
+                              <span className="num ml-1.5 text-xs text-faint">
+                                {shareOf(part.amount, currentPay.grossAmount)}
+                              </span>
+                            </dt>
+                            <dd>
+                              <Amount
+                                value={part.amount}
+                                showCounterpart={false}
+                              />
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Nothing recorded yet — they will be left off the salary sheet
+                    until a figure exists.
+                  </p>
+                )}
+                </CardBody>
+              </Card>
+            ) : null}
+
+            {/*
+              Where they can be found — always rendered, unlike Salary changes:
+              an empty one is an invitation to add the first account. It carries
+              its own drawer, so nothing about the big edit form has to change.
+            */}
+            {shows("personal") ? (
+              <SocialAccounts
+                memberId={member.id}
+                memberName={member.fullName}
+                socials={socials}
+                canWrite={canWrite}
+                onSaved={refresh}
+              />
+            ) : null}
+
+            {/* Tax: the year, the acknowledgement, and nothing invented. The
+                e-TIN itself is a field on the person, above. */}
+            {shows("pay") ? (
+              <Ereturns
+                memberId={member.id}
+                memberName={member.fullName}
+                ereturns={ereturns}
+                canWrite={canWrite}
+                onSaved={refresh}
+              />
+            ) : null}
+
+            {shows("pay") ? (
+              <>
+            {history.length > 0 ? (
+              <Card>
+                <CardHeader
+                  title="Salary changes"
+                  icon={ChartLineUpIcon}
+                  description="What they were paid before, and why it changed"
+                />
+                <CardBody className="p-0">
+                  <TableScroll>
+                    {/* Only once something is ticked; otherwise the panel is
+                        exactly as it was. */}
+                    {/*
+                      No money on this bar, deliberately. Everywhere else it
+                      states the total the selection is worth, because those are
+                      entries in a ledger and their sum is a real figure. Three
+                      historical monthly salaries added together is not a figure
+                      at all — it is not what anybody was paid, or owed, or is
+                      about to lose. So the bar says how many, and stops.
+                    */}
+                    <BulkBar
+                      count={payBulk.count}
+                      noun="salary record"
+                      pending={payBulkPending}
+                      onClear={payBulk.clear}
+                      onTrash={() => {
+                        setPayBulkError(null);
+                        setPayBulkAsking(true);
+                      }}
+                    />
+                    <table className="table-data min-w-[760px] text-sm">
+                      <thead>
+                        <tr className="text-left">
+                          {canSetPay ? (
+                            <TickHead
+                              state={payBulk.headerState}
+                              onChange={payBulk.allOnPage}
+                            />
+                          ) : null}
+                          <SerialHead />
+                          <Th width="w-32">From</Th>
+                          <Th width="w-32">Until</Th>
+                          <Th align="right">Gross, monthly</Th>
+                          <Th>Why it changed</Th>
+                          {/* The same unlabelled heading every other table's
+                              action column uses, at its narrow width — one
+                              button, not three. */}
+                          {canSetPay ? <RowActionsHead /> : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payVisible.map((row, index) => (
+                          <tr key={row.id} className="row-finance">
+                            {canSetPay ? (
+                              <TickCell
+                                checked={payBulk.isTicked(row.id)}
+                                onChange={() => payBulk.toggle(row.id)}
+                                label={`${row.grossAmount} from ${row.effectiveFrom}`}
+                              />
+                            ) : null}
+                            {/* Counted across pages, so the twenty-first row is
+                                21 rather than a second 1. */}
+                            <SerialCell n={serial(payCurrent, index)} />
+                            <td className="num text-muted-foreground">
+                              {formatDate(row.effectiveFrom)}
+                            </td>
+                            <td className="num text-muted-foreground">
+                              {/*
+                                Read from the row that follows, not from the
+                                stored `effective_to`.
+
+                                Nothing in this app resolves a salary through
+                                `effective_to` — payroll and the directory both
+                                take the newest row whose `effective_from` is on
+                                or before the date they want. The column is
+                                written once, when the NEXT change closes this
+                                row, and nothing repairs it afterwards. So
+                                deleting a row out of the middle of a history
+                                leaves its predecessor stamped with an end date
+                                that came from a row nobody can see any more:
+                                the money quietly carries on at the predecessor's
+                                figure while this column claims it stopped months
+                                ago. Display and money disagreeing, with only the
+                                display wrong.
+
+                                Derived here, they cannot disagree.
+                              */}
+                              {untilOf(row) ?? "—"}
+                            </td>
+                            <td className="num text-right">
+                              <Amount
+                                value={row.grossAmount}
+                                showCounterpart={false}
+                              />
+                            </td>
+                            <td className="text-muted-foreground">
+                              {row.changeReason ?? "—"}
+                            </td>
+                            {canSetPay ? (
+                              /*
+                                One button, written here rather than through
+                                `RowActions`.
+
+                                That component takes a REQUIRED second verb —
+                                void, deactivate, archive, delete, status — and
+                                renders Edit beside it. This row supports
+                                neither: a historical salary cannot be edited
+                                (the API only ever appends a new one, which is
+                                what makes the history a history), and it has no
+                                second act. Passing a verb to satisfy the type
+                                would put two dead icons on every row, and making
+                                `second` optional is a change to the nineteen
+                                screens that use it — which is the owner's call,
+                                not this page's.
+                              */
+                              <td>
+                                <div className="flex items-center justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => payDelete.ask(row)}
+                                    aria-label="Move to trash"
+                                    title="Move to trash"
+                                    className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-negative"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            ) : null}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableScroll>
+                </CardBody>
+                {/* A sibling of the table, not inside it — it renders nothing at
+                    all while the history fits on one page. */}
+                <Pagination
+                  page={payCurrent}
+                  totalPages={payPages}
+                  total={history.length}
+                  noun="salary record"
+                  nounPlural="salary records"
+                  onPage={setPayPage}
+                />
+              </Card>
+            ) : null}
+
+            <Card>
+              <CardHeader
+                title="Payslips"
+                icon={ReceiptIcon}
+                description="Every month they appear on a finalised salary sheet"
               />
               <CardBody className="p-0">
                 <TableScroll>
-                  {/* Only once something is ticked; otherwise the panel is
-                      exactly as it was. */}
-                  {/*
-                    No money on this bar, deliberately. Everywhere else it
-                    states the total the selection is worth, because those are
-                    entries in a ledger and their sum is a real figure. Three
-                    historical monthly salaries added together is not a figure
-                    at all — it is not what anybody was paid, or owed, or is
-                    about to lose. So the bar says how many, and stops.
-                  */}
-                  <BulkBar
-                    count={payBulk.count}
-                    noun="salary record"
-                    pending={payBulkPending}
-                    onClear={payBulk.clear}
-                    onTrash={() => {
-                      setPayBulkError(null);
-                      setPayBulkAsking(true);
-                    }}
-                  />
-                  <table className="table-data min-w-[760px] text-sm">
+                  <table className="table-data min-w-[780px] text-sm">
                     <thead>
                       <tr className="text-left">
-                        {canSetPay ? (
-                          <TickHead
-                            state={payBulk.headerState}
-                            onChange={payBulk.allOnPage}
-                          />
-                        ) : null}
                         <SerialHead />
-                        <Th width="w-32">From</Th>
-                        <Th width="w-32">Until</Th>
-                        <Th align="right">Gross, monthly</Th>
-                        <Th>Why it changed</Th>
-                        {/* The same unlabelled heading every other table's
-                            action column uses, at its narrow width — one
-                            button, not three. */}
-                        {canSetPay ? <RowActionsHead /> : null}
+                        <Th>Paid on</Th>
+                        <Th>Salary sheet</Th>
+                        <Th align="right">Gross</Th>
+                        <Th align="right">Tax</Th>
+                        <Th align="right">Net</Th>
+                        <Th>Status</Th>
+                        <Th width="w-24" />
                       </tr>
                     </thead>
                     <tbody>
-                      {payVisible.map((row, index) => (
-                        <tr key={row.id} className="row-finance">
-                          {canSetPay ? (
-                            <TickCell
-                              checked={payBulk.isTicked(row.id)}
-                              onChange={() => payBulk.toggle(row.id)}
-                              label={`${row.grossAmount} from ${row.effectiveFrom}`}
-                            />
-                          ) : null}
-                          {/* Counted across pages, so the twenty-first row is
-                              21 rather than a second 1. */}
-                          <SerialCell n={serial(payCurrent, index)} />
-                          <td className="num text-muted-foreground">
-                            {formatDate(row.effectiveFrom)}
-                          </td>
-                          <td className="num text-muted-foreground">
-                            {/*
-                              Read from the row that follows, not from the
-                              stored `effective_to`.
-
-                              Nothing in this app resolves a salary through
-                              `effective_to` — payroll and the directory both
-                              take the newest row whose `effective_from` is on
-                              or before the date they want. The column is
-                              written once, when the NEXT change closes this
-                              row, and nothing repairs it afterwards. So
-                              deleting a row out of the middle of a history
-                              leaves its predecessor stamped with an end date
-                              that came from a row nobody can see any more:
-                              the money quietly carries on at the predecessor's
-                              figure while this column claims it stopped months
-                              ago. Display and money disagreeing, with only the
-                              display wrong.
-
-                              Derived here, they cannot disagree.
-                            */}
-                            {untilOf(row) ?? "—"}
-                          </td>
-                          <td className="num text-right">
-                            <Amount
-                              value={row.grossAmount}
-                              showCounterpart={false}
-                            />
-                          </td>
-                          <td className="text-muted-foreground">
-                            {row.changeReason ?? "—"}
-                          </td>
-                          {canSetPay ? (
-                            /*
-                              One button, written here rather than through
-                              `RowActions`.
-
-                              That component takes a REQUIRED second verb —
-                              void, deactivate, archive, delete, status — and
-                              renders Edit beside it. This row supports
-                              neither: a historical salary cannot be edited
-                              (the API only ever appends a new one, which is
-                              what makes the history a history), and it has no
-                              second act. Passing a verb to satisfy the type
-                              would put two dead icons on every row, and making
-                              `second` optional is a change to the nineteen
-                              screens that use it — which is the owner's call,
-                              not this page's.
-                            */
-                            <td>
-                              <div className="flex items-center justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => payDelete.ask(row)}
-                                  aria-label="Move to trash"
-                                  title="Move to trash"
-                                  className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-negative"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </button>
-                              </div>
+                      {payslips.length === 0 ? (
+                        <TableMessageRow colSpan={8}>
+                          No payslips yet — one appears here for each month whose
+                          salary sheet has been finalised.
+                        </TableMessageRow>
+                      ) : (
+                        payslips.map((slip, index) => (
+                          <tr key={slip.id} className="row-finance">
+                            <SerialCell n={index + 1} />
+                            {/* A sheet can be finalised before it is paid, and
+                                then there is no date to show. The dash is the
+                                honest answer — Status is where the reason is. */}
+                            <td
+                              className={cn(
+                                "num",
+                                !slip.paidOn && "text-muted-foreground",
+                              )}
+                            >
+                              {/* #1 rewired the whole app to day/month/year and
+                                  missed this one cell — the profile was not on
+                                  the sweep, which walked seven list screens and
+                                  no detail page. The owner found it by looking:
+                                  Salary changes above reads 30/08/2026 and this
+                                  read 2026-06-29. */}
+                              {slip.paidOn ? formatDate(slip.paidOn) : "N/A"}
                             </td>
-                          ) : null}
-                        </tr>
-                      ))}
+                            <td>
+                              {/* One link per row — see the note in
+                                  team-screen.tsx. */}
+                              <Link
+                                href={`/payroll/${slip.runId}`}
+                                prefetch={false}
+                                className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+                              >
+                                {slip.runLabel}
+                              </Link>
+                            </td>
+                            <td>
+                              <Amount
+                                value={slip.grossAmount}
+                                tone="neutral"
+                                className="block"
+                              />
+                            </td>
+                            <td>
+                              <Amount
+                                value={slip.tdsAmount}
+                                tone="neutral"
+                                className="block"
+                              />
+                            </td>
+                            <td>
+                              <Amount
+                                value={slip.netAmount}
+                                tone="neutral"
+                                className="block font-medium"
+                              />
+                            </td>
+                            <td>
+                              <Badge
+                                tone={
+                                  slip.runStatus === "paid"
+                                    ? "positive"
+                                    : slip.runStatus === "finalized"
+                                      ? "primary"
+                                      : "neutral"
+                                }
+                              >
+                                {PAYROLL_STATUS_LABELS[slip.runStatus]}
+                              </Badge>
+                            </td>
+                            <td className="text-right">
+                              {/*
+                                  The route's segment is named runId but carries
+                                  the payroll line id — one payslip is one line.
+                                */}
+                              <Link
+                                href={`/payroll/${slip.id}/payslip`}
+                                prefetch={false}
+                                className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+                              >
+                                <Printer className="size-3" />
+                                Payslip
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </TableScroll>
               </CardBody>
-              {/* A sibling of the table, not inside it — it renders nothing at
-                  all while the history fits on one page. */}
-              <Pagination
-                page={payCurrent}
-                totalPages={payPages}
-                total={history.length}
-                noun="salary record"
-                nounPlural="salary records"
-                onPage={setPayPage}
-              />
             </Card>
-          ) : null}
-
-          <Card>
-            <CardHeader
-              title="Payslips"
-              icon={ReceiptIcon}
-              description="Every month they appear on a finalised salary sheet"
-            />
-            <CardBody className="p-0">
-              <TableScroll>
-                <table className="table-data min-w-[780px] text-sm">
-                  <thead>
-                    <tr className="text-left">
-                      <SerialHead />
-                      <Th>Paid on</Th>
-                      <Th>Salary sheet</Th>
-                      <Th align="right">Gross</Th>
-                      <Th align="right">Tax</Th>
-                      <Th align="right">Net</Th>
-                      <Th>Status</Th>
-                      <Th width="w-24" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payslips.length === 0 ? (
-                      <TableMessageRow colSpan={8}>
-                        No payslips yet — one appears here for each month whose
-                        salary sheet has been finalised.
-                      </TableMessageRow>
-                    ) : (
-                      payslips.map((slip, index) => (
-                        <tr key={slip.id} className="row-finance">
-                          <SerialCell n={index + 1} />
-                          {/* A sheet can be finalised before it is paid, and
-                              then there is no date to show. The dash is the
-                              honest answer — Status is where the reason is. */}
-                          <td
-                            className={cn(
-                              "num",
-                              !slip.paidOn && "text-muted-foreground",
-                            )}
-                          >
-                            {/* #1 rewired the whole app to day/month/year and
-                                missed this one cell — the profile was not on
-                                the sweep, which walked seven list screens and
-                                no detail page. The owner found it by looking:
-                                Salary changes above reads 30/08/2026 and this
-                                read 2026-06-29. */}
-                            {slip.paidOn ? formatDate(slip.paidOn) : "N/A"}
-                          </td>
-                          <td>
-                            {/* One link per row — see the note in
-                                team-screen.tsx. */}
-                            <Link
-                              href={`/payroll/${slip.runId}`}
-                              prefetch={false}
-                              className="font-medium text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-                            >
-                              {slip.runLabel}
-                            </Link>
-                          </td>
-                          <td>
-                            <Amount
-                              value={slip.grossAmount}
-                              tone="neutral"
-                              className="block"
-                            />
-                          </td>
-                          <td>
-                            <Amount
-                              value={slip.tdsAmount}
-                              tone="neutral"
-                              className="block"
-                            />
-                          </td>
-                          <td>
-                            <Amount
-                              value={slip.netAmount}
-                              tone="neutral"
-                              className="block font-medium"
-                            />
-                          </td>
-                          <td>
-                            <Badge
-                              tone={
-                                slip.runStatus === "paid"
-                                  ? "positive"
-                                  : slip.runStatus === "finalized"
-                                    ? "primary"
-                                    : "neutral"
-                              }
-                            >
-                              {PAYROLL_STATUS_LABELS[slip.runStatus]}
-                            </Badge>
-                          </td>
-                          <td className="text-right">
-                            {/*
-                                The route's segment is named runId but carries
-                                the payroll line id — one payslip is one line.
-                              */}
-                            <Link
-                              href={`/payroll/${slip.id}/payslip`}
-                              prefetch={false}
-                              className="inline-flex items-center gap-1 text-xs text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
-                            >
-                              <Printer className="size-3" />
-                              Payslip
-                            </Link>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </TableScroll>
-            </CardBody>
-          </Card>
-        </>
-      )}
+              </>
+            ) : null}
+          </>
+        )}
+      </div>
 
       <StatusForm
         open={changingStatus}
@@ -1026,6 +1162,94 @@ export function TeamMemberScreen({
         }}
       />
     </>
+  );
+}
+
+type ProfileTab =
+  | "overview"
+  | "personal"
+  | "employment"
+  | "pay"
+  | "documents"
+  | "tools";
+
+/** The tabs, each a section of the page; Overview shows them all. */
+const PROFILE_TABS: { key: ProfileTab; label: string; icon: Icon }[] = [
+  { key: "overview", label: "Overview", icon: SquaresFourIcon },
+  { key: "personal", label: "Personal", icon: IdentificationCardIcon },
+  { key: "employment", label: "Employment", icon: BriefcaseIcon },
+  { key: "pay", label: "Pay & bank", icon: BankIcon },
+  { key: "documents", label: "Documents", icon: FolderOpenIcon },
+  { key: "tools", label: "Paid tools", icon: SparkleIcon },
+];
+
+/**
+ * The details the Record figure counts — the ones a complete record of a
+ * person has, all of them fields already on it. Nothing here is required by
+ * the form; the figure only says how many are still blank.
+ */
+const RECORD_FIELDS = [
+  "employeeCode",
+  "designation",
+  "department",
+  "dateOfBirth",
+  "gender",
+  "bloodGroup",
+  "nid",
+  "phone",
+  "personalEmail",
+  "workEmail",
+  "address",
+  "permanentAddress",
+  "educationLevel",
+  "bankName",
+  "bankAccountNumber",
+] as const satisfies readonly (keyof TeamMemberDto)[];
+
+/** One of the two figures above the tabs: a label, a number and its bar. */
+function ProgressCard({
+  icon: Glyph,
+  label,
+  value,
+  ratio,
+  note,
+}: {
+  icon: Icon;
+  label: string;
+  value: string;
+  /** 0 to 1. */
+  ratio: number;
+  note: string;
+}) {
+  const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+  return (
+    <Card className="sv-rise flex items-start gap-3.5 px-5 py-4">
+      <span className="grid size-10 flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
+        <Glyph weight="duotone" size={21} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-muted) uppercase">
+          {label}
+        </p>
+        <p className="mt-0.5 text-[22px] font-extrabold tracking-[-0.01em] tabular-nums">
+          {value}
+        </p>
+        <div
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="mt-2 h-2 overflow-hidden rounded-full bg-(--sv-track)"
+        >
+          <div
+            className="h-full rounded-full bg-(--sv-violet) transition-[width] duration-500"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-[12.5px] text-(--sv-muted)">{note}</p>
+      </div>
+    </Card>
   );
 }
 
@@ -1167,7 +1391,7 @@ function MemberPhoto({
 
   if (!photoUrl || broken) {
     return (
-      <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary/12 text-lg font-semibold text-primary">
+      <span className="flex size-24 shrink-0 items-center justify-center rounded-full bg-(--sv-accent) text-[28px] font-extrabold text-(--sv-on-accent)">
         {initialsOf(fullName)}
       </span>
     );
@@ -1182,7 +1406,7 @@ function MemberPhoto({
       alt={fullName}
       loading="lazy"
       onError={() => setBroken(true)}
-      className="size-16 shrink-0 rounded-xl border border-border object-cover"
+      className="size-24 shrink-0 rounded-full object-cover"
     />
   );
 }
@@ -1232,11 +1456,14 @@ function ageInYears(dateOfBirth: string): number | null {
  * a muted dash — a label with nothing after it reads as a rendering fault.
  */
 function Row({
+  icon: Glyph,
   label,
   value,
   children,
   mono = false,
 }: {
+  /** The small violet mark before the label — the reference design's. */
+  icon: Icon;
   label: string;
   value?: string | null;
   children?: React.ReactNode;
@@ -1246,11 +1473,18 @@ function Row({
   const empty = content === null || content === undefined || content === "";
 
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <span className="shrink-0 text-(--sv-muted)">{label}</span>
+    <div className="sv-profile-row">
+      <span className="flex min-w-0 items-center gap-2.5 text-(--sv-muted)">
+        <Glyph
+          weight="duotone"
+          size={17}
+          className="flex-none text-(--sv-violet)"
+        />
+        <span className="truncate">{label}</span>
+      </span>
       <span
         className={cn(
-          "text-right wrap-break-word",
+          "min-w-0 wrap-break-word",
           mono && "tabular-nums",
           empty ? "text-(--sv-muted)" : "font-extrabold",
         )}

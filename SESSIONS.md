@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 113 | **A team member's page, laid out after the HR portal's** | **done** — not pushed |
 | 112 | **Team: a click anywhere on a row opens the person's page** | **done** — not pushed |
 | 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — not pushed; **schema ae06f4b goes first, alone** |
 | 110 | **Dashboard: the three count chips gone, and every card a way in** | **done** — not pushed |
@@ -90,6 +91,48 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 113. A team member's page, laid out after the HR portal's — 28 Sep 2026
+
+The owner sent the HR portal's employee page as the reference
+(`Downloads/employee profile/*.png`, a full-page capture): *"single team page
+tao ektu design improve korte hobe. kono existing field change hobena sudhu
+design improve hobe existing functionalities thik rekhe ... header sundor vabe
+add kora tarpor section gular jonne sundor nevigation. prottekta item er jonne
+icons"*.
+
+`team-member-screen.tsx`, layout only — every field, card, drawer and gate is
+the one the page had:
+- **A banner**: the violet band (stripes, a lime sun, a pale moon), the photo
+  on a white ring over its edge ("Change photo" under it), the name, the role,
+  and chips for what the record already holds — employee code and employment
+  type when set, the status pill, "Joined dd/mm/yyyy". Change status and a
+  lime **Edit record** sit above it, as the reference places them.
+- **Two figures**: Documents — expected papers on file (`DocumentSlots`
+  reports its counts through a new optional `onSummary`; it is used on this
+  page only) — and Record — how many of fifteen details already on the
+  record are filled in. Nothing is required by either.
+- **Tabs with icons**: Overview (everything), Personal, Employment, Pay & bank,
+  Documents, Paid tools — each shows its sections and only those.
+- **Every fact row carries an icon**, the label in its own column and the
+  value beside it; card headings wear the reference's filled violet tile —
+  scoped to `.sv-profile` in `new-design.css`, so the cards other components
+  draw here (social media, e-returns) match and no other screen moves.
+- The "Current gross" card became the **Pay** card, Record a change in its
+  heading. Social media and E-Return stay behind the pay permission exactly as
+  before (every live role holds it; only the withdrawn admin/finance cannot).
+
+**Proved** by `.profileqa.mjs` (new, read-only) **18/18**: the banner and chips,
+both figures against the database, the six tabs and what each shows, an icon
+on all 29 rows, Edit record and Change status opening their drawers, HR seeing
+what the admin sees, no sideways scroll at 1440 or 390, no errors. Dark and
+phone looked at. `.dateqa` 23/23, `.docviewqa` 7/7, `.ereturnqa` 17/17,
+`.payhistqa` 11/11, `.resignqa` 7/7. Four harnesses clicked "Edit" and now
+find "Edit record" (`.previewsweep`, `.teamdocsqa`, `.teambankqa`); `.uiqa`
+now allows the 38px row buttons the Accounts cards have had since #105. The
+API-backed ones (`.salaryhistoryqa`, `.socialsqa`, `.teambankqa`,
+`.teamdocsqa`, `.uploadqa`, `.uiqa`, `.previewsweep`) could not be trusted while
+two other sessions' API edits kept restarting the server; re-run after them.
 
 ## 112. Team: a click anywhere on a row opens the person's page — 28 Sep 2026
 

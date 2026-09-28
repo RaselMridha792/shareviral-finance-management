@@ -91,9 +91,16 @@ export function DocumentSlots({
   memberId,
   canWrite,
   hasLeft = false,
+  onSummary,
 }: {
   memberId: string;
   canWrite: boolean;
+  /**
+   * How many of the expected papers are on file, each time the list is read —
+   * the profile's Documents figure above the tabs. Counts the named kinds
+   * only: "Other" is not a paper anybody is expected to have.
+   */
+  onSummary?: (summary: { expected: number; received: number }) => void;
   /**
    * Whether this person has left. A resignation letter is a paper that only
    * exists once somebody has gone, so the row is not offered to everybody —
@@ -174,6 +181,22 @@ export function DocumentSlots({
       );
     }
   }
+
+  /* Told after every read, including after an upload or a removal. */
+  useEffect(() => {
+    if (files === null || !onSummary) return;
+    const expected = [
+      ...SLOTS.filter((kind) => kind !== "other"),
+      ...(hasLeft || files.some((f) => f.kind === "resignation_letter")
+        ? (["resignation_letter"] as FileKind[])
+        : []),
+    ];
+    onSummary({
+      expected: expected.length,
+      received: expected.filter((kind) => files.some((f) => f.kind === kind))
+        .length,
+    });
+  }, [files, hasLeft, onSummary]);
 
   if (files === null) {
     return (

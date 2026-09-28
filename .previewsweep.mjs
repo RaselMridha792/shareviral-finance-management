@@ -193,7 +193,8 @@ const member = (
 await sweep({
   label: "Team — edit person",
   url: `${WEB}/team/${member.id}`,
-  open: () => clickText("Edit"),
+  // "Edit record" since the profile's redesign (#113).
+  open: () => clickText("Edit record"),
   inputIndex: 0, // the drawer's Photo row
 });
 

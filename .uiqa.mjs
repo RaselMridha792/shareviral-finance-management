@@ -147,7 +147,9 @@ try {
         const good =
           (!m.serial || m.serial === "28px 800") &&
           m.bareSerials === 0 &&
-          (!m.rowButton || m.rowButton === "32px true") &&
+          // 38px on /accounts: the bank cards' own buttons match the View
+          // details button beside them (#105, `.sv-bankcard-actions`).
+          (!m.rowButton || m.rowButton === "32px true" || (label === "/accounts" && m.rowButton === "38px true")) &&
           m.lucideInRow === 0 &&
           (!m.activeTab || m.activeTab === "rgb(191, 255, 0)") &&
           (!m.control || /^1(\.5)?px (11|8)px$/.test(m.control)) &&

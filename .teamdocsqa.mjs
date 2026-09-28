@@ -231,8 +231,9 @@ check(
   "",
 );
 await page.evaluate(() => {
+  // "Edit record" since the profile's redesign (#113).
   [...document.querySelectorAll("button")]
-    .find((b) => (b.textContent ?? "").trim() === "Edit")
+    .find((b) => /^Edit( record)?$/.test((b.textContent ?? "").trim()))
     ?.click();
 });
 await settle(1600);

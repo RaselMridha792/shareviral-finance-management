@@ -1420,3 +1420,152 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   A team member's profile — laid out after the HR portal's (#113)
+   --------------------------------------------------------------------------
+   The owner sent the HR portal's employee page as the reference: a violet
+   banner with the photo over its edge, two progress figures, a row of tabs
+   with icons, and cards whose rows each carry an icon. Everything here is
+   scoped to `.sv-profile` or named for it, so no other screen moves. */
+
+.sv-profile-banner {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgb(255 255 255 / 0.07) 0 1.5px,
+      transparent 1.5px 12px
+    ),
+    linear-gradient(120deg, var(--sv-violet) 0%, #7a4ee0 100%);
+}
+
+/* The lime sun and the pale moon the reference hangs in the band. */
+.sv-profile-banner-sun,
+.sv-profile-banner-moon {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.sv-profile-banner-sun {
+  top: -84px;
+  right: 96px;
+  width: 170px;
+  height: 170px;
+  background: var(--sv-accent);
+  opacity: 0.7;
+}
+
+.sv-profile-banner-moon {
+  right: 360px;
+  bottom: -118px;
+  width: 196px;
+  height: 196px;
+  background: rgb(255 255 255 / 0.12);
+}
+
+/* The photo sits on a white ring so it reads over the band's edge. */
+.sv-profile-avatar {
+  display: block;
+  padding: 4px;
+  background: var(--sv-surface);
+  box-shadow: var(--sv-shadow);
+}
+
+.sv-profile-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--sv-line);
+  border-radius: 999px;
+  background: var(--sv-subtle);
+  /* --sv-ink, not --sv-body: the body grey has no dark value and read as
+     dark on dark. */
+  color: var(--sv-ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sv-profile-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 9px;
+  color: var(--sv-muted);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.sv-profile-tab svg {
+  color: var(--sv-violet);
+}
+
+.sv-profile-tab:hover {
+  background: var(--sv-violet-tint);
+  color: var(--sv-ink);
+}
+
+.sv-profile-tab[data-active],
+.sv-profile-tab[data-active]:hover {
+  background: var(--sv-violet);
+  color: #ffffff;
+  box-shadow: 0 6px 14px -6px rgb(133 88 236 / 0.6);
+}
+
+.sv-profile-tab[data-active] svg {
+  color: #ffffff;
+}
+
+/* Every card heading on the page carries the reference's filled tile — the
+   cards other components draw here included (social accounts, e-returns). */
+.sv-profile .sv-panel-head > div > span:first-child {
+  width: 40px;
+  height: 40px;
+  background: var(--sv-violet);
+  color: #ffffff;
+}
+
+.sv-profile .sv-panel-head h2 {
+  font-size: 19px;
+}
+
+/* A card's facts: the icon and label in a column of their own, the value
+   beside it, a hairline between. */
+.sv-profile-rows {
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+  padding-bottom: 8px;
+  font-size: 14px;
+}
+
+.sv-profile-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--sv-line-soft);
+}
+
+.sv-profile-row:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 520px) {
+  .sv-profile-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+}

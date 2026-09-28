@@ -179,8 +179,9 @@ check(
 /* The drawer offers all six. */
 await page.evaluate(() => {
   const main = document.querySelector("main") ?? document.body;
+  // "Edit record" since the profile's redesign (#113).
   [...main.querySelectorAll("button")]
-    .find((b) => (b.textContent ?? "").trim() === "Edit")
+    .find((b) => /^Edit( record)?$/.test((b.textContent ?? "").trim()))
     ?.click();
 });
 await settle(1900);
