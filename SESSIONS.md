@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 106 | **An edit form shows the files already attached, and one attach is one file** | **done** — four screens, and the rest checked |
 | 105 | **Accounts overview: every account drawn as a bank card** | **done** |
 | 104 | **No empty band either side of every page on a 1920px screen** | **done** — every screen, at the owner's ask |
 | 103 | **The API integration suite passes again — 13 of 13** | **done** |
@@ -83,6 +84,69 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 106. An edit form shows the files already attached, and one attach is one file — 28 Sep 2026
+
+The owner, on Cash In: *"edit a click korar por ekhane invoice and Reference
+preview dekhacchena and eksathe multiple add hoye geche edit mode theke remove
+o kora jacchena ... invoice upload korar poreo ekhane N/A dekhacche table a"*
+— and check the whole app for the same. Done by a delegated agent (commit
+e405fbc), reviewed and re-measured here before pushing.
+
+- **Why there were two of each.** Every money form's paperclip knew only the
+  files picked in the current sitting. A correction opened on "No invoice
+  attached" over an entry that had one, so the paper was attached again —
+  and nothing on the form could take the extra copy off. No code path uploads
+  one pick twice. The clip is now one shared piece
+  (`components/files/attach-clip.tsx`, replacing three copies): it lists what
+  is on file, with an eye to open it and a cross that takes it off **on save**
+  (struck through, with undo; Cancel changes nothing), and refuses a file
+  already attached (same name and size). Cash In, the ledger form (All
+  transactions, registers, headings, Other expenses), Money Transfer and
+  Subscriptions. The ledger form's separate "Documents on this entry" list is
+  gone — it contradicted the clips and wrote immediately, ignoring Cancel; an
+  edit there now adds invoice or bank-slip files, and existing receipts show
+  under Reference and can be removed. The TDS challan form can take a scan off
+  too.
+- **N/A over an attached invoice.** Cash In's Invoice column looked only at
+  the typed invoice number, which the form no longer asks for. It now draws
+  the same cell as Reference, counted on invoices; Reference counts the rest.
+  Other expenses and the bank statement had the same fault. Subscriptions now
+  get `invoiceCount` / `recordCount` from the API (two added fields, no
+  schema change), so a plan with only a bank record no longer offers an empty
+  Invoice eye.
+- A correction on Cash In says **"Edit TXN-…"** and **"Save changes"**, not
+  "Add cash" / "Add it".
+
+**The live entry the owner showed** (TXN-2026-000083, two of each) keeps its
+extra copies until somebody removes them — which the edit form can now do.
+
+**Proved** by `.attachqa.mjs` (new), through the real forms on Cash In, Other
+expenses, Money Transfer and Subscriptions, plus the register and the bank
+statement: one stored file per attach, "View" and never N/A while a file is
+on, the popup agreeing, the edit form listing and previewing stored files, a
+repeat refused, Cancel keeping everything, removal reaching the database, the
+table and the popup. **75/75**, re-run here with nothing else on the database
+(one run read 74 — a proxy ECONNRESET while the API reloaded, not the app).
+`SHOT_DIR=<folder>` now keeps a picture of each edit form. `.rowdetailqa`
+49/49; the attach, preview, reference, transfer and subscription harnesses
+pass. Four harnesses fail **with and without** this change (checked by
+taking it out of the tree and re-running): `.cashinqa` (expects a dollar
+default account), `.cashinorderqa` (finds its row by description, gone since
+#99), `.subsfixqa` (dollar figure on a typed pay — one check *fewer* fails
+with this change), `.subspaysqa` (overview slices). Stale, for their own
+session.
+
+**Found, not fixed — each for the owner to schedule:**
+1. A transfer's files hang on its outgoing half, so the **incoming** row on the
+   receiving account's register and All transactions reads N/A for Invoice and
+   Reference. Same class of bug; the fix is in the file-count query every
+   ledger list shares.
+2. A TDS scan on a line with no challan number shows "Challan not recorded
+   yet" and cannot be opened from the table.
+3. The Team profile's tool list has an Invoice eye with no click handler.
+4. The member form (Team) keeps adding a duplicate when the same CV is picked
+   again; its Documents card can remove it.
 
 ## 105. Accounts overview: every account drawn as a bank card — 28 Sep 2026
 

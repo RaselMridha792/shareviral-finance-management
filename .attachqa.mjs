@@ -419,6 +419,11 @@ async function editCycle({ label, owner, ownerId, reopen, table, popup, files })
     JSON.stringify(s.reference.stored.map((x) => x.name)),
   );
   check(`${label}: each has an eye to open it`, s.invoice.stored.every((x) => x.eye) && s.reference.stored.every((x) => x.eye));
+  // SHOT_DIR=<folder> keeps a picture of each edit form as it opens, for a
+  // person to look at; the checks above do not depend on it.
+  if (process.env.SHOT_DIR) {
+    await page.screenshot({ path: path.join(process.env.SHOT_DIR, `attachqa-${label.replace(/\W+/g, "-").toLowerCase()}-edit.png`) });
+  }
 
   // The eye opens the stored file itself.
   const storedId = s.invoice.stored[0].id;
