@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 114 | **A joining salary is the first pay figure, automatically** | **done** — not pushed |
 | 113 | **A team member's page, laid out after the HR portal's** | **done** — not pushed |
 | 112 | **Team: a click anywhere on a row opens the person's page** | **done** — not pushed |
 | 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — not pushed; **schema ae06f4b goes first, alone** |
@@ -91,6 +92,48 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 114. A joining salary is the first pay figure, automatically — 28 Sep 2026
+
+The owner, on Abdullah Akter's profile ("Joining Salary ৳1,18,000.00" above a
+Current gross reading "Nothing recorded yet"): *"karo jodi joining salary
+dewa thake setai surute current salary howa ucit and eta auto set hote hobe.
+pore eta change hole update record thakbe and update hobe eta alada bepar."*
+Done by a delegated agent (99c926b), reviewed here, the paid-sheet rule added
+here on the owner's answer.
+
+- Adding or saving an **employee** with a joining salary above 0 and no live
+  pay row writes their first pay row in the same transaction — that gross,
+  from their joining date, the Settings split, reason "Set from the salary
+  agreed at joining", a sensitive audit row. The web drawer and the HR app's
+  sync both arrive through `create`/`update`. Contractors are left out.
+- While that row is the only one and still matches the record (reason, gross,
+  date), a corrected joining salary or date moves it, with an audit row. Any
+  real change ends that for good. An explicit Current salary that changes pay
+  wins; the drawer's pre-filled, untouched box does not count. Zero changes
+  nothing; nothing is ever deleted.
+- **Once a sheet has gone out on it, the paid months stay.** Asked, the owner:
+  *"dhoro running month a salary diye dilam. akhon jodi salary update hoy
+  profile a eta porer month theke karjokor hobe oi month a r dekhar dorkar
+  nai."* If a finalised, partly paid or paid sheet already carries the person,
+  a corrected joining salary leaves the row where it is (closed the day before)
+  and starts the new figure on the first of the month after the last such
+  sheet, as its own row ("Joining salary corrected — from the month after the
+  last paid salary sheet") with a sensitive audit row. A date-only correction
+  then changes nothing.
+- The salary sheet's **"Set their pay from the joining salary"** button
+  (Payroll → a draft run → Build list → the yellow notice) now writes through
+  the same helper, with the split. **People already on the live site need that
+  button pressed once, or their profile saved once** — and "Rebuild list"
+  drops bonuses/deductions typed on that run, so press it on a run with none.
+- No schema change. Found on the way: `hr` has held `team.compensation.write`
+  since 15 Aug; the stale comment in `create()` now says so.
+
+**Proved** by `.joiningpayqa.mjs` (new) **50/50** — the agent's 46 plus the
+paid-sheet case (old figure kept and closed, new one from 1 Dec of the test
+year, audit row, no further following). The agent's re-runs: payroll, team,
+TDS and role harnesses pass; `.salarylocksqa` flaky (13/14, 14/14 on a re-run);
+`.threeasksqa`, `.tdseditqa`, `.exportqa` fail on things this does not touch.
 
 ## 113. A team member's page, laid out after the HR portal's — 28 Sep 2026
 

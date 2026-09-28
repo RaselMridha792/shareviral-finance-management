@@ -290,6 +290,34 @@ try {
     );
     check("…with the split the row froze", JSON.stringify(lineC?.earnings_breakdown) === JSON.stringify(splitSalary("70000.00", DEFAULT_SALARY_SPLIT)) || Boolean(splitNote), JSON.stringify(lineC?.earnings_breakdown));
     check("…and the contractor-turned-employee too", lineD?.gross === "50000.00", JSON.stringify(lineD));
+
+    /* ----- 8b. once a sheet has gone out, a correction starts next month ---
+       The owner: "dhoro running month a salary diye dilam. akhon jodi salary
+       update hoy profile a eta porer month theke karjokor hobe oi month a r
+       dekhar dorkar nai." */
+    await q(`update payroll_runs set status = 'paid' where id = $1`, [RUN]);
+    const before8b = await rows(C);
+    const corrected = await call("PATCH", `/team-members/${C}`, { joiningSalary: "72000" });
+    const r8b = await rows(C);
+    check(
+      "after a paid sheet, a corrected joining salary leaves the paid figure where it was",
+      corrected.status === 200 && r8b.length === 2 && r8b[0].gross === "70000.00" && r8b[0].from === before8b[0]?.from && r8b[0].to === `${YEAR}-${MONTH}-30`,
+      `HTTP ${corrected.status} ${JSON.stringify(r8b.map((r) => [r.gross, r.from, r.to, r.reason]))}`,
+    );
+    check(
+      "…and the corrected figure starts the month after that sheet, as its own row",
+      r8b[1]?.gross === "72000.00" && r8b[1]?.from === `${YEAR}-${MONTH + 1}-01` && r8b[1]?.to === null &&
+        /month after the last paid salary sheet/.test(r8b[1]?.reason ?? "") && sameSplit(r8b[1]?.components, "72000.00") === (sameSplit(r8b[0]?.components, "70000.00")),
+      JSON.stringify(r8b[1] && [r8b[1].gross, r8b[1].from, r8b[1].reason]),
+    );
+    const a8b = (await compAudits(C)).at(-1);
+    check("…with a sensitive audit row saying so", a8b?.is_sensitive && /from 2039-12-01/.test(a8b.summary) && /72,000\.00/.test(a8b.summary), a8b?.summary);
+    const again8b = await call("PATCH", `/team-members/${C}`, { joiningSalary: "75000" });
+    check(
+      "…and from then on a joining salary is the offer letter again",
+      again8b.status === 200 && JSON.stringify((await rows(C)).map((r) => r.gross)) === JSON.stringify(["70000.00", "72000.00"]),
+      JSON.stringify((await rows(C)).map((r) => r.gross)),
+    );
   }
 
   /* ----- 9. the salary sheet's one-off button, with this in place -------- */

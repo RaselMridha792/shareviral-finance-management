@@ -534,6 +534,18 @@ export class TeamMembersService {
    * A joining salary corrected to zero leaves the row where it is: there is no
    * figure to follow, and removing somebody's pay is not something a profile
    * edit should do quietly. That is the Pay card's trash button.
+   *
+   * **Once a salary sheet has gone out on it, the paid months stay as they
+   * were.** The owner, asked on 28 Sep 2026 whether a correction should still
+   * move the row after a sheet used it: *"dhoro running month a salary diye
+   * dilam. akhon jodi salary update hoy profile a eta porer month theke
+   * karjokor hobe oi month a r dekhar dorkar nai"*. So when a finalised,
+   * partly paid or paid sheet already carries this person, the row is left
+   * where it is and the corrected figure starts on the first day of the month
+   * after the last such sheet, as a row of its own — the previous one closed
+   * the day before, the same shape `setCompensation` writes. A corrected
+   * joining DATE on its own changes nothing then: months already paid cannot
+   * be re-dated.
    */
   private async followJoiningSalary(
     tx: DbTransaction,
@@ -590,6 +602,50 @@ export class TeamMembersService {
       only.effectiveFrom === member.joinedOn
     ) {
       return null;
+    }
+
+    /* The first day of the month after the last sheet that has gone out with
+       this person on it — null when none has. */
+    const paid = await tx.execute(sql`
+      select (max(make_date(r.period_year, r.period_month, 1))
+                + interval '1 month')::date::text as next_month
+        from payroll_lines l
+        join payroll_runs r on r.id = l.payroll_run_id
+       where l.team_member_id = ${member.id}::uuid
+         and r.deleted_at is null
+         and r.status in ('finalized', 'partially_paid', 'paid')
+    `);
+    const nextMonth = (
+      paid.rows as unknown as { next_month: string | null }[]
+    )[0]?.next_month;
+
+    if (nextMonth) {
+      // Only the date moved: a month already paid cannot be re-dated.
+      if (only.grossAmount === joining) return null;
+
+      await tx
+        .update(compensationHistory)
+        .set({
+          effectiveTo: sql`(${nextMonth}::date - interval '1 day')::date`,
+        })
+        .where(eq(compensationHistory.id, only.id));
+      await tx.insert(compensationHistory).values({
+        teamMemberId: member.id,
+        grossAmount: joining,
+        components: splitSalary(joining, await this.salarySplitIn(tx)),
+        effectiveFrom: nextMonth,
+        changeReason: FROM_CORRECTED_JOINING_SALARY,
+        createdBy: actorId,
+      });
+      await this.audit.record(tx, {
+        action: "update",
+        entityTable: "compensation_history",
+        entityId: member.id,
+        module: "team",
+        isSensitive: true,
+        summary: `Set ${member.fullName}'s pay to ${formatMoney(joining)} from ${nextMonth}, their corrected joining salary — the month after the last salary sheet paid on ${formatMoney(only.grossAmount)}`,
+      });
+      return "followed";
     }
 
     await tx
@@ -1251,6 +1307,13 @@ export class TeamMembersService {
  * them: those would stop following a corrected joining salary.
  */
 const FROM_JOINING_SALARY = "Set from the salary agreed at joining";
+
+/**
+ * The reason on the row a corrected joining salary writes once a sheet has
+ * been paid on the old figure — from the month after that sheet.
+ */
+const FROM_CORRECTED_JOINING_SALARY =
+  "Joining salary corrected — from the month after the last paid salary sheet";
 
 /** The two facts on a member record the first pay figure is taken from. */
 type JoiningFacts = { joinedOn: string; joiningSalary: string | null };
