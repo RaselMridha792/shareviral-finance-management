@@ -37,6 +37,8 @@ export function AccountForm({
    * stays uncontrolled and keeps its defaultValue.
    */
   const [type, setType] = useState(account?.type ?? "bank");
+  // Decides whether the dollar opening is asked for — a taka account has none.
+  const [currency, setCurrency] = useState(account?.currency ?? "BDT");
   const isCard = type === "card";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,15 @@ export function AccountForm({
       currency: String(data.get("currency") ?? "BDT"),
       openingBalance: String(data.get("openingBalance") ?? "0"),
       openingBalanceOn: String(data.get("openingBalanceOn") ?? ""),
+      /*
+       * The opening in dollars, for a dollar account only. Blank clears it
+       * (the schema reads "" as null); on a taka account it is not sent at
+       * all, so switching an account's currency back and forth cannot wipe a
+       * figure somebody stated.
+       */
+      ...(currency !== "BDT"
+        ? { openingBalanceUsd: String(data.get("openingBalanceUsd") ?? "") }
+        : {}),
       notes: String(data.get("notes") ?? ""),
       sortOrder: Number(data.get("sortOrder") ?? 0),
       /*
@@ -324,7 +335,11 @@ export function AccountForm({
             error={fieldErrors.currency}
             hint="USD makes this account's forms ask for dollars first, converted at the day's rate. Every report still counts taka."
           >
-            <Select name="currency" defaultValue={account?.currency ?? "BDT"}>
+            <Select
+              name="currency"
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+            >
               <option value="BDT">BDT — Taka</option>
               <option value="USD">USD — Dollar</option>
             </Select>
@@ -340,6 +355,29 @@ export function AccountForm({
             />
           </Field>
         </div>
+
+        {/*
+          The opening in the account's own dollars.
+
+          Without it a dollar account's card leads with "~$0.00" — nobody had
+          said what it held in dollars, and the form had no box to say it in,
+          so the figure could only ever be set through the API. The owner:
+          "hea ghorta jog kore daw". Optional: left blank, the dollars stay an
+          approximate reading rather than a wrong exact one.
+        */}
+        {currency !== "BDT" ? (
+          <Field
+            label="Opening balance in dollars"
+            error={fieldErrors.openingBalanceUsd}
+            hint="What it held in dollars on the opening date. Leave blank if nobody knows — its dollars then read as approximate."
+          >
+            <MoneyInput
+              name="openingBalanceUsd"
+              placeholder="0.00"
+              defaultValue={account?.openingBalanceUsd ?? ""}
+            />
+          </Field>
+        ) : null}
 
         <Field label="Notes" error={fieldErrors.notes}>
           <Textarea name="notes" defaultValue={account?.notes ?? ""} />
