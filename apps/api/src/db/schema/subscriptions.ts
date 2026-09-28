@@ -239,6 +239,55 @@ export const subscriptionUsers = pgTable(
   ],
 );
 
+/**
+ * A plan's upgrades — the history the plan row itself does not keep.
+ *
+ * The owner asked for a way to upgrade an existing plan rather than add a
+ * second one beside it (Claude Max 5x and Max 20x sat side by side on the live
+ * register), and in the same message for a plan never to renew twice in one
+ * month. The two need each other: an upgrade the vendor charges for on the day
+ * is a payment on the plan that is NOT a renewal, and without a record saying
+ * so the once-a-month rule would refuse the month's real renewal after it.
+ *
+ * `transactionId` is that payment, when there was one. Set null rather than
+ * cascaded: voiding or trashing the payment does not undo the plan having
+ * changed. `deploy/sql/2026-09-28-subscription-upgrades.sql`.
+ */
+export const subscriptionUpgrades = pgTable(
+  "subscription_upgrades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: "cascade" }),
+    upgradedOn: date("upgraded_on").notNull(),
+    fromPlanName: varchar("from_plan_name", { length: 160 }).notNull(),
+    toPlanName: varchar("to_plan_name", { length: 160 }).notNull(),
+    fromCostUsd: numeric("from_cost_usd", { precision: 14, scale: 2 }),
+    toCostUsd: numeric("to_cost_usd", { precision: 14, scale: 2 }).notNull(),
+    fromChargeUsd: numeric("from_charge_usd", { precision: 14, scale: 2 }),
+    toChargeUsd: numeric("to_charge_usd", { precision: 14, scale: 2 }),
+    usdRate: numeric("usd_rate", { precision: 18, scale: 6 }),
+    /* No `.references()` here: `transactions` is declared in a module that
+       imports this one, and the constraint lives in the SQL file. */
+    transactionId: uuid("transaction_id"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    index("subscription_upgrades_subscription_idx").on(
+      t.subscriptionId,
+      t.upgradedOn,
+    ),
+    index("subscription_upgrades_transaction_idx").on(t.transactionId),
+  ],
+);
+
+export type SubscriptionUpgrade = typeof subscriptionUpgrades.$inferSelect;
+
 export const subscriptionsRelations = relations(
   subscriptions,
   ({ one, many }) => ({
