@@ -20,6 +20,8 @@ import {
   SubscriptionHeadCells,
 } from "@/components/subscriptions/subscription-columns";
 import { SubscriptionForm } from "@/components/subscriptions/subscription-form";
+import { SubscriptionDetails } from "@/components/subscriptions/subscription-details";
+import { rowOpener } from "@/components/ui/row-details";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { ScreenshotDialog } from "@/components/subscriptions/screenshot-dialog";
 import { Button } from "@/components/ui/button";
@@ -127,6 +129,8 @@ export function SubscriptionsScreen({
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<SubscriptionDto | null>(null);
+  /** The plan whose whole record is open — a click on its row or its name. */
+  const [showing, setShowing] = useState<SubscriptionDto | null>(null);
   const [adding, setAdding] = useState(false);
   const [screenshotOf, setScreenshotOf] = useState<SubscriptionDto | null>(
     null,
@@ -463,10 +467,15 @@ export function SubscriptionsScreen({
                     <tr
                       key={row.id}
                       className="row-finance"
-                      // Which plan this is, for anything that has to find
-                      // the row again — the same attribute every ledger
-                      // table's rows carry.
-                      data-row-id={row.id}
+                      /*
+                        A click anywhere on the row opens the plan's record,
+                        like every other register's rows — the owner: "table
+                        er row te click korlei jeno popup ta ase". Links,
+                        buttons and the tick box keep their own clicks.
+                        `rowOpener` also writes `data-row-id`, which is how
+                        anything that has to find the row again finds it.
+                      */
+                      {...rowOpener(() => setShowing(row), row.id)}
                     >
                       {bulk ? (
                         <TickCell
@@ -479,6 +488,7 @@ export function SubscriptionsScreen({
                       <SubscriptionBodyCells
                         row={row}
                         handlers={{
+                          onOpen: setShowing,
                           onInvoice: (r) =>
                             setDocumentsFor({ row: r, kinds: ["invoice"] }),
                           onReference: (r) =>
@@ -578,6 +588,39 @@ export function SubscriptionsScreen({
             showSaved(savedStatus);
             void load();
           }}
+        />
+      ) : null}
+
+      {showing ? (
+        <SubscriptionDetails
+          plan={showing}
+          onClose={() => setShowing(null)}
+          onEdit={
+            canWrite
+              ? () => {
+                  setShowing(null);
+                  setEditing(showing);
+                }
+              : undefined
+          }
+          onPay={
+            canWrite
+              ? () => {
+                  setShowing(null);
+                  setPaying(showing);
+                }
+              : undefined
+          }
+          onInvoice={() =>
+            setDocumentsFor({ row: showing, kinds: ["invoice"] })
+          }
+          onReference={() =>
+            setDocumentsFor({
+              row: showing,
+              kinds: ["bank_statement", "receipt", "other"],
+            })
+          }
+          onScreenshot={() => setScreenshotOf(showing)}
         />
       ) : null}
 

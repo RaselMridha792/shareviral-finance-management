@@ -43,6 +43,13 @@ import { formatDate } from "@/lib/utils";
  */
 
 export type SubscriptionRowHandlers = {
+  /**
+   * Open the plan's whole record in a popup. Given, the tool's name opens it
+   * instead of going to the plan's own page — the register's choice (the
+   * owner: "ekhane click korle single page a jabena sudhu popup open hobe").
+   * The team profile's tool list passes none and keeps the link.
+   */
+  onOpen?: (row: SubscriptionDto) => void;
   /** Open the invoice for this plan. */
   onInvoice?: (row: SubscriptionDto) => void;
   /** Open the bank's record of the charge. */
@@ -147,13 +154,24 @@ export function SubscriptionBodyCells({
             The vendor's site keeps its own way through: the plan page has an
             "Open <tool>" link at the top, next to the name.
           */}
-          <Link
-            href={`/subscriptions/${row.id}`}
-            title={`Everything about ${row.toolName}`}
-            className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
-          >
-            {row.toolName}
-          </Link>
+          {handlers.onOpen ? (
+            <button
+              type="button"
+              onClick={() => handlers.onOpen?.(row)}
+              title={`Everything about ${row.toolName}`}
+              className="cursor-pointer font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
+            >
+              {row.toolName}
+            </button>
+          ) : (
+            <Link
+              href={`/subscriptions/${row.id}`}
+              title={`Everything about ${row.toolName}`}
+              className="font-extrabold text-link underline decoration-link/40 underline-offset-2 transition hover:decoration-link"
+            >
+              {row.toolName}
+            </Link>
+          )}
           {row.screenshotFileId && handlers.onScreenshot ? (
             <button
               type="button"

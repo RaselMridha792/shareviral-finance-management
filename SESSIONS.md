@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 109 | **AI tools and subscriptions: a click opens the plan in a popup, not its page** | **done** — not pushed |
 | 108 | **A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused** | **done** — not pushed |
 | 107 | **Accounts overview: the two pale cards deepened — ink and ocean** | **done** — not pushed, at the owner's word |
 | 106 | **An edit form shows the files already attached, and one attach is one file** | **done** — four screens, and the rest checked |
@@ -86,6 +87,41 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 109. AI tools and subscriptions: a click opens the plan in a popup, not its page — 28 Sep 2026
+
+The owner: *"Ai tools and subscription page tao thik korte hobe. ekhane click
+korle single page a jabena sudhu popup open hobe ei table er khetreo and ager
+gular moto table er row te click korlei jeno popup ta ase"*. This reverses,
+for this one table, the earlier rule that a table with its own page gets no
+popup (the memory note says so; Team and Payroll keep their pages).
+
+`subscription-details.tsx` (new) is the plan's page in the popup every other
+register opens (`RowDetails`): plan, category, status, website; what it costs
+(dollars + charge, rate, taka, total per cycle, cycle); how it is paid;
+department, login, the seats with the whole-plan footnote; invoice,
+reference and the as-bought screenshot, each with its eye; the note whole.
+Its foot carries **Record a payment** and **Edit**, which close the record and
+open the drawers the row already had. Everything is on the row the register
+fetched, so opening it asks the server for nothing.
+
+The row opens it on a click anywhere (`rowOpener`, which also writes the
+`data-row-id` the row carried by hand); links, buttons and the tick box keep
+their own clicks. The tool's name opens it too, as a button — but only where
+the screen passes `onOpen`: `SubscriptionBodyCells` is shared with the Team
+profile's tool list, which passes none and keeps its link. `/subscriptions/[id]`
+still answers by address; the register no longer leaves for it.
+
+**Proved** by `.subspopupqa.mjs` (new), **21/21**: name and row both open it,
+the address does not change, every field is there, View opens the invoice,
+Edit opens the plan's form in its place, the tick box ticks and opens
+nothing. `.subsmonthqa` check 22 moved from "the name links to the page" to
+"the name opens the record, which carries the six fields the table dropped" —
+18/18. `.attachqa` 75/75, `.subpayqa` 15/15, `.popupqa` 47/47, `.linkcheck`
+clean. Stale and not this change's: `.payuiqa` (makes its plan in `vendors`,
+looks for a text button that has been an icon for weeks), `.bulkuiqa` 2 and
+`.threeasksqa` 3 (Cash In / Other expenses / Payroll with no local rows this
+month). Four CI steps green.
 
 ## 108. A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused — 28 Sep 2026
 

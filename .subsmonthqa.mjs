@@ -301,22 +301,46 @@ check(
   detail.backLink ? "" : "no way back",
 );
 
-/* And the table's name reaches it. */
+/*
+ * And the table's name opens the plan's record — in a popup since 28 Sep
+ * 2026, not the page. The owner: "ekhane click korle single page a jabena
+ * sudhu popup open hobe" (SESSIONS #109). The page above is still there by
+ * its address; the register no longer leaves for it.
+ */
 await page.goto(`${WEB}/subscriptions`, { waitUntil: "networkidle0", timeout: 120000 });
 await settle(2600);
-const nameLink = await page.evaluate(() => {
+const before = page.url();
+const clicked = await page.evaluate(() => {
   const row = [...document.querySelectorAll("tbody tr")].find((r) =>
     (r.textContent ?? "").includes("SMQA Old Tool"),
   );
-  const link = [...(row?.querySelectorAll("a") ?? [])].find((a) =>
-    (a.textContent ?? "").trim() === "SMQA Old Tool",
+  const name = [...(row?.querySelectorAll("button") ?? [])].find((b) =>
+    (b.textContent ?? "").trim() === "SMQA Old Tool",
   );
-  return link?.getAttribute("href") ?? null;
+  name?.click();
+  return Boolean(name);
+});
+await settle(1200);
+const record = await page.evaluate(() => {
+  const box = [...document.querySelectorAll("[data-popup]")].pop();
+  return box
+    ? {
+        title: box.querySelector("h2")?.textContent?.trim() ?? null,
+        text: (box.innerText ?? "").replace(/\s+/g, " "),
+      }
+    : null;
 });
 check(
-  "22: the tool's name in the table opens its page",
-  nameLink === `/subscriptions/${old.id}`,
-  `${nameLink}`,
+  "22: the tool's name in the table opens its record, without leaving the register",
+  clicked && record?.title === "SMQA Old Tool" && page.url() === before,
+  clicked ? `${record?.title ?? "no popup"} at ${page.url()}` : "no name button on the row",
+);
+check(
+  "22: and the record carries the six the table dropped",
+  ["Cost (USD)", "USD rate", "Equivalent (BDT)", "Payment method", "Notes", "AI Tool"].every((label) =>
+    (record?.text ?? "").includes(label),
+  ),
+  (record?.text ?? "").slice(0, 160),
 );
 
 await browser.close();
