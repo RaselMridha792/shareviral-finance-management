@@ -130,9 +130,17 @@ export type AccountWithBalanceDto = AccountDto & {
  * count" is answered.
  */
 function counted(asOf: string | null) {
+  /*
+   * `id is not null` first: the LEFT JOIN gives an account with no entries one
+   * row whose transaction columns are all null, and `voided_at is null` is
+   * TRUE for it. Every sum here shrugs that row off (it adds null), but the
+   * exactness test below does not — it read the phantom as "a row with neither
+   * dollars nor a rate" and marked a dollar account with a stated opening and
+   * no entries as approximate: "~$100.00" for exactly $100.00.
+   */
   return asOf
-    ? sql`${transactions.voidedAt} is null and ${transactions.txnDate} <= ${asOf}`
-    : sql`${transactions.voidedAt} is null`;
+    ? sql`${transactions.id} is not null and ${transactions.voidedAt} is null and ${transactions.txnDate} <= ${asOf}`
+    : sql`${transactions.id} is not null and ${transactions.voidedAt} is null`;
 }
 
 /**

@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 102 | **A dollar account with no entries read "~" even with its dollars stated** | **done** |
+| 101 | **The account form asks a dollar account for its opening in dollars** | **done** |
 | 100 | **Paying a subscription with a malformed id: a 400, not a 500** | **done** |
 | 99 | **No Description column on any table; a row click opens the whole record** | **done** — seven screens |
 | 98 | **Every acceptance harness passes again — 43 scripts, and a new one** | **done** — no app fault among the failures |
@@ -78,6 +80,44 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 102. A dollar account with no entries read "~" even with its dollars stated — 28 Sep 2026
+
+Found by #101's harness: a USD account whose opening was just stated as
+$100.00, with no entries yet, led its card with **"~$100.00"** — marked
+approximate for a figure that was exact.
+
+The cause is in `accounts.service.ts`: the accounts list LEFT JOINs the
+ledger, so an account with no entries gets one row whose transaction columns
+are all null, and `counted()` — `voided_at is null` — is TRUE for that phantom.
+Every sum shrugs it off (it adds null), but the exactness test
+(`ownExactUpTo`) read it as "a row with neither dollars nor a rate" and said
+approximate. `counted()` now requires `transactions.id is not null` first.
+
+**No figure can move**: the phantom only ever added null to the sums, and now
+adds nothing. Proved by the balance harnesses, which compare against the
+ledger worked out independently — `.accountsqa` 20/20, `.acctqa` all pass,
+`.usdprimaryqa` 10/10, `.usdstableqa` 21/21, `.cashcurrencyqa` 14/14 — and by
+`.usdopeningqa`, which now sees exact dollars (8/8).
+
+## 101. The account form asks a dollar account for its opening in dollars — 28 Sep 2026
+
+The owner: *"hea ghorta jog kore daw"* — the box #98 found missing. A USD
+account whose opening was never stated in dollars leads its card with
+"~$0.00", and the form had no box to state it in; only the API could.
+
+`account-form.tsx` now shows **Opening balance in dollars** when the account's
+currency is USD (it follows the currency select as it changes), and sends it
+as `openingBalanceUsd`, which the API already accepted and stored. Blank clears
+it back to "not stated". A taka account neither shows the box nor sends the
+field, so switching an account's currency back and forth cannot wipe a figure
+somebody stated.
+
+**Proved** by `.usdopeningqa.mjs` (new), through the form itself: no box for a
+taka account, a box for a USD one; $100.00 typed is `100.00` stored; the card
+then leads with exact dollars (after #102); editing shows the figure; blanking
+it stores null and the card goes back to "~". 8/8, no errors. It creates one
+account and deletes it.
 
 ## 100. Paying a subscription with a malformed id: a 400, not a 500 — 27 Sep 2026
 
