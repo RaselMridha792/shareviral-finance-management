@@ -186,6 +186,7 @@ export function AccountBlocks({
   ended,
   previousMonthName,
   editing,
+  range,
 }: {
   groups: AccountGroup[];
   /** True when the month on screen is over, so the figure is a close. */
@@ -194,6 +195,8 @@ export function AccountBlocks({
   previousMonthName: string;
   /** Whether the order is being arranged. The Edit button owns this. */
   editing: boolean;
+  /** The month on screen as dates — what a card's register opens on. */
+  range: { from: string; to: string };
 }) {
   const saved = useSyncExternalStore(subscribe, readOrder, serverOrder);
   /**
@@ -279,6 +282,7 @@ export function AccountBlocks({
           ended={ended}
           previousMonthName={previousMonthName}
           editing={editing}
+          range={range}
           dragging={dragging === group.key}
           first={index === 0}
           last={index === shown.length - 1}
@@ -332,6 +336,7 @@ function AccountBlock({
   ended,
   previousMonthName,
   editing,
+  range,
   dragging,
   first,
   last,
@@ -346,6 +351,7 @@ function AccountBlock({
   previousMonthName: string;
   /** True while the order is being arranged: handles out, block draggable. */
   editing: boolean;
+  range: { from: string; to: string };
   /** True while this is the block in hand. */
   dragging: boolean;
   first: boolean;
@@ -366,6 +372,15 @@ function AccountBlock({
     moved > 0
       ? `${Math.round((part / moved) * 100)}% of total movement`
       : "Nothing moved this period";
+  /*
+   * Where the four cards lead: this account's register for the month on
+   * screen — the opening it starts from, every entry in and out, and the
+   * running balance it closes on. The owner: "dashboard a nicer card gula
+   * jate clickable thake". Not while arranging, when a click means a drag.
+   */
+  const register = editing
+    ? undefined
+    : `/accounts/${group.key}/register?from=${range.from}&to=${range.to}`;
 
   return (
     <section
@@ -440,12 +455,14 @@ function AccountBlock({
         {/* "Opening balance", not "Opening bank balance": the heading above
             already says which account this is. */}
         <FigureCard
+          href={register}
           icon={ClockCounterClockwiseIcon}
           label="Opening balance"
           {...figures(group.currency, group.opening, group.usd.opening)}
           note={`Carried forward from ${previousMonthName}`}
         />
         <FigureCard
+          href={register}
           icon={ArrowDownLeftIcon}
           label="Cash inflow"
           tone="in"
@@ -453,6 +470,7 @@ function AccountBlock({
           note={shareOf(inflow)}
         />
         <FigureCard
+          href={register}
           icon={ArrowUpRightIcon}
           label="Cash outflow"
           tone="out"
@@ -468,6 +486,7 @@ function AccountBlock({
           as today's cash.
         */}
         <FigureCard
+          href={register}
           icon={WalletIcon}
           label={ended ? "Closing balance" : "Current balance"}
           {...figures(group.currency, group.closing, group.usd.closing)}

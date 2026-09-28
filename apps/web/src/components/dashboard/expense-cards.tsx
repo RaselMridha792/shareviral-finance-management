@@ -285,6 +285,32 @@ export function placeholderFor(key: string, label?: string): CardSpec | null {
   };
 }
 
+/**
+ * Where a card on the expense row leads — the screen its figure comes from.
+ *
+ * The owner: "dashboard a nicer card gula jate clickable thake". Each goes to
+ * the place that figure is made of: salary to Payroll, the tools to their
+ * register, TDS to TDS, money in and funding to Cash In, the total and every
+ * heading to Expense overview (a heading's own page wants a slug the report
+ * does not carry), the position figures to Accounts and the Finance statement.
+ */
+export function cardHref(key: string): string {
+  if (key.startsWith("category:")) return "/expenses";
+  const to: Record<string, string> = {
+    salaryPaid: "/payroll",
+    tools: "/subscriptions",
+    moneyOut: "/expenses",
+    moneyIn: "/accounts/cash-in",
+    net: "/reports",
+    cashInHand: "/accounts",
+    funding: "/accounts/cash-in",
+    tdsWithheld: "/tax/withholding",
+    tdsDeposited: "/tax/withholding",
+    tdsOutstanding: "/tax/withholding",
+  };
+  return to[key] ?? "/expenses";
+}
+
 /** Null when there is no previous figure — "+100%" from zero is meaningless. */
 function percentChange(
   current: string,

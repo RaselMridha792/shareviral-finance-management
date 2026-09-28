@@ -2,9 +2,14 @@
  * The dashboard, in the September 2026 design.
  *
  * Every figure is read off the painted page and held against something that
- * did not come from the page: the API's own report for the same month, the
- * database for the renewals, and the arithmetic the cards claim (opening + in −
- * out = closing, and the greeting's total = the accounts' closings).
+ * did not come from the page: the API's own report for the same month, and
+ * the arithmetic the cards claim (opening + in − out = closing, and the
+ * greeting's total = the accounts' closings).
+ *
+ * 28 Sep 2026 (#110): the greeting's three count chips are gone at the owner's
+ * word, so the check is that there are none; and the cards are links now —
+ * each account's four open its register for the month, each expense card the
+ * screen its figure comes from — checked by where they point and by a click.
  *
  *     node .dashboardqa.mjs     (local only — writes nothing but localStorage)
  *
@@ -47,15 +52,6 @@ const hr = await who("hr");
 const today = (
   await db.query(`select to_char(now() at time zone 'Asia/Dhaka', 'YYYY-MM-DD') as d`)
 ).rows[0].d;
-const monthPrefix = today.slice(0, 8);
-const renewalsInDb = (
-  await db.query(
-    `select count(*)::int as n from subscriptions
-      where status = 'active' and deleted_at is null
-        and to_char(next_renewal_on, 'YYYY-MM-DD') like $1`,
-    [`${monthPrefix}%`],
-  )
-).rows[0].n;
 await db.end();
 
 const tokenFor = (u) =>
@@ -113,6 +109,7 @@ const readPage = (page) =>
           labels: cards.map((c) => c.querySelector("span.uppercase")?.textContent.trim()),
           bdt: cards.map(bdtOf),
           tiles: cards.map((c) => getComputedStyle(c.querySelector("span.grid")).backgroundColor),
+          hrefs: cards.map((c) => c.getAttribute("href")),
         };
       });
     const hero = document.querySelector(".sv-hero");
@@ -130,6 +127,7 @@ const readPage = (page) =>
       held: paisa(heldLabel?.nextElementSibling?.textContent),
       blocks,
       expenseLabels: expense ? [...expense.querySelectorAll(".sv-card span.uppercase")].map((x) => x.textContent.trim()) : [],
+      expenseHrefs: expense ? [...expense.querySelectorAll(".sv-card")].map((c) => c.getAttribute("href")) : [],
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       h1: document.querySelectorAll("h1").length,
     };
@@ -163,12 +161,8 @@ try {
   check("the greeting names the reader, in violet", m.greeting === `Overview, ${admin.full_name.split(" ")[0]}` && m.nameColor === "rgb(133, 88, 236)", `${m.greeting} / ${m.nameColor}`);
   check("the card is violet-tint", m.heroBg === "rgb(241, 236, 254)", m.heroBg);
   check("one h1 on the page", m.h1 === 1);
-  const want = [
-    `${api.groups.length} account${api.groups.length === 1 ? "" : "s"}`,
-    `${api.headcount.employees} on payroll`,
-    `${renewalsInDb} renewal${renewalsInDb === 1 ? "" : "s"} this month`,
-  ];
-  check("chips: accounts, payroll, renewals — against the API and the database", JSON.stringify(m.chips) === JSON.stringify(want), m.chips.join(" | "));
+  // The owner: "dashbaord theke ei 3take soriye daw aigula rakhar dorkar nai".
+  check("no count chips on the greeting card", m.chips.length === 0, m.chips.join(" | "));
   check("one block per account the API returned", m.blocks.length === api.groups.length, `${m.blocks.length} of ${api.groups.length}`);
 
   let tie = true;
@@ -189,6 +183,32 @@ try {
   check("Total held = the accounts' closings added up", m.heldLabel === "Total held" && m.held === sum, `${m.heldLabel} ${m.held / 100} vs ${sum / 100}`);
   check("the expense row opens on the usual four", m.expenseLabels.join("|") === "Salary paid|AI & other tools|TDS withheld|Total spent", m.expenseLabels.join(", "));
   check("no sideways scroll at 1440", m.overflow <= 0, `${m.overflow}px`);
+
+  /* The owner: "dashboard a nicer card gula jate clickable thake". */
+  const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const monthFrom = `${y}-${String(mo).padStart(2, "0")}-01`;
+  const monthTo = `${y}-${String(mo).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const registersRight = m.blocks.every((b) => {
+    const g = api.groups.find((x) => x.label === b.name);
+    const want = `/accounts/${g?.key}/register?from=${monthFrom}&to=${monthTo}`;
+    return g && b.hrefs.every((h) => h === want);
+  });
+  check(
+    "every account card opens that account's register for the month",
+    registersRight,
+    m.blocks[0] ? m.blocks[0].hrefs.join(" ") : "no blocks",
+  );
+  check(
+    "the expense cards open where their figures come from",
+    m.expenseHrefs.join("|") === "/payroll|/subscriptions|/tax/withholding|/expenses",
+    m.expenseHrefs.join(", "),
+  );
+  if (m.blocks[0]) {
+    await page.click("main section .sv-card[href]");
+    await page.waitForFunction(() => /\/register/.test(location.pathname), { timeout: 20000 }).catch(() => {});
+    check("and a click on one goes there", /\/accounts\/[0-9a-f-]+\/register$/.test(new URL(page.url()).pathname), page.url());
+    await open(page, "/");
+  }
   await page.screenshot({ path: `${SHOTS}/dashboard-light.png`, fullPage: true });
 
   /* ------------------------------------------------ 2. arranging */
@@ -204,6 +224,14 @@ try {
     await new Promise((r) => setTimeout(r, 300));
     const arrows = await page.$$eval('button[aria-label^="Move "]', (x) => x.length);
     check("Edit puts two arrows on every block", arrows === m.blocks.length * 2, `${arrows}`);
+    // The account blocks only — the expense row is a section too, with its
+    // own chooser, and arranging the accounts leaves its cards alone.
+    const linksWhileArranging = await page.evaluate(() =>
+      [...document.querySelectorAll("main section")]
+        .filter((s) => !s.textContent.includes("Expense overview"))
+        .reduce((n, s) => n + s.querySelectorAll(".sv-card[href]").length, 0),
+    );
+    check("while arranging, the account cards are not links", linksWhileArranging === 0, `${linksWhileArranging}`);
     const firstName = m.blocks[0].name;
     await page.click(`button[aria-label="Move ${firstName} down"]`);
     await new Promise((r) => setTimeout(r, 300));
@@ -246,7 +274,7 @@ try {
   await open(page, `/?month=${prev.m}&year=${prev.y}`);
   const last = await readPage(page);
   check("the total says it is a close", /^Held at the end of /.test(last.heldLabel ?? ""), last.heldLabel);
-  check("no renewals chip for a month gone", !last.chips.some((c) => c.includes("renewal")), last.chips.join(" | "));
+  check("no chips for a month gone either", last.chips.length === 0, last.chips.join(" | "));
   check("the last card says Closing balance", last.blocks.every((b) => b.labels[3] === "Closing balance"));
   check("and still ties", last.blocks.every((b) => b.bdt[0] + b.bdt[1] - b.bdt[2] === b.bdt[3]));
   check("no console errors on any of it", errors.length === 0, errors.slice(0, 2).join(" | "));

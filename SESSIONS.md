@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 110 | **Dashboard: the three count chips gone, and every card a way in** | **done** — not pushed |
 | 109 | **AI tools and subscriptions: a click opens the plan in a popup, not its page** | **done** — not pushed |
 | 108 | **A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused** | **done** — not pushed |
 | 107 | **Accounts overview: the two pale cards deepened — ink and ocean** | **done** — not pushed, at the owner's word |
@@ -87,6 +88,38 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 110. Dashboard: the three count chips gone, and every card a way in — 28 Sep 2026
+
+The owner, arrows on the greeting card: *"dashbaord theke ei 3take soriye daw
+aigula rakhar dorkar nai. dashboard a nicer card gula jate clickable thake"*.
+
+**The chips.** "3 accounts", "12 on payroll" and "2 renewals this month" are
+off the greeting card. Their data went with them: the page no longer walks
+the subscriptions register every load to count renewals (`renewalsIn` in
+`app/(dashboard)/page.tsx`), and the unused `.sv-hero-chip` rule is out of
+`new-design.css`. The accounts are the blocks below; the payroll count is
+still the hint on Salary paid.
+
+**The cards.** `FigureCard` (dashboard-only, not `ui/`) takes an `href` and
+becomes a link when given one. Each account's four — opening, in, out,
+current/closing — open **that account's register for the month on screen**
+(`/accounts/<id>/register?from=…&to=…`), which starts at the same opening
+and closes on the same balance. The expense row's cards open where their
+figure comes from (`cardHref` in `expense-cards.tsx`): Salary paid →
+Payroll, AI & other tools → AI tools and subscriptions, the TDS cards →
+TDS, Total spent and every heading → Expense overview (a heading's own page
+wants a slug the report does not carry), Money in and Funding → Cash In,
+Cash in hand → Accounts, Net → Finance statement. Not while the account
+blocks are being arranged or the row's cards chosen — a click means
+something else then, and the chooser's cross must not sit inside a link.
+Those screens open on the current month; only the register takes a range in
+its address, which is why the account cards carry one and the rest do not.
+
+**Proved** by `.dashboardqa` (brought up to date: no chips on this month or a
+past one; every account card's address is its register for the month; the
+expense cards' four addresses; a click lands on the register; no links while
+arranging) — **34/34**, dark and phone included. Four CI steps green.
 
 ## 109. AI tools and subscriptions: a click opens the plan in a popup, not its page — 28 Sep 2026
 

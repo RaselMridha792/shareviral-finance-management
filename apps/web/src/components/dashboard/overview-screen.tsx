@@ -5,6 +5,7 @@ import {
   formatMoney,
   fromMinorUnits,
   isSelectableMonth,
+  monthRange,
   nearestSelectableMonth,
   toMinorUnits,
   todayInDhaka,
@@ -37,7 +38,6 @@ export function OverviewScreen({
   month,
   year,
   years,
-  renewals,
 }: {
   firstName: string;
   report: OverviewReport;
@@ -45,12 +45,6 @@ export function OverviewScreen({
   month: number;
   year: number;
   years: number[];
-  /**
-   * Active plans renewing in the month on screen. Null when it is not the
-   * current month — "next renewal" says nothing about a month already gone —
-   * or when this reader may not see the subscriptions.
-   */
-  renewals: number | null;
 }) {
   const router = useRouter();
   const settings = useSettings();
@@ -113,19 +107,8 @@ export function OverviewScreen({
     startTransition(() => router.push(`/?${params.toString()}`));
   }
 
-  const chips = [
-    { n: report.groups.length, one: "account", many: "accounts" },
-    { n: report.headcount.employees, one: "on payroll", many: "on payroll" },
-    ...(renewals === null
-      ? []
-      : [
-          {
-            n: renewals,
-            one: "renewal this month",
-            many: "renewals this month",
-          },
-        ]),
-  ];
+  /** The month on screen as dates — what a card's register opens on. */
+  const range = monthRange(year, month);
 
   return (
     <>
@@ -219,20 +202,13 @@ export function OverviewScreen({
           </>
         }
       >
-        <ul className="mt-3.5 flex flex-wrap gap-2">
-          {chips.map((chip) => (
-            <li
-              key={chip.many}
-              className="sv-hero-chip flex items-center gap-2 rounded-full bg-(--sv-surface) py-1.5 pr-3.25 pl-1.5 text-[13px] font-extrabold"
-            >
-              <span className="grid h-6.5 min-w-6.5 place-items-center rounded-full bg-(--sv-violet) px-1.5 text-[12px] text-white tabular-nums">
-                {chip.n}
-              </span>
-              {chip.n === 1 ? chip.one : chip.many}
-            </li>
-          ))}
-        </ul>
-
+        {/*
+          No chips. Accounts, on payroll and renewals this month sat here as
+          three counts; the owner had them taken off — "dashbaord theke ei
+          3take soriye daw aigula rakhar dorkar nai". The accounts are the
+          blocks below, the payroll count is on Salary paid, and the renewals
+          are on AI tools and subscriptions.
+        */}
         {/*
           The rate line is gone when there is a rate, and stays when there is
           not: no rate means no dollar figures at all, and a page that silently
@@ -254,6 +230,7 @@ export function OverviewScreen({
         groups={report.groups}
         ended={periodHasEnded}
         editing={arranging}
+        range={{ from: range.start, to: range.end }}
         // December's opening is carried from November, and January's from
         // December — hence the wrap rather than `month - 2`.
         previousMonthName={MONTH_NAMES[(month + 10) % 12]}

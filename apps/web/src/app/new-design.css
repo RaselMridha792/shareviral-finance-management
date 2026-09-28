@@ -755,9 +755,9 @@
   animation: sv-fx-float 4s ease-in-out infinite;
 }
 
-/* The chips and the controls inside the card sit on white with a violet-tint
-   edge, which is what separates them from the tint behind. */
-.sv-hero-chip,
+/* The controls inside the card sit on white with a violet-tint edge, which is
+   what separates them from the tint behind. (The count chips beside them went
+   on the owner's word, #110.) */
 .sv-hero-control {
   border: 1px solid var(--sv-violet-tint-line);
 }

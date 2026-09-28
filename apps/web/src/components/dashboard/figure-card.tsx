@@ -1,4 +1,5 @@
 import type { Icon } from "@phosphor-icons/react";
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export function FigureCard({
   sub,
   note,
   tone = "neutral",
+  href,
   className,
   style,
   children,
@@ -54,19 +56,26 @@ export function FigureCard({
   sub?: string | null;
   note?: ReactNode;
   tone?: FigureTone;
+  /**
+   * Where the figure comes from — the whole card becomes the way there. The
+   * owner: "dashboard a nicer card gula jate clickable thake". Left off while
+   * the cards are being arranged, when a click means something else, and
+   * never given together with `children`: nothing clickable may sit inside a
+   * link.
+   */
+  href?: string;
   className?: string;
   style?: CSSProperties;
   /** Laid over the card — the remove cross while the row is being arranged. */
   children?: ReactNode;
 }) {
-  return (
-    <div
-      className={cn(
-        "sv-card sv-card-lift relative flex flex-col gap-1.5 rounded-[11px] bg-(--sv-surface) px-5 py-[18px]",
-        className,
-      )}
-      style={style}
-    >
+  const classes = cn(
+    "sv-card sv-card-lift relative flex flex-col gap-1.5 rounded-[11px] bg-(--sv-surface) px-5 py-[18px]",
+    href && "cursor-pointer",
+    className,
+  );
+  const body = (
+    <>
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
@@ -101,6 +110,16 @@ export function FigureCard({
       ) : null}
 
       {children}
+    </>
+  );
+
+  return href ? (
+    <Link href={href} className={classes} style={style}>
+      {body}
+    </Link>
+  ) : (
+    <div className={classes} style={style}>
+      {body}
     </div>
   );
 }

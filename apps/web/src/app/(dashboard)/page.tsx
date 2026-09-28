@@ -11,7 +11,6 @@ import { HrDashboard } from "@/components/dashboard/hr-dashboard";
 import { OverviewScreen } from "@/components/dashboard/overview-screen";
 import { getSession } from "@/lib/api-client";
 import { reportsApi } from "@/lib/reports";
-import { subscriptionsApi } from "@/lib/subscriptions";
 import { tdsApi } from "@/lib/tax";
 
 export const dynamic = "force-dynamic";
@@ -64,16 +63,7 @@ export default async function OverviewPage({
   const year = yearParam(params.year) ?? thisYear;
 
   const period = periodOf(year, month, mode);
-  const isThisMonth = year === thisYear && month === thisMonth;
-  const [report, renewals] = await Promise.all([
-    reportsApi.overview({ granularity: "month", ...period }),
-    // The greeting card's third chip. Only for the month we are in — a plan's
-    // "next renewal" says nothing about a month already gone — and only for a
-    // reader who may see the register at all.
-    isThisMonth && hasPermission(user?.role, "vendors.read")
-      ? renewalsIn(year, month)
-      : Promise.resolve(null),
-  ]);
+  const report = await reportsApi.overview({ granularity: "month", ...period });
 
   return (
     <OverviewScreen
@@ -82,44 +72,11 @@ export default async function OverviewPage({
       month={month}
       year={year}
       years={calendarYears(available.years, mode, thisYear, year)}
-      renewals={renewals}
       // So the Export button asks for the month on screen rather than the
       // server's default. `report.period` carries the dates but not the
       // coordinates the endpoint takes, and they are already worked out here.
     />
   );
-}
-
-/**
- * How many active plans renew in this calendar month.
- *
- * The register has no renewal-date filter, so this reads the active plans and
- * counts the ones whose next renewal falls in the month — a count, not money,
- * so nothing is being added up in JavaScript that should be summed in SQL. A
- * plan still showing an earlier day this month is one nobody has recorded
- * paying yet, which is exactly a renewal of this month.
- *
- * Null rather than a guess when the register cannot be read: the chip is left
- * off and the dashboard still renders.
- */
-async function renewalsIn(year: number, month: number): Promise<number | null> {
-  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
-  try {
-    let count = 0;
-    for (let page = 1; ; page += 1) {
-      const batch = await subscriptionsApi.list({
-        status: "active",
-        page,
-        pageSize: 200,
-      });
-      count += batch.items.filter((plan) =>
-        plan.nextRenewalOn?.startsWith(prefix),
-      ).length;
-      if (page >= batch.totalPages) return count;
-    }
-  } catch {
-    return null;
-  }
 }
 
 /**

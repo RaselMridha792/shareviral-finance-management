@@ -12,6 +12,7 @@ import {
   DEFAULT_CARDS,
   MAX_CARDS,
   buildCatalogue,
+  cardHref,
   placeholderFor,
   type CardSpec,
 } from "@/components/dashboard/expense-cards";
@@ -273,6 +274,7 @@ export function ExpenseRow({
               // thing against a two-lakh month and another against a
               // twenty-four-lakh one.
               note={[share, card.hint].filter(Boolean).join(" · ") || null}
+              href={editing ? undefined : cardHref(card.key)}
             >
               {editing ? (
                 <button
