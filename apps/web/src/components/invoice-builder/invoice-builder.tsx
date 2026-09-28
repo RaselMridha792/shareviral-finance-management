@@ -328,7 +328,15 @@ function Builder({
       <style>{SHEET_CSS}</style>
       <Header onReset={() => setConfirmingReset(true)} onDownload={download} />
 
-      <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+      {/*
+        The preview is only as wide as the sheet — 794px, the padding and a
+        thin scrollbar — and sits at the right-hand end; the form takes the
+        rest. A preview column wider than its page left an empty band on
+        either side of it, which the owner asked to be gone (28 Sep 2026).
+        Where there is less room the preview gives way first, down to the
+        form's 400px, and the sheet zooms to fit.
+      */}
+      <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(400px,1fr)_minmax(0,856px)]">
         <div key={generation} className="flex min-w-0 flex-col gap-3">
           {confirmingReset ? (
             <div
@@ -851,7 +859,10 @@ function Preview({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="min-w-0 rounded-[11px] bg-(--sv-subtle) p-[clamp(12px,2vw,24px)] xl:sticky xl:top-[84px] xl:max-h-[calc(100dvh-100px)] xl:overflow-y-auto">
+    <div
+      className="min-w-0 rounded-[11px] bg-(--sv-subtle) p-[clamp(12px,2vw,24px)] [scrollbar-width:thin] xl:sticky xl:top-[84px] xl:max-h-[calc(100dvh-100px)] xl:overflow-y-auto"
+      data-invoice-preview-box
+    >
       <div ref={boxRef} className="flex justify-center">
         <div style={{ zoom: scale }} data-invoice-preview>
           {children}

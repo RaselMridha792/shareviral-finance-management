@@ -367,6 +367,37 @@ try {
   await context.close();
 
   /* ------------------------------------------------------------------ */
+  console.log("\nNo empty band beside the sheet (the owner's screenshot, 28 Sep)");
+  for (const [width, rail] of [[1440, false], [1680, false], [1680, true], [1920, false]]) {
+    const view = await open(users.super_admin, "/invoice-builder", width);
+    if (rail) {
+      await view.page.evaluate(() => localStorage.setItem("svf-sidebar", "rail"));
+      await view.page.reload({ waitUntil: "networkidle0" });
+      await settle(900);
+    }
+    const m = await view.page.evaluate(() => {
+      const box = document.querySelector("[data-invoice-preview-box]").getBoundingClientRect();
+      const sheet = document.querySelector("[data-invoice-sheet]").getBoundingClientRect();
+      const main = document.querySelector("main");
+      const pad = parseFloat(getComputedStyle(main).paddingRight);
+      const form = document.querySelector("[data-invoice-section='brand']").getBoundingClientRect();
+      return {
+        left: Math.round(sheet.left - box.left),
+        right: Math.round(box.right - sheet.right),
+        edge: Math.round(main.getBoundingClientRect().right - pad - box.right),
+        form: Math.round(form.width),
+        zoom: Number(getComputedStyle(document.querySelector("[data-invoice-preview]")).zoom),
+      };
+    });
+    check(
+      `${width}px${rail ? ", rail folded" : ""}: the preview hugs the sheet at the right-hand edge, the form takes the rest`,
+      m.left <= 32 && m.right <= 44 && Math.abs(m.edge) <= 1 && m.form >= 400,
+      JSON.stringify(m),
+    );
+    if (SHOTS) await view.page.screenshot({ path: path.join(SHOTS, `fit-${width}${rail ? "-rail" : ""}.png`) });
+    await view.context.close();
+  }
+
   console.log("\nOn a phone");
   const phone = await open(users.super_admin, "/invoice-builder", 390);
   const narrow = await phone.page.evaluate(() => ({

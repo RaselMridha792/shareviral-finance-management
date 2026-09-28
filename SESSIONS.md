@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 117 | **Invoice Builder: no empty band beside the sheet** | **done** — not pushed |
 | 116 | **Invoice Builder, a page of its own** | **done** — deployed |
 | 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — deployed |
 | 114 | **A joining salary is the first pay figure, automatically** | **done** — deployed |
@@ -94,6 +95,26 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 117. Invoice Builder: no empty band beside the sheet — 28 Sep 2026
+
+The owner, with a screenshot of the live page on a wide screen — a wide grey
+band either side of the A4 sheet: *"ekhane dui pase dekho gap hoye ache ...
+left side er edit panel tar width barate paro. and invoice preview take aro
+right a soriye dite paro screen er end a"*.
+
+- The columns were a 360–420px form and a preview taking the rest, so on a
+  wide screen the preview was far wider than its 794px page. Now it is the
+  other way round: the preview column is at most 856px (the sheet, 24px
+  padding, room for a thin scrollbar) at the right-hand end, and the form
+  takes the rest (at least 400px). Where there is less room the preview gives
+  way first and the sheet zooms, as before. One line in
+  `invoice-builder.tsx`; the preview box also asks for a thin scrollbar.
+
+**Proved** by `.invoiceqa.mjs` **44/44** — four new checks at 1440, 1680,
+1680 with the rail folded, and 1920: the sheet sits 24–31px inside its box,
+the box ends on the page's right edge, the form is 400–758px. Four CI steps
+green.
 
 ## 116. Invoice Builder, a page of its own — 28 Sep 2026
 
