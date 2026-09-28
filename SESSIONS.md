@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 105 | **Accounts overview: every account drawn as a bank card** | **done** |
 | 104 | **No empty band either side of every page on a 1920px screen** | **done** — every screen, at the owner's ask |
 | 103 | **The API integration suite passes again — 13 of 13** | **done** |
 | 102 | **A dollar account with no entries read "~" even with its dollars stated** | **done** |
@@ -82,6 +83,42 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 105. Accounts overview: every account drawn as a bank card — 28 Sep 2026
+
+The owner sent a new drawing of the page: *"Accounts Overview page er jonne
+new design dilam eta implement koro"*. It is not in the handoff zip (whose
+prototype still has the old card), so the sizes were measured off the
+screenshot pixel by pixel rather than guessed.
+
+The header and the Total held band were already the drawing's. The card is
+new (`AccountCard` in `accounts-screen.tsx`, `.sv-bankcard` in
+`new-design.css`): a white shell holding a card at 1.6:1 — issuer (bank name,
+else the account type) with a **BDT / USD / CARD** tag, a chip, the account
+number (a card with none shows its last four), and the account's name opposite
+the balance. Under it: the opening date and the other currency, then a lime
+**View details →** with 38px Edit and Archive icon buttons (Restore and Delete
+on an archived one). Four tones taken in turn across the grid — paper, violet,
+lime, lilac — with the two light ones redrawn for dark. The rules that were
+already the owner's stay: the balance leads in the account's primary currency,
+and dollars wear `~` only when the API calls them inexact.
+
+Dropped, because the drawing drops it: the opening **amount** on the card
+("Opened at ৳X on date" is now "Opened date"). It is still on the account's
+own page.
+
+**Measured** against the drawing at 1920: pill, chip, buttons and gaps within
+1–2px; font sizes set by comparing rendered text widths to the drawing's
+(balance 22px, name 13.5, issuer 13, footer 12.5). Checked in dark, at 1440
+and at 390px (one column, no sideways scroll; `.sweep.mjs /accounts` 0px at
+every width), and with a fourth and an archived account made for the look and
+deleted. The cards now carry `data-account-id` / `data-account-name`, and the
+four harnesses that read them by class were moved onto those:
+`.accountsqa` 20/20, `.acctqa` all pass, `.usdopeningqa` 8/8, `.sixqa` 24/24;
+`.cardformqa`, `.dateqa`, `.popupqa` pass untouched.
+
+The drawing's top bar has no theme toggle; that is the shell's, not this
+page's, and was left alone.
 
 ## 104. No empty band either side of every page on a 1920px screen — 28 Sep 2026
 

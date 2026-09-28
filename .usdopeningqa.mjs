@@ -89,10 +89,11 @@ try {
     );
   const card = () =>
     page.evaluate((name) => {
-      const c = [...document.querySelectorAll("main .sv-card")].find(
-        (el) => el.querySelector("p.truncate")?.textContent.trim() === name,
+      // By the card's own hooks since the cards became drawn bank cards (#105).
+      const c = [...document.querySelectorAll("main [data-account-id]")].find(
+        (el) => el.querySelector("[data-account-name]")?.textContent.trim() === name,
       );
-      return c ? [...c.querySelectorAll(".text-right > *")].map((x) => x.textContent.trim()) : null;
+      return c ? [...c.querySelectorAll(".col-amount")].map((x) => x.textContent.trim()) : null;
     }, NAME);
 
   /* ------------------------------------------------ adding one */

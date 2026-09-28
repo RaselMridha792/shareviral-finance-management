@@ -161,11 +161,11 @@ await new Promise((r) => setTimeout(r, 2200));
  * card's figures instead. The taka figure is the one with the \u09f3.
  */
 const cards = await page.evaluate(() =>
-  [...document.querySelectorAll("main .sv-card")]
-    .filter((card) => card.querySelector('a[href^="/accounts/"]'))
+  // By the card's own hooks since the cards became drawn bank cards (#105).
+  [...document.querySelectorAll("main [data-account-id]")]
     .map((card) => ({
-      name: card.querySelector("p.truncate")?.textContent.trim(),
-      taka: [...card.querySelectorAll(".text-right > *")]
+      name: card.querySelector("[data-account-name]")?.textContent.trim(),
+      taka: [...card.querySelectorAll(".col-amount")]
         .map((el) => el.textContent.trim())
         .find((text) => text.includes("\u09f3")),
     })),

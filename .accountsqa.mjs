@@ -81,15 +81,17 @@ const api = (path) =>
 const readList = () =>
   page.evaluate(() => {
     const band = document.querySelector(".sv-total");
-    const cards = [...document.querySelectorAll("main .sv-card")].filter((c) => c.querySelector('a[href^="/accounts/"]'));
+    // Read by the card's own hooks (`data-account-id`, `data-account-name`) since
+    // the cards became drawn bank cards (#105) and their classes changed.
+    const cards = [...document.querySelectorAll("main [data-account-id]")];
     return {
       bandLabel: band?.querySelector("p")?.textContent.trim(),
       bandFigure: band?.querySelector(".text-right")?.textContent.trim(),
       cards: cards.map((c) => {
-        const figures = [...c.querySelectorAll(".text-right > *")].map((x) => x.textContent.trim());
+        const figures = [...c.querySelectorAll(".col-amount")].map((x) => x.textContent.trim());
         return {
-          name: c.querySelector("p.truncate")?.textContent.trim(),
-          pill: c.querySelector("span.rounded-full")?.textContent.trim(),
+          name: c.querySelector("[data-account-name]")?.textContent.trim(),
+          pill: c.querySelector(".sv-bankcard-pill")?.textContent.trim(),
           taka: figures.find((f) => f.includes("৳")),
           href: c.querySelector('a[href^="/accounts/"]')?.getAttribute("href"),
           archived: Boolean(c.closest(".sv-archived")),
@@ -118,7 +120,15 @@ try {
   const sum = active.reduce((s, a) => s + toPaisa(a.balance), 0);
   const band = paisaOf(now.bandFigure?.split("≈")[0]);
   check("Total held = the active balances added, to the paisa", now.bandLabel === "Total held" && band === sum, `${band / 100} vs ${sum / 100}`);
-  check("each card names its kind in a pill", shownActive.every((c) => c.pill && c.pill.length > 2), shownActive.map((c) => c.pill).join(", "));
+  // The owner's drawing: a card says CARD, anything else the currency it holds.
+  check(
+    "each card carries its currency, or CARD, in a pill",
+    shownActive.every((c) => {
+      const a = active.find((x) => x.name === c.name);
+      return a && c.pill === (a.type === "card" ? "CARD" : a.currency);
+    }),
+    shownActive.map((c) => c.pill).join(", "),
+  );
 
   const card = await page.$("main .sv-card.sv-card-lift");
   await card.hover();

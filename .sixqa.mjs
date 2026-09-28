@@ -289,6 +289,11 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
  * now the API's to decide: the dollars are the account's OWN figure
  * (ownBalance) and "only an inexact one wears the ~" — this fixture states no
  * opening in dollars, so the API calls it inexact and the card must say so.
+ *
+ * Since #105 the card is drawn as a bank card: found by its own hooks
+ * (`data-account-id`, `data-account-name`), the lead figure is the one on the
+ * card and the other currency sits under it — both `.col-amount`, in that
+ * order.
  */
 const listedAccounts = await call("GET", "/accounts");
 const usdListed = (listedAccounts.body ?? []).find?.((a) => a.id === usdAcct.body?.id) ?? null;
@@ -296,12 +301,11 @@ await page.goto(`${WEB}/accounts`, { waitUntil: "networkidle0", timeout: 120000 
 await settle(2800);
 const cards = await page.evaluate(() => {
   const read = (name) => {
-    const card = [...document.querySelectorAll(".sv-card")].find(
-      (c) => c.querySelector("p")?.textContent?.trim() === name,
+    const card = [...document.querySelectorAll("[data-account-id]")].find(
+      (c) => c.querySelector("[data-account-name]")?.textContent?.trim() === name,
     );
     if (!card) return null;
-    const block = card.querySelector("div.text-right");
-    const [big, small] = [...(block?.children ?? [])];
+    const [big, small] = [...card.querySelectorAll(".col-amount")];
     const size = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : null);
     return {
       big: big?.textContent?.trim() ?? null,

@@ -13,7 +13,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise";
-import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
 import { CalendarBlankIcon } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
 import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
@@ -308,7 +308,7 @@ export function AccountsScreen({
             </div>
           </div>
 
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+          <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]">
             {active.map((account, index) => (
               <AccountCard
                 key={account.id}
@@ -316,6 +316,7 @@ export function AccountsScreen({
                 usdRate={usdRate}
                 base={base}
                 canWrite={canWrite}
+                tone={TONES[index % TONES.length]}
                 delay={0.1 + index * 0.05}
                 onEdit={() => setEditing(account)}
                 onArchive={() => archive(account)}
@@ -330,14 +331,15 @@ export function AccountsScreen({
           <h2 className="text-[11px] font-extrabold tracking-[0.14em] text-(--sv-muted) uppercase">
             Archived
           </h2>
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-            {archived.map((account) => (
+          <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]">
+            {archived.map((account, index) => (
               <AccountCard
                 key={account.id}
                 account={account}
                 usdRate={usdRate}
                 base={base}
                 canWrite={canWrite}
+                tone={TONES[index % TONES.length]}
                 delay={0}
                 onEdit={() => setEditing(account)}
                 onRestore={() => restore(account)}
@@ -456,11 +458,34 @@ function ImpossibleBalanceNote() {
   );
 }
 
+/**
+ * The four looks a card takes, in turn across the grid — the owner's September
+ * drawing of this page: a paper card, a violet one, a lime one and a lilac one.
+ * Nothing about the account picks its colour; the drawing cycles them so a
+ * row of four never repeats, and so does this.
+ */
+const TONES = ["paper", "violet", "lime", "lilac"] as const;
+type Tone = (typeof TONES)[number];
+
+/**
+ * What goes on the card's number line.
+ *
+ * The account number as it was entered, which is how the bank prints it on a
+ * statement. A card with no account number shows its last four behind dots —
+ * the only part of a card number this app keeps where it can be read.
+ */
+function numberLine(account: AccountWithBalance): string | null {
+  if (account.accountNumber) return account.accountNumber;
+  if (account.cardLast4) return `•••• •••• •••• ${account.cardLast4}`;
+  return null;
+}
+
 function AccountCard({
   account,
   usdRate,
   base,
   canWrite,
+  tone,
   delay,
   onEdit,
   onArchive,
@@ -473,6 +498,7 @@ function AccountCard({
   /** The company's base currency, from Settings. */
   base: string;
   canWrite: boolean;
+  tone: Tone;
   /** Seconds before this card rises in, so a grid of them staggers. */
   delay: number;
   onEdit: () => void;
@@ -485,157 +511,187 @@ function AccountCard({
   const equivalent = otherCurrency(account.balance, base, base, usdRate);
 
   const Glyph = ICONS[account.type];
+  const number = numberLine(account);
 
   return (
     <div
       className={
         account.isActive
-          ? "sv-card sv-card-lift sv-rise flex flex-col gap-3.5 rounded-[11px] bg-(--sv-surface) p-5"
-          : "sv-card flex flex-col gap-3.5 rounded-[11px] bg-(--sv-surface) p-5 opacity-70"
+          ? "sv-card sv-card-lift sv-rise flex flex-col rounded-[18px] bg-(--sv-surface) px-3 pt-3 pb-4"
+          : "sv-card flex flex-col rounded-[18px] bg-(--sv-surface) px-3 pt-3 pb-4 opacity-70"
       }
       style={delay ? { animationDelay: `${delay}s` } : undefined}
+      // Hooks for the harnesses, which read a card by what it is rather than
+      // by the classes that happen to draw it.
+      data-account-id={account.id}
     >
-      <div className="flex items-start gap-3">
-        <span className="grid size-[42px] flex-none place-items-center rounded-[11px] bg-(--sv-violet-tint) text-(--sv-violet)">
-          <Glyph weight="duotone" size={23} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[16px] font-extrabold">{account.name}</p>
-          <p className="truncate text-[12.5px] text-(--sv-muted)">
-            {[account.bankName, account.accountNumber]
-              .filter(Boolean)
-              .join(" · ") || ACCOUNT_TYPE_LABELS[account.type]}
-          </p>
-        </div>
-        <span className="flex-none rounded-full bg-(--sv-subtle) px-2.5 py-1 text-[11px] font-extrabold text-(--sv-muted)">
-          {ACCOUNT_TYPE_LABELS[account.type]}
-        </span>
-      </div>
-
       {/*
-        The balance, in taka — including on the card that is *called* a dollar
-        one.
+        The account drawn as the card it is: the issuer and a currency tag
+        across the top, a chip, the number, and the account's name opposite
+        the balance along the bottom.
 
-        `account.currency` says which account is the foreign-spend one. It does
-        not say what this figure is denominated in: every amount this system
-        stores is BDT, the card's included, with the foreign figure kept beside
-        the transaction that recorded it.
-
-        Which figure sits on top follows the account's PRIMARY currency, on the
-        owner's instruction: a USD-primary card leads with the dollars and keeps
-        the taka underneath, a BDT account the reverse. The dollars are the
-        account's OWN figure — `ownBalance` sums what each row carried — and
-        only an inexact one wears the `~`. With no recorded rate there is no
-        dollar figure, so a USD-primary card falls back to taka-first rather
-        than promoting a blank.
-
-        Right-aligned, so a grid of cards lines its figures up against one edge.
+        The balance on it follows the account's PRIMARY currency, on the
+        owner's instruction: a USD-primary account leads with its own dollars
+        (`ownBalance`, what each row carried — only an inexact one wears the
+        `~`), a BDT one with taka. The other currency is the smaller figure
+        under the card. Every stored amount is BDT whatever `currency` says; the
+        field marks which account is the foreign-spend one.
       */}
-      <div className="py-1.5 text-right">
-        {account.currency === "USD" ? (
-          <>
-            <Amount
-              value={account.ownBalance}
-              currency="USD"
-              approximate={!account.ownBalanceExact}
-              showCounterpart={false}
-              className="block text-[30px] font-extrabold tracking-[-0.02em] tabular-nums"
-            />
-            <Amount
-              value={account.balance}
-              currency={base}
-              showCounterpart={false}
-              className="block text-[13px] text-(--sv-muted) tabular-nums"
-            />
-          </>
-        ) : (
-          <>
-            <Amount
-              value={account.balance}
-              currency={base}
-              showCounterpart={false}
-              className="block text-[30px] font-extrabold tracking-[-0.02em] tabular-nums"
-            />
-            {equivalent ? (
+      <div
+        data-tone={tone}
+        className="sv-bankcard relative flex aspect-[1.6] flex-col overflow-hidden rounded-[16px] p-[18px]"
+      >
+        <span aria-hidden="true" className="sv-bankcard-glow" />
+        <span aria-hidden="true" className="sv-bankcard-ring" />
+
+        <div className="relative flex items-center gap-2">
+          <Glyph weight="duotone" size={19} className="flex-none" />
+          <p className="min-w-0 flex-1 truncate text-[13px] font-extrabold">
+            {account.bankName || ACCOUNT_TYPE_LABELS[account.type]}
+          </p>
+          {/* A card says so; anything else says what it holds. */}
+          <span className="sv-bankcard-pill flex-none rounded-full px-2.5 py-[3px] text-[11px] font-extrabold tracking-[0.1em]">
+            {account.type === "card" ? "CARD" : account.currency}
+          </span>
+        </div>
+
+        <span
+          aria-hidden="true"
+          className="sv-bankcard-chip relative mt-3.5 block h-7 w-[38px] rounded-[6px]"
+        />
+
+        <div className="relative mt-auto">
+          {/* A blank line rather than none, so every card's name and balance
+              sit at the same height. */}
+          <p className="sv-bankcard-number min-h-[1lh] truncate font-mono text-[13px] tracking-[0.12em]">
+            {number}
+          </p>
+          <div className="mt-2.5 flex items-end justify-between gap-3">
+            <p
+              data-account-name=""
+              className="min-w-0 truncate pb-0.5 text-[13.5px] font-extrabold"
+            >
+              {account.name}
+            </p>
+            {account.currency === "USD" ? (
               <Amount
-                value={equivalent.value}
-                currency={equivalent.currency}
-                approximate
+                value={account.ownBalance}
+                currency="USD"
+                approximate={!account.ownBalanceExact}
                 showCounterpart={false}
-                className="block text-[13px] text-(--sv-muted) tabular-nums"
+                className="flex-none text-[22px] leading-none font-extrabold tracking-[-0.02em] tabular-nums"
               />
             ) : (
-              <span
-                className="block text-[13px] text-(--sv-muted)"
-                title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
-              >
-                N/A
-              </span>
+              <Amount
+                value={account.balance}
+                currency={base}
+                showCounterpart={false}
+                className="flex-none text-[22px] leading-none font-extrabold tracking-[-0.02em] tabular-nums"
+              />
             )}
-          </>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3.5 flex items-center justify-between gap-3 px-2 text-[12.5px]">
+        <span className="flex min-w-0 items-center gap-2 text-(--sv-muted)">
+          <CalendarBlankIcon
+            weight="duotone"
+            size={16}
+            className="flex-none text-(--sv-violet)"
+          />
+          <span className="truncate">
+            Opened {formatDate(account.openingBalanceOn)}
+          </span>
+        </span>
+        {account.currency === "USD" ? (
+          <Amount
+            value={account.balance}
+            currency={base}
+            showCounterpart={false}
+            className="flex-none font-extrabold tabular-nums"
+          />
+        ) : equivalent ? (
+          <Amount
+            value={equivalent.value}
+            currency={equivalent.currency}
+            approximate
+            showCounterpart={false}
+            className="flex-none font-extrabold tabular-nums"
+          />
+        ) : (
+          <span
+            className="flex-none text-(--sv-muted)"
+            title="No exchange rate has been recorded, so there is nothing to convert at. A figure here would be invented rather than approximate."
+          >
+            N/A
+          </span>
         )}
       </div>
 
-      <p className="sv-card-rules flex items-center gap-2 py-2.5 text-[12.5px] text-(--sv-muted)">
-        <CalendarBlankIcon
-          weight="duotone"
-          size={16}
-          className="flex-none text-(--sv-violet)"
-        />
-        <span>
-          Opened at{" "}
-          <Amount
-            value={account.openingBalance}
-            currency={base}
-            showCounterpart={false}
-            className="tabular-nums"
-          />{" "}
-          on {formatDate(account.openingBalanceOn)}
-        </span>
-      </p>
-
-      {impossiblyNegative(account) ? <ImpossibleBalanceNote /> : null}
+      {impossiblyNegative(account) ? (
+        <div className="mx-1 mt-3">
+          <ImpossibleBalanceNote />
+        </div>
+      ) : null}
 
       {/*
         View details is outside the canWrite check, and that is the point of
         it: reading is not writing, and the CEO can read and never edit.
       */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="sv-bankcard-actions mt-[15px] flex items-center gap-2 px-1">
         <Link
           href={`/accounts/${account.id}`}
-          className="inline-flex flex-1 items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) hover:text-(--sv-ink)"
+          className="inline-flex h-[38px] flex-1 items-center justify-center gap-[7px] rounded-lg bg-primary px-[13px] text-[14px] font-extrabold text-primary-foreground shadow-[0_6px_16px_rgb(150_200_0/0.28)] transition-[background-color,transform] duration-200 hover:-translate-y-px hover:bg-(--sv-accent-hover)"
         >
-          <ArrowSquareOutIcon weight="duotone" size={17} />
           View details
+          <ArrowRightIcon weight="bold" size={15} />
         </Link>
 
         {canWrite ? (
           <>
-            <Button size="sm" onClick={onEdit}>
-              <PencilSimpleIcon weight="duotone" size={15} />
-              Edit
-            </Button>
+            <button
+              type="button"
+              className="sv-row-button"
+              aria-label={`Edit ${account.name}`}
+              title="Edit"
+              onClick={onEdit}
+            >
+              <PencilSimpleIcon weight="duotone" size={18} />
+            </button>
             {onArchive ? (
-              <Button size="sm" onClick={onArchive}>
-                <ArchiveIcon weight="duotone" size={15} />
-                Archive
-              </Button>
+              <button
+                type="button"
+                className="sv-row-button"
+                aria-label={`Archive ${account.name}`}
+                title="Archive"
+                onClick={onArchive}
+              >
+                <ArchiveIcon weight="duotone" size={18} />
+              </button>
             ) : null}
             {onRestore ? (
-              <Button size="sm" onClick={onRestore}>
-                <ArrowCounterClockwiseIcon weight="duotone" size={15} />
-                Restore
-              </Button>
+              <button
+                type="button"
+                className="sv-row-button"
+                aria-label={`Restore ${account.name}`}
+                title="Restore"
+                onClick={onRestore}
+              >
+                <ArrowCounterClockwiseIcon weight="duotone" size={18} />
+              </button>
             ) : null}
             {onDelete ? (
-              <Button
-                size="sm"
-                className="sv-button-danger text-(--sv-neg)"
+              <button
+                type="button"
+                className="sv-row-button"
+                data-tone="danger"
+                aria-label={`Delete ${account.name}`}
+                title="Delete"
                 onClick={onDelete}
               >
-                <TrashIcon weight="duotone" size={15} />
-                Delete
-              </Button>
+                <TrashIcon weight="duotone" size={18} />
+              </button>
             ) : null}
           </>
         ) : null}
