@@ -34,10 +34,10 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 116 | **Invoice Builder, a page of its own** | **done** — not pushed |
-| 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — not pushed |
-| 114 | **A joining salary is the first pay figure, automatically** | **done** — not pushed |
-| 113 | **A team member's page, laid out after the HR portal's** | **done** — not pushed |
+| 116 | **Invoice Builder, a page of its own** | **done** — deployed |
+| 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — deployed |
+| 114 | **A joining salary is the first pay figure, automatically** | **done** — deployed |
+| 113 | **A team member's page, laid out after the HR portal's** | **done** — deployed |
 | 112 | **Team: a click anywhere on a row opens the person's page** | **done** — deployed |
 | 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — deployed (schema ae06f4b first, alone) |
 | 110 | **Dashboard: the three count chips gone, and every card a way in** | **done** — not pushed |
@@ -131,7 +131,8 @@ invoice builder name. eta toiri kore felo"*.
 - **Who:** gated on `transactions.write` — super admin and CFO. CEO and HR do
   not see it, and the URL sends them to /no-access. The check is in the page
   itself, not `proxy.ts`, because the page fetches nothing for the API to
-  refuse. Say if the CEO should have it.
+  refuse. Asked whether the CEO should have it, the owner (28 Sep): *"apatoto
+  jevabe ache oivabei thakuk"* — left as it is.
 - Files: `components/invoice-builder/` (new: draft, sheet, builder),
   `app/(dashboard)/invoice-builder/page.tsx` (new), `layout/nav-items.ts`
   (one entry). No shared component, no schema, no API.
@@ -174,8 +175,9 @@ charge o usd howa ucit"*. Done by a delegated agent (eab62e1), reviewed here.
   `trash.service.ts`. An upgrade bank charge with nothing charged is refused
   instead of silently dropped.
 - **Open, not done:** a charge row's own Edit opens the entry form, which
-  cannot restate a USD row's dollars (true of every USD row, not new) — hide
-  Edit on charge rows, or send it to the entry's form.
+  cannot restate a USD row's dollars (true of every USD row, not new).
+  Offered hiding Edit on charge rows; the owner (28 Sep): *"apatoto jevabe
+  ache oivabei thakuk"* — left as it is, do not raise it again unasked.
 
 **Proved** by `.chargecurrencyqa.mjs` (new) **75/75**, re-run here (one run
 hit an ECONNRESET between the dev servers; clean on re-run). `.renewqa`,
