@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 104 | **No empty band either side of every page on a 1920px screen** | **done** — every screen, at the owner's ask |
 | 103 | **The API integration suite passes again — 13 of 13** | **done** |
 | 102 | **A dollar account with no entries read "~" even with its dollars stated** | **done** |
 | 101 | **The account form asks a dollar account for its opening in dollars** | **done** |
@@ -81,6 +82,23 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 104. No empty band either side of every page on a 1920px screen — 28 Sep 2026
+
+The owner, two red boxes drawn on the dashboard: *"prottek page a dui pase je
+gap ache eta maybe global layout ei gap ta komate hobe"*.
+
+It was the column's ceiling. `main-region.tsx` capped every page at 1560px and
+centred it, so on a 1920px screen the page sat **69px** in from the rail and
+69px in from the edge. `.sweep.mjs` measures at 1440, where the cap is never
+met, which is why no harness had seen it. The ceiling is now 1920px: on any
+ordinary monitor the column fills the room beside the rail, with only its own
+24px padding (the handoff's) either side. Only an ultra-wide screen meets the
+new cap.
+
+**Measured** by `.gapqa.mjs` (new): eight screens at 1920, 1680 and 1440,
+rail-to-page and page-to-edge. Before, 16/24 — every 1920 row at 69px. After,
+**24/24**, all 24px. Nothing changes at 1680 or below.
 
 ## 103. The API integration suite passes again — 13 of 13 — 28 Sep 2026
 

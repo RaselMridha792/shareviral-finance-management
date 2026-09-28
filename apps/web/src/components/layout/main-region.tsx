@@ -25,17 +25,18 @@ export function MainRegion({ children }: { children: ReactNode }) {
 
   return (
     /**
-     * The September handoff's column: 24px all round, blocks 18px apart, and
-     * a ceiling of 1560px, centred.
+     * The September handoff's column: 24px all round, blocks 18px apart.
      *
-     * The ceiling is not the old `max-w-7xl`. That one stopped at 1280px and
-     * left two columns of empty space either side of every screen on an
-     * ordinary monitor while a fourteen-column table scrolled sideways inside a
-     * card with room to spare. 1560 is wide enough that only a genuinely large
-     * screen meets it, and there a line of figures stops stretching across a
-     * width nobody reads at. Phones keep a 16px gutter rather than 24.
+     * The ceiling is 1920px. It was 1560, and on the owner's own 1920px screen
+     * that left every page 69px in from the rail and 69px in from the edge —
+     * the owner: *"prottek page a dui pase je gap ache ... ei gap ta komate
+     * hobe"*. Now the column fills the room beside the rail on any ordinary
+     * monitor, with only its 24px padding either side (`.gapqa.mjs` measures
+     * it); the ceiling is only ever met on an ultra-wide screen, where a line
+     * of figures would otherwise stretch across a width nobody reads at.
+     * Phones keep a 16px gutter rather than 24.
      */
-    <main className="w-full max-w-[1560px] flex-1 self-center p-[clamp(16px,2vw,24px)]">
+    <main className="w-full max-w-[1920px] flex-1 self-center p-[clamp(16px,2vw,24px)]">
       {/*
         Nothing follows the last block. A rate caption used to close every
         screen but the dashboard — "Dollar figures are approximate, translated
