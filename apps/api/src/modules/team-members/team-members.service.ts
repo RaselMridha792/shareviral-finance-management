@@ -25,6 +25,7 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
+import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import {
   appSettings,
@@ -315,6 +316,13 @@ export class TeamMembersService {
      * A request carrying the field from a role without the permission is
      * refused loudly rather than quietly dropped — silence would teach the
      * sender the figure was saved.
+     *
+     * (Since 2026-08-15 HR does hold team.compensation.write — see
+     * `ROLE_PERMISSIONS.hr` — so today no role with team.write lacks it. The
+     * check stays for whichever role is next given the one without the other.)
+     *
+     * Without `currentSalary`, a joining salary becomes the first pay figure on
+     * its own — `followJoiningSalary`, in this same transaction.
      */
     const { currentSalary, ...memberInput } = input;
     if (currentSalary !== undefined) {
@@ -370,6 +378,15 @@ export class TeamMembersService {
             isSensitive: true,
             summary: `Set ${memberInput.fullName}'s pay to ${formatMoney(currentSalary)} from ${memberInput.joinedOn}, given when they were added`,
           });
+        } else {
+          // No pay given: the joining salary, if there is one, is the pay.
+          await this.followJoiningSalary(
+            tx,
+            row,
+            null,
+            actor.id,
+            "when they were added",
+          );
         }
 
         return row;
@@ -394,6 +411,15 @@ export class TeamMembersService {
      */
     const { currentSalary, ...memberInput } = input;
     await this.assertEmployeeCodeFree(memberInput.employeeCode, id);
+    /*
+     * Whether this request records pay of its own. Only a figure that
+     * actually changes something counts: the edit drawer sends the box
+     * pre-filled with what they are on now, and an untouched box is not an
+     * instruction — so it must not stop a corrected joining salary from being
+     * followed (`followJoiningSalary`). A figure that IS written wins, and the
+     * joining-salary rule stands aside for the whole request.
+     */
+    let explicitPay = false;
     if (currentSalary !== undefined) {
       if (!hasPermission(actor.role, "team.compensation.write")) {
         throw new ForbiddenException(
@@ -402,6 +428,7 @@ export class TeamMembersService {
       }
       const now = await this.currentFigureOf(id);
       if (now === null || Number(now) !== Number(currentSalary)) {
+        explicitPay = true;
         await this.setCompensation(
           id,
           {
@@ -429,14 +456,226 @@ export class TeamMembersService {
         return row;
       },
       run: async (tx) => {
+        // What the record said before this edit, read in this transaction —
+        // how `followJoiningSalary` tells its own untouched row from pay
+        // somebody decided.
+        const [prior] = await tx
+          .select({
+            joinedOn: teamMembers.joinedOn,
+            joiningSalary: teamMembers.joiningSalary,
+          })
+          .from(teamMembers)
+          .where(eq(teamMembers.id, id))
+          .limit(1);
+
         const [row] = await tx
           .update(teamMembers)
           .set({ ...memberInput, updatedAt: new Date(), updatedBy: actor.id })
           .where(eq(teamMembers.id, id))
           .returning(projection);
+
+        if (!explicitPay) {
+          await this.followJoiningSalary(
+            tx,
+            row,
+            prior ?? null,
+            actor.id,
+            "when their record was saved",
+          );
+        }
         return row;
       },
     });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /*  A joining salary is the first pay figure                               */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A joining salary is the first pay figure — automatically.
+   *
+   * The owner, 28 Sep 2026, on a profile reading "Joining Salary ৳1,18,000.00"
+   * above a Current gross card that said nothing was recorded and the person
+   * would be left off the salary sheet: *"karo jodi joining salary dewa thake
+   * setai surute current salary howa ucit and eta auto set hote hobe. pore eta
+   * change hole update record thakbe and update hobe eta alada bepar."*
+   *
+   * Runs inside the transaction that writes the member, after the write, on
+   * every create and every edit — the web drawer and the HR app's sync both
+   * arrive through those two. Two cases, and nothing else:
+   *
+   * 1. **No live pay row at all**, an employee, a joining salary above zero:
+   *    the first row is written — that figure, from their own joining date,
+   *    the Settings split frozen with it, `FROM_JOINING_SALARY` as its reason,
+   *    and a sensitive audit row naming the amount. Employees only, the scope
+   *    of the salary sheet and of the one-off button below: a contractor bills
+   *    for work and is never on a sheet, so a monthly figure for one would be
+   *    a number nothing reads.
+   *
+   * 2. **The only live row is that automatic one, untouched**, and the joining
+   *    salary or the joining date has just been corrected: the row follows,
+   *    with an audit row of its own. "Untouched" is checked rather than
+   *    assumed — the reason has to be `FROM_JOINING_SALARY` AND the row has to
+   *    still say exactly what the record said before this edit, the same gross
+   *    from the same date. The reason alone is not enough: "Record a change"
+   *    on the joining date amends that row in place and can leave the reason
+   *    where it was, and it is the gross no longer matching that tells the two
+   *    apart. The reason is free text a person could type, too; a row that
+   *    matches on all three is the joining salary in every respect, so
+   *    following it is right whoever wrote it. No schema change buys a better
+   *    marker than that.
+   *
+   * Once any other live row exists, a joining salary is the offer letter again
+   * and never touches pay. A real pay record is never overwritten or deleted
+   * here, and a second automatic row is never written — the insert gives way
+   * on the partial unique index instead of failing the save.
+   *
+   * A joining salary corrected to zero leaves the row where it is: there is no
+   * figure to follow, and removing somebody's pay is not something a profile
+   * edit should do quietly. That is the Pay card's trash button.
+   */
+  private async followJoiningSalary(
+    tx: DbTransaction,
+    member: JoiningFacts & { id: string; fullName: string } & Pick<
+        TeamMemberDto,
+        "engagementType"
+      >,
+    before: JoiningFacts | null,
+    actorId: string,
+    when: string,
+  ): Promise<"created" | "followed" | null> {
+    const joining = member.joiningSalary;
+    if (joining === null || !(Number(joining) > 0)) return null;
+
+    // Two are enough to know whether there is exactly one.
+    const live = await tx
+      .select({
+        id: compensationHistory.id,
+        grossAmount: compensationHistory.grossAmount,
+        effectiveFrom: compensationHistory.effectiveFrom,
+        changeReason: compensationHistory.changeReason,
+      })
+      .from(compensationHistory)
+      .where(
+        and(
+          eq(compensationHistory.teamMemberId, member.id),
+          isNull(compensationHistory.deletedAt),
+        ),
+      )
+      .limit(2);
+
+    if (live.length === 0) {
+      if (member.engagementType !== "employee") return null;
+      const created = await this.writePayFromJoining(
+        tx,
+        { ...member, joiningSalary: joining },
+        actorId,
+        when,
+      );
+      return created ? "created" : null;
+    }
+
+    if (live.length > 1 || !before) return null;
+    const [only] = live;
+    /* Both sides are numeric(14,2) and date columns read back from Postgres,
+       so they compare exactly as text — no float touches the money. */
+    const untouched =
+      only.changeReason === FROM_JOINING_SALARY &&
+      only.effectiveFrom === before.joinedOn &&
+      only.grossAmount === before.joiningSalary;
+    if (!untouched) return null;
+    if (
+      only.grossAmount === joining &&
+      only.effectiveFrom === member.joinedOn
+    ) {
+      return null;
+    }
+
+    await tx
+      .update(compensationHistory)
+      .set({
+        grossAmount: joining,
+        components: splitSalary(joining, await this.salarySplitIn(tx)),
+        effectiveFrom: member.joinedOn,
+      })
+      .where(eq(compensationHistory.id, only.id));
+    await this.audit.record(tx, {
+      action: "update",
+      entityTable: "compensation_history",
+      entityId: member.id,
+      module: "team",
+      isSensitive: true,
+      summary: `Moved ${member.fullName}'s pay with their corrected joining salary: ${formatMoney(only.grossAmount)} from ${only.effectiveFrom} became ${formatMoney(joining)} from ${member.joinedOn}`,
+    });
+    return "followed";
+  }
+
+  /**
+   * The first pay row, taken from the joining salary — one definition of it,
+   * shared by the automatic rule above and the salary sheet's one-off button,
+   * so a row written by either is recognisably the same row.
+   *
+   * Returns false when the partial unique index already holds a live row on
+   * that date (two saves racing): the other one won, and this one does not
+   * fail the save or write an audit row for a figure it did not set.
+   */
+  private async writePayFromJoining(
+    tx: DbTransaction,
+    member: {
+      id: string;
+      fullName: string;
+      joinedOn: string;
+      joiningSalary: string;
+    },
+    actorId: string,
+    when?: string,
+  ): Promise<boolean> {
+    const inserted = await tx
+      .insert(compensationHistory)
+      .values({
+        teamMemberId: member.id,
+        grossAmount: member.joiningSalary,
+        components: splitSalary(
+          member.joiningSalary,
+          await this.salarySplitIn(tx),
+        ),
+        effectiveFrom: member.joinedOn,
+        changeReason: FROM_JOINING_SALARY,
+        createdBy: actorId,
+      })
+      .onConflictDoNothing({
+        target: [
+          compensationHistory.teamMemberId,
+          compensationHistory.effectiveFrom,
+        ],
+        // Names the PARTIAL index, as `setCompensation`'s conflict does.
+        where: sql`${compensationHistory.deletedAt} is null`,
+      })
+      .returning({ id: compensationHistory.id });
+    if (!inserted.length) return false;
+
+    await this.audit.record(tx, {
+      action: "update",
+      entityTable: "compensation_history",
+      entityId: member.id,
+      module: "team",
+      isSensitive: true,
+      summary: `Set ${member.fullName}'s pay to ${formatMoney(member.joiningSalary)} from ${member.joinedOn}, taken from their joining salary${when ? `, ${when}` : ""}`,
+    });
+    return true;
+  }
+
+  /** The split in Settings, or the default when none is set. */
+  private async salarySplitIn(tx: DbTransaction) {
+    const [settings] = await tx
+      .select({ salarySplit: appSettings.salarySplit })
+      .from(appSettings)
+      .limit(1);
+    const parsed = salarySplitSchema.safeParse(settings?.salarySplit);
+    return parsed.success && parsed.data.length
+      ? parsed.data
+      : DEFAULT_SALARY_SPLIT;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -688,6 +927,19 @@ export class TeamMembersService {
    * wrong payment nobody notices. This is an action a person takes, once, and
    * every row it writes is in the audit log with the amount.
    *
+   * **Reversed in part on 28 Sep 2026, by the owner:** *"karo jodi joining
+   * salary dewa thake setai surute current salary howa ucit and eta auto set
+   * hote hobe. pore eta change hole update record thakbe and update hobe eta
+   * alada bepar."* A joining salary now becomes the first pay figure on its
+   * own, whenever a member is added or saved — `followJoiningSalary`. What the
+   * paragraph above guarded against still holds where it mattered: payroll
+   * still reads only `compensation_history`, never the joining salary, and the
+   * automatic row is a real, audited record written at save time, not a
+   * fallback taken silently while a sheet is built. This button stays for the
+   * people already on the books, whom nothing has saved since — the
+   * automatic rule only runs on a write. It writes the same row the rule
+   * does, through the same `writePayFromJoining`, split included.
+   *
    * Each record starts from that person's **own joining date**, not from one
    * date chosen for everybody. That is what the figure actually means, and it
    * makes an earlier month's payroll compute correctly too rather than only
@@ -753,33 +1005,27 @@ export class TeamMembersService {
       return { created: 0, names: [], skipped: withoutFigure };
     }
 
-    await this.db.transaction(async (tx) => {
+    const names = await this.db.transaction(async (tx) => {
+      const set: string[] = [];
       for (const person of ready) {
-        await tx.insert(compensationHistory).values({
-          teamMemberId: person.id,
-          grossAmount: person.joiningSalary as string,
-          effectiveFrom: person.joinedOn,
-          changeReason: "Set from the salary agreed at joining",
-          createdBy: actor.id,
-        });
-
-        // One row each rather than one for the batch: an audit trail that says
-        // "eighteen salaries were set" answers none of the questions anybody
-        // asks it later.
-        await this.audit.record(tx, {
-          action: "update",
-          entityTable: "compensation_history",
-          entityId: person.id,
-          module: "team",
-          isSensitive: true,
-          summary: `Set ${person.fullName}'s pay to ${formatMoney(person.joiningSalary as string)} from ${person.joinedOn}, taken from their joining salary`,
-        });
+        // One audit row each rather than one for the batch: an audit trail
+        // that says "eighteen salaries were set" answers none of the questions
+        // anybody asks it later. `writePayFromJoining` writes it.
+        const created = await this.writePayFromJoining(
+          tx,
+          { ...person, joiningSalary: person.joiningSalary as string },
+          actor.id,
+        );
+        // False only when a save got there first; that person has pay now,
+        // and saying this set it would be untrue.
+        if (created) set.push(person.fullName);
       }
+      return set;
     });
 
     return {
-      created: ready.length,
-      names: ready.map((p) => p.fullName),
+      created: names.length,
+      names,
       skipped: withoutFigure,
     };
   }
@@ -997,6 +1243,17 @@ export class TeamMembersService {
     }
   }
 }
+
+/**
+ * The reason the first pay figure taken from a joining salary carries — written
+ * by `writePayFromJoining`, and half of how `followJoiningSalary` recognises
+ * that row later. Changing the words orphans every row already written with
+ * them: those would stop following a corrected joining salary.
+ */
+const FROM_JOINING_SALARY = "Set from the salary agreed at joining";
+
+/** The two facts on a member record the first pay figure is taken from. */
+type JoiningFacts = { joinedOn: string; joiningSalary: string | null };
 
 const projection = {
   id: teamMembers.id,
