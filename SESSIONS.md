@@ -34,10 +34,11 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 116 | **Invoice Builder, a page of its own** | **done** — not pushed |
 | 114 | **A joining salary is the first pay figure, automatically** | **done** — not pushed |
 | 113 | **A team member's page, laid out after the HR portal's** | **done** — not pushed |
-| 112 | **Team: a click anywhere on a row opens the person's page** | **done** — not pushed |
-| 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — not pushed; **schema ae06f4b goes first, alone** |
+| 112 | **Team: a click anywhere on a row opens the person's page** | **done** — deployed |
+| 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — deployed (schema ae06f4b first, alone) |
 | 110 | **Dashboard: the three count chips gone, and every card a way in** | **done** — not pushed |
 | 109 | **AI tools and subscriptions: a click opens the plan in a popup, not its page** | **done** — not pushed |
 | 108 | **A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused** | **done** — not pushed |
@@ -92,6 +93,54 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 116. Invoice Builder, a page of its own — 28 Sep 2026
+
+The owner, with `invoice_builder_ShareViral.html` attached (a single page: a
+form on the left, a live A4 invoice on the right, PDF by print): *"amar
+application a notun ekta features anbo. eta sidebar a add koro eta hobe
+invoice builder name. eta toiri kore felo"*.
+
+- **`/invoice-builder`**, "Invoice Builder" in the rail under Money, after All
+  transactions. Everything the owner's page did is here: logo upload, company
+  name and tagline, primary and accent colours (picker or hex), the status
+  badge in its colour, invoice number and dates, currency label, sales period,
+  the flexible Invoice To / Invoice From lines with bold and size per line,
+  line items (description, qty, unit price in taka), the total with its USD
+  equivalent at a typed rate, payment terms, bank rows as label/value pairs,
+  notes, and the eye buttons that leave Meta row / Bill section / Pay terms /
+  Bank info / Notes off the sheet. Empty lines and an empty bank box are left
+  off, as before.
+- **Nothing reaches the server or the books.** The draft is kept in this
+  browser (`localStorage`, `sfm.invoice-builder.v1`), so a reload does not
+  lose it; Reset asks, then goes back to the owner's defaults. The USD rate
+  starts at the latest rate on file instead of the page's fixed 120.
+- **Changed from the owner's page, on purpose:** figures are integer poisha
+  (2.5 × ৳1,000.10 = ৳2,500.25 exactly) and grouped the company's way
+  (৳18,00,000.00, not the page's 1,800,000); "BDT only" also drops the two
+  dollar columns, not just the USD line; the font is the app's (Plus Jakarta
+  Sans — Inter is not bundled); a quantity or price that is not a number is
+  marked rather than summed as 0.
+- **Download PDF** prints the sheet alone through a hidden frame (the page's
+  own `window.print()` would print the sidebar too), titled with the invoice
+  number — the name the browser offers for the PDF. An invoice up to a fifth
+  longer than A4 is zoomed to fit one page (the owner's layout is already full
+  with one item — a second one put the footer alone on page two); longer ones
+  run on at full size.
+- **Who:** gated on `transactions.write` — super admin and CFO. CEO and HR do
+  not see it, and the URL sends them to /no-access. The check is in the page
+  itself, not `proxy.ts`, because the page fetches nothing for the API to
+  refuse. Say if the CEO should have it.
+- Files: `components/invoice-builder/` (new: draft, sheet, builder),
+  `app/(dashboard)/invoice-builder/page.tsx` (new), `layout/nav-items.ts`
+  (one entry). No shared component, no schema, no API.
+
+**Proved** by `.invoiceqa.mjs` (new) **40/40**: rail and URL per role (4
+roles), every form part reaching the sheet, poisha-exact totals and the USD
+equivalent, each eye, logo upload, reload keeps the draft, Reset, the print
+frame (title, sheet only), one page for two items fitted at 0.961, two pages
+for twelve at full size, 390px phone with no sideways scroll, no errors.
+Looked at in light, dark and the PDF. Four CI steps green.
 
 ## 114. A joining salary is the first pay figure, automatically — 28 Sep 2026
 

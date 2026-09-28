@@ -6,6 +6,7 @@ import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ChartPieSliceIcon } from "@phosphor-icons/react/dist/ssr/ChartPieSlice";
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
+import { FilePlusIcon } from "@phosphor-icons/react/dist/ssr/FilePlus";
 import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
@@ -163,6 +164,17 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "All transactions",
         icon: ArrowsDownUpIcon,
         permission: "transactions.read",
+      },
+      {
+        // An invoice drawn and downloaded as a PDF — the owner's own builder,
+        // brought into the app on 28 Sep 2026. It writes nothing to the books;
+        // gated on `transactions.write` because an invoice asks for money on
+        // the company's behalf and prints its bank account.
+        key: "invoice-builder",
+        href: "/invoice-builder",
+        label: "Invoice Builder",
+        icon: FilePlusIcon,
+        permission: "transactions.write",
       },
     ],
   },
