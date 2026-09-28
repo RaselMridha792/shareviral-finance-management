@@ -193,7 +193,7 @@ try {
         usd: byLabel("Amount (USD)")?.value ?? null,
         rate: byLabel("USD rate")?.value ?? null,
         bdt: box.querySelector('[name="amount"]')?.value ?? null,
-        charge: box.querySelector('[name="chargeAmount"]')?.value ?? null,
+        charge: (box.querySelector('[name="chargeUsd"]') ?? box.querySelector('[name="chargeAmount"]'))?.value ?? null,
         description: box.querySelector('[name="description"]')?.value ?? null,
         accounts: [...box.querySelectorAll("select")].filter((s) => s.disabled).map((s) => s.selectedOptions[0]?.textContent?.trim()),
         stored: [...box.querySelectorAll('[data-attached="stored"]')].map((el) => el.textContent.trim()),
@@ -219,7 +219,9 @@ try {
   let missing = await fill({ fromAccountId: exprovia, toAccountId: dollar });
   await settle(300);
   missing = missing.concat(await fill({
-    txnDate: EARLY_DAY, "Amount (USD)": "50", "USD rate": "121.5", chargeAmount: "200",
+    /* In dollars since 28 Sep 2026: a dollar account is on one side, so the
+       bank charge is asked in dollars — $2.00 at 121.5 is ৳243.00. */
+    txnDate: EARLY_DAY, "Amount (USD)": "50", "USD rate": "121.5", chargeUsd: "2",
     description: `${MARK} fifty dollars`,
   }));
   await press(/Record the transfer/);
@@ -243,7 +245,7 @@ try {
     JSON.stringify(pair.map((r) => [r.direction, r.amount, r.usd, r.rate])),
   );
   const firstCharge = (await q(`select id, amount::text, txn_date::text d from transactions where charge_for_id = $1 and deleted_at is null`, [outId]))[0];
-  check("its ৳200 charge is its own row on the paying account", firstCharge?.amount === "200.00" && firstCharge?.d === FUND_DAY, JSON.stringify(firstCharge));
+  check("its $2.00 charge is its own row on the paying account — ৳243.00", firstCharge?.amount === "243.00" && firstCharge?.d === FUND_DAY, JSON.stringify(firstCharge));
 
   /* ===================================================== PART B: edit */
   console.log("\nB. Editing a transfer");
@@ -268,15 +270,15 @@ try {
   form = await read();
   check("it opens titled as an edit, with Save changes", /^Edit transfer TXN-/.test(form?.title ?? "") && form?.save, form?.title);
   check(
-    "on the transfer's own figures — date, $50, 121.5, ৳6,075, ৳200, description",
-    form?.date === FUND_DAY && Number(form?.usd) === 50 && form?.rate === "121.5" && form?.bdt === "6075.00" && Number(form?.charge) === 200 && form?.description === `${MARK} fifty dollars`,
+    "on the transfer's own figures — date, $50, 121.5, ৳6,075, a $2 charge, description",
+    form?.date === FUND_DAY && Number(form?.usd) === 50 && form?.rate === "121.5" && form?.bdt === "6075.00" && Number(form?.charge) === 2 && form?.description === `${MARK} fifty dollars`,
     JSON.stringify(form),
   );
   check("the two accounts are shown and cannot be changed", form?.accounts?.length === 2 && form.accounts[0] === `${MARK} Exprovia` && form.accounts[1] === `${MARK} Dollar`, JSON.stringify(form?.accounts));
   check("the slip already on it is on its clip", form?.stored?.some((t) => t.includes("teqa-slip.png")), JSON.stringify(form?.stored));
 
   // $60 at the same rate: the taka follows the dollars once they move.
-  await fill({ "Amount (USD)": "60", chargeAmount: "150", description: `${MARK} sixty dollars` });
+  await fill({ "Amount (USD)": "60", chargeUsd: "1.2", description: `${MARK} sixty dollars` });
   await settle(300);
   form = await read();
   check("moving the dollars hands the taka back to the arithmetic — ৳7,290", form?.bdt === "7290.00", form?.bdt);
@@ -295,13 +297,13 @@ try {
   );
   const charge2 = await q(`select id, amount::text, description from transactions where charge_for_id = $1 and deleted_at is null`, [outId]);
   check(
-    "the charge is the same row, now ৳150, renamed with it",
-    charge2.length === 1 && charge2[0].id === firstCharge.id && charge2[0].amount === "150.00" && charge2[0].description === `Bank charge — ${MARK} sixty dollars`,
+    "the charge is the same row, now $1.20 — ৳145.80 — renamed with it",
+    charge2.length === 1 && charge2[0].id === firstCharge.id && charge2[0].amount === "145.80" && charge2[0].description === `Bank charge — ${MARK} sixty dollars`,
     JSON.stringify(charge2),
   );
   check(
-    "and both accounts moved by exactly that — ৳4,92,360 and ৳7,290",
-    (await balanceOf(exprovia)) === "492360.00" && (await balanceOf(dollar)) === "7290.00",
+    "and both accounts moved by exactly that — ৳4,92,364.20 and ৳7,290",
+    (await balanceOf(exprovia)) === "492364.20" && (await balanceOf(dollar)) === "7290.00",
     `${await balanceOf(exprovia)} / ${await balanceOf(dollar)}`,
   );
 
@@ -320,7 +322,7 @@ try {
       edit: [...(box?.querySelectorAll("button") ?? [])].some((b) => /^Edit$/.test((b.textContent ?? "").trim())),
     };
   });
-  check("the record shows the bank charge and offers Edit", /Bank charge ৳150\.00/.test(record.text) && record.edit, record.text.slice(0, 200));
+  check("the record shows the bank charge and offers Edit", /Bank charge \$1\.20 ৳145\.80/.test(record.text) && record.edit, record.text.slice(0, 200));
   await page.evaluate(() => {
     const box = [...document.querySelectorAll("[data-popup]")].pop();
     [...box.querySelectorAll("button")].find((b) => /^Edit$/.test((b.textContent ?? "").trim()))?.click();
@@ -328,10 +330,10 @@ try {
   await waitFor(() => /Edit transfer/.test([...document.querySelectorAll("[data-popup]")].pop()?.innerText ?? ""));
   await waitFor(() => Boolean([...document.querySelectorAll("[data-popup]")].pop()?.querySelector('[data-attached="stored"]')), undefined, 8000);
   form = await read();
-  check("the record's Edit opens the same form, on the corrected figures", form?.bdt === "7290.00" && Number(form?.charge) === 150, JSON.stringify({ bdt: form?.bdt, charge: form?.charge }));
+  check("the record's Edit opens the same form, on the corrected figures", form?.bdt === "7290.00" && Number(form?.charge) === 1.2, JSON.stringify({ bdt: form?.bdt, charge: form?.charge }));
 
   // Clear the charge, move the date, take the slip off — one save.
-  await fill({ chargeAmount: "", txnDate: LATER_DAY });
+  await fill({ chargeUsd: "", txnDate: LATER_DAY });
   await page.evaluate(() => {
     const box = [...document.querySelectorAll("[data-popup]")].pop();
     box.querySelector('[data-attached="stored"] button[aria-label^="Remove"]')?.click();

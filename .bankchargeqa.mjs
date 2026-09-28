@@ -144,6 +144,7 @@ const rent = (
     categoryId: outCat.id,
     description: `${MARK} office rent`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
     chargeAmount: "115.00",
   })
 ).body;
@@ -286,6 +287,7 @@ const stationery = (
     categoryId: outCat.id,
     description: `${MARK} stationery`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
     chargeAmount: "50.00",
   })
 ).body;
@@ -344,6 +346,7 @@ const moved2 = (
     amount: "25000.00",
     description: `${MARK} moving funds`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
     chargeAmount: "30.00",
   })
 ).body;
@@ -375,6 +378,7 @@ const noCharge = (
     categoryId: outCat.id,
     description: `${MARK} no charge at all`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
   })
 ).body;
 check(
@@ -392,6 +396,7 @@ const zero = (
     categoryId: outCat.id,
     description: `${MARK} a zero charge`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
     chargeAmount: "0.00",
   })
 ).body;
@@ -496,23 +501,23 @@ const screenRow = (
     categoryId: outCat.id,
     description: `${MARK} edited on the screen`,
     paymentMethod: "bank_transfer",
+    usdRate: "122.00", // every entry states its rate now
     chargeAmount: "77.00",
   })
 ).body;
 
-await page.goto(`${WEB}/transactions`, { waitUntil: "networkidle0", timeout: 120000 });
+/* On the account's own register, by the row's id: the tables lost their
+   Description column on 27 Sep (#99), so the words this used to look for are
+   no longer in the row, and All transactions may put it on a later page. */
+await page.goto(`${WEB}/accounts/${account.id}/register`, { waitUntil: "networkidle0", timeout: 120000 });
 await new Promise((r) => setTimeout(r, 2500));
-const openedEdit = await page.evaluate((mark) => {
+const openedEdit = await page.evaluate((id) => {
   /* The PARENT, not its charge. The charge row's own description is
      "Bank charge — BCQA edited on the screen", which contains the same words —
      and the first draft of this clicked edit on the charge, found a box
      reading 0.00, and reported the round trip broken when it was the harness
      that had opened the wrong row. */
-  const tr = [...document.querySelectorAll("tbody tr")].find(
-    (r) =>
-      (r.textContent ?? "").includes(`${mark} edited on the screen`) &&
-      !(r.textContent ?? "").includes("Bank charge —"),
-  );
+  const tr = document.querySelector(`tbody tr[data-row-id="${id}"]`);
   if (!tr) return "row not found";
   const edit = [...tr.querySelectorAll("button")].find((b) =>
     /edit/i.test(b.getAttribute("aria-label") ?? b.getAttribute("title") ?? ""),
@@ -520,7 +525,7 @@ const openedEdit = await page.evaluate((mark) => {
   if (!edit) return "no edit button";
   edit.click();
   return "opened";
-}, MARK);
+}, screenRow.id);
 await new Promise((r) => setTimeout(r, 2000));
 
 const txnBox = await page.evaluate(() => {

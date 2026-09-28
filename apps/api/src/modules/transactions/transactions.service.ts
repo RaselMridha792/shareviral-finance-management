@@ -7,9 +7,13 @@ import {
 } from "@nestjs/common";
 import {
   billingCycleSchema,
+  CHARGE_TWICE_MESSAGE,
+  convertAmount,
   formatMoney,
+  isValidAmount,
   monthRange,
   nextRenewalAfter,
+  normaliseAmount,
   type CreateTransactionInput,
   type ListTransactionsQuery,
   type Paginated,
@@ -121,6 +125,8 @@ export type TransactionDto = {
   transferGroupId: string | null;
   chargeForId: string | null;
   chargeAmount: string;
+  /** The charge's dollars, when it was given in dollars. */
+  chargeUsd: string | null;
   voidedAt: Date | null;
   voidReason: string | null;
   accountId: string;
@@ -139,6 +145,17 @@ export type TransactionDto = {
   createdAt: Date;
 };
 
+/**
+ * What `findOne` adds to a row: enough to say WHAT the entry was, for the
+ * popup of a bank charge levied on it.
+ */
+export type EntryContext = {
+  /** The plan an upgrade moved to, when this payment was that upgrade's. */
+  upgradeToPlan: string | null;
+  /** A transfer's other account — where it went, or came from. */
+  transferOtherAccountName: string | null;
+};
+
 /** One transfer, read as the single event it is. */
 export type TransferRow = {
   outId: string;
@@ -153,6 +170,8 @@ export type TransferRow = {
   recordCount: number;
   /** The bank's cut on the paying side, or null when there was none. */
   chargeAmount: string | null;
+  /** That cut's dollars, when it was given in dollars. */
+  chargeUsd: string | null;
   txnDate: string;
   amount: string;
   description: string;
@@ -713,9 +732,31 @@ export class TransactionsService {
     };
   }
 
-  async findOne(id: string): Promise<TransactionDto> {
+  async findOne(id: string): Promise<TransactionDto & EntryContext> {
     const [row] = await this.db.client
-      .select(projection)
+      .select({
+        ...projection,
+        /*
+         * Two facts only a single entry needs, so they ride on this read and
+         * not on every list row: what a bank charge's popup says about the
+         * entry it was levied on — "Subscription upgrade — to Max 20x",
+         * "Money transfer to Dollar Card". Literal names inside the SQL, for
+         * the bare-column reason written on `documentCount` below.
+         */
+        upgradeToPlan: sql<string | null>`(
+          select u.to_plan_name from subscription_upgrades u
+           where u.transaction_id = transactions.id
+           order by u.created_at desc
+           limit 1)`,
+        transferOtherAccountName: sql<string | null>`(
+          select a.name from transactions twin
+            join accounts a on a.id = twin.account_id
+           where transactions.transfer_group_id is not null
+             and twin.transfer_group_id = transactions.transfer_group_id
+             and twin.id <> transactions.id
+             and twin.deleted_at is null
+           limit 1)`,
+      })
       .from(transactions)
       .leftJoin(accounts, eq(transactions.accountId, accounts.id))
       .leftJoin(categories, eq(transactions.categoryId, categories.id))
@@ -844,6 +885,7 @@ export class TransactionsService {
           await this.writeBankCharge(tx, {
             parentId: created.id,
             chargeAmount: input.chargeAmount,
+            chargeUsd: input.chargeUsd,
             accountId: input.accountId,
             txnDate: input.txnDate,
             description: input.description,
@@ -875,7 +917,15 @@ export class TransactionsService {
     tx: DbTransaction,
     input: {
       parentId: string;
+      /** The charge in taka. */
       chargeAmount?: string;
+      /**
+       * Or the charge in dollars — the owner, 28 Sep 2026: *"jokhon usd hobe
+       * tokhon bank charge o usd howa ucit"*. Worked out in taka below at the
+       * entry's own rate, and the dollars kept on the row. Never both; the
+       * schemas refuse that and so does this.
+       */
+      chargeUsd?: string;
       accountId: string;
       txnDate: string;
       description: string;
@@ -887,9 +937,17 @@ export class TransactionsService {
        it: `wanted` is a boolean the compiler cannot narrow a `string |
        undefined` with, and casting it away would hide the one case that
        matters — an empty box. */
-    const amountText = input.chargeAmount?.trim() ?? "";
-    const amount = Number(amountText);
-    const wanted = amountText !== "" && Number.isFinite(amount) && amount > 0;
+    const takaText = input.chargeAmount?.trim() ?? "";
+    const usdText = input.chargeUsd?.trim() ?? "";
+    const inTaka = statesACharge(takaText);
+    const inDollars = statesACharge(usdText);
+    if (inTaka && inDollars) {
+      throw new BadRequestException({
+        message: CHARGE_TWICE_MESSAGE,
+        errors: { chargeUsd: [CHARGE_TWICE_MESSAGE] },
+      });
+    }
+    const wanted = inTaka || inDollars;
 
     /*
      * A charge cannot itself be charged.
@@ -919,7 +977,17 @@ export class TransactionsService {
       })
       .from(transactions)
       .where(eq(transactions.id, input.parentId))
-      .limit(1);
+      .limit(1)
+      /*
+       * Locked, so ONE live charge per entry holds under concurrency too.
+       *
+       * Two saves of the same entry arriving together would otherwise both
+       * look for its charge, both find none, and both insert one. Every caller
+       * today writes the parent row before this (which takes the same lock),
+       * so this only makes explicit what already holds — and keeps holding if
+       * a caller ever stops doing that first.
+       */
+      .for("update");
     if (parent?.chargeForId) {
       if (!wanted) return;
       throw new BadRequestException(
@@ -937,6 +1005,7 @@ export class TransactionsService {
           isNull(transactions.voidedAt),
         ),
       )
+      .orderBy(asc(transactions.createdAt))
       .limit(1);
 
     if (!wanted) {
@@ -956,15 +1025,68 @@ export class TransactionsService {
     }
 
     const categoryId = await this.bankChargeCategoryId();
+    /*
+     * Unchanged wording, on purpose: the popup of a charge names its entry
+     * (number, kind, description, date, amount, account) by following
+     * `chargeForId`, which reads right on every charge ever written — a new
+     * wording would only have reached the new ones.
+     */
     const description = `Bank charge — ${input.description}`;
     /** Inherited, so the charge is readable in the same currency its entry is. */
     const readAt = parent?.fxRate ?? parent?.usdRate ?? null;
+
+    /*
+     * The taka, and — for a charge given in dollars — the dollars beside it.
+     *
+     * Dollars × the entry's own rate, to the paisa, by `convertAmount`: integer
+     * arithmetic on minor units, rounded half-up, never a float product that
+     * can land a paisa off. The dollars go in `original_amount` with the rate
+     * in `fx_rate`, so a dollar account's own balance moves by exactly them —
+     * and the three are written as a set or cleared as a set, which is what
+     * `transactions_fx_complete` insists on, so a charge restated from dollars
+     * to taka (or back) is the same row with its conversion swapped.
+     */
+    let amountText = takaText;
+    let dollars: {
+      originalAmount: string | null;
+      originalCurrency: string | null;
+      fxRate: string | null;
+      fxRateSource: "manual" | null;
+    } = {
+      originalAmount: null,
+      originalCurrency: null,
+      fxRate: null,
+      fxRateSource: null,
+    };
+    if (inDollars) {
+      if (!readAt || !(Number(readAt) > 0)) {
+        throw new BadRequestException({
+          message:
+            "This entry has no USD rate, so a charge in dollars cannot be worked out in taka. Give the entry its rate, or the charge in taka.",
+          errors: { chargeUsd: ["The entry has no USD rate to read this at"] },
+        });
+      }
+      amountText = convertAmount(usdText, readAt);
+      if (!isValidAmount(amountText) || !(Number(amountText) > 0)) {
+        throw new BadRequestException({
+          message: "That bank charge does not come to a taka amount.",
+          errors: { chargeUsd: ["Enter the charge in dollars, like 2.00"] },
+        });
+      }
+      dollars = {
+        originalAmount: normaliseAmount(usdText),
+        originalCurrency: "USD",
+        fxRate: readAt,
+        fxRateSource: "manual",
+      };
+    }
 
     if (current) {
       await tx
         .update(transactions)
         .set({
           amount: amountText,
+          ...dollars,
           txnDate: input.txnDate,
           accountId: input.accountId,
           description,
@@ -984,6 +1106,7 @@ export class TransactionsService {
       direction: "out",
       txnDate: input.txnDate,
       amount: amountText,
+      ...dollars,
       categoryId,
       description,
       paymentMethod: "bank_transfer",
@@ -1063,6 +1186,7 @@ export class TransactionsService {
         /* A wire arriving is charged too, and the charge is money leaving.
            `create` writes it as an out row on this same account. */
         chargeAmount: input.chargeAmount,
+        chargeUsd: input.chargeUsd,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
         invoiceNo: input.invoiceNo,
@@ -1229,10 +1353,11 @@ export class TransactionsService {
          * account and description, so a payment moved to another month does not
          * leave its bank charge behind in the old one.
          */
-        if (input.chargeAmount !== undefined) {
+        if (input.chargeAmount !== undefined || input.chargeUsd !== undefined) {
           await this.writeBankCharge(tx, {
             parentId: id,
             chargeAmount: input.chargeAmount,
+            chargeUsd: input.chargeUsd,
             accountId: existing.accountId,
             txnDate: nextDate,
             description: nextDescription,
@@ -1300,6 +1425,12 @@ export class TransactionsService {
       usdAmount?: string;
       /** The bank's fee, written as its own row under Bank charges. */
       chargeAmount?: string;
+      /**
+       * The same fee in dollars — the Renew and Upgrade drawers ask for it so,
+       * because a plan is billed in dollars. NOT the plan's own `chargeUsd`,
+       * which is the vendor's and already inside the price.
+       */
+      chargeUsd?: string;
     },
     actor: AuthenticatedUser,
     /**
@@ -1384,7 +1515,7 @@ export class TransactionsService {
      * What the card was billed in dollars: stated on the drawer, or the plan's
      * own price plus its vendor charge.
      *
-     * NOT the bank's fee. `chargeAmount` is that, it is in taka, and it becomes
+     * NOT the bank's fee. `chargeAmount` / `chargeUsd` is that, and it becomes
      * its own row — folding it in here would make the dollars claim the vendor
      * billed more than it did.
      */
@@ -1463,7 +1594,7 @@ export class TransactionsService {
      *
      * `usdCharged` is the price PLUS the plan's vendor charge, because that
      * charge is in dollars and is part of what is billed. The BANK's fee is
-     * not in here — that is `chargeAmount`, it is in taka, and it becomes its
+     * not in here — that is `chargeAmount` / `chargeUsd`, and it becomes its
      * own row.
      */
     const statedDollars =
@@ -1503,6 +1634,9 @@ export class TransactionsService {
          */
         ...(input.chargeAmount?.trim()
           ? { chargeAmount: input.chargeAmount.trim() }
+          : {}),
+        ...(input.chargeUsd?.trim()
+          ? { chargeUsd: input.chargeUsd.trim() }
           : {}),
         /* The fact that makes this tooling, rather than the guess about which
            card it was on. */
@@ -1608,6 +1742,8 @@ export class TransactionsService {
       chargedUsd?: string;
       chargedBdt?: string;
       bankCharge?: string;
+      /** The bank's fee in dollars — the upgrade drawer asks for it so. */
+      bankChargeUsd?: string;
       nextRenewalOn?: string;
       note?: string | null;
     },
@@ -1637,6 +1773,7 @@ export class TransactionsService {
             usdRate: input.usdRate,
             ...(input.chargedBdt ? { amount: input.chargedBdt } : {}),
             ...(input.bankCharge ? { chargeAmount: input.bankCharge } : {}),
+            ...(input.bankChargeUsd ? { chargeUsd: input.bankChargeUsd } : {}),
             note: `upgrade to ${input.toPlanName}`,
             advanceRenewal: false,
           },
@@ -1905,6 +2042,16 @@ export class TransactionsService {
                and c.voided_at is null
              limit 1
           )`,
+          /* Its dollars, when the charge was given in dollars — so the edit
+             form reopens it in the currency it was entered in. */
+          chargeUsd: sql<string | null>`(
+            select c.original_amount::text from transactions c
+             where c.charge_for_id = transactions.id
+               and c.deleted_at is null
+               and c.voided_at is null
+               and c.original_currency = 'USD'
+             limit 1
+          )`,
           fromAccountId: fromAccount.id,
           fromAccountName: fromAccount.name,
           toAccountId: toAccount.id,
@@ -2029,6 +2176,7 @@ export class TransactionsService {
         await this.writeBankCharge(tx, {
           parentId: outRow.id,
           chargeAmount: input.chargeAmount,
+          chargeUsd: input.chargeUsd,
           accountId: input.fromAccountId,
           txnDate: input.txnDate,
           description: input.description,
@@ -2070,6 +2218,7 @@ export class TransactionsService {
       usdRate: string;
       usdAmount?: string;
       chargeAmount?: string;
+      chargeUsd?: string;
       description: string;
       paymentMethod: PaymentMethod;
     },
@@ -2156,6 +2305,7 @@ export class TransactionsService {
         await this.writeBankCharge(tx, {
           parentId: out.id,
           chargeAmount: input.chargeAmount,
+          chargeUsd: input.chargeUsd,
           accountId: out.accountId,
           txnDate: input.txnDate,
           description: input.description,
@@ -2231,6 +2381,12 @@ export class TransactionsService {
       });
     }
   }
+}
+
+/** A charge box that says there WAS a charge: a figure above zero. */
+function statesACharge(text: string): boolean {
+  const value = Number(text);
+  return text !== "" && Number.isFinite(value) && value > 0;
 }
 
 /** 2026-09-28 as the screens print it: 28/09/2026. */
@@ -2342,6 +2498,22 @@ const projection = {
      where c.charge_for_id = transactions.id
        and c.deleted_at is null
        and c.voided_at is null)`,
+  /**
+   * The same charge's dollars, when it was given in dollars — null when it was
+   * given in taka, or there is none. What lets an edit form reopen the charge
+   * in the currency it was entered in, and a record show it as dollars. Same
+   * literal-name rule as the line above.
+   */
+  chargeUsd: sql<string | null>`(
+    select c.original_amount::text
+      from transactions c
+     where c.charge_for_id = transactions.id
+       and c.deleted_at is null
+       and c.voided_at is null
+       and c.original_currency = 'USD'
+       and c.original_amount is not null
+     order by c.created_at
+     limit 1)`,
   voidedAt: transactions.voidedAt,
   voidReason: transactions.voidReason,
   accountId: transactions.accountId,

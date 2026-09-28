@@ -623,6 +623,11 @@ export const subscriptionsApi = {
       usdAmount?: string;
       /** The bank's fee, written as its own row under Bank charges. */
       chargeAmount?: string;
+      /**
+       * The same fee in dollars — how the Renew drawer asks for it. Not the
+       * plan's own `chargeUsd`, which is the vendor's.
+       */
+      chargeUsd?: string;
       advanceRenewal?: boolean;
     },
   ) =>
@@ -647,6 +652,8 @@ export const subscriptionsApi = {
       chargedUsd?: string;
       chargedBdt?: string;
       bankCharge?: string;
+      /** The bank's fee in dollars — how the upgrade drawer asks for it. */
+      bankChargeUsd?: string;
       nextRenewalOn?: string;
       note?: string | null;
     },

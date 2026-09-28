@@ -55,6 +55,12 @@ export type TransactionDto = {
    * edit form show it without the form having to know where it lives.
    */
   chargeAmount: string;
+  /**
+   * That charge's dollars, when it was given in dollars — null when it was
+   * given in taka, or there is none. An edit form reopens the charge in the
+   * currency it was entered in by reading this.
+   */
+  chargeUsd: string | null;
   voidedAt: string | null;
   voidReason: string | null;
   accountId: string;
@@ -73,6 +79,15 @@ export type TransactionDto = {
   senderAccountName: string | null;
   senderAccountNumber: string | null;
   senderSwiftCode: string | null;
+  /** The plan this payment paid for, when it paid for one. */
+  subscriptionId?: string | null;
+  /**
+   * Only on a row read on its own (`ledgerApi.get`): the plan an upgrade
+   * moved to when this payment was that upgrade's, and a transfer's other
+   * account. Enough for a bank charge's record to say what its entry was.
+   */
+  upgradeToPlan?: string | null;
+  transferOtherAccountName?: string | null;
   createdAt: string;
 };
 
@@ -94,6 +109,8 @@ export type TransferRowDto = {
   recordCount: number;
   /** The bank's cut on the paying side, or null when there was none. */
   chargeAmount: string | null;
+  /** That cut's dollars, when it was given in dollars. */
+  chargeUsd: string | null;
   txnDate: string;
   amount: string;
   description: string;
@@ -218,6 +235,10 @@ export const ledgerApi = {
       cache: "no-store",
     }),
 
+  /** One entry, whole — what a bank charge's record reads its entry from. */
+  get: (id: string) =>
+    apiFetch<TransactionDto>(`/transactions/${id}`, { cache: "no-store" }),
+
   register: (
     accountId: string,
     range: { from?: string; to?: string; includeVoided?: boolean } = {},
@@ -305,6 +326,8 @@ export type UpdateTransferInput = {
   usdRate: string;
   usdAmount?: string;
   chargeAmount?: string;
+  /** Or the charge in dollars — never both. */
+  chargeUsd?: string;
   description: string;
   paymentMethod: PaymentMethod;
 };

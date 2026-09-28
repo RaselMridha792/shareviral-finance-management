@@ -220,7 +220,7 @@ const chooseAccount = async (name) => {
 const moneyOrder = () =>
   page.evaluate(() => {
     const wanted =
-      /^(Amount \(BDT\)|Amount \(USD\)|Rate|Bank charge \(BDT\))/;
+      /^(Amount \(BDT\)|Amount \(USD\)|Rate|Bank charge \((?:BDT|USD)\))/;
     const labels = [...document.querySelectorAll("label")]
       .map((l) => (l.textContent ?? "").trim())
       .filter((t) => wanted.test(t))
@@ -287,14 +287,16 @@ const usdView = await moneyOrder();
 check(
   "on a dollar account the boxes read: USD amount, rate, auto BDT, bank charge",
   JSON.stringify(usdView.labels) ===
-    JSON.stringify(["Amount (USD)", "Rate", "Amount (BDT)", "Bank charge (BDT)"]),
+    /* The charge in dollars too, since 28 Sep 2026 — the owner: "jokhon usd
+       hobe tokhon bank charge o usd howa ucit". */
+    JSON.stringify(["Amount (USD)", "Rate", "Amount (BDT)", "Bank charge (USD)"]),
   JSON.stringify(usdView.labels),
 );
 /* THE ONE HE FOUND FIRST: there was no charge box here at all. */
 check(
   "the Bank charge box is there on a dollar account too",
-  usdView.labels.includes("Bank charge (BDT)"),
-  usdView.labels.includes("Bank charge (BDT)") ? "present" : "missing",
+  usdView.labels.includes("Bank charge (USD)"),
+  usdView.labels.includes("Bank charge (USD)") ? "present" : "missing",
 );
 check(
   "the taka fills itself in from the dollars and the rate",
@@ -312,7 +314,8 @@ check(
 const filled = {
   txnDate: await type("txnDate", TODAY),
   description: await type("description", `${MARK} dollar wire with a charge`),
-  chargeAmount: await type("chargeAmount", "450"),
+  /* $3.50 at 122 is ৳427.00. */
+  chargeUsd: await type("chargeUsd", "3.50"),
 };
 const submitted = await page.evaluate(() => {
   const buttons = [...document.querySelectorAll("button")].map((b) =>
@@ -359,7 +362,7 @@ check(
   saved?.amount === "122000.00" &&
     saved?.direction === "in" &&
     saved?.original_amount === "1000.00" &&
-    saved?.charge === "450.00",
+    saved?.charge === "427.00",
   saved
     ? `৳${saved.amount} in on ${saved.txn_date}, $${saved.original_amount}, charge ${saved.charge}`
     : "nothing written",
@@ -374,8 +377,8 @@ const netted = (
 ).rows[0].m;
 check(
   "so the account nets the receipt less the charge",
-  netted === "121550.00",
-  `${netted} — expected 122000.00 − 450.00`,
+  netted === "121573.00",
+  `${netted} — expected 122000.00 − 427.00`,
 );
 
 check(
@@ -479,10 +482,16 @@ check(
 const before = await classifyOf(`${MARK} dollar wire with a charge`);
 await page.goto(`${WEB}/accounts/cash-in`, { waitUntil: "networkidle0", timeout: 120000 });
 await new Promise((r) => setTimeout(r, 2500));
-const openedEdit = await page.evaluate((mark) => {
-  const tr = [...document.querySelectorAll("tbody tr")].find((r) =>
-    (r.textContent ?? "").includes(`${mark} dollar wire with a charge`),
-  );
+/* By the row's id: the table lost its Description column on 27 Sep (#99), so
+   the words this used to look for are no longer in the row. */
+const wireId = (
+  await db.query(
+    `select id from transactions where description like $1 and charge_for_id is null`,
+    [`%${MARK} dollar wire with a charge%`],
+  )
+).rows[0]?.id;
+const openedEdit = await page.evaluate((id) => {
+  const tr = document.querySelector(`tbody tr[data-row-id="${id}"]`);
   if (!tr) return "row not found";
   const edit = [...tr.querySelectorAll("button")].find((b) =>
     /edit/i.test(b.getAttribute("aria-label") ?? b.getAttribute("title") ?? ""),
@@ -490,7 +499,7 @@ const openedEdit = await page.evaluate((mark) => {
   if (!edit) return "no edit button";
   edit.click();
   return "opened";
-}, MARK);
+}, wireId);
 await new Promise((r) => setTimeout(r, 2000));
 
 check(
@@ -500,7 +509,7 @@ check(
 );
 
 const editView = await page.evaluate(() => {
-  const box = document.querySelector('input[name="chargeAmount"]');
+  const box = document.querySelector('input[name="chargeUsd"]');
   const amount = document.querySelector('input[name="amount"]');
   return {
     charge: box ? box.value : null,
@@ -510,7 +519,7 @@ const editView = await page.evaluate(() => {
 });
 check(
   "a correction opens with the charge already on the entry",
-  editView.charge === "450.00",
+  editView.charge === "3.50",
   `charge box reads ${JSON.stringify(editView.charge)}`,
 );
 check(

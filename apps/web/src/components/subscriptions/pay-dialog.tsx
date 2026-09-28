@@ -4,6 +4,7 @@ import { hasCharge, payableBdt, payableUsd } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { BankChargeField } from "@/components/ledger/bank-charge-field";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
@@ -109,6 +110,10 @@ export function PayDialog({
         /* The bank's fee, as its own row. "0.00" and blank both mean none. */
         chargeAmount:
           plainAmount(String(data.get("chargeAmount") ?? "")) || undefined,
+        /* In dollars, as the drawer asks for it — a plan is billed in
+           dollars. The API works out the taka at this payment's rate. */
+        chargeUsd:
+          plainAmount(String(data.get("chargeUsd") ?? "")) || undefined,
         note: String(data.get("note") ?? "") || null,
         usdRate: plainAmount(String(data.get("usdRate") ?? "")) || undefined,
         advanceRenewal: data.get("advanceRenewal") === "on",
@@ -236,13 +241,12 @@ export function PayDialog({
           already inside the price above; this is what the BANK takes on top,
           and like everywhere else in this app it becomes its own row under Bank
           charges rather than being buried in the amount.
+
+          In dollars, because a plan is billed in dollars — the owner: *"jokhon
+          usd hobe tokhon bank charge o usd howa ucit"*. The taka it comes to at
+          the rate above is read back under the box.
         */}
-        <Field
-          label="Bank charge (BDT)"
-          hint="Its own entry under Bank charges. Leave it empty when there was none."
-        >
-          <MoneyInput name="chargeAmount" placeholder="0.00" />
-        </Field>
+        <BankChargeField currency="USD" rate={usdRate} />
 
         {/*
           No Expense heading here.

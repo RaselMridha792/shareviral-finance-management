@@ -245,7 +245,9 @@ try {
   await settle(300);
   const bdt = await page.evaluate(() => [...document.querySelectorAll("[data-popup]")].pop().querySelector('[name="chargedBdt"]')?.value);
   check("the day's charge in taka is worked out — $50 at 122.50 is ৳6,125.00", bdt === "6125.00", missing.length ? `missing ${missing}` : bdt);
-  await fill({ bankCharge: "50" });
+  /* In dollars since 28 Sep 2026 — the upgrade is a dollar entry, so its bank
+     charge is too: $0.40 at 122.50 is ৳49.00. */
+  await fill({ bankChargeUsd: "0.40" });
   await press("Upgrade");
   await waitFor(() => !document.querySelector("[data-popup]"), undefined, 20000);
   plan = await planRow();
@@ -269,8 +271,8 @@ try {
     Boolean(upgradePay) && upgradePay.amount === "6125.00" && upgradePay.usd === "50.00" && /upgrade to Pro 20x/.test(upgradePay.description) && history[0].transaction_id === upgradePay.id,
     JSON.stringify(upgradePay),
   );
-  const bankCharge = upgradePay ? await q(`select amount::text a from transactions where charge_for_id = $1 and deleted_at is null`, [upgradePay.id]) : [];
-  check("with its bank charge as its own row", bankCharge.length === 1 && bankCharge[0].a === "50.00", JSON.stringify(bankCharge));
+  const bankCharge = upgradePay ? await q(`select amount::text a, original_amount::text usd from transactions where charge_for_id = $1 and deleted_at is null`, [upgradePay.id]) : [];
+  check("with its bank charge as its own row — $0.40, ৳49.00", bankCharge.length === 1 && bankCharge[0].a === "49.00" && bankCharge[0].usd === "0.40", JSON.stringify(bankCharge));
 
   const october = await call("POST", `/subscriptions/${planId}/pay`, { txnDate: "2026-10-10", usdRate: "122.50", advanceRenewal: true });
   check("the upgrade's charge does not use up October's renewal", october.status < 300, `HTTP ${october.status} ${msgOf(october).trim()}`);

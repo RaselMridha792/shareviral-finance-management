@@ -4,6 +4,7 @@ import { formatMoney, hasCharge, todayInDhaka } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { BankChargeField } from "@/components/ledger/bank-charge-field";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
@@ -78,6 +79,8 @@ export function UpgradeDialog({
         chargedBdt:
           plain(chargedUsd) && bdtTouched ? plain(typedBdt) || undefined : undefined,
         bankCharge: plain(text("bankCharge")) || undefined,
+        /* In dollars, as the drawer asks for it — like the upgrade itself. */
+        bankChargeUsd: plain(text("bankChargeUsd")) || undefined,
         nextRenewalOn: text("nextRenewalOn") || undefined,
         note: text("note") || null,
       });
@@ -212,17 +215,15 @@ export function UpgradeDialog({
               />
             </Field>
           </div>
-          <Field
-            label="Bank charge (BDT)"
-            error={fieldErrors.bankCharge}
-            hint="Its own entry under Bank charges. Leave it empty when there was none."
-          >
-            <MoneyInput
-              name="bankCharge"
-              placeholder="0.00"
-              disabled={!plain(chargedUsd)}
-            />
-          </Field>
+          {/* In dollars, like the charge above it — the owner: *"jokhon usd
+              hobe tokhon bank charge o usd howa ucit"*. */}
+          <BankChargeField
+            currency="USD"
+            names={{ bdt: "bankCharge", usd: "bankChargeUsd" }}
+            rate={usdRate}
+            error={fieldErrors.bankChargeUsd ?? fieldErrors.bankCharge}
+            disabled={!plain(chargedUsd)}
+          />
         </fieldset>
 
         <Field

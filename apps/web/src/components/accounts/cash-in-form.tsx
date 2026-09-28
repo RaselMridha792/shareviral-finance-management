@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/field";
 import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
 import { FileManager } from "@/components/files/file-manager";
+import {
+  BankChargeField,
+  type ChargeCurrency,
+} from "@/components/ledger/bank-charge-field";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { type AccountDto } from "@/lib/masters";
@@ -119,6 +123,23 @@ export function CashInForm({
   const usdPrimary =
     accounts.find((candidate) => candidate.id === accountId)?.currency ===
     "USD";
+
+  /*
+   * The bank charge follows the same rule — dollars on a dollar account, taka
+   * on a taka one. The owner: *"jokhon bdt transaction hobe tokhon bank charge
+   * o bdt hobe r jokhon usd hobe tokhon bank charge o usd howa ucit"*. A
+   * correction reopens the charge in the currency it was entered in.
+   */
+  const entryChargeCurrency: ChargeCurrency = usdPrimary ? "USD" : "BDT";
+  const [keptChargeCurrency, setKeptChargeCurrency] =
+    useState<ChargeCurrency | null>(
+      transaction && Number(transaction.chargeAmount) > 0
+        ? transaction.chargeUsd
+          ? "USD"
+          : "BDT"
+        : null,
+    );
+  const chargeCurrency = keptChargeCurrency ?? entryChargeCurrency;
 
   /**
    * Both tracked only so the realised rate can be read back while it is being
@@ -500,6 +521,10 @@ export function CashInForm({
            — the API writes it as an out row on this same account. */
         chargeAmount:
           plainAmount(String(data.get("chargeAmount") ?? "")) || undefined,
+        /* Or in dollars, on a dollar account — worked out in taka by the API
+           at this entry's rate. Only one of the two boxes is ever drawn. */
+        chargeUsd:
+          plainAmount(String(data.get("chargeUsd") ?? "")) || undefined,
         usdRate: String(data.get("usdRate")).trim(),
         // Blank on a local receipt, and then this row is exactly what it was
         // before: an ordinary money-in with a reference rate on it. Given, the
@@ -541,7 +566,9 @@ export function CashInForm({
              * charge; the service removes the row rather than leaving a 0.00
              * line item on the Expenses screen.
              */
-            chargeAmount: payload.chargeAmount ?? "0.00",
+            ...(payload.chargeUsd
+              ? { chargeUsd: payload.chargeUsd }
+              : { chargeAmount: payload.chargeAmount ?? "0.00" }),
             senderAccountName: payload.senderAccountName,
             notes: payload.notes,
             // No `accountId`: the ledger will not let an edit move money
@@ -979,19 +1006,20 @@ export function CashInForm({
             offered no charge box at all, which is the half of this the owner
             found first: *"usd bank select korle charge field ta nai"*.
           */}
-          <Field
-            label="Bank charge (BDT)"
-            error={fieldErrors.chargeAmount}
-            hint="Its own entry under Bank charges. Leave it empty when there was none."
-          >
-            <MoneyInput
-              name="chargeAmount"
-              placeholder="0.00"
-              /* Seeded, or a correction opens blank and the charge already on
-                 the row reads as none. */
-              defaultValue={transaction?.chargeAmount ?? ""}
-            />
-          </Field>
+          <BankChargeField
+            currency={chargeCurrency}
+            entryCurrency={entryChargeCurrency}
+            onUseEntryCurrency={() => setKeptChargeCurrency(null)}
+            /* Seeded, or a correction opens blank and the charge already on
+               the row reads as none — in the currency it was entered in. */
+            defaultValue={
+              chargeCurrency === "USD"
+                ? (transaction?.chargeUsd ?? "")
+                : (transaction?.chargeAmount ?? "")
+            }
+            rate={usdRate}
+            error={fieldErrors.chargeUsd ?? fieldErrors.chargeAmount}
+          />
 
           {/* The arithmetic, back in front of the person who typed it. A digit
             too many in either box turns a plausible rate into an absurd one,

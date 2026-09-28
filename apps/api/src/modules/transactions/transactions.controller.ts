@@ -1,6 +1,8 @@
 import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
   amountSchema,
+  CHARGE_TWICE_MESSAGE,
+  chargeStatedOnce,
   createTransactionSchema,
   expenseOverviewQuerySchema,
   expenseSummaryQuerySchema,
@@ -42,7 +44,7 @@ const uuidSchema = z.string().uuid("Not a valid id");
  * Declared here rather than in packages/shared: one screen reads it, and that
  * package is consumed as built dist/ by twenty others.
  */
-const paySubscriptionSchema = z.object({
+const paySubscriptionFields = z.object({
   txnDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date it was charged"),
@@ -106,6 +108,17 @@ const paySubscriptionSchema = z.object({
    * already inside the price; this is what the BANK takes on top.
    */
   chargeAmount: z.string().trim().optional(),
+  /**
+   * The same fee in dollars, which is how the Renew drawer asks for it now —
+   * the owner: *"jokhon usd hobe tokhon bank charge o usd howa ucit"*, and a
+   * plan is billed in dollars. Worked out in taka at this payment's rate.
+   * Still not the plan's own `chargeUsd`: that one is the VENDOR's.
+   */
+  chargeUsd: amountSchema.optional(),
+});
+const paySubscriptionSchema = paySubscriptionFields.refine(chargeStatedOnce, {
+  message: CHARGE_TWICE_MESSAGE,
+  path: ["chargeUsd"],
 });
 type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
 
@@ -124,7 +137,7 @@ type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
  * account is corrected by voiding and recording again, the rule Cash In keeps:
  * an edit that moved money between two balances would leave no trail.
  */
-const updateTransferSchema = z.strictObject({
+const updateTransferFields = z.strictObject({
   txnDate: isoDateSchema,
   amount: amountSchema.refine((v) => Number(v) > 0, {
     message: "The amount must be more than zero",
@@ -137,8 +150,14 @@ const updateTransferSchema = z.strictObject({
   usdAmount: amountSchema.optional(),
   /** Absent or zero: no charge, and an existing one comes off. */
   chargeAmount: amountSchema.optional(),
+  /** Or the charge in dollars — the same row, restated. */
+  chargeUsd: amountSchema.optional(),
   description: z.string().trim().min(2).max(300),
   paymentMethod: paymentMethodSchema,
+});
+const updateTransferSchema = updateTransferFields.refine(chargeStatedOnce, {
+  message: CHARGE_TWICE_MESSAGE,
+  path: ["chargeUsd"],
 });
 export type UpdateTransferInput = z.infer<typeof updateTransferSchema>;
 
@@ -171,13 +190,38 @@ const upgradeSubscriptionSchema = z
     chargedUsd: amountSchema.optional(),
     chargedBdt: amountSchema.optional(),
     bankCharge: amountSchema.optional(),
+    /** The bank's fee in dollars — how the upgrade drawer asks for it. */
+    bankChargeUsd: amountSchema.optional(),
     nextRenewalOn: isoDateSchema.optional(),
     note: z.string().trim().max(200).nullish(),
   })
   .refine((v) => !v.chargedBdt || Boolean(v.chargedUsd), {
     message: "Say what the vendor charged in dollars first",
     path: ["chargedUsd"],
-  });
+  })
+  .refine(
+    (v) =>
+      chargeStatedOnce({
+        chargeAmount: v.bankCharge,
+        chargeUsd: v.bankChargeUsd,
+      }),
+    { message: CHARGE_TWICE_MESSAGE, path: ["bankChargeUsd"] },
+  )
+  /*
+   * A bank charge rides on the upgrade's payment, so it needs one. Without the
+   * vendor's charge there is no payment, and the fee was dropped in silence —
+   * the drawer disables the box then, and this says so to anything else.
+   */
+  .refine(
+    (v) =>
+      Boolean(v.chargedUsd && Number(v.chargedUsd) > 0) ||
+      !(Number(v.bankCharge ?? 0) > 0 || Number(v.bankChargeUsd ?? 0) > 0),
+    {
+      message:
+        "A bank charge needs the upgrade's own charge — say what the vendor charged in dollars first",
+      path: ["bankChargeUsd"],
+    },
+  );
 export type UpgradeSubscriptionInput = z.infer<
   typeof upgradeSubscriptionSchema
 >;

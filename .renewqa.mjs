@@ -336,7 +336,8 @@ for (const [what, needle] of [
   ["a dollars box", 'name="usdAmount"'],
   ["a rate box", 'name="usdRate"'],
   ["a taka box", 'name="amount"'],
-  ["a bank charge box", 'name="chargeAmount"'],
+  /* In dollars since 28 Sep 2026: a plan is billed in dollars. */
+  ["a bank charge box, in dollars", '<BankChargeField currency="USD"'],
 ]) {
   check(`the drawer has ${what}`, drawer.includes(needle), needle);
 }

@@ -11,6 +11,10 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
+import {
+  BankChargeField,
+  type ChargeCurrency,
+} from "@/components/ledger/bank-charge-field";
 import { FileManager } from "@/components/files/file-manager";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
@@ -262,6 +266,24 @@ export function TransactionForm({
   const [usdEntered, setUsdEntered] = useState(
     transaction?.originalAmount ?? "",
   );
+
+  /*
+   * The bank charge is asked in the entry's own currency — dollars on a
+   * USD-primary account, taka otherwise — the owner: *"jokhon usd hobe tokhon
+   * bank charge o usd howa ucit"*. A correction reopens a charge in the
+   * currency it was ENTERED in, which for one written before this rule is
+   * taka even on a dollar account; the box then offers to restate it.
+   */
+  const entryChargeCurrency: ChargeCurrency = usdPrimary ? "USD" : "BDT";
+  const [keptChargeCurrency, setKeptChargeCurrency] =
+    useState<ChargeCurrency | null>(
+      transaction && Number(transaction.chargeAmount) > 0
+        ? transaction.chargeUsd
+          ? "USD"
+          : "BDT"
+        : null,
+    );
+  const chargeCurrency = keptChargeCurrency ?? entryChargeCurrency;
   /** On an edit the stored taka is authoritative — nothing recomputes it. */
   const [bdtTouched, setBdtTouched] = useState(Boolean(transaction));
   /** The other direction, for a USD-primary account: dollars × rate. */
@@ -407,8 +429,13 @@ export function TransactionForm({
              * cleared. "0.00" is how this form says "there is no charge", and
              * the service removes the row rather than leaving a 0.00 line item.
              */
-            chargeAmount:
-              plainAmount(String(data.get("chargeAmount") ?? "")) || "0.00",
+            ...(plainAmount(String(data.get("chargeUsd") ?? ""))
+              ? { chargeUsd: plainAmount(String(data.get("chargeUsd"))) }
+              : {
+                  chargeAmount:
+                    plainAmount(String(data.get("chargeAmount") ?? "")) ||
+                    "0.00",
+                }),
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
           })
@@ -424,6 +451,8 @@ export function TransactionForm({
             description: String(data.get("description")),
             notes: text("notes"),
             chargeAmount: text("chargeAmount"),
+            chargeUsd:
+              plainAmount(String(data.get("chargeUsd") ?? "")) || undefined,
             billAmount: showTax ? text("billAmount") : undefined,
             withheldTaxAmount: showTax ? text("withheldTaxAmount") : undefined,
             usdRate: text("usdRate"),
@@ -682,24 +711,26 @@ export function TransactionForm({
               heading keeps its own figure, the charge is visible as a charge,
               and the account is ৳10,115 lighter either way.
 
-              In taka whatever the account's own currency, because a bank
-              charge here is levied in taka and the ledger counts taka.
+              In the entry's own currency since 28 Sep 2026 — dollars on a
+              dollar account, worked out in taka at the entry's rate by the
+              server; the ledger still counts taka.
             */}
             {/* Not on a row that IS a charge. A charge on a charge is a row
                 nothing would reconcile, and the API refuses one — this is the
                 door being closed rather than the refusal being explained. */}
             {transaction?.chargeForId ? null : (
-              <Field
-                label="Bank charge (BDT)"
-                error={fieldErrors.chargeAmount}
-                hint="Its own entry under Bank charges. Leave it empty when there was none."
-              >
-                <MoneyInput
-                  name="chargeAmount"
-                  placeholder="0.00"
-                  defaultValue={transaction?.chargeAmount ?? ""}
-                />
-              </Field>
+              <BankChargeField
+                currency={chargeCurrency}
+                entryCurrency={entryChargeCurrency}
+                onUseEntryCurrency={() => setKeptChargeCurrency(null)}
+                defaultValue={
+                  chargeCurrency === "USD"
+                    ? (transaction?.chargeUsd ?? "")
+                    : (transaction?.chargeAmount ?? "")
+                }
+                rate={usdRate}
+                error={fieldErrors.chargeUsd ?? fieldErrors.chargeAmount}
+              />
             )}
             {/*
               * REQUIRED, on every entry — *"baddhotamulok all transactions er

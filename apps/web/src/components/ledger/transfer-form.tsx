@@ -9,6 +9,10 @@ import { ArrowRight, LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
+import {
+  BankChargeField,
+  type ChargeCurrency,
+} from "@/components/ledger/bank-charge-field";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -113,6 +117,22 @@ export function TransferForm({
         accounts.find((candidate) => candidate.id === id)?.currency === "USD",
     ) || Boolean(transfer?.usdAmount);
   const [usdAmount, setUsdAmount] = useState(transfer?.usdAmount ?? "");
+  /*
+   * The bank charge in the transfer's own currency: dollars when a dollar
+   * account is on either side, taka otherwise — the owner: *"jokhon usd hobe
+   * tokhon bank charge o usd howa ucit"*. A correction reopens the charge in
+   * the currency it was entered in.
+   */
+  const entryChargeCurrency: ChargeCurrency = usdPrimary ? "USD" : "BDT";
+  const [keptChargeCurrency, setKeptChargeCurrency] =
+    useState<ChargeCurrency | null>(
+      transfer && Number(transfer.chargeAmount ?? 0) > 0
+        ? transfer.chargeUsd
+          ? "USD"
+          : "BDT"
+        : null,
+    );
+  const chargeCurrency = keptChargeCurrency ?? entryChargeCurrency;
   const [usdRate, setUsdRate] = useState(typedRate(transfer?.usdRate));
   /*
    * A correction opens on the taka it STORED, not a figure recomputed from the
@@ -178,6 +198,10 @@ export function TransferForm({
            on a correction takes an existing charge off. */
         chargeAmount:
           String(data.get("chargeAmount") ?? "").replace(/[,\s৳]/g, "") ||
+          undefined,
+        /* Or in dollars — only one of the two boxes is ever drawn. */
+        chargeUsd:
+          String(data.get("chargeUsd") ?? "").replace(/[,\s$]/g, "") ||
           undefined,
         description: String(data.get("description")),
         /* The rate always; the dollars only when dollars actually moved. */
@@ -438,19 +462,21 @@ export function TransferForm({
 
           Not folded into the amount: the heading keeps its own figure and the
           charge is visible as a charge — the owner's choice when asked how one
-          should count. In taka whatever currency the account is kept in.
+          should count. In the transfer's own currency: dollars when a dollar
+          account is on either side, worked out in taka at its rate.
         */}
-        <Field
-          label="Bank charge (BDT)"
-          error={fieldErrors.chargeAmount}
-          hint="Its own entry under Bank charges. Leave it empty when there was none."
-        >
-          <MoneyInput
-            name="chargeAmount"
-            placeholder="0.00"
-            defaultValue={transfer?.chargeAmount ?? ""}
-          />
-        </Field>
+        <BankChargeField
+          currency={chargeCurrency}
+          entryCurrency={entryChargeCurrency}
+          onUseEntryCurrency={() => setKeptChargeCurrency(null)}
+          defaultValue={
+            chargeCurrency === "USD"
+              ? (transfer?.chargeUsd ?? "")
+              : (transfer?.chargeAmount ?? "")
+          }
+          rate={usdRate}
+          error={fieldErrors.chargeUsd ?? fieldErrors.chargeAmount}
+        />
 
         <Field label="Description" required error={fieldErrors.description}>
           <Input

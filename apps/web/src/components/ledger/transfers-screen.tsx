@@ -673,11 +673,30 @@ function TransferDetails({
         {
           label: "Bank charge",
           value: row.chargeAmount ? (
-            <Amount
-              value={row.chargeAmount}
-              tone="neutral"
-              showCounterpart={false}
-            />
+            row.chargeUsd ? (
+              /* Given in dollars: the dollars, then the taka they came to. */
+              <span className="inline-flex items-baseline gap-2">
+                <Amount
+                  value={row.chargeUsd}
+                  currency="USD"
+                  tone="neutral"
+                  showCounterpart={false}
+                />
+                <span className="font-semibold text-(--sv-muted)">
+                  <Amount
+                    value={row.chargeAmount}
+                    tone="neutral"
+                    showCounterpart={false}
+                  />
+                </span>
+              </span>
+            ) : (
+              <Amount
+                value={row.chargeAmount}
+                tone="neutral"
+                showCounterpart={false}
+              />
+            )
           ) : null,
         },
       ],

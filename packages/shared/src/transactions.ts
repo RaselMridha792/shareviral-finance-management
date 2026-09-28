@@ -109,6 +109,33 @@ const senderFields = {
   senderSwiftCode: optionalText(20),
 };
 
+/**
+ * A bank charge is given in taka OR in dollars — never both.
+ *
+ * The owner, 28 Sep 2026: *"jokhon bdt transaction hobe tokhon bank charge o
+ * bdt hobe r jokhon usd hobe tokhon bank charge o usd howa ucit"*. So every
+ * body that carries a charge has two boxes for it — `chargeAmount` in taka,
+ * and `chargeUsd` in dollars, which the API works out in taka at the entry's
+ * own rate. Two figures for one charge would be two answers to one question,
+ * so a body giving both is refused rather than one of them quietly winning.
+ *
+ * "0.00" in either is the same as leaving it out; only two figures that each
+ * say there WAS a charge conflict.
+ */
+export const CHARGE_TWICE_MESSAGE =
+  "Give the bank charge in taka or in dollars — not both.";
+
+const chargeGiven = (value: string | undefined) =>
+  value !== undefined && value.trim() !== "" && Number(value) > 0;
+
+/** True when a body states the charge once at most. */
+export function chargeStatedOnce(body: {
+  chargeAmount?: string;
+  chargeUsd?: string;
+}): boolean {
+  return !(chargeGiven(body.chargeAmount) && chargeGiven(body.chargeUsd));
+}
+
 export const createTransactionSchema = z
   .strictObject({
     direction: txnDirectionSchema,
@@ -216,6 +243,15 @@ export const createTransactionSchema = z
      * sends "0.00" means the same as one that sends nothing.
      */
     chargeAmount: amountSchema.optional(),
+    /**
+     * The same charge, stated in dollars — for a dollar entry, where the bank
+     * charge is billed in dollars too. The taka is worked out by the API at
+     * this entry's own rate (to the paisa, never with floats), and the dollars
+     * are kept on the charge's row as its `original_amount`, so a dollar
+     * account's own balance moves by exactly them. One or the other; see
+     * `chargeStatedOnce`.
+     */
+    chargeUsd: amountSchema.optional(),
     originalAmount: amountSchema.optional(),
     originalCurrency: z.string().trim().length(3).optional(),
     fxRate: z
@@ -265,7 +301,11 @@ export const createTransactionSchema = z
       message: "A foreign amount needs the rate that converted it",
       path: ["fxRate"],
     },
-  );
+  )
+  .refine(chargeStatedOnce, {
+    message: CHARGE_TWICE_MESSAGE,
+    path: ["chargeUsd"],
+  });
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 
 /**
@@ -283,11 +323,13 @@ export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
  * whole month: it is the first funded inflow's rate that every later taka
  * figure is read back in. Nobody will know it as precisely again.
  */
-export const recordCashInSchema = z.strictObject({
+const recordCashInFields = z.strictObject({
   /* The bank's cut, as its own row under Bank charges. Same field, same
      meaning and the same one line of service code as every other entry —
      the owner asked for it on every kind of transaction. */
   chargeAmount: amountSchema.optional(),
+  /* Or in dollars, on a dollar account — see `chargeStatedOnce`. */
+  chargeUsd: amountSchema.optional(),
   txnDate: isoDateSchema,
 
   /** The bank's reference for the wire — what a query about it would quote. */
@@ -358,6 +400,10 @@ export const recordCashInSchema = z.strictObject({
   notes: optionalText(1000),
   receiptUrl: receiptUrlSchema,
 });
+export const recordCashInSchema = recordCashInFields.refine(chargeStatedOnce, {
+  message: CHARGE_TWICE_MESSAGE,
+  path: ["chargeUsd"],
+});
 export type RecordCashInInput = z.infer<typeof recordCashInSchema>;
 
 /** Everything except direction and account, which would rewrite history. */
@@ -374,6 +420,12 @@ export const updateTransactionSchema = z
      * screen for somebody to read and wonder about.
      */
     chargeAmount: amountSchema.optional(),
+    /**
+     * Or in dollars. Either one present rewrites the charge; the one given
+     * decides its currency, so a charge entered in taka can be restated in
+     * dollars (and back) and stays the same row.
+     */
+    chargeUsd: amountSchema.optional(),
     categoryId: z.string().uuid().optional(),
     /** By id only — see `createTransactionSchema`. */
     vendorId: z.string().uuid().nullish(),
@@ -402,7 +454,11 @@ export const updateTransactionSchema = z
       .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77")
       .optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" })
+  .refine(chargeStatedOnce, {
+    message: CHARGE_TWICE_MESSAGE,
+    path: ["chargeUsd"],
+  });
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
 
 export const voidTransactionSchema = z.strictObject({
@@ -419,6 +475,8 @@ export const transferSchema = z
        field and the same meaning as on every other entry; the owner asked for
        it on every kind of transaction. */
     chargeAmount: amountSchema.optional(),
+    /* Or in dollars, when a dollar account is on either side. */
+    chargeUsd: amountSchema.optional(),
     fromAccountId: z.string().uuid("Choose the account money leaves"),
     toAccountId: z.string().uuid("Choose the account money arrives in"),
     // The same rule the create and cash-in schemas carry: zero passes the
@@ -456,6 +514,10 @@ export const transferSchema = z
   .refine((v) => v.fromAccountId !== v.toAccountId, {
     message: "Pick two different accounts",
     path: ["toAccountId"],
+  })
+  .refine(chargeStatedOnce, {
+    message: CHARGE_TWICE_MESSAGE,
+    path: ["chargeUsd"],
   });
 export type TransferInput = z.infer<typeof transferSchema>;
 

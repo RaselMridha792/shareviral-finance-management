@@ -711,6 +711,52 @@ export class TrashService {
    * bug the partial index exists to close, arriving through the door the fix
    * itself opened.
    */
+  /**
+   * One live bank charge per entry, on the way out of the trash too.
+   *
+   * Found while checking the owner's report of one charge written three times
+   * (28 Sep 2026). Every door that WRITES a charge finds the entry's live one
+   * and rewrites it, so none of them can add a second — but a charge that
+   * went into the trash on its own (binned by hand, or taken off when its box
+   * was emptied) could come back after the entry had been given a new one,
+   * and then the entry is charged twice. The same shape as the salary clash
+   * above: refused, with the sentence that says what to do instead.
+   *
+   * Only a charge that would come back LIVE counts — one voided before it was
+   * binned comes back voided and charges nothing.
+   */
+  private async assertChargeStillFree(entry: TrashEntry, ids: string[]) {
+    if (entry.kind !== "transaction" || ids.length === 0) return;
+
+    const list = sql.join(
+      ids.map((one) => sql`${one}::uuid`),
+      sql`, `,
+    );
+    const clash = await this.db.client.execute(
+      sql`select parent.ref_no as parent_ref, other.ref_no as other_ref
+            from transactions c
+            join transactions parent on parent.id = c.charge_for_id
+            join transactions other
+              on other.charge_for_id = c.charge_for_id
+             and other.deleted_at is null
+             and other.voided_at is null
+             and other.id not in (${list})
+           where c.id in (${list})
+             and c.charge_for_id is not null
+             and (c.voided_at is null or c.voided_at = c.deleted_at)
+           limit 1`,
+    );
+    const hit = (
+      clash.rows as unknown as { parent_ref: string; other_ref: string }[]
+    )[0];
+    if (hit) {
+      throw new BadRequestException(
+        `That bank charge belongs to ${hit.parent_ref}, which has a bank charge of its own now (${hit.other_ref}). ` +
+          `Restoring it would charge that entry twice. Change the charge on ${hit.parent_ref} instead.`,
+      );
+    }
+  }
+
   private async assertDateStillFree(
     entry: TrashEntry,
     row: Record<string, unknown>,
@@ -748,6 +794,7 @@ export class TrashService {
 
     await this.assertRestoreFits(entry, row);
     await this.assertDateStillFree(entry, row);
+    await this.assertChargeStillFree(entry, ids);
 
     // Restoring an "out" row spends the money again. The account rule holds
     // on the way out of the trash exactly as it does everywhere else.
