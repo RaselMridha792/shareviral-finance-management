@@ -35,6 +35,7 @@ ticking all seventeen.
 | # | What | State |
 |---|---|---|
 | 116 | **Invoice Builder, a page of its own** | **done** — not pushed |
+| 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — not pushed |
 | 114 | **A joining salary is the first pay figure, automatically** | **done** — not pushed |
 | 113 | **A team member's page, laid out after the HR portal's** | **done** — not pushed |
 | 112 | **Team: a click anywhere on a row opens the person's page** | **done** — deployed |
@@ -141,6 +142,46 @@ equivalent, each eye, logo upload, reload keeps the draft, Reset, the print
 frame (title, sheet only), one page for two items fitted at 0.961, two pages
 for twelve at full size, 390px phone with no sideways scroll, no errors.
 Looked at in light, dark and the PDF. Four CI steps green.
+
+## 115. A bank charge names its entry, and is asked in the entry's own currency — 28 Sep 2026
+
+The owner, on an upgrade with a bank charge: *"bank charge er ekhane details a
+lekha nei eta kon transaction er jonne charge ta add hoyeche etake clear kore
+mention korte hobeto"*, that it seemed written three times, and *"jokhon bdt
+transaction hobe tokhon bank charge o bdt hobe r jokhon usd hobe tokhon bank
+charge o usd howa ucit"*. Done by a delegated agent (eab62e1), reviewed here.
+
+- **A charge's record opens with "Bank charge for"**: the entry's Entry No.
+  with Open (that entry's own record) and Back, what it was (Cash In / Money
+  transfer to X / Subscription renewal / Subscription upgrade — to the plan /
+  Payroll / Tax payment / Expense — heading), its description, date, amount
+  and account. Read with `GET /transactions/:id` when a charge is opened, by
+  `charge_for_id`, so old charges read the same; ordinary rows make no extra
+  request. `findOne` gains `upgradeToPlan` and `transferOtherAccountName` (it
+  reads `subscription_upgrades`, live since ae06f4b).
+- **The charge box follows the entry's currency**: "Bank charge (USD)" on a
+  Cash In or entry on a USD-primary account, a transfer with a USD-primary
+  side, and Renew/Upgrade; BDT otherwise. The server stores taka = dollars ×
+  the entry's rate in paisa (shared `convertAmount`, half-up), the dollars in
+  the fx columns as a set. Taka and dollars together are refused; an entry
+  with no rate refuses dollars; an edit reopens a charge in the currency it
+  was entered in. New optional `chargeUsd` / `bankChargeUsd` (shared schemas,
+  controller, `lib/ledger.ts`, `lib/api-client.ts` — all additive).
+- **"Three times" was three entries' charges**, not one written thrice (the
+  one opened said "Bank charge — August Funding"). Every path writes at most
+  one live charge; `writeBankCharge` now locks the entry. The one real hole —
+  restoring a binned charge after the entry got a new one — is refused in
+  `trash.service.ts`. An upgrade bank charge with nothing charged is refused
+  instead of silently dropped.
+- **Open, not done:** a charge row's own Edit opens the entry form, which
+  cannot restate a USD row's dollars (true of every USD row, not new) — hide
+  Edit on charge rows, or send it to the entry's form.
+
+**Proved** by `.chargecurrencyqa.mjs` (new) **75/75**, re-run here (one run
+hit an ECONNRESET between the dev servers; clean on re-run). `.renewqa`,
+`.renewupgradeqa`, `.transfereditqa`, `.cashinorderqa` updated to the dollar
+rule; `.bankchargeqa` and `.cashinorderqa` find rows by id since #99.
+`.carddollarqa` still fails 5 — it sends no `usdRate`, as before this.
 
 ## 114. A joining salary is the first pay figure, automatically — 28 Sep 2026
 
