@@ -567,7 +567,10 @@
 }
 
 /* An account drawn as a bank card — the owner's September drawing of the
-   Accounts page. Four tones taken in turn across the grid (`data-tone`); each
+   Accounts page. Four tones taken in turn across the grid (`data-tone`),
+   all four deep: the drawing's paper and lilac cards read washed out beside
+   the violet and the lime, and the owner asked for deeper ones — *"aro deep
+   color daw jate dekhte sundor hoy"* — so they became ink and ocean. Each
    sets the few colours the card's parts read, so the parts are written once.
    Colours here and not in utilities for the usual reason: a border colour as
    a utility loses to globals.css's unlayered `* { border-color }`. */
@@ -614,21 +617,18 @@
   color: var(--bankcard-pill-ink);
 }
 
-.sv-bankcard[data-tone="paper"] {
-  --bankcard-glow: rgb(191 255 0 / 0.45);
-  --bankcard-ring: rgb(133 88 236 / 0.22);
+/* Near-black with the brand's lime in the chip, the tag and the glow. */
+.sv-bankcard[data-tone="ink"] {
+  --bankcard-glow: rgb(191 255 0 / 0.2);
+  --bankcard-ring: rgb(191 255 0 / 0.28);
   --bankcard-chip: linear-gradient(135deg, #e6fb90, #c6f23d);
   --bankcard-chip-line: #b5e02c;
-  --bankcard-number: var(--sv-muted);
-  --bankcard-pill: var(--sv-violet-tint);
-  --bankcard-pill-ink: var(--sv-ink);
-  color: var(--sv-ink);
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--sv-surface) 55%, var(--sv-subtle)),
-    var(--sv-subtle)
-  );
-  border-color: var(--sv-line);
+  --bankcard-number: rgb(236 241 226 / 0.6);
+  --bankcard-pill: rgb(191 255 0 / 0.16);
+  --bankcard-pill-ink: #d4ff5c;
+  color: #f4f7ec;
+  background: linear-gradient(135deg, #3a4230 0%, #1b2014 50%, #080a03 100%);
+  box-shadow: 0 16px 28px -14px rgb(6 8 0 / 0.55);
 }
 
 .sv-bankcard[data-tone="violet"] {
@@ -662,36 +662,28 @@
   box-shadow: 0 16px 28px -14px rgb(155 212 0 / 0.6);
 }
 
-.sv-bankcard[data-tone="lilac"] {
-  --bankcard-glow: rgb(255 255 255 / 0.75);
-  --bankcard-ring: rgb(133 88 236 / 0.22);
-  --bankcard-chip: linear-gradient(135deg, #f8f5ff, #dccdfb);
-  --bankcard-chip-line: #d3c2fa;
-  --bankcard-number: rgb(42 26 94 / 0.6);
-  --bankcard-pill: #ffffff;
-  --bankcard-pill-ink: #2a1a5e;
-  color: #2a1a5e;
-  background: linear-gradient(160deg, #f1e9fe, #e9e0fd);
-  border-color: var(--sv-violet-tint-line);
+/* A deep blue, the one hue the other three leave free. */
+.sv-bankcard[data-tone="ocean"] {
+  --bankcard-glow: rgb(255 255 255 / 0.2);
+  --bankcard-ring: rgb(255 255 255 / 0.28);
+  --bankcard-chip: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.92),
+    rgb(255 255 255 / 0.62)
+  );
+  --bankcard-chip-line: rgb(255 255 255 / 0.55);
+  --bankcard-number: rgb(255 255 255 / 0.72);
+  --bankcard-pill: rgb(255 255 255 / 0.18);
+  --bankcard-pill-ink: #ffffff;
+  color: #ffffff;
+  background: linear-gradient(135deg, #4f7df5 0%, #2b4fd0 50%, #172a86 100%);
+  box-shadow: 0 16px 28px -14px rgb(23 42 134 / 0.55);
 }
 
-/* The two light tones, redrawn for the dark theme; violet and lime are
-   bright enough to stand on either ground as they are. */
-:root[data-theme="dark"] .sv-bankcard[data-tone="paper"] {
-  --bankcard-glow: rgb(191 255 0 / 0.16);
-}
-
-:root[data-theme="dark"] .sv-bankcard[data-tone="lilac"] {
-  --bankcard-glow: rgb(255 255 255 / 0.06);
-  --bankcard-ring: rgb(205 184 251 / 0.2);
-  --bankcard-chip: linear-gradient(135deg, #4a3b7a, #35295c);
-  --bankcard-chip-line: rgb(205 184 251 / 0.25);
-  --bankcard-number: rgb(233 224 255 / 0.6);
-  --bankcard-pill: rgb(255 255 255 / 0.1);
-  --bankcard-pill-ink: #e9e0ff;
-  color: #e9e0ff;
-  background: linear-gradient(160deg, #2a2146, #1f1935);
-  border-color: #3a2f5e;
+/* On the dark ground the ink card would melt into the page; a lime hairline
+   keeps its edge. The other three are bright enough as they are. */
+:root[data-theme="dark"] .sv-bankcard[data-tone="ink"] {
+  border-color: rgb(191 255 0 / 0.18);
 }
 
 /* The card's own buttons are the row buttons at the size of the button beside

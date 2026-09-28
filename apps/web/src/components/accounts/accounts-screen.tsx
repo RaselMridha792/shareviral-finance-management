@@ -460,11 +460,12 @@ function ImpossibleBalanceNote() {
 
 /**
  * The four looks a card takes, in turn across the grid — the owner's September
- * drawing of this page: a paper card, a violet one, a lime one and a lilac one.
- * Nothing about the account picks its colour; the drawing cycles them so a
- * row of four never repeats, and so does this.
+ * drawing of this page, with its two pale cards deepened at the owner's word
+ * (ink and ocean in place of paper and lilac). Nothing about the account picks
+ * its colour; the drawing cycles them so a row of four never repeats, and so
+ * does this.
  */
-const TONES = ["paper", "violet", "lime", "lilac"] as const;
+const TONES = ["ink", "violet", "lime", "ocean"] as const;
 type Tone = (typeof TONES)[number];
 
 /**

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 107 | **Accounts overview: the two pale cards deepened — ink and ocean** | **done** — not pushed, at the owner's word |
 | 106 | **An edit form shows the files already attached, and one attach is one file** | **done** — four screens, and the rest checked |
 | 105 | **Accounts overview: every account drawn as a bank card** | **done** |
 | 104 | **No empty band either side of every page on a 1920px screen** | **done** — every screen, at the owner's ask |
@@ -84,6 +85,26 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 107. Accounts overview: the two pale cards deepened — ink and ocean — 28 Sep 2026
+
+The owner, arrows on the first and fourth card of #105: *"mark kora item
+duitar color valo lagchena eigula aro deep color daw jate dekhte sundor
+hoy"*. Deepening each in its own hue would only have repeated its
+neighbours — a deeper paper is the lime card, a deeper lilac is the violet
+— so five pairs were drawn side by side (ink + ocean, ink + teal, forest +
+plum, ink + navy, ocean + plum) and **ink + ocean** taken: a near-black card
+with the brand's lime in its chip, tag and glow, and a deep blue, the one hue
+the other three leave free. `TONES` is now `ink, violet, lime, ocean`; the
+paper and lilac rules and their dark-theme redraws are gone, and the ink
+card gets a lime hairline on the dark ground so it does not melt into it.
+
+Checked with a fourth account made for the look and deleted, light and dark
+at 1920; `.accountsqa` 20/20; the four CI steps green.
+
+**Not pushed.** The owner, the same message: *"akhon ami ja dicchi age kaj
+korte thako live a deploy korar dorkar nai. ami bolle ekbare deploy korba"*
+— from here, work is committed and held until the owner says deploy.
 
 ## 106. An edit form shows the files already attached, and one attach is one file — 28 Sep 2026
 

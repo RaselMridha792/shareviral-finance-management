@@ -271,7 +271,7 @@ latest month. HR gets the greeting and an empty state, and no money.
 **Accounts overview** is a card per account, drawn as a bank card (the owner's 28 Sep drawing,
 #105): issuer and a BDT/USD/CARD tag, a chip, the account number, the name opposite the balance
 in the account's primary currency; the other currency, the opening date, View details and the
-icon buttons sit under it. Four tones — paper, violet, lime, lilac — taken in turn across the
+icon buttons sit under it. Four deep tones — ink, violet, lime, ocean (#107) — taken in turn across the
 grid. A lime **Total held** band added in paisa, and a month
 dropdown that reads every figure as at that month's last day (an account opened later holds
 nothing before it). **Primary currency** (BDT or USD) decides which figure leads and which box a
