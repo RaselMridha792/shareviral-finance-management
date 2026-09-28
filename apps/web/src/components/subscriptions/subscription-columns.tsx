@@ -262,16 +262,15 @@ export function SubscriptionBodyCells({
         The invoice NUMBER is not lost. It is on the plan's own page, which the
         tool name opens, and it is still what the search box matches on.
 
-        The count behind it is the plan's WHOLE paper count rather than its
-        invoices alone,
-        so this eye appears whenever the plan carries any paper — exactly as the
-        reference cell beside it does, from the same number. Two cells sharing
-        one imprecision is better than two cells disagreeing about when to offer
-        a control.
+        Counted on the plan's invoices alone. Both cells used to read the
+        plan's WHOLE paper count, so a plan carrying only the bank's record
+        offered an eye here that opened an empty drawer — and taking an invoice
+        off left the eye behind. Each cell now counts what it opens, the way
+        the ledger's tables do.
       */}
       <ReferenceCell
         value={null}
-        documentCount={row.documentCount}
+        documentCount={row.invoiceCount}
         onOpen={() => handlers.onInvoice?.(row)}
       />
 
@@ -283,7 +282,7 @@ export function SubscriptionBodyCells({
       {handlers.onReference ? (
         <ReferenceCell
           value={row.reference}
-          documentCount={row.documentCount}
+          documentCount={row.recordCount}
           onOpen={() => handlers.onReference?.(row)}
         />
       ) : (

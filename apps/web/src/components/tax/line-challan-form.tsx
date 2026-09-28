@@ -1,13 +1,18 @@
 "use client";
 
-import { LoaderCircle, Paperclip, X } from "lucide-react";
+import { LoaderCircle, Paperclip, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 import { Field, Input } from "@/components/ui/field";
-import { ApiError, fileHref, type StoredFile } from "@/lib/api-client";
+import {
+  ApiError,
+  deleteStoredFile,
+  fileHref,
+  type StoredFile,
+} from "@/lib/api-client";
 import {
   listLineChallanFiles,
   setLineChallan,
@@ -72,6 +77,14 @@ export function LineChallanForm({
 
   const [scan, setScan] = useState<StoredFile | null>(null);
   const [chosen, setChosen] = useState<File | null>(null);
+  /*
+   * The scan on file, marked to come off when this is saved.
+   *
+   * It could be replaced from here and never removed: a scan attached to the
+   * wrong row, or to a number since cleared, stayed on it for good. Held until
+   * Save like everything else on this form, so Cancel still changes nothing.
+   */
+  const [dropScan, setDropScan] = useState(false);
   const preview = useFilePreview();
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -110,6 +123,24 @@ export function LineChallanForm({
         challanNumber,
         applyToMonth,
       });
+
+      /*
+       * Only when nothing replaces it — a chosen file retires the old scan in
+       * the same transaction on the server, because the kind is singular.
+       */
+      if (dropScan && scan && !chosen) {
+        try {
+          await deleteStoredFile(scan.id);
+        } catch {
+          await onSaved(
+            result.challanNumber
+              ? `Challan ${result.challanNumber} recorded, but the old file could not be removed.`
+              : "Challan cleared, but the old file could not be removed.",
+          );
+          onClose();
+          return;
+        }
+      }
 
       if (chosen) {
         try {
@@ -224,7 +255,25 @@ export function LineChallanForm({
           }
         >
           <div className="flex flex-col gap-2">
-            {scan && !chosen ? (
+            {scan && !chosen && dropScan ? (
+              <span className="flex items-center gap-2 text-sm">
+                <Paperclip className="size-3.5 text-muted-foreground" />
+                <span className="text-faint line-through">
+                  {scan.originalName}
+                </span>
+                <span className="text-xs text-negative">removed on save</span>
+                <button
+                  type="button"
+                  onClick={() => setDropScan(false)}
+                  aria-label={`Keep ${scan.originalName}`}
+                  title="Keep it"
+                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <Undo2 className="size-3.5" />
+                </button>
+              </span>
+            ) : null}
+            {scan && !chosen && !dropScan ? (
               <span className="flex items-center gap-2 text-sm">
                 <Paperclip className="size-3.5 text-muted-foreground" />
                 <a
@@ -248,6 +297,15 @@ export function LineChallanForm({
                 <span className="text-xs text-muted-foreground">
                   — choosing another replaces it
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setDropScan(true)}
+                  aria-label={`Remove ${scan.originalName}`}
+                  title="Remove it when this is saved"
+                  className="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-negative"
+                >
+                  <X className="size-3.5" />
+                </button>
               </span>
             ) : null}
 

@@ -460,7 +460,14 @@ export function SubscriptionsScreen({
                   <TableMessageRow colSpan={19}>Loading…</TableMessageRow>
                 ) : (
                   rows.map((row, index) => (
-                    <tr key={row.id} className="row-finance">
+                    <tr
+                      key={row.id}
+                      className="row-finance"
+                      // Which plan this is, for anything that has to find
+                      // the row again — the same attribute every ledger
+                      // table's rows carry.
+                      data-row-id={row.id}
+                    >
                       {bulk ? (
                         <TickCell
                           checked={bulk.isTicked(row.id)}

@@ -7,7 +7,9 @@ import { useState } from "react";
 
 import { formatMoney } from "@finance/shared";
 
+import { SLOT_KINDS } from "@/components/files/attach-clip";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
+import { ReferenceCell } from "@/components/ledger/reference-kind";
 import { TransactionDetails } from "@/components/ledger/transaction-details";
 import { rowOpener } from "@/components/ui/row-details";
 import { Amount } from "@/components/money/amount";
@@ -62,7 +64,12 @@ export function BankStatementScreen({
   range: { from?: string; to?: string };
 }) {
   const router = useRouter();
-  const [documentsFor, setDocumentsFor] = useState<TransactionDto | null>(null);
+  /* Which entry's papers are open — all of them from its Entry No., only the
+     invoice from the Invoice cell. */
+  const [documentsFor, setDocumentsFor] = useState<{
+    row: TransactionDto;
+    kinds?: readonly string[];
+  } | null>(null);
   /** The movement whose whole record is open — a click on its row. The
       statement has no Description column; this is where it is read. */
   const [showing, setShowing] = useState<RegisterRow | null>(null);
@@ -330,7 +337,7 @@ export function BankStatementScreen({
                           number that identifies it is what opens it. */}
                       <button
                         type="button"
-                        onClick={() => setDocumentsFor(row)}
+                        onClick={() => setDocumentsFor({ row })}
                         className="num cursor-pointer rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
                       >
                         {row.refNo}
@@ -341,19 +348,20 @@ export function BankStatementScreen({
                         </span>
                       ) : null}
                     </td>
-                    <td>
-                      {row.invoiceNo ? (
-                        <button
-                          type="button"
-                          onClick={() => setDocumentsFor(row)}
-                          className="num cursor-pointer rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
-                        >
-                          {row.invoiceNo}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">N/A</span>
-                      )}
-                    </td>
+                    {/*
+                      The number when one was typed, an eye when there is only
+                      the paper, N/A when there is neither. It drew N/A for
+                      every entry without a typed number — which, since the
+                      forms stopped asking for one, is every entry whose
+                      invoice is only attached.
+                    */}
+                    <ReferenceCell
+                      value={row.invoiceNo}
+                      documentCount={row.invoiceCount}
+                      onOpen={() =>
+                        setDocumentsFor({ row, kinds: SLOT_KINDS.invoice })
+                      }
+                    />
                     {/* The statement is read-only today — nothing on this
                         screen edits or voids a movement. The pair still renders,
                         disabled, so the column reads as "not from here" rather
@@ -437,13 +445,22 @@ export function BankStatementScreen({
       <TransactionDetails
         row={showing}
         onClose={() => setShowing(null)}
-        onOpenDocuments={(row) => setDocumentsFor(row)}
+        onOpenDocuments={(row, which) =>
+          setDocumentsFor({
+            row,
+            kinds:
+              which === "invoice"
+                ? SLOT_KINDS.invoice
+                : SLOT_KINDS.bank_statement,
+          })
+        }
       />
 
       {documentsFor ? (
         <DocumentsDialog
-          transactionId={documentsFor.id}
-          refNo={documentsFor.reference ?? documentsFor.refNo}
+          transactionId={documentsFor.row.id}
+          refNo={documentsFor.row.reference ?? documentsFor.row.refNo}
+          kinds={documentsFor.kinds}
           onClose={() => setDocumentsFor(null)}
         />
       ) : null}

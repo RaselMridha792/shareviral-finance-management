@@ -39,8 +39,14 @@ import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
+import {
+  asPreview,
+  sameAsStored,
+  StoredPaperLine,
+  useStoredPapers,
+} from "@/components/files/attach-clip";
 import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
-import { subscriptionsApi as payApi } from "@/lib/api-client";
+import { subscriptionsApi as payApi, type StoredFile } from "@/lib/api-client";
 import {
   subscriptionsApi,
   uploadSubscriptionFile,
@@ -96,15 +102,32 @@ function Clip({
   file,
   onPick,
   label,
+  stored = [],
+  removing = [],
+  onToggleRemove,
   children,
 }: {
   picker: React.RefObject<HTMLInputElement | null>;
   file: File | null;
   onPick: (next: File | null) => void;
   label: string;
+  /**
+   * What the plan already carries in this slot.
+   *
+   * The drawer opened on an existing plan said "No invoice attached" whatever
+   * was on file — the same blind spot the Cash In form had, and the same
+   * result: the paper is attached a second time, and nothing on the form can
+   * take the extra copy off. Listed now, openable, and removable on save.
+   */
+  stored?: StoredFile[];
+  removing?: readonly string[];
+  onToggleRemove?: (file: StoredFile) => void;
   children: React.ReactNode;
 }) {
   const preview = useFilePreview();
+  const [rejected, setRejected] = useState<string | null>(null);
+  const kept = stored.filter((one) => !removing.includes(one.id));
+  const all = [...kept.map(asPreview), ...(file ? [file] : [])];
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
@@ -115,9 +138,17 @@ function Clip({
           accept="image/*,application/pdf"
           className="sr-only"
           onChange={(event) => {
-            onPick(event.target.files?.[0] ?? null);
+            const next = event.target.files?.[0] ?? null;
             // Cleared so picking the same file twice still fires.
             event.target.value = "";
+            /* The paper already on file, picked again, is a second copy of
+               it rather than a second paper. */
+            if (next && kept.some((one) => sameAsStored(next, one))) {
+              setRejected("That one is already attached.");
+              return;
+            }
+            setRejected(null);
+            onPick(next);
           }}
         />
         <button
@@ -130,8 +161,29 @@ function Clip({
           <Paperclip className="size-4" />
         </button>
       </div>
+      {rejected ? (
+        <span className="text-xs text-negative">{rejected}</span>
+      ) : null}
+      {stored.map((one) => (
+        <StoredPaperLine
+          key={one.id}
+          file={one}
+          removing={removing.includes(one.id)}
+          count={all.length}
+          onToggle={onToggleRemove ? () => onToggleRemove(one) : undefined}
+          onPreview={() =>
+            preview.show(
+              all,
+              kept.findIndex((k) => k.id === one.id),
+            )
+          }
+        />
+      ))}
       {file ? (
-        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+        <span
+          data-attached="picked"
+          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+        >
           {/* The name reads as content, not as a caption — the same change
               the other three attach helpers got, so the four screens do not
               drift. */}
@@ -144,7 +196,21 @@ function Clip({
             it here is the difference between attaching the right month's and
             finding out later.
           */}
-          <PreviewButton name={file.name} onClick={() => preview.show(file)} />
+          <PreviewButton
+            name={file.name}
+            count={all.length}
+            onClick={() => preview.show(all, kept.length)}
+          />
+          {/* A picked file could not be taken back before — only replaced by
+              picking another. */}
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            aria-label={`Remove ${file.name}`}
+            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
         </span>
       ) : null}
 
@@ -241,6 +307,28 @@ export function SubscriptionForm({
    */
   const [reference] = useState(subscription?.reference ?? "");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
+
+  /** What the plan being edited already carries — see `Clip`. */
+  const papers = useStoredPapers(
+    "subscription",
+    open ? subscription?.id : undefined,
+  );
+  /** The words beside a clip: nothing when a paper is on file or picked. */
+  const clipNote = (
+    kind: "invoice" | "bank_statement",
+    picked: File | null,
+    empty: string,
+  ) =>
+    papers.loading
+      ? "Checking what is attached…"
+      : papers.failed
+        ? "Could not check what is already attached."
+        : picked ||
+            papers
+              .of(kind)
+              .some((one) => !papers.removing.includes(one.id))
+          ? ""
+          : empty;
 
   /*
    * A transaction id, or only the paper. Read back from the plan being
@@ -487,7 +575,11 @@ export function SubscriptionForm({
        * does. A failure here is reported and does not claim the plan was lost
        * — it was saved a moment ago, and sending somebody back to type it
        * again would be false.
+       *
+       * What was marked to come off goes first, so "replace this invoice" is
+       * one save rather than a second copy beside the first.
        */
+      const unremoved = await papers.commit();
       for (const [file, kind, what] of [
         [invoiceFile, "invoice", "invoice"],
         [referenceFile, "bank_statement", "bank record"],
@@ -504,6 +596,18 @@ export function SubscriptionForm({
           );
           return;
         }
+      }
+
+      if (unremoved.length > 0) {
+        onSaved(status);
+        setError(
+          `The plan is saved, but ${unremoved
+            .map((one) => one.name)
+            .join(" and ")} could not be removed: ${unremoved
+            .map((one) => one.reason)
+            .join(" ")}`,
+        );
+        return;
       }
 
       /*
@@ -900,9 +1004,12 @@ export function SubscriptionForm({
               file={invoiceFile}
               onPick={setInvoiceFile}
               label="Attach the invoice"
+              stored={papers.of("invoice")}
+              removing={papers.removing}
+              onToggleRemove={papers.toggle}
             >
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {invoiceFile ? "" : "No invoice attached"}
+                {clipNote("invoice", invoiceFile, "No invoice attached")}
               </span>
             </Clip>
           </Field>
@@ -919,9 +1026,16 @@ export function SubscriptionForm({
               file={referenceFile}
               onPick={setReferenceFile}
               label="Attach the bank's record"
+              stored={papers.of("bank_statement")}
+              removing={papers.removing}
+              onToggleRemove={papers.toggle}
             >
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {referenceFile ? "" : "No reference attached"}
+                {clipNote(
+                  "bank_statement",
+                  referenceFile,
+                  "No reference attached",
+                )}
               </span>
             </Clip>
           </Field>

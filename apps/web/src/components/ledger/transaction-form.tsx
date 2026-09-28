@@ -1,24 +1,16 @@
 "use client";
 
 import {
-  ALLOWED_MIME_TYPES,
-  formatFileSize,
-  MAX_FILE_BYTES,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
   todayInDhaka,
   type TxnDirection,
 } from "@finance/shared";
-import { LoaderCircle, Paperclip, X } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
 import { FileManager } from "@/components/files/file-manager";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
@@ -32,8 +24,6 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
-import {
-} from "@/components/ledger/reference-kind";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { fxApi } from "@/lib/reports";
@@ -43,7 +33,6 @@ import {
   type CategoryNode,
 } from "@/lib/masters";
 import { cn } from "@/lib/utils";
-import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 
 /**
  * The two files a movement comes with, under the kinds the ledger already
@@ -232,6 +221,16 @@ export function TransactionForm({
    */
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+
+  /**
+   * What the entry being corrected already carries, per clip — shown, opened,
+   * and taken off on save. See components/files/attach-clip.tsx for why a
+   * correction that could not see its own paper produced duplicates.
+   */
+  const papers = useStoredPapers(
+    "transaction",
+    open ? transaction?.id : undefined,
+  );
 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -445,11 +444,24 @@ export function TransactionForm({
           } as never);
 
       const picked = chosen().length;
+      // Removals first, then uploads — "replace this invoice" is one save.
+      const unremoved = await papers.commit();
       const failures = await attach(row.id);
 
       // Before any of the endings: the row is in the table now, and how many
       // documents hang on it is part of what that table draws.
       await onSaved();
+
+      if (unremoved.length > 0) {
+        toast.show(
+          `${row.refNo} saved, but ${unremoved
+            .map((one) => one.name)
+            .join(" and ")} could not be removed: ${unremoved
+            .map((one) => one.reason)
+            .join(" ")}`,
+          "error",
+        );
+      }
 
       if (failures.length > 0) {
         toast.show(
@@ -462,11 +474,13 @@ export function TransactionForm({
       }
 
       if (editing || picked > 0) {
-        toast.show(
-          picked > 0
-            ? `${row.refNo} ${editing ? "updated" : "recorded"}, documents attached.`
-            : `${row.refNo} updated.`,
-        );
+        if (unremoved.length === 0) {
+          toast.show(
+            picked > 0
+              ? `${row.refNo} ${editing ? "updated" : "recorded"}, documents attached.`
+              : `${row.refNo} updated.`,
+          );
+        }
         close();
         return;
       }
@@ -824,15 +838,14 @@ export function TransactionForm({
               error={fieldErrors.invoiceNo}
               hint="Attach the invoice itself — there is no number to type"
             >
-              <Attach
+              <AttachClip
                 kind="invoice"
+                name={DOCUMENT_NAMES.invoice}
                 files={invoiceFiles}
                 onPick={setInvoiceFiles}
-              >
-                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {invoiceFiles.length ? "" : "No invoice attached"}
-                </span>
-              </Attach>
+                papers={papers}
+                emptyLabel="No invoice attached"
+              />
             </Field>
 
               {/*
@@ -854,15 +867,14 @@ export function TransactionForm({
               error={fieldErrors.reference}
               hint="Attach the bank's slip — there is no number to type"
             >
-              <Attach
+              <AttachClip
                 kind="bank_statement"
+                name={DOCUMENT_NAMES.bank_statement}
                 files={screenshotFiles}
                 onPick={setScreenshotFiles}
-              >
-                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {screenshotFiles.length ? "" : "No reference attached"}
-                </span>
-              </Attach>
+                papers={papers}
+                emptyLabel="No reference attached"
+              />
             </Field>
           </div>
 
@@ -874,26 +886,14 @@ export function TransactionForm({
             open-receipt icon on old rows. */}
 
           {/*
-          What is already filed against this row — which is only a question
-          once the row exists. The clips above hand a document to the save;
-          this is where one is looked at, or taken off again, and it uploads
-          the moment a file is picked because here there is already an id to
-          upload against.
+          There was a "Documents on this entry" list here, under the clips. It
+          was the only place a correction showed what was already filed, and it
+          disagreed with the clips right above it: they said "No invoice
+          attached" over an entry carrying two, and it uploaded the moment a
+          file was picked while the clips waited for Save. The clips now list
+          what is on file themselves — openable, and removable on save — so the
+          second list went rather than saying everything twice.
         */}
-          {editing && transaction ? (
-            <Field
-              label="Documents on this entry"
-              hint="Kept on this company's own server"
-            >
-              <FileManager
-                owner="transaction"
-                ownerId={transaction.id}
-                kinds={DOCUMENT_KINDS}
-                canWrite
-                emptyLabel="Nothing attached to this entry."
-              />
-            </Field>
-          ) : null}
 
           {/*
           Tax withheld: behind a toggle because most entries have none, and
@@ -1013,198 +1013,6 @@ export function TransactionForm({
         </div>
       )}
     </Drawer>
-  );
-}
-
-/**
- * A text box with the paper it refers to clipped beside it.
- *
- * Both numbers on this form point at a document, so the document is asked for
- * in the same breath as the number rather than on a step afterwards. Nothing
- * is uploaded from here — the file is handed up and held until the entry has
- * an id for it to hang on.
- *
- * Deliberately the same control, down to the copy, as the one on the cash-in
- * form: it is the same job on the same pair of fields, and a second shape for
- * it would be a second thing to keep in step. If a third screen ever needs it,
- * it should move into a module of its own rather than be copied again.
- */
-function Attach({
-  kind,
-  files,
-  onPick,
-  children,
-}: {
-  kind: DocKind;
-  /**
-   * Everything clipped here, not one thing.
-   *
-   * The owner: "multiple documents upload korar option thakte hobe". An
-   * invoice can be two pages photographed separately, a bank slip can be the
-   * confirmation and the statement line; the form used to keep whichever was
-   * chosen last and silently drop the other.
-   */
-  files: File[];
-  onPick: (files: File[]) => void;
-  children: ReactNode;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [rejected, setRejected] = useState<string | null>(null);
-  /*
-   * Owned here rather than passed in from the form. `Attach` already holds the
-   * file, so keeping the preview beside it means none of the six call sites
-   * across these three forms has to know about it — and none of them can be
-   * the one that forgets.
-   */
-  const preview = useFilePreview();
-
-  /**
-   * Everything just chosen, judged together and appended in one go.
-   *
-   * One pass rather than a loop of single adds, and that is not tidiness: each
-   * `onPick` is a setState the parent has not re-rendered from yet, so three
-   * separate calls would each build on the ORIGINAL list and only the last
-   * would survive — the very bug this change exists to fix, reintroduced one
-   * level down. A ref would also work and the lint rule rightly refuses it:
-   * writing a ref during render is not something to reach for when the honest
-   * shape is simply to decide once.
-   */
-  function choose(chosenFiles: File[]) {
-    // Emptied straight away so picking the same file again — after clearing
-    // it, or after it was refused — still counts as a change.
-    if (inputRef.current) inputRef.current.value = "";
-    if (chosenFiles.length === 0) return;
-
-    const additions: File[] = [];
-    const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
-
-    for (const picked of chosenFiles) {
-      /*
-       * The same file twice is almost always a second click rather than a
-       * second page, and a duplicate upload is not undone by removing one of
-       * them. Checked against what is already attached AND against what this
-       * same choice is adding.
-       */
-      if (
-        files.some((f) => same(f, picked)) ||
-        additions.some((f) => same(f, picked))
-      ) {
-        setRejected("That one is already attached.");
-        continue;
-      }
-
-      /**
-       * Refused here as well as by the server, which reads the bytes and has
-       * the final say. This exists so the answer arrives while the file is
-       * being chosen, rather than after the entry is saved — which is the one
-       * moment the message is awkward to act on.
-       */
-      const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-      if (picked.type && !allowed.includes(picked.type)) {
-        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
-        continue;
-      }
-      if (picked.size > MAX_FILE_BYTES[kind]) {
-        setRejected(
-          `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
-        );
-        continue;
-      }
-
-      additions.push(picked);
-    }
-
-    if (additions.length > 0) {
-      setRejected(null);
-      onPick([...files, ...additions]);
-    }
-  }
-
-  return (
-    <span className="flex min-w-0 flex-col gap-1.5">
-      <span className="flex items-center gap-2">
-        {children}
-
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="sr-only"
-          // Every camera roll and every scanner, as asked. The server keeps a
-          // narrower list than this and says so if it has to; `choose` says it
-          // first, in the moment.
-          accept="image/*,application/pdf"
-          /*
-           * Every file the picker returned, not the first. The input is
-           * `multiple`, so choosing three pages in one go has to attach three
-           * — taking [0] made the extra choice look accepted and drop it.
-           */
-          onChange={(event) => choose([...(event.target.files ?? [])])}
-        />
-
-        {/* A button rather than the file input itself: a bare one renders as a
-          browser-styled control too wide to sit beside a text box, and the
-          label that would normally dress it cannot nest inside the label
-          `Field` already is. */}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="size-9 shrink-0 px-0"
-          title={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          aria-label={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Paperclip className="size-4" />
-        </Button>
-      </span>
-
-      {rejected ? (
-        <span className="text-xs text-negative">{rejected}</span>
-      ) : null}
-
-      {/*
-        One line per paper, each with its own eye and its own cross. The eye
-        opens the WHOLE set from that one — clicking the second of three starts
-        the slider on the second — because somebody checking their attachments
-        is checking all of them, not one.
-      */}
-      {files.map((one, index) => (
-        <span
-          key={`${one.name}-${one.size}-${index}`}
-          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-        >
-          {/*
-            The name reads as content, not as a caption.
-
-            The owner: "upload document gular name color change hobe." The
-            whole row was `text-muted-foreground`, so the file somebody had
-            just attached looked exactly like the hint underneath telling them
-            to attach one — and the eye and the cross beside it, being icons,
-            carried more weight than the name they act on. The row stays muted
-            because that is right for the two buttons; the name steps forward.
-          */}
-          <span className="truncate font-medium text-foreground">
-            {one.name}
-          </span>
-          <PreviewButton
-            name={one.name}
-            count={files.length}
-            onClick={() => preview.show(files, index)}
-          />
-          <button
-            type="button"
-            onClick={() => onPick(files.filter((_, i) => i !== index))}
-            aria-label={`Remove ${one.name}`}
-            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-
-      {preview.overlay}
-    </span>
   );
 }
 

@@ -1,16 +1,14 @@
 "use client";
 
 import {
-  ALLOWED_MIME_TYPES,
-  formatFileSize,
-  MAX_FILE_BYTES,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
   todayInDhaka,
 } from "@finance/shared";
-import { ArrowRight, LoaderCircle, Paperclip, X } from "lucide-react";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
 
+import { AttachClip } from "@/components/files/attach-clip";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -25,7 +23,6 @@ import { formatMoney } from "@finance/shared";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import { ledgerApi } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
-import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 
 /**
  * Moving money between our own accounts. Creates two linked rows — one out,
@@ -362,15 +359,13 @@ export function TransferForm({
             error={fieldErrors.invoiceNo}
             hint="Attach the invoice itself — there is no number to type"
           >
-            <Attach
+            <AttachClip
               kind="invoice"
+              name={DOCUMENT_NAMES.invoice}
               files={invoiceFiles}
               onPick={setInvoiceFiles}
-            >
-              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {invoiceFiles.length ? "" : "No invoice attached"}
-              </span>
-            </Attach>
+              emptyLabel="No invoice attached"
+            />
           </Field>
           {/* Attached, never typed — the same shape Invoice already has, and
               the same change the other three forms got. */}
@@ -379,15 +374,13 @@ export function TransferForm({
             error={fieldErrors.reference}
             hint="Attach the bank's slip — there is no number to type"
           >
-            <Attach
+            <AttachClip
               kind="bank_statement"
+              name={DOCUMENT_NAMES.bank_statement}
               files={bankFiles}
               onPick={setBankFiles}
-            >
-              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {bankFiles.length ? "" : "No reference attached"}
-              </span>
-            </Attach>
+              emptyLabel="No reference attached"
+            />
           </Field>
         </div>
 
@@ -435,167 +428,3 @@ const DOCUMENT_NAMES: Record<DocKind, string> = {
   invoice: "invoice",
   bank_statement: "bank record",
 };
-
-/**
- * The paperclip beside a reference number — the paper is picked in the same
- * breath as the number and held until the pair exists to hang it on. The
- * same helper the transaction and cash-in forms carry; the third copy is a
- * known rough edge, tracked rather than hidden.
- */
-function Attach({
-  kind,
-  files,
-  onPick,
-  children,
-}: {
-  kind: DocKind;
-  /**
-   * Everything clipped here, not one thing.
-   *
-   * The owner: "multiple documents upload korar option thakte hobe". An
-   * invoice can be two pages photographed separately, a bank slip can be the
-   * confirmation and the statement line; the form used to keep whichever was
-   * chosen last and silently drop the other.
-   */
-  files: File[];
-  onPick: (files: File[]) => void;
-  children: ReactNode;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [rejected, setRejected] = useState<string | null>(null);
-  /*
-   * Owned here rather than passed in from the form. `Attach` already holds the
-   * file, so keeping the preview beside it means none of the six call sites
-   * across these three forms has to know about it — and none of them can be
-   * the one that forgets.
-   */
-  const preview = useFilePreview();
-
-  /**
-   * Everything just chosen, judged together and appended in one go.
-   *
-   * One pass rather than a loop of single adds: each `onPick` is a setState the
-   * parent has not re-rendered from yet, so three separate calls would each
-   * build on the ORIGINAL list and only the last would survive — the very bug
-   * this change exists to fix, one level down.
-   */
-  function choose(chosenFiles: File[]) {
-    // Emptied straight away so picking the same file again — after clearing
-    // it, or after it was refused — still counts as a change.
-    if (inputRef.current) inputRef.current.value = "";
-    if (chosenFiles.length === 0) return;
-
-    const additions: File[] = [];
-    const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
-
-    for (const picked of chosenFiles) {
-      /* The same file twice is a second click, not a second page. */
-      if (
-        files.some((f) => same(f, picked)) ||
-        additions.some((f) => same(f, picked))
-      ) {
-        setRejected("That one is already attached.");
-        continue;
-      }
-
-      const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-      if (picked.type && !allowed.includes(picked.type)) {
-        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
-        continue;
-      }
-      if (picked.size > MAX_FILE_BYTES[kind]) {
-        setRejected(
-          `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
-        );
-        continue;
-      }
-
-      additions.push(picked);
-    }
-
-    if (additions.length > 0) {
-      setRejected(null);
-      onPick([...files, ...additions]);
-    }
-  }
-
-  return (
-    <span className="flex min-w-0 flex-col gap-1.5">
-      <span className="flex items-center gap-2">
-        {children}
-
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="sr-only"
-          accept="image/*,application/pdf"
-          /*
-           * Every file the picker returned, not the first. The input is
-           * `multiple`, so choosing three pages in one go has to attach three
-           * — taking [0] made the extra choice look accepted and drop it.
-           */
-          onChange={(event) => choose([...(event.target.files ?? [])])}
-        />
-
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="size-9 shrink-0 px-0"
-          title={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          aria-label={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Paperclip className="size-4" />
-        </Button>
-      </span>
-
-      {rejected ? (
-        <span className="text-xs text-negative">{rejected}</span>
-      ) : null}
-
-      {/*
-        One line per paper, each with its own eye and its own cross. The eye
-        opens the WHOLE set from that one — clicking the second of three starts
-        the slider on the second — because somebody checking their attachments
-        is checking all of them, not one.
-      */}
-      {files.map((one, index) => (
-        <span
-          key={`${one.name}-${one.size}-${index}`}
-          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-        >
-          {/*
-            The name reads as content, not as a caption.
-
-            The owner: "upload document gular name color change hobe." The
-            whole row was `text-muted-foreground`, so the file somebody had
-            just attached looked exactly like the hint underneath telling them
-            to attach one — and the eye and the cross beside it, being icons,
-            carried more weight than the name they act on. The row stays muted
-            because that is right for the two buttons; the name steps forward.
-          */}
-          <span className="truncate font-medium text-foreground">
-            {one.name}
-          </span>
-          <PreviewButton
-            name={one.name}
-            count={files.length}
-            onClick={() => preview.show(files, index)}
-          />
-          <button
-            type="button"
-            onClick={() => onPick(files.filter((_, i) => i !== index))}
-            aria-label={`Remove ${one.name}`}
-            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-
-      {preview.overlay}
-    </span>
-  );
-}

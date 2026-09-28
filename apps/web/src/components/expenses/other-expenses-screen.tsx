@@ -7,7 +7,7 @@ import {
   toMinorUnits,
 } from "@finance/shared";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
-import { LoaderCircle, TriangleAlert } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -539,33 +539,29 @@ export function OtherExpensesScreen({
                         <td className="text-xs text-muted-foreground">
                           {PAYMENT_METHOD_LABELS[row.paymentMethod]}
                         </td>
-                        <td>
-                          {/* The number opens what it refers to. The amber
-                              mark is an entry that has a reference and nothing
-                              attached to it — the row somebody has to chase,
-                              and invisible unless the table says so. */}
-                          {row.invoiceNo ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDocumentsFor({ row, kinds: ["invoice"] })
-                              }
-                              title="Show the invoice"
-                              className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
-                            >
-                              {row.documentCount === 0 ? (
-                                <TriangleAlert className="size-3 shrink-0 text-warning" />
-                              ) : null}
-                              {row.invoiceNo}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">N/A</span>
-                          )}
-                        </td>
-                        {/* Number, eye, or dash — ledger/reference-kind.tsx */}
+                        {/*
+                          The invoice: the number when one was typed, an eye
+                          when there is only the paper, N/A when there is
+                          neither — the same cell as Reference beside it.
+
+                          It drew N/A whenever no number was typed, and the
+                          form stopped asking for one, so an expense with its
+                          invoice attached read N/A. Counted on `invoiceCount`
+                          so the eye never opens an empty drawer.
+                        */}
+                        <ReferenceCell
+                          value={row.invoiceNo}
+                          documentCount={row.invoiceCount}
+                          onOpen={() =>
+                            setDocumentsFor({ row, kinds: ["invoice"] })
+                          }
+                        />
+                        {/* Number, eye, or dash — ledger/reference-kind.tsx.
+                            On `recordCount`, not the row's total, so an
+                            invoice alone does not offer an eye here. */}
                         <ReferenceCell
                           value={row.reference}
-                          documentCount={row.documentCount}
+                          documentCount={row.recordCount}
                           onOpen={() =>
                             setDocumentsFor({
                               row,

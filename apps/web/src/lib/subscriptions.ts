@@ -83,6 +83,10 @@ export type SubscriptionDto = {
   screenshotFileId: string | null;
   /** Invoice and bank record on the plan — not its own screenshot. */
   documentCount: number;
+  /** The same, counted apart — the Invoice and Reference cells each open
+      their own kind, so each needs its own count. */
+  invoiceCount: number;
+  recordCount: number;
   notes: string | null;
   users: SubscriptionSeatDto[];
 };

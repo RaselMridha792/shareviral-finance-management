@@ -565,6 +565,24 @@ export class SubscriptionsService {
           and f.kind <> 'subscription_screenshot'
           and f.deleted_at is null
       )`,
+      /*
+       * The same paperwork counted apart, the way the ledger's rows count it.
+       * The Invoice and Reference cells each open their OWN kind, and both
+       * reading the total above meant a plan carrying only the bank's record
+       * offered an eye on Invoice that opened an empty drawer.
+       */
+      invoiceCount: sql<number>`(
+        select count(*)::int from ${files} f
+        where f.subscription_id = ${subscriptions.id}
+          and f.kind = 'invoice'
+          and f.deleted_at is null
+      )`,
+      recordCount: sql<number>`(
+        select count(*)::int from ${files} f
+        where f.subscription_id = ${subscriptions.id}
+          and f.kind not in ('subscription_screenshot', 'invoice')
+          and f.deleted_at is null
+      )`,
       notes: subscriptions.notes,
     };
   }
@@ -726,5 +744,8 @@ type SubscriptionRow = {
   reference: string | null;
   screenshotFileId: string | null;
   documentCount: number;
+  /** Invoices, and the rest of the paperwork, counted apart. */
+  invoiceCount: number;
+  recordCount: number;
   notes: string | null;
 };

@@ -10,7 +10,7 @@ import {
   todayInDhaka,
 } from "@finance/shared";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
-import { LoaderCircle, TriangleAlert } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -38,6 +38,7 @@ import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import type { AccountDto } from "@/lib/masters";
 import { PAGE_SIZE, pageCount, serial } from "@/lib/pagination";
 import { reportsApi } from "@/lib/reports";
+import { SLOT_KINDS } from "@/components/files/attach-clip";
 import { DocumentsDialog } from "@/components/ledger/documents-dialog";
 import { TransactionDetails } from "@/components/ledger/transaction-details";
 import { rowOpener } from "@/components/ui/row-details";
@@ -518,22 +519,33 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                           <span className="text-muted-foreground">N/A</span>
                         )}
                       </td>
-                      <DocumentCell
-                        row={row}
-                        kind="invoice"
-                        onOpen={setDocumentsFor}
-                      >
-                        {row.invoiceNo}
-                      </DocumentCell>
+                      {/*
+                        The invoice, drawn the way its neighbour is: the number
+                        when one was typed, an eye when there is only the paper,
+                        N/A when there is neither.
+
+                        It drew N/A whenever `invoiceNo` was empty — and since
+                        the form stopped asking for the number, that is every
+                        new entry, so a row whose popup said "Invoice — 2
+                        attached" read N/A here. Counted on `invoiceCount`, the
+                        invoices alone, so the eye never opens an empty drawer.
+                      */}
+                      <ReferenceCell
+                        value={row.invoiceNo}
+                        documentCount={row.invoiceCount}
+                        onOpen={() => setDocumentsFor({ row, kind: "invoice" })}
+                      />
                       {/*
                         The reference column: the number when the bank gave
                         one, an eye when all there is is the slip. See
                         ledger/reference-kind.tsx for why nothing is stored to
-                        say which.
+                        say which. Counted on `recordCount` — everything that is
+                        not the invoice — not on the row's total, which offered
+                        an eye here when only an invoice was attached.
                       */}
                       <ReferenceCell
                         value={row.reference}
-                        documentCount={row.documentCount}
+                        documentCount={row.recordCount}
                         onOpen={() =>
                           setDocumentsFor({ row, kind: "bank_statement" })
                         }
@@ -612,8 +624,11 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
       {documentsFor ? (
         <DocumentsDialog
           transactionId={documentsFor.row.id}
-          kinds={[documentsFor.kind]}
-          title={documentsFor.kind === "invoice" ? "Invoice" : "Bank statement"}
+          /* The kinds each column COUNTS, so the drawer shows exactly what the
+             cell promised — the bank's slip, a receipt or anything else
+             attached is the record behind the movement. */
+          kinds={SLOT_KINDS[documentsFor.kind]}
+          title={documentsFor.kind === "invoice" ? "Invoice" : "Reference"}
           refNo={
             (documentsFor.kind === "invoice"
               ? documentsFor.row.invoiceNo
@@ -700,58 +715,6 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
         }}
       />
     </>
-  );
-}
-
-/**
- * A number on the sheet that opens what it refers to.
- *
- * The invoice number and the transaction id both point at paper — the invoice
- * itself and the bank's statement — and both were asked to be clickable. They
- * open the same panel because they are attached to the same entry; which one
- * was clicked is not a filter on what comes back.
- *
- * The amber mark is for an entry with a number and nothing attached to it. A
- * remittance whose advice was never uploaded is exactly the row somebody has
- * to chase, and it is invisible unless the table says so.
- */
-function DocumentCell({
-  row,
-  kind,
-  children,
-  onOpen,
-}: {
-  row: TransactionDto;
-  /** Which paper this number points at — the invoice, or the bank's record. */
-  kind: "invoice" | "bank_statement";
-  children: string | null;
-  onOpen: (of: {
-    row: TransactionDto;
-    kind: "invoice" | "bank_statement";
-  }) => void;
-}) {
-  if (!children) {
-    return <td className="text-muted-foreground">N/A</td>;
-  }
-
-  return (
-    <td>
-      <button
-        type="button"
-        onClick={() => onOpen({ row, kind })}
-        title={
-          row.documentCount > 0
-            ? `${row.documentCount} attached`
-            : "Nothing attached to this entry"
-        }
-        className="num inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-link underline decoration-link/40 underline-offset-2 hover:decoration-link transition"
-      >
-        {row.documentCount === 0 ? (
-          <TriangleAlert className="size-3 shrink-0 text-warning" />
-        ) : null}
-        {children}
-      </button>
-    </td>
   );
 }
 

@@ -1,20 +1,8 @@
 "use client";
 
-import {
-  ALLOWED_MIME_TYPES,
-  formatFileSize,
-  isValidAmount,
-  MAX_FILE_BYTES,
-  todayInDhaka,
-} from "@finance/shared";
-import { LoaderCircle, Paperclip, X } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { isValidAmount, todayInDhaka } from "@finance/shared";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { useMoney } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
@@ -28,13 +16,12 @@ import {
   MoneyInput,
   Textarea,
 } from "@/components/ui/field";
+import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
 import { FileManager } from "@/components/files/file-manager";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
-import {} from "@/components/ledger/reference-kind";
 import { ledgerApi, type TransactionDto } from "@/lib/ledger";
 import { type AccountDto } from "@/lib/masters";
 import { fxApi } from "@/lib/reports";
-import { PreviewButton, useFilePreview } from "@/components/files/file-preview";
 
 /**
  * The two files a receipt comes with.
@@ -209,6 +196,19 @@ export function CashInForm({
    */
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+
+  /**
+   * What the entry being corrected ALREADY carries.
+   *
+   * Without it a correction opened on "No invoice attached" over an entry
+   * whose popup said "Invoice — 2 attached", and the natural response —
+   * attaching it again — is how one entry came to carry two of each. The clip
+   * now lists what is on file, opens it, and takes it off on save.
+   */
+  const papers = useStoredPapers(
+    "transaction",
+    open ? transaction?.id : undefined,
+  );
 
   /*
    * A transaction id, or only the paper. Seeded from the row being edited: a
@@ -552,18 +552,39 @@ export function CashInForm({
         : await ledgerApi.recordCashIn(payload);
 
       const picked = chosen().length;
+      /*
+       * What was marked to come off goes first, then what was picked goes up —
+       * so "replace this invoice" is one save, and a paper taken off and the
+       * same paper attached again end as one copy, not two.
+       */
+      const unremoved = await papers.commit();
       const failures = await attach(row.id);
 
       // Before either ending: the row is in the table now, and how many
       // documents hang on it is part of what that table draws.
       await onSaved();
 
-      if (failures.length === 0) {
+      if (unremoved.length > 0) {
         toast.show(
-          picked > 0
-            ? "Transfer recorded, documents attached."
-            : "Transfer recorded. Nothing attached to it.",
+          `${row.refNo} saved, but ${unremoved
+            .map((one) => one.name)
+            .join(" and ")} could not be removed: ${unremoved
+            .map((one) => one.reason)
+            .join(" ")}`,
+          "error",
         );
+      }
+
+      if (failures.length === 0) {
+        if (unremoved.length === 0) {
+          toast.show(
+            editing
+              ? `${row.refNo} updated.`
+              : picked > 0
+                ? "Transfer recorded, documents attached."
+                : "Transfer recorded. Nothing attached to it.",
+          );
+        }
         close();
         return;
       }
@@ -590,13 +611,21 @@ export function CashInForm({
     <Drawer
       open={open}
       onClose={close}
-      title="Add cash"
-      description="The columns of the receipts sheet, and the two files behind them."
+      /* A correction said "Add cash" over an entry that already existed, and
+         its button said "Add it" — which reads as making a second one. */
+      title={transaction ? `Edit ${transaction.refNo}` : "Add cash"}
+      description={
+        transaction
+          ? "The account cannot change — void it and record it again instead."
+          : "The columns of the receipts sheet, and the two files behind them."
+      }
     >
       {saved ? (
         <div className="flex flex-col gap-4">
           <p className="rounded-lg bg-negative/10 px-4 py-3 text-sm">
-            <span className="font-medium">Recorded as</span>{" "}
+            <span className="font-medium">
+              {editing ? "Saved as" : "Recorded as"}
+            </span>{" "}
             <span className="num">{saved.refNo}</span> — the entry is saved and
             the table already has it. What did not go up is the{" "}
             {failed.map((slot) => DOCUMENT_NAMES[slot.kind]).join(" and the ")}:{" "}
@@ -658,15 +687,14 @@ export function CashInForm({
               error={fieldErrors.invoiceNo}
               hint="Attach the invoice itself — there is no number to type"
             >
-              <Attach
+              <AttachClip
                 kind="invoice"
+                name={DOCUMENT_NAMES.invoice}
                 files={invoiceFiles}
                 onPick={setInvoiceFiles}
-              >
-                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {invoiceFiles.length ? "" : "No invoice attached"}
-                </span>
-              </Attach>
+                papers={papers}
+                emptyLabel="No invoice attached"
+              />
             </Field>
 
             {/*
@@ -688,15 +716,14 @@ export function CashInForm({
               error={fieldErrors.reference}
               hint="Attach the bank's slip — there is no number to type"
             >
-              <Attach
+              <AttachClip
                 kind="bank_statement"
+                name={DOCUMENT_NAMES.bank_statement}
                 files={screenshotFiles}
                 onPick={setScreenshotFiles}
-              >
-                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {screenshotFiles.length ? "" : "No reference attached"}
-                </span>
-              </Attach>
+                papers={papers}
+                emptyLabel="No reference attached"
+              />
             </Field>
           </div>
 
@@ -1038,198 +1065,11 @@ export function CashInForm({
             disabled={pending}
           >
             {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            Add it
+            {editing ? "Save changes" : "Add it"}
           </Button>
         </div>
       )}
     </Drawer>
-  );
-}
-
-/**
- * A text box with the paper it refers to clipped beside it.
- *
- * Both numbers on this form point at a document, so the document is asked for
- * in the same breath as the number rather than on a step afterwards. Nothing
- * is uploaded from here — the file is handed up and held until the entry has
- * an id for it to hang on.
- */
-function Attach({
-  kind,
-  files,
-  onPick,
-  children,
-}: {
-  kind: DocKind;
-  /**
-   * Everything clipped here, not one thing.
-   *
-   * The owner: "multiple documents upload korar option thakte hobe". An
-   * invoice can be two pages photographed separately, a bank slip can be the
-   * confirmation and the statement line; the form used to keep whichever was
-   * chosen last and silently drop the other.
-   */
-  files: File[];
-  onPick: (files: File[]) => void;
-  children: ReactNode;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [rejected, setRejected] = useState<string | null>(null);
-  /*
-   * Owned here rather than passed in from the form. `Attach` already holds the
-   * file, so keeping the preview beside it means none of the six call sites
-   * across these three forms has to know about it — and none of them can be
-   * the one that forgets.
-   */
-  const preview = useFilePreview();
-
-  /**
-   * Everything just chosen, judged together and appended in one go.
-   *
-   * One pass rather than a loop of single adds, and that is not tidiness: each
-   * `onPick` is a setState the parent has not re-rendered from yet, so three
-   * separate calls would each build on the ORIGINAL list and only the last
-   * would survive — the very bug this change exists to fix, reintroduced one
-   * level down. A ref would also work and the lint rule rightly refuses it:
-   * writing a ref during render is not something to reach for when the honest
-   * shape is simply to decide once.
-   */
-  function choose(chosenFiles: File[]) {
-    // Emptied straight away so picking the same file again — after clearing
-    // it, or after it was refused — still counts as a change.
-    if (inputRef.current) inputRef.current.value = "";
-    if (chosenFiles.length === 0) return;
-
-    const additions: File[] = [];
-    const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
-
-    for (const picked of chosenFiles) {
-      /*
-       * The same file twice is almost always a second click rather than a
-       * second page, and a duplicate upload is not undone by removing one of
-       * them. Checked against what is already attached AND against what this
-       * same choice is adding.
-       */
-      if (
-        files.some((f) => same(f, picked)) ||
-        additions.some((f) => same(f, picked))
-      ) {
-        setRejected("That one is already attached.");
-        continue;
-      }
-
-      /**
-       * Refused here as well as by the server, which reads the bytes and has
-       * the final say. This exists so the answer arrives while the file is
-       * being chosen, rather than after the entry is saved — which is the one
-       * moment the message is awkward to act on.
-       */
-      const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-      if (picked.type && !allowed.includes(picked.type)) {
-        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
-        continue;
-      }
-      if (picked.size > MAX_FILE_BYTES[kind]) {
-        setRejected(
-          `That is ${formatFileSize(picked.size)}; the limit is ${formatFileSize(MAX_FILE_BYTES[kind])}.`,
-        );
-        continue;
-      }
-
-      additions.push(picked);
-    }
-
-    if (additions.length > 0) {
-      setRejected(null);
-      onPick([...files, ...additions]);
-    }
-  }
-
-  return (
-    <span className="flex min-w-0 flex-col gap-1.5">
-      <span className="flex items-center gap-2">
-        {children}
-
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="sr-only"
-          // Every camera roll and every scanner, as asked. The server keeps a
-          // narrower list than this and says so if it has to; `choose` says it
-          // first, in the moment.
-          accept="image/*,application/pdf"
-          /*
-           * Every file the picker returned, not the first. The input is
-           * `multiple`, so choosing three pages in one go has to attach three
-           * — taking [0] made the extra choice look accepted and drop it.
-           */
-          onChange={(event) => choose([...(event.target.files ?? [])])}
-        />
-
-        {/* A button rather than the file input itself: a bare one renders as a
-          browser-styled control too wide to sit beside a text box, and the
-          label that would normally dress it cannot nest inside the label
-          `Field` already is. */}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="size-9 shrink-0 px-0"
-          title={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          aria-label={`Attach the ${DOCUMENT_NAMES[kind]}`}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Paperclip className="size-4" />
-        </Button>
-      </span>
-
-      {rejected ? (
-        <span className="text-xs text-negative">{rejected}</span>
-      ) : null}
-
-      {/*
-        One line per paper, each with its own eye and its own cross. The eye
-        opens the WHOLE set from that one — clicking the second of three starts
-        the slider on the second — because somebody checking their attachments
-        is checking all of them, not one.
-      */}
-      {files.map((one, index) => (
-        <span
-          key={`${one.name}-${one.size}-${index}`}
-          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
-        >
-          {/*
-            The name reads as content, not as a caption.
-
-            The owner: "upload document gular name color change hobe." The
-            whole row was `text-muted-foreground`, so the file somebody had
-            just attached looked exactly like the hint underneath telling them
-            to attach one — and the eye and the cross beside it, being icons,
-            carried more weight than the name they act on. The row stays muted
-            because that is right for the two buttons; the name steps forward.
-          */}
-          <span className="truncate font-medium text-foreground">
-            {one.name}
-          </span>
-          <PreviewButton
-            name={one.name}
-            count={files.length}
-            onClick={() => preview.show(files, index)}
-          />
-          <button
-            type="button"
-            onClick={() => onPick(files.filter((_, i) => i !== index))}
-            aria-label={`Remove ${one.name}`}
-            className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
-          >
-            <X className="size-3" />
-          </button>
-        </span>
-      ))}
-
-      {preview.overlay}
-    </span>
   );
 }
 
