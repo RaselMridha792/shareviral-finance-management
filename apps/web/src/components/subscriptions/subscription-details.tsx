@@ -11,11 +11,13 @@ import {
   type BillingCycle,
   type PaymentMethod,
 } from "@finance/shared";
+import { ArrowCircleUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowCircleUp";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
-import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,10 @@ import {
   RowDetails,
   type DetailSection,
 } from "@/components/ui/row-details";
+import {
+  subscriptionsApi,
+  type SubscriptionUpgradeDto,
+} from "@/lib/api-client";
 import type { SubscriptionDto } from "@/lib/subscriptions";
 import { formatDate } from "@/lib/utils";
 
@@ -36,16 +42,18 @@ import { SubscriptionStatusPill } from "./subscription-columns";
  * popup ta ase"*. The register used to send the name to `/subscriptions/[id]`;
  * this is that page's content in the popup every other table opens — the
  * money, how it is paid, who it is for, the seats, the paperwork and the note —
- * with the acts the row offers (Edit, Record a payment) at its foot.
+ * with the acts the row offers (Renew, Upgrade, Edit) at its foot.
  *
- * Everything here is already on the row the register fetched, so opening it
- * asks the server for nothing.
+ * Everything here is already on the row the register fetched except the
+ * plan's upgrades, which are read when it opens — they are history nobody
+ * needs in the table.
  */
 export function SubscriptionDetails({
   plan,
   onClose,
   onEdit,
   onPay,
+  onUpgrade,
   onInvoice,
   onReference,
   onScreenshot,
@@ -56,11 +64,32 @@ export function SubscriptionDetails({
   onEdit?: () => void;
   /** Absent for a reader. */
   onPay?: () => void;
+  /** Absent for a reader. */
+  onUpgrade?: () => void;
   onInvoice: () => void;
   onReference: () => void;
   onScreenshot: () => void;
 }) {
   const settings = useSettings();
+  /** Null while reading; an empty list is "never upgraded". */
+  const [upgrades, setUpgrades] = useState<SubscriptionUpgradeDto[] | null>(
+    null,
+  );
+  useEffect(() => {
+    let alive = true;
+    subscriptionsApi
+      .upgrades(plan.id)
+      .then((rows) => {
+        if (alive) setUpgrades(rows);
+      })
+      .catch(() => {
+        if (alive) setUpgrades([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [plan.id]);
+
   const money = (value: string | null | undefined, currency: string) =>
     value ? formatMoney(value, { currency, format: settings.numberFormat }) : null;
 
@@ -235,6 +264,41 @@ export function SubscriptionDetails({
         },
       ],
     },
+    /*
+      What the plan was before, each time it was upgraded in place — newest
+      first, with the charge the upgrade took when there was one.
+    */
+    ...(upgrades && upgrades.length > 0
+      ? [
+          {
+            title: "Upgrades",
+            items: upgrades.map((one) => ({
+              label: formatDate(one.upgradedOn),
+              block: true,
+              value: (
+                <span className="flex flex-col gap-0.5">
+                  <span>
+                    {one.fromPlanName}{" "}
+                    <span className="text-(--sv-muted)">
+                      ({money(one.fromCostUsd, "USD") ?? "N/A"})
+                    </span>{" "}
+                    → {one.toPlanName}{" "}
+                    <span className="text-(--sv-muted)">
+                      ({money(one.toCostUsd, "USD")})
+                    </span>
+                  </span>
+                  <span className="text-[12.5px] font-normal text-(--sv-muted)">
+                    {one.paymentRefNo
+                      ? `Charged ${money(one.paymentAmount, "BDT")} for it — ${one.paymentRefNo}${one.paymentVoided ? " (voided)" : ""}`
+                      : "Nothing charged on the day"}
+                    {one.note ? ` · ${one.note}` : ""}
+                  </span>
+                </span>
+              ),
+            })),
+          },
+        ]
+      : []),
     ...(plan.notes
       ? [{ items: [{ label: "Notes", value: plan.notes, block: true }] }]
       : []),
@@ -248,16 +312,26 @@ export function SubscriptionDetails({
       description={`${plan.planName} · started ${formatDate(plan.startDate)}`}
       sections={sections}
       footer={
-        onEdit || onPay ? (
+        onEdit || onPay || onUpgrade ? (
           <div className="flex flex-wrap justify-end gap-2">
             {onPay ? (
               <Button variant="secondary" onClick={onPay}>
-                <CreditCardIcon
+                <ArrowsClockwiseIcon
                   weight="duotone"
                   size={17}
                   className="text-(--sv-violet)"
                 />
-                Record a payment
+                Renew
+              </Button>
+            ) : null}
+            {onUpgrade ? (
+              <Button variant="secondary" onClick={onUpgrade}>
+                <ArrowCircleUpIcon
+                  weight="duotone"
+                  size={17}
+                  className="text-(--sv-violet)"
+                />
+                Upgrade
               </Button>
             ) : null}
             {onEdit ? (

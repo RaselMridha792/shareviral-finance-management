@@ -152,7 +152,9 @@ try {
   ]) {
     check(`it carries ${what}`, re.test(text), re.test(text) ? "" : text.slice(0, 260));
   }
-  check("its foot offers Record a payment and Edit", ["Record a payment", "Edit"].every((b) => shown?.buttons.includes(b)), JSON.stringify(shown?.buttons));
+  // Renew and Upgrade since #111 — "Record a payment" was renamed on the
+  // owner's word, and Upgrade changes the plan in place.
+  check("its foot offers Renew, Upgrade and Edit", ["Renew", "Upgrade", "Edit"].every((b) => shown?.buttons.includes(b)), JSON.stringify(shown?.buttons));
   // SHOT_DIR=<folder> keeps a picture of the popup, for a person to look at.
   if (process.env.SHOT_DIR) {
     await page.screenshot({ path: `${process.env.SHOT_DIR}/subspopupqa-popup.png` });

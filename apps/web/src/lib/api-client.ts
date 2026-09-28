@@ -630,6 +630,56 @@ export const subscriptionsApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  /**
+   * Upgrade the plan in place — a new name and price from the day given, and
+   * the vendor's charge for it taken from the plan's card when there was one.
+   * That charge is not a renewal, so it does not use up the month's.
+   */
+  upgrade: (
+    id: string,
+    body: {
+      upgradedOn: string;
+      toPlanName: string;
+      toCostUsd: string;
+      toChargeUsd?: string;
+      usdRate: string;
+      chargedUsd?: string;
+      chargedBdt?: string;
+      bankCharge?: string;
+      nextRenewalOn?: string;
+      note?: string | null;
+    },
+  ) =>
+    apiFetch<{ id: string }>(`/subscriptions/${id}/upgrade`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** The plan's upgrades, newest first. */
+  upgrades: (id: string) =>
+    apiFetch<SubscriptionUpgradeDto[]>(`/subscriptions/${id}/upgrades`, {
+      cache: "no-store",
+    }),
+};
+
+/** One upgrade of a plan, and the payment it took (if any). */
+export type SubscriptionUpgradeDto = {
+  id: string;
+  upgradedOn: string;
+  fromPlanName: string;
+  toPlanName: string;
+  fromCostUsd: string | null;
+  toCostUsd: string;
+  fromChargeUsd: string | null;
+  toChargeUsd: string | null;
+  usdRate: string | null;
+  note: string | null;
+  transactionId: string | null;
+  paymentRefNo: string | null;
+  paymentAmount: string | null;
+  /** The payment was voided or trashed since. */
+  paymentVoided: boolean | null;
 };
 
 export const trashApi = {

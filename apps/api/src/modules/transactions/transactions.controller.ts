@@ -142,6 +142,46 @@ const updateTransferSchema = z.strictObject({
 });
 export type UpdateTransferInput = z.infer<typeof updateTransferSchema>;
 
+const usdRateText = z
+  .string()
+  .trim()
+  .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77");
+
+/**
+ * Upgrading a plan in place — the owner: *"upgrade plan name ekta option diba
+ * and oitar details o add korar option rakhba jate kono existing plan ke
+ * upgrade korte pare"*.
+ *
+ * The new name and price are the upgrade; the rest is optional. `chargedUsd`
+ * is what the vendor billed for the upgrade on the day (a pro-rated
+ * difference, usually) — given, it becomes a payment on the plan's card that
+ * is marked as the upgrade's, so the once-a-month renewal rule does not count
+ * it. `chargedBdt` overrides the taka that works out to, the same way the
+ * renewal drawer's box does, and means nothing without the dollars.
+ */
+const upgradeSubscriptionSchema = z
+  .strictObject({
+    upgradedOn: isoDateSchema,
+    toPlanName: z.string().trim().min(1, "Name the new plan").max(160),
+    toCostUsd: amountSchema.refine((v) => Number(v) > 0, {
+      message: "The new price must be more than zero",
+    }),
+    toChargeUsd: amountSchema.optional(),
+    usdRate: usdRateText,
+    chargedUsd: amountSchema.optional(),
+    chargedBdt: amountSchema.optional(),
+    bankCharge: amountSchema.optional(),
+    nextRenewalOn: isoDateSchema.optional(),
+    note: z.string().trim().max(200).nullish(),
+  })
+  .refine((v) => !v.chargedBdt || Boolean(v.chargedUsd), {
+    message: "Say what the vendor charged in dollars first",
+    path: ["chargedUsd"],
+  });
+export type UpgradeSubscriptionInput = z.infer<
+  typeof upgradeSubscriptionSchema
+>;
+
 @Controller()
 export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
@@ -274,6 +314,25 @@ export class TransactionsController {
     // Parsed like every other `:id` here: a malformed one reached Postgres
     // raw and came back as a 500 rather than a 400.
     return this.transactions.payForSubscription(
+      uuidSchema.parse(id),
+      body,
+      actor,
+    );
+  }
+
+  /**
+   * Upgrade a plan in place, taking the vendor's charge for it if there was
+   * one. Here beside `pay` for the same module-cycle reason: the payment is a
+   * ledger write, and the plan change is asked of SubscriptionsService.
+   */
+  @Post("subscriptions/:id/upgrade")
+  @RequirePermission("vendors.write", "transactions.write")
+  upgradeSubscription(
+    @Param("id") id: string,
+    @ZodBody(upgradeSubscriptionSchema) body: UpgradeSubscriptionInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.transactions.upgradeSubscription(
       uuidSchema.parse(id),
       body,
       actor,

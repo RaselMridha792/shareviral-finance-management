@@ -564,7 +564,7 @@ export function SubscriptionForm({
           setError(
             `The plan is saved, but the payment did not go through: ${
               caught instanceof ApiError ? caught.message : "try it again"
-            }. Use "Record payment" on its row to take the money out.`,
+            }. Use Renew on its row to take the money out.`,
           );
           return;
         }

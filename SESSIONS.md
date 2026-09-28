@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 112 | **Team: a click anywhere on a row opens the person's page** | **done** — not pushed |
+| 111 | **Subscriptions: Renew, once a month, and Upgrade in place** | **done** — not pushed; **schema ae06f4b goes first, alone** |
 | 110 | **Dashboard: the three count chips gone, and every card a way in** | **done** — not pushed |
 | 109 | **AI tools and subscriptions: a click opens the plan in a popup, not its page** | **done** — not pushed |
 | 108 | **A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused** | **done** — not pushed |
@@ -88,6 +90,83 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 112. Team: a click anywhere on a row opens the person's page — 28 Sep 2026
+
+The owner: *"team table tay ami jekono jaygay click korlei jate single page a
+jay. akhon only name er opor click korle single page a jay."* Done by a
+delegated agent (86bbb39), reviewed and re-run here. Every row of the team
+table opens `/team/<id>` from any plain cell, and Enter on the focused row
+does the same — the ledger tables' `rowOpener`, used locally in
+`team-screen.tsx`, no shared code changed. Links, row buttons, the tick box
+and a text selection keep their own clicks; the tick's whole cell is left
+alone, so a near miss cannot navigate away and lose the ticks. The row does
+not claim `aria-haspopup` (it opens a page) and carries `data-row-id`.
+`.teamrowqa.mjs` (new, read-only) **27/27**, re-run here. The single person's
+page is untouched — its redesign waits on the owner's screenshot, which did
+not arrive with the message. Noted by the agent: `.threeasksqa`'s #39/#38
+checks predate the initials tile and the dd/mm/yyyy dates; `.teamwrite`
+changes real rows (it restored them); `.bulkbarqa` wants
+`SFM_WEB=http://localhost:3000`.
+
+## 111. Subscriptions: Renew, once a month, and Upgrade in place — 28 Sep 2026
+
+The owner, on the plan's record: *"ekhane add a record na diye renew dile valo
+hoyna. karon etato subscription take renew korte hobe. and ekhane ekta jinish
+set korba upgrade plan name ekta option diba and oitar details o add korar
+option rakhba jate kono existing plan ke upgrade korte pare. akoi month a kono
+plan duibar renew hobena"*.
+
+**Schema, alone first: ae06f4b** — `deploy/sql/2026-09-28-subscription-upgrades.sql`,
+one new empty table `subscription_upgrades` (the plan's name and price before
+and after, the day, and the ledger row the vendor's charge for it became).
+Applied locally, twice, idempotent. **When deploying, push ae06f4b on its own
+and let it deploy before the rest.**
+
+- **Renew.** "Record a payment" is Renew everywhere — the row button, the
+  record's foot, the drawer's title and button. The drawer moves the next
+  renewal by default now (a box, so a late one can be left alone), and it
+  had **two "USD rate" boxes of the same name** — a blank one that was sent
+  and a required filled one that never was; one required box now, opening on
+  the plan's rate.
+- **The next renewal date was skipping a month.** Moving it on stepped the
+  STORED date a cycle, and the stored date is already the first after today —
+  so September's renewal recorded on the 28th pushed a plan due 10 October to
+  10 November. Now: the first billing day (on the plan's own day) after the
+  month the renewal is PAID in, never earlier than what was stored. Paid late,
+  early or on the day, the answer is the same.
+- **Once a month.** `payForSubscription` refuses a renewal when the plan has a
+  live payment in that month that no upgrade names — "… was already renewed
+  this month — TXN-… on 10/09/2026 … If this charge was for changing plan,
+  record it with Upgrade instead." A closed month still answers with the lock
+  first.
+- **Upgrade.** New `POST /subscriptions/:id/upgrade` (vendors.write **and**
+  transactions.write) and an Upgrade drawer (row button and the record's
+  foot): the new plan's name and price, its charge, the rate, the day; the
+  vendor's charge on the day optional — given, it is taken from the plan's
+  card through the same door a renewal uses (period lock, never-below-zero,
+  heading, dollars, bank charge as its own row) but marked as the upgrade's,
+  so it does **not** use up the month's renewal; the next renewal date only if
+  the vendor moved it. The plan changes in place (taka re-derived) and the
+  history row is written in one transaction. An upgrade that changes nothing,
+  or states taka without dollars, is refused. `GET /subscriptions/:id/upgrades`
+  feeds an **Upgrades** list on the record: from → to with prices, and the
+  charge with its TXN, newest first.
+
+**Proved** by `.renewupgradeqa.mjs` (new) **28/28**: the words, the drawer's
+single rate box and default, a renewal's taka and the next date not skipping,
+a second renewal refused through the API and the drawer, the upgrade drawer,
+the plan changed and its history, the upgrade's payment and bank charge, the
+next month's renewal still allowed after an upgrade charge and a second one
+refused, the no-charge and no-change and taka-only cases, the record's list,
+five row buttons on one line. Integration suite 03 **107/107** with both new
+routes in the matrix. Five older harnesses paid one plan several times in a
+month or expected the month-skipping date; brought up to date with a comment
+each — `.subpayqa` 15/15, `.chargeqa` 22/22, `.rateqa` 22/22, `.renewalqa`
+15/15, `.renewqa` 20/20 (its own notes already said January, April, July,
+October). `.subspopupqa` 21/21, `.attachqa` 75/75. Stale before this and not
+touched: `.carddollarqa` (expenses without `usdRate`, since #67),
+`.subsfixqa` 1, `.subspaysqa` 1, `.payuiqa`. Four CI steps green.
 
 ## 110. Dashboard: the three count chips gone, and every card a way in — 28 Sep 2026
 

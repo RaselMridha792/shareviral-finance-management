@@ -6,8 +6,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  addMonths,
+  billingCycleSchema,
   formatMoney,
+  monthRange,
+  nextRenewalAfter,
   type CreateTransactionInput,
   type ListTransactionsQuery,
   type Paginated,
@@ -1300,6 +1302,12 @@ export class TransactionsService {
       chargeAmount?: string;
     },
     actor: AuthenticatedUser,
+    /**
+     * `upgrade`: this is the vendor's charge for an upgrade, not a renewal —
+     * the once-a-month rule does not apply, and `upgradeSubscription` marks
+     * the row as the upgrade's straight after.
+     */
+    options: { upgrade?: boolean } = {},
   ) {
     /*
      * `subscriptionsService`, not `vendorsService`.
@@ -1313,6 +1321,30 @@ export class TransactionsService {
      */
     const plan = await this.subscriptionsService.billingPlan(id);
     if (!plan) throw new NotFoundException("That subscription is not here");
+
+    /*
+     * A plan renews once a month.
+     *
+     * The owner: *"akoi month a kono plan duibar renew hobena so eita ekta
+     * option set kore dile better hoy"*. A second renewal in the month is a
+     * double charge typed twice, or an upgrade recorded as a renewal — either
+     * way the ledger would say the card paid for the plan twice. Every live
+     * payment on the plan counts (its first payment included), except the ones
+     * an upgrade names: those are the vendor's charge for changing plan, and
+     * are recorded through Upgrade, which skips this.
+     */
+    if (!options.upgrade) {
+      // A closed month is the harder rule, so it answers first — `create`
+      // would refuse the date anyway, after this had already blamed a renewal.
+      await this.settings.assertPeriodOpen(input.txnDate);
+      const already = await this.renewalInMonth(plan.id, input.txnDate);
+      if (already) {
+        throw new BadRequestException(
+          `${plan.toolName ?? plan.planName} was already renewed this month — ${already.refNo} on ${shownDate(already.txnDate)}. ` +
+            `A plan renews once a month. If this charge was for changing plan, record it with Upgrade instead.`,
+        );
+      }
+    }
 
     const accountId = input.accountId ?? plan.accountId;
     if (!accountId) {
@@ -1484,17 +1516,149 @@ export class TransactionsService {
     );
 
     /*
-     * Roll the renewal forward only if asked. A payment is not always the
-     * month's renewal — somebody may be recording one they forgot in March —
-     * and moving the date on a back-dated entry would tell the reminder it has
-     * a month it does not.
+     * Roll the renewal forward when asked — which the Renew drawer now does by
+     * default.
+     *
+     * From the PAYMENT's month, not from the stored date. It stepped the
+     * stored date on by a cycle, and the stored date is already the first one
+     * after today — so the September renewal recorded on 28 September pushed
+     * a plan due 10 October to 10 November, skipping a month. A renewal covers
+     * the cycle due in the month it is paid (a plan renews once a month), so
+     * the next one is the first billing day after that month ends, on the
+     * plan's own day; paid late, early or on the day, the answer is the same.
+     * And it never moves back: a renewal recorded for a month already past
+     * leaves a later date alone.
      */
-    if (input.advanceRenewal && plan.nextRenewalOn) {
-      const next = advanceCycle(plan.nextRenewalOn, plan.billingCycle);
-      if (next) await this.subscriptionsService.setNextRenewal(id, next, actor);
+    if (input.advanceRenewal) {
+      const cycle = billingCycleSchema.safeParse(plan.billingCycle);
+      const [year, month] = input.txnDate.split("-").map(Number);
+      const next =
+        cycle.success && plan.startDate
+          ? nextRenewalAfter(
+              plan.startDate,
+              cycle.data,
+              monthRange(year, month).end,
+            )
+          : null;
+      if (next && (!plan.nextRenewalOn || next > plan.nextRenewalOn)) {
+        await this.subscriptionsService.setNextRenewal(id, next, actor);
+      }
     }
 
     return created;
+  }
+
+  /**
+   * The renewal this plan already has in the month of `txnDate`, or null.
+   *
+   * A renewal is any live payment on the plan — not voided, not in the trash,
+   * not a bank-charge row — that no upgrade names as its own. Raw SQL for the
+   * `not exists` against `subscription_upgrades`, with every column written
+   * against an alias so nothing resolves to the wrong table.
+   */
+  private async renewalInMonth(
+    subscriptionId: string,
+    txnDate: string,
+  ): Promise<{ refNo: string; txnDate: string } | null> {
+    const result = await this.db.client.execute(sql`
+      select t.ref_no, t.txn_date::text as txn_date
+        from transactions t
+       where t.subscription_id = ${subscriptionId}::uuid
+         and t.voided_at is null
+         and t.deleted_at is null
+         and t.charge_for_id is null
+         and date_trunc('month', t.txn_date) = date_trunc('month', ${txnDate}::date)
+         and not exists (
+           select 1 from subscription_upgrades u where u.transaction_id = t.id
+         )
+       order by t.txn_date
+       limit 1
+    `);
+    const row = (
+      result.rows as unknown as { ref_no: string; txn_date: string }[]
+    )[0];
+    return row ? { refNo: row.ref_no, txnDate: row.txn_date } : null;
+  }
+
+  /**
+   * Upgrade a plan in place, and take the vendor's charge for it if there was
+   * one.
+   *
+   * The owner asked for an Upgrade beside Renew rather than a second plan
+   * added next to the first. Two writes, in this order:
+   *
+   * 1. The payment, when the vendor charged for the upgrade on the day —
+   *    through `payForSubscription` with `upgrade`, so it gets every rule a
+   *    renewal gets (the period lock, never-below-zero, the heading, the
+   *    dollars, the bank's charge as its own row) and skips only the
+   *    once-a-month rule. It goes first because it is the one that can be
+   *    refused; a refused payment leaves the plan untouched.
+   * 2. The plan's new name and price, and the history row that names that
+   *    payment as the upgrade's — `SubscriptionsService.upgrade`, one
+   *    transaction.
+   */
+  async upgradeSubscription(
+    id: string,
+    input: {
+      upgradedOn: string;
+      toPlanName: string;
+      toCostUsd: string;
+      toChargeUsd?: string;
+      usdRate: string;
+      chargedUsd?: string;
+      chargedBdt?: string;
+      bankCharge?: string;
+      nextRenewalOn?: string;
+      note?: string | null;
+    },
+    actor: AuthenticatedUser,
+  ) {
+    const plan = await this.subscriptionsService.get(id);
+    if (
+      input.toPlanName.trim() === plan.planName.trim() &&
+      Number(input.toCostUsd) === Number(plan.costUsd) &&
+      Number(input.toChargeUsd ?? 0) === Number(plan.chargeUsd ?? 0)
+    ) {
+      throw new BadRequestException(
+        "Nothing changes — give the new plan's name or price.",
+      );
+    }
+
+    const charged =
+      input.chargedUsd && Number(input.chargedUsd) > 0
+        ? input.chargedUsd
+        : null;
+    const payment = charged
+      ? await this.payForSubscription(
+          id,
+          {
+            txnDate: input.upgradedOn,
+            usdAmount: charged,
+            usdRate: input.usdRate,
+            ...(input.chargedBdt ? { amount: input.chargedBdt } : {}),
+            ...(input.bankCharge ? { chargeAmount: input.bankCharge } : {}),
+            note: `upgrade to ${input.toPlanName}`,
+            advanceRenewal: false,
+          },
+          actor,
+          { upgrade: true },
+        )
+      : null;
+
+    return this.subscriptionsService.upgrade(
+      id,
+      {
+        upgradedOn: input.upgradedOn,
+        toPlanName: input.toPlanName,
+        toCostUsd: input.toCostUsd,
+        toChargeUsd: input.toChargeUsd,
+        usdRate: input.usdRate,
+        nextRenewalOn: input.nextRenewalOn,
+        note: input.note ?? null,
+      },
+      payment?.id ?? null,
+      actor,
+    );
   }
 
   /**
@@ -2069,6 +2233,12 @@ export class TransactionsService {
   }
 }
 
+/** 2026-09-28 as the screens print it: 28/09/2026. */
+function shownDate(isoDate: string): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 /**
  * How many live documents hang on the row.
  *
@@ -2213,26 +2383,4 @@ function describeUpdate(
   }
   const detail = parts.length ? parts.join(", ") : "details updated";
   return `${existing.refNo}: ${detail}`;
-}
-
-/**
- * The next renewal, one cycle on.
- *
- * Returns null for a cycle that has no length — "none", or anything unknown —
- * rather than guessing a month, because a date invented here would be shown to
- * somebody as the day their card is charged.
- */
-function advanceCycle(from: string, cycle: string): string | null {
-  const months =
-    cycle === "monthly"
-      ? 1
-      : cycle === "quarterly"
-        ? 3
-        : cycle === "half_yearly"
-          ? 6
-          : cycle === "yearly"
-            ? 12
-            : null;
-  if (months === null) return null;
-  return addMonths(from, months);
 }

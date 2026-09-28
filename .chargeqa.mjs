@@ -196,8 +196,9 @@ check(
 );
 
 const typedBefore = await balanceOf();
+// September, not August: #111: a plan renews once a month, so each renewal here has its own month.
 await call("POST", `/subscriptions/${withCharge.id}/pay`, {
-  txnDate: "2026-08-06",
+  txnDate: "2026-09-06",
   amount: "9000.00",
 });
 const typedAfter = await balanceOf();

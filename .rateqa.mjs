@@ -263,8 +263,11 @@ if (plan?.id) {
     subRows.map((r) => r.r ?? "MISSING").join(" ") || "no row",
   );
 
+  // Next month: #111: a plan renews once a month, so each renewal here has its own month.
+  const [ty, tm] = TODAY.split("-").map(Number);
+  const nextMonth = new Date(Date.UTC(ty, tm, 5)).toISOString().slice(0, 10);
   const typed = await call("POST", `/subscriptions/${plan.id}/pay`, {
-    txnDate: TODAY,
+    txnDate: nextMonth,
     usdRate: "130.00",
     note: `${MARK} a payment at another rate`,
   });

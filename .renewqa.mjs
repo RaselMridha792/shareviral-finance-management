@@ -162,6 +162,14 @@ const cardBalance = async () => {
   return { usd: Number(row?.ownBalance ?? 0), bdt: Number(row?.balance ?? 0) };
 };
 
+
+/* A date n months after an ISO date, on the same day (clamped to the 28th so
+   every month has it). #111: a plan renews once a month, so each renewal here has its own month. */
+const monthsAfter = (iso, n) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1 + n, Math.min(d, 28))).toISOString().slice(0, 10);
+};
+
 /* ----------------------- 1. a renewal at the usual rate ---------------- */
 
 const plain = await call("POST", `/subscriptions/${plan.id}/pay`, {
@@ -194,7 +202,7 @@ check(
 /* --------- 2. THE COMPLAINT: a renewal at a rate that has moved -------- */
 
 const moved = await call("POST", `/subscriptions/${plan.id}/pay`, {
-  txnDate: TODAY,
+  txnDate: monthsAfter(TODAY, 1),
   usdAmount: "100.00",
   usdRate: "128.50",
   note: `${MARK} April, the rate has moved`,
@@ -220,7 +228,7 @@ check(
 /* ------------------ 3. a bank charge, as its own row ------------------- */
 
 const charged = await call("POST", `/subscriptions/${plan.id}/pay`, {
-  txnDate: TODAY,
+  txnDate: monthsAfter(TODAY, 2),
   usdAmount: "100.00",
   usdRate: "125.00",
   chargeAmount: "230.00",
@@ -265,7 +273,7 @@ check(
 /* ---------------- 4. a typed taka beats the arithmetic ----------------- */
 
 const typed = await call("POST", `/subscriptions/${plan.id}/pay`, {
-  txnDate: TODAY,
+  txnDate: monthsAfter(TODAY, 3),
   usdAmount: "100.00",
   usdRate: "125.00",
   amount: "12750.00",

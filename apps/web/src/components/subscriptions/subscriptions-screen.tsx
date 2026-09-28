@@ -9,7 +9,8 @@ import {
   type SubscriptionCategory,
   type SubscriptionStatus,
 } from "@finance/shared";
-import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
+import { ArrowCircleUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowCircleUp";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -55,6 +56,7 @@ import { BulkBar } from "@/components/ui/bulk-bar";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { ApiError, trashApi } from "@/lib/api-client";
 import { PayDialog } from "./pay-dialog";
+import { UpgradeDialog } from "./upgrade-dialog";
 
 /**
  * The register of paid tools — one row per plan, not per payment.
@@ -242,6 +244,8 @@ export function SubscriptionsScreen({
   /* Ticking, and the one act it leads to. Declared after the rows it
      prunes itself to. */
   const [paying, setPaying] = useState<SubscriptionDto | null>(null);
+  /** The plan being upgraded in place. */
+  const [upgrading, setUpgrading] = useState<SubscriptionDto | null>(null);
   const bulk = useBulkSelect(rows);
   const [bulkPending, setBulkPending] = useState(false);
   const [bulkAsking, setBulkAsking] = useState(false);
@@ -504,14 +508,25 @@ export function SubscriptionsScreen({
                            column of its own — for a renewal, or to retry a
                            first payment the card refused. `extra` is the slot
                            RowActions keeps for exactly this. */
+                        /* Renew — the owner: "add a record na diye renew
+                           dile valo hoy" — and Upgrade beside it, which
+                           changes the plan in place. */
                         extra={
                           canWrite ? (
-                            <RowButton
-                              onClick={() => setPaying(row)}
-                              label={`Record a payment for ${row.toolName}`}
-                              title="Record a payment"
-                              icon={CreditCardIcon}
-                            />
+                            <>
+                              <RowButton
+                                onClick={() => setPaying(row)}
+                                label={`Renew ${row.toolName}`}
+                                title="Renew"
+                                icon={ArrowsClockwiseIcon}
+                              />
+                              <RowButton
+                                onClick={() => setUpgrading(row)}
+                                label={`Upgrade ${row.toolName}`}
+                                title="Upgrade"
+                                icon={ArrowCircleUpIcon}
+                              />
+                            </>
                           ) : null
                         }
                         onEdit={canWrite ? () => setEditing(row) : undefined}
@@ -611,6 +626,14 @@ export function SubscriptionsScreen({
                 }
               : undefined
           }
+          onUpgrade={
+            canWrite
+              ? () => {
+                  setShowing(null);
+                  setUpgrading(showing);
+                }
+              : undefined
+          }
           onInvoice={() =>
             setDocumentsFor({ row: showing, kinds: ["invoice"] })
           }
@@ -633,10 +656,19 @@ export function SubscriptionsScreen({
         />
       ) : null}
 
+      {/* A fresh drawer per plan, so its rate box starts at that plan's. */}
       <PayDialog
+        key={paying?.id ?? "none"}
         plan={paying}
         onClose={() => setPaying(null)}
         onPaid={() => void load()}
+      />
+      {/* A fresh dialog per plan, so its boxes start from that plan. */}
+      <UpgradeDialog
+        key={upgrading?.id ?? "none"}
+        plan={upgrading}
+        onClose={() => setUpgrading(null)}
+        onUpgraded={() => void load()}
       />
 
       {documentsFor ? (

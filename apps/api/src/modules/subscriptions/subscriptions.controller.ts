@@ -53,6 +53,13 @@ export class SubscriptionsController {
     return this.subscriptions.get(uuidSchema.parse(id));
   }
 
+  /** A plan's upgrades, newest first — the record's "Upgrades" list. */
+  @Get(":id/upgrades")
+  @RequirePermission("vendors.read")
+  upgrades(@Param("id") id: string) {
+    return this.subscriptions.upgrades(uuidSchema.parse(id));
+  }
+
   @Post()
   @RequirePermission("vendors.write")
   create(

@@ -33,6 +33,10 @@ const ROUTES = [
   // Correcting a transfer, both halves (#108). A made-up id: an allowed role
   // stops at validation before the id is ever looked up.
   ["PATCH", "/transactions/transfer/00000000-0000-4000-8000-000000000000", ["transactions.write"], {}],
+  // Upgrading a plan in place (#111) changes the plan AND can take a payment,
+  // so it needs both; its history is read like the plan itself.
+  ["POST", "/subscriptions/00000000-0000-4000-8000-000000000000/upgrade", ["vendors.write", "transactions.write"], {}],
+  ["GET", "/subscriptions/00000000-0000-4000-8000-000000000000/upgrades", ["vendors.read"]],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],

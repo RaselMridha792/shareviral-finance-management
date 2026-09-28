@@ -35,8 +35,10 @@ import {
   accounts,
   files,
   subscriptions,
+  subscriptionUpgrades,
   subscriptionUsers,
   teamMembers,
+  transactions,
   vendors,
 } from "../../db/schema";
 
@@ -434,11 +436,131 @@ export class SubscriptionsService {
         usdRate: subscriptions.usdRate,
         accountId: subscriptions.accountId,
         nextRenewalOn: subscriptions.nextRenewalOn,
+        // What a renewal's next date is anchored on — the plan's own day.
+        startDate: subscriptions.startDate,
       })
       .from(subscriptions)
       .where(and(eq(subscriptions.id, id), isNull(subscriptions.deletedAt)))
       .limit(1);
     return row ?? null;
+  }
+
+  /**
+   * Upgrade a plan in place: its name and price change, and the change is kept.
+   *
+   * The owner: *"upgrade plan name ekta option diba and oitar details o add
+   * korar option rakhba jate kono existing plan ke upgrade korte pare"*. Until
+   * now an upgrade was a SECOND plan beside the first. This changes the plan's
+   * own name, price and charge (the taka re-derived at the rate given), moves
+   * the renewal date only if one was given, and writes a `subscription_upgrades`
+   * row saying what it was before — in one database transaction, audited like
+   * any other change to the plan.
+   *
+   * `transactionId` is the payment the vendor took for the upgrade, recorded
+   * by the transactions side just before this (it owns the ledger). Named here
+   * so the once-a-month renewal rule knows that payment is not a renewal.
+   */
+  async upgrade(
+    id: string,
+    input: {
+      upgradedOn: string;
+      toPlanName: string;
+      toCostUsd: string;
+      toChargeUsd?: string;
+      usdRate?: string;
+      nextRenewalOn?: string;
+      note?: string | null;
+    },
+    transactionId: string | null,
+    actor: AuthenticatedUser,
+  ) {
+    const existing = await this.get(id);
+    const money = this.moneyOf({
+      costUsd: input.toCostUsd,
+      usdRate: input.usdRate ?? existing.usdRate ?? undefined,
+    });
+
+    await this.audit.mutate({
+      action: "update",
+      entityTable: "subscriptions",
+      entityId: id,
+      summary: `${actor.fullName} upgraded ${existing.toolName ?? "a plan"} from ${existing.planName} to ${input.toPlanName}`,
+      module: "subscriptions",
+      read: async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.id, id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(subscriptions)
+          .set({
+            planName: input.toPlanName,
+            ...money,
+            chargeUsd: input.toChargeUsd ?? null,
+            ...(input.nextRenewalOn
+              ? { nextRenewalOn: input.nextRenewalOn }
+              : {}),
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(subscriptions.id, id));
+
+        await tx.insert(subscriptionUpgrades).values({
+          subscriptionId: id,
+          upgradedOn: input.upgradedOn,
+          fromPlanName: existing.planName,
+          toPlanName: input.toPlanName,
+          fromCostUsd: existing.costUsd,
+          toCostUsd: money.costUsd,
+          fromChargeUsd: existing.chargeUsd,
+          toChargeUsd: input.toChargeUsd ?? null,
+          usdRate: money.usdRate,
+          transactionId,
+          note: input.note ?? null,
+          createdBy: actor.id,
+        });
+      },
+    });
+
+    return this.get(id);
+  }
+
+  /**
+   * A plan's upgrades, newest first, each with the payment it took (if any) —
+   * what the plan's record lists under "Upgrades".
+   */
+  async upgrades(id: string) {
+    return this.db.client
+      .select({
+        id: subscriptionUpgrades.id,
+        upgradedOn: subscriptionUpgrades.upgradedOn,
+        fromPlanName: subscriptionUpgrades.fromPlanName,
+        toPlanName: subscriptionUpgrades.toPlanName,
+        fromCostUsd: subscriptionUpgrades.fromCostUsd,
+        toCostUsd: subscriptionUpgrades.toCostUsd,
+        fromChargeUsd: subscriptionUpgrades.fromChargeUsd,
+        toChargeUsd: subscriptionUpgrades.toChargeUsd,
+        usdRate: subscriptionUpgrades.usdRate,
+        note: subscriptionUpgrades.note,
+        transactionId: subscriptionUpgrades.transactionId,
+        paymentRefNo: transactions.refNo,
+        paymentAmount: transactions.amount,
+        paymentVoided: sql<boolean>`(${transactions.voidedAt} is not null or ${transactions.deletedAt} is not null)`,
+      })
+      .from(subscriptionUpgrades)
+      .leftJoin(
+        transactions,
+        eq(transactions.id, subscriptionUpgrades.transactionId),
+      )
+      .where(eq(subscriptionUpgrades.subscriptionId, id))
+      .orderBy(
+        desc(subscriptionUpgrades.upgradedOn),
+        desc(subscriptionUpgrades.createdAt),
+      );
   }
 
   /**
@@ -729,6 +851,8 @@ type SubscriptionRow = {
   status: string;
   costUsd: string;
   costBdt: string | null;
+  /** Selected all along by `columns()`; the type had never said so. */
+  chargeUsd: string | null;
   usdRate: string | null;
   billingCycle: string;
   startDate: string;

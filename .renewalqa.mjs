@@ -208,8 +208,12 @@ const category = (
     "select id from categories where kind='out' and deleted_at is null limit 1",
   )
 ).rows[0];
+/* Paid on the day it is due. Since #111 a renewal moves the plan to the
+   first billing day after the month it is PAID in — paying September's on
+   28 September no longer skips October — so the payment that moves the date
+   a cycle on is the one for the renewal that is due. */
 const paid = await call("POST", `/subscriptions/${plan.id}/pay`, {
-  txnDate: TODAY,
+  txnDate: beforePay,
   categoryId: category.id,
   note: "RENEWQA charge",
   advanceRenewal: true,

@@ -280,12 +280,18 @@ try {
     "select next_renewal_on::text v from subscriptions where id = $1",
     [plan.body.id],
   );
+  /* Since #111 a renewal moves the plan to the first billing day after the
+     month it is paid in — never earlier than the date already stored. Paid
+     this month, on a plan whose next date is already next month's, that is
+     the date it had: paying September's renewal no longer skips October. */
   const renewalExpected = await sqlv(
-    "select ($1::date + interval '1 month')::date::text v",
-    [renewalWas],
+    `select greatest($1::date,
+        (date_trunc('month', $2::date) + interval '1 month')::date
+          + (extract(day from $1::date)::int - 1))::date::text v`,
+    [renewalWas, TODAY],
   );
   check(
-    "and the renewal moved on a month",
+    "and the next renewal is the first billing day after this month's",
     Boolean(renewalWas) && renewalNow === renewalExpected,
     `${renewalWas} -> ${renewalNow} (expected ${renewalExpected})`,
   );
@@ -306,14 +312,17 @@ try {
 
   /* The account rule: the card holds 7,501 and the plan costs 2,499 — three
      more payments leave 4.00, and a fourth would take it under. */
+  // One month apart: #111: a plan renews once a month, so each renewal here has its own month.
+  const [py, pm] = TODAY.split("-").map(Number);
+  const inMonth = (n) => new Date(Date.UTC(py, pm - 1 + n, 5)).toISOString().slice(0, 10);
   const fillers = [];
   for (let i = 0; i < 3; i += 1) {
     fillers.push(
-      (await call("POST", `/subscriptions/${plan.body.id}/pay`, { txnDate: TODAY })).status,
+      (await call("POST", `/subscriptions/${plan.body.id}/pay`, { txnDate: inMonth(i + 1) })).status,
     );
   }
   const broke = await call("POST", `/subscriptions/${plan.body.id}/pay`, {
-    txnDate: TODAY,
+    txnDate: inMonth(4),
   });
   check(
     "THE RULE: the account cannot be taken below zero by a subscription either",

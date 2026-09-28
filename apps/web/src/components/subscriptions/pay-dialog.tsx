@@ -12,7 +12,13 @@ import { formatDate } from "@/lib/utils";
 import type { SubscriptionDto } from "@/lib/subscriptions";
 
 /**
- * Recording that a plan was actually paid for.
+ * Renewing a plan — recording that it was actually paid for this cycle.
+ *
+ * Called Renew since 28 Sep 2026, on the owner's word: *"ekhane add a record
+ * na diye renew dile valo hoyna. karon etato subscription take renew korte
+ * hobe"*. A plan renews once a month; the server refuses a second renewal in
+ * the same month, and a charge for changing plan is recorded with Upgrade,
+ * which does not use the month's renewal up.
  *
  * The owner's report, and it was right: *"ekhane kichu kinle eta taka katena
  * bank theke kono history thakena"*. A subscription was a PLAN — price, card,
@@ -55,7 +61,9 @@ export function PayDialog({
    * ledger counts taka.
    */
   const [usdCharged, setUsdCharged] = useState("");
-  const [usdRate, setUsdRate] = useState("");
+  /* Starts at the plan's rate, in the box rather than behind it — see the
+     box below. */
+  const [usdRate, setUsdRate] = useState(plan?.usdRate ?? "");
   const [typedBdt, setTypedBdt] = useState("");
   /*
    * Whether the taka box has been typed in **in this sitting**.
@@ -125,8 +133,8 @@ export function PayDialog({
     <Drawer
       open
       onClose={onClose}
-      title={`Record a payment — ${plan.toolName}`}
-      description="This writes a real expense against the card. The balance moves."
+      title={`Renew — ${plan.toolName}`}
+      description="Records this cycle's payment as a real expense against the card — the balance moves. A plan renews once a month."
     >
       <form id="pay-form" onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field
@@ -172,21 +180,26 @@ export function PayDialog({
           {/*
             Every entry states its rate — *"puro application a joto dhoroner
             transaction a hok na keno manually prottekbar rate bosate hobe"*.
-            The plan's own is the placeholder rather than the value, because a
-            box that arrives already filled is a box nobody re-reads, and the
-            whole reason this one exists is that the rate moves between
-            renewals. Leaving it alone still uses the plan's.
+
+            One box, required, opening on the plan's own rate so the figure
+            being used is on the screen rather than behind it. There used to
+            be two boxes of this name — a blank one that was actually sent and
+            a required, filled one that never was — and that second one's
+            behaviour (required, the plan's rate in it) is what this keeps.
+            The rate moves between renewals, so it is the box to change.
           */}
           <Field
             label="USD rate"
+            required
             hint={
               plan.usdRate
-                ? `Blank uses the plan's rate, ${plan.usdRate}. It moves between renewals.`
+                ? `The plan's rate. It moves between renewals — change it to the day's.`
                 : "What one US dollar was worth the day the card was billed"
             }
           >
             <Input
               name="usdRate"
+              required
               inputMode="decimal"
               className="col-amount"
               placeholder={plan.usdRate ?? "122.77"}
@@ -241,50 +254,29 @@ export function PayDialog({
           something the app already knows. The server resolves it.
         */}
         {/*
-          Every entry states its rate — *"puro application a joto dhoroner
-          transaction a hok na keno manually prottekbar rate bosate hobe"*.
-
-          Pre-filled here, unlike the transaction form, because a plan already
-          states the rate its dollar price was struck at, and that IS the rate
-          this payment happened at unless the card was billed on a different
-          day. Editable, so a day that moved can be said so.
+          There was a second "USD rate" box here, named `usdRate` like the one
+          above. The form sends the FIRST box of a name, so this one was never
+          read — it only showed the same question twice and, being required,
+          could block a save the first box had already answered. Gone.
         */}
-        <Field
-          label="USD rate"
-          required
-          hint={
-            plan.usdRate
-              ? "The plan's rate. Change it if the card was billed at another."
-              : "What one US dollar was worth on the day the card was billed."
-          }
-        >
-          <Input
-            name="usdRate"
-            required
-            inputMode="decimal"
-            className="col-amount"
-            placeholder="122.77"
-            defaultValue={plan.usdRate ?? ""}
-          />
-        </Field>
 
         <Field
           label="Note"
           hint="Anything that makes this charge recognisable later"
         >
-          <Input name="note" maxLength={200} placeholder="March renewal" />
+          <Input name="note" maxLength={200} placeholder="September renewal" />
         </Field>
 
         {/*
-          Off by default, and that is deliberate. A payment is not always the
-          month's renewal — somebody may be recording one they forgot in March —
-          and moving the renewal date on a back-dated entry would tell the
-          reminder it has a month it does not.
+          On by default now that this is Renew: renewing IS moving the plan on
+          a cycle. Still a box, because a renewal recorded late — one forgotten
+          in March — must not move a date that has already moved.
         */}
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
             name="advanceRenewal"
+            defaultChecked
             className="mt-0.5 size-3.5 cursor-pointer accent-primary"
           />
           <span>
@@ -311,7 +303,7 @@ export function PayDialog({
           disabled={pending}
         >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Record it
+          Renew
         </Button>
       </div>
     </Drawer>
