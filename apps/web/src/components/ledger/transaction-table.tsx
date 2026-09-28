@@ -501,8 +501,13 @@ export function TransactionTable({
                     is disabled, so the screen still decides.
                   */}
                   <RowActions
+                    /*
+                      Not on half a transfer: this form changes one row, and
+                      the API now refuses that for a transfer — both halves are
+                      corrected together from Money Transfer.
+                    */
                     onEdit={
-                      canWrite && onEdit && !voided
+                      canWrite && onEdit && !voided && !row.transferGroupId
                         ? () => onEdit(row)
                         : undefined
                     }
@@ -535,7 +540,9 @@ export function TransactionTable({
       <TransactionDetails
         row={showing}
         onClose={() => setShowing(null)}
-        onEdit={canWrite && onEdit ? onEdit : undefined}
+        onEdit={
+          canWrite && onEdit && !showing?.transferGroupId ? onEdit : undefined
+        }
         onOpenDocuments={(row, which) =>
           setDocumentsFor(
             which === "invoice"

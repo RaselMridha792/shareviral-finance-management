@@ -1,11 +1,14 @@
 import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
+  amountSchema,
   createTransactionSchema,
   expenseOverviewQuerySchema,
   expenseSummaryQuerySchema,
+  isoDateSchema,
   listTransactionsQuerySchema,
   recordCashInSchema,
   registerQuerySchema,
+  paymentMethodSchema,
   transactionFilterSchema,
   transferSchema,
   updateTransactionSchema,
@@ -105,6 +108,39 @@ const paySubscriptionSchema = z.object({
   chargeAmount: z.string().trim().optional(),
 });
 type PaySubscriptionInput = z.infer<typeof paySubscriptionSchema>;
+
+/**
+ * Correcting a transfer — both halves at once, and its bank charge with them.
+ *
+ * The owner: *"money transfer er ekhane edit button rakho jate edit kora jay
+ * records"*. Editing had been left out on purpose while the only edit endpoint
+ * changed one row: half a pair corrected is two accounts that disagree. This
+ * one changes the pair, so the reason is gone. Declared here, like the schema
+ * above, because one screen sends it.
+ *
+ * The whole correction every time, not a patch: the form sends what it shows,
+ * so a box left empty means empty — no dollars moved, no bank charge — rather
+ * than "unchanged". The ACCOUNTS are not in it. Money landed in the wrong
+ * account is corrected by voiding and recording again, the rule Cash In keeps:
+ * an edit that moved money between two balances would leave no trail.
+ */
+const updateTransferSchema = z.strictObject({
+  txnDate: isoDateSchema,
+  amount: amountSchema.refine((v) => Number(v) > 0, {
+    message: "The amount must be more than zero",
+  }),
+  usdRate: z
+    .string()
+    .trim()
+    .regex(/^\d{1,5}(\.\d{1,6})?$/, "Enter a rate like 122.77"),
+  /** Absent: no dollars moved, and any stated before are cleared. */
+  usdAmount: amountSchema.optional(),
+  /** Absent or zero: no charge, and an existing one comes off. */
+  chargeAmount: amountSchema.optional(),
+  description: z.string().trim().min(2).max(300),
+  paymentMethod: paymentMethodSchema,
+});
+export type UpdateTransferInput = z.infer<typeof updateTransferSchema>;
 
 @Controller()
 export class TransactionsController {
@@ -251,6 +287,17 @@ export class TransactionsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.transactions.transfer(body, actor);
+  }
+
+  /** Either half's id; both halves change together. */
+  @Patch("transactions/transfer/:id")
+  @RequirePermission("transactions.write")
+  updateTransfer(
+    @Param("id") id: string,
+    @ZodBody(updateTransferSchema) body: UpdateTransferInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.transactions.updateTransfer(uuidSchema.parse(id), body, actor);
   }
 
   @Patch("transactions/:id")

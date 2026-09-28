@@ -12,6 +12,7 @@ import {
   type ListTransactionsQuery,
   type Paginated,
   type PaginationQuery,
+  type PaymentMethod,
   type RecordCashInInput,
   type TransactionFilter,
   type TransferInput,
@@ -148,6 +149,8 @@ export type TransferRow = {
   documentCount: number;
   invoiceCount: number;
   recordCount: number;
+  /** The bank's cut on the paying side, or null when there was none. */
+  chargeAmount: string | null;
   txnDate: string;
   amount: string;
   description: string;
@@ -1110,6 +1113,22 @@ export class TransactionsService {
       );
     }
 
+    /*
+     * Half a transfer is corrected with its twin, never alone.
+     *
+     * This endpoint changes one row, and a transfer is two: an amount or a
+     * date changed on one half leaves the two accounts disagreeing about the
+     * same movement, which is the fault the pair exists to prevent. The All
+     * transactions table offered its Edit on either half and nothing here
+     * refused it. `updateTransfer` changes both, and Money Transfer is the
+     * door to it.
+     */
+    if (existing.transferGroupId) {
+      throw new BadRequestException(
+        "This is one half of a transfer. Correct it from Money Transfer, so both accounts change together.",
+      );
+    }
+
     // Both the date it currently sits on and the date it would move to.
     await this.settings.assertPeriodOpen(existing.txnDate);
     if (input.txnDate) await this.settings.assertPeriodOpen(input.txnDate);
@@ -1710,6 +1729,18 @@ export class TransactionsService {
              columns on the transfers table open different drawers. */
           invoiceCount: documentCountOf(["invoice"]),
           recordCount: documentCountOf(["bank_statement", "receipt", "other"]),
+          /*
+           * The bank's cut, hung on the out half like the files — what the
+           * edit form opens on, and what the record shows. Literal SQL for the
+           * same bare-name reason as the counts above.
+           */
+          chargeAmount: sql<string | null>`(
+            select c.amount::text from transactions c
+             where c.charge_for_id = transactions.id
+               and c.deleted_at is null
+               and c.voided_at is null
+             limit 1
+          )`,
           fromAccountId: fromAccount.id,
           fromAccountName: fromAccount.name,
           toAccountId: toAccount.id,
@@ -1847,6 +1878,132 @@ export class TransactionsService {
     });
 
     return this.findOne(created.id);
+  }
+
+  /**
+   * Corrects a transfer: both halves, and the bank charge on the paying side,
+   * in one database transaction.
+   *
+   * `id` may be either half. The accounts stay as they are (see the schema on
+   * the controller); everything the form shows is rewritten on BOTH rows, so
+   * the pair can never disagree about its own date, amount, rate or wording.
+   *
+   * The rules every other write keeps, kept here:
+   *
+   * - The period lock on the date it sits on AND the date it moves to.
+   * - Never below zero, on BOTH accounts. The paying side is the obvious one;
+   *   the receiving side matters too, because a transfer corrected downward
+   *   takes money back out of an account that may already have spent it.
+   * - Dollars stated together or not at all: `transactions_fx_complete` wants
+   *   the amount, the currency and the rate as a set, so a transfer that no
+   *   longer states dollars clears all three.
+   */
+  async updateTransfer(
+    id: string,
+    input: {
+      txnDate: string;
+      amount: string;
+      usdRate: string;
+      usdAmount?: string;
+      chargeAmount?: string;
+      description: string;
+      paymentMethod: PaymentMethod;
+    },
+    actor: AuthenticatedUser,
+  ) {
+    const existing = await this.findOne(id);
+    if (!existing.transferGroupId) {
+      throw new BadRequestException("This entry is not a transfer.");
+    }
+    if (existing.voidedAt) {
+      throw new BadRequestException(
+        "This transfer was voided. A voided transfer cannot be edited — record it again instead.",
+      );
+    }
+
+    const halves = await this.db.client
+      .select({
+        id: transactions.id,
+        refNo: transactions.refNo,
+        direction: transactions.direction,
+        accountId: transactions.accountId,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.transferGroupId, existing.transferGroupId),
+          isNull(transactions.deletedAt),
+        ),
+      );
+    const out = halves.find((half) => half.direction === "out");
+    const arriving = halves.find((half) => half.direction === "in");
+    if (!out || !arriving) {
+      throw new BadRequestException(
+        "This transfer is missing one of its halves, so it cannot be edited safely.",
+      );
+    }
+
+    await this.settings.assertPeriodOpen(existing.txnDate);
+    await this.settings.assertPeriodOpen(input.txnDate);
+
+    const watch = await overdraftWatch(this.db.client, [
+      out.accountId,
+      arriving.accountId,
+    ]);
+
+    await this.audit.mutate({
+      action: "update",
+      entityTable: "transactions",
+      entityId: out.id,
+      summary: `Corrected the transfer ${out.refNo} — ${input.description}`,
+      module: "transactions",
+      read: async (tx) => {
+        const [row] = await tx
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, out.id))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const dollars = input.usdAmount
+          ? {
+              originalAmount: input.usdAmount,
+              originalCurrency: "USD",
+              fxRate: input.usdRate,
+            }
+          : { originalAmount: null, originalCurrency: null, fxRate: null };
+
+        await tx
+          .update(transactions)
+          .set({
+            txnDate: input.txnDate,
+            amount: input.amount,
+            usdRate: input.usdRate,
+            ...dollars,
+            description: input.description,
+            paymentMethod: input.paymentMethod,
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(inArray(transactions.id, [out.id, arriving.id]));
+
+        // After the rows, so the charge is read at the rate just written.
+        await this.writeBankCharge(tx, {
+          parentId: out.id,
+          chargeAmount: input.chargeAmount,
+          accountId: out.accountId,
+          txnDate: input.txnDate,
+          description: input.description,
+          year: Number(input.txnDate.slice(0, 4)),
+          actor,
+        });
+
+        await watch.assert(tx);
+      },
+    });
+
+    return this.findOne(out.id);
   }
 
   /**

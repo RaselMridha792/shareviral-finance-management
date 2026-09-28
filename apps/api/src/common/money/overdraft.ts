@@ -43,6 +43,11 @@ type Low = {
   end: number;
   /** The day the low happens, or null when the opening balance is the low. */
   dipDate: string | null;
+  /**
+   * The first day after the dip when the account is back at or above zero —
+   * the day the money that covers it is dated. Null when it never recovers.
+   */
+  recoverDate: string | null;
 };
 
 async function lowestPoint(
@@ -80,7 +85,11 @@ async function lowestPoint(
            case
              when w.cum is not null and w.cum < 0 then w.txn_date::text
              else null
-           end as dip_date
+           end as dip_date,
+           (select min(r.txn_date)::text
+              from running r
+             where r.txn_date > w.txn_date
+               and a.opening_balance::numeric + r.cum >= 0) as recover_date
       from accounts a
       left join worst w on true
       cross join total t
@@ -93,6 +102,7 @@ async function lowestPoint(
       low_cents: string;
       end_cents: string;
       dip_date: string | null;
+      recover_date: string | null;
     }[]
   )[0];
   if (!row) return null;
@@ -101,7 +111,14 @@ async function lowestPoint(
     low: Number(row.low_cents),
     end: Number(row.end_cents),
     dipDate: row.dip_date,
+    recoverDate: row.recover_date,
   };
+}
+
+/** 2026-09-28 as the screens print it: 28/09/2026. */
+function shown(isoDate: string): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
 }
 
 export type OverdraftWatch = {
@@ -158,12 +175,41 @@ export async function overdraftWatch(
         const endBroken =
           after.end < 0 && after.end < Math.min(0, was?.end ?? 0);
 
+        /*
+         * The money is there — just dated later than this entry.
+         *
+         * The owner hit exactly this: ৳4,99,800 in M/S. EXPROVIA, a $50
+         * transfer refused. The ৳5,00,000 that filled the account was dated
+         * 29/09 and the transfer 28/09, so on the 28th the account held
+         * nothing. "Record the money coming in first" was the wrong advice —
+         * it WAS recorded — and the balance on every screen said the money was
+         * there. So when the account ends up in credit and only dips on the
+         * way, the message names the day the covering money is dated and the
+         * two ways out.
+         */
+        if (
+          lowBroken &&
+          !endBroken &&
+          after.dipDate &&
+          after.recoverDate &&
+          after.end >= 0
+        ) {
+          throw new BadRequestException(
+            `${after.name} does not hold enough money on ${shown(after.dipDate)}: it would stand at ` +
+              `${formatMoney((after.low / 100).toFixed(2))} that day, and an account can never go below zero on any day. ` +
+              `The money that covers this is dated ${shown(after.recoverDate)}, later than this entry — ` +
+              `date this on or after ${shown(after.recoverDate)}, or correct the date of the entry that brought the money in.`,
+          );
+        }
+
         if (lowBroken || endBroken) {
           const standing = lowBroken ? after.low : after.end;
           throw new BadRequestException(
             `${after.name} does not hold enough money for this. It would stand at ` +
               `${formatMoney((standing / 100).toFixed(2))}` +
-              (lowBroken && after.dipDate ? ` on ${after.dipDate}` : "") +
+              (lowBroken && after.dipDate
+                ? ` on ${shown(after.dipDate)}`
+                : "") +
               `, and an account can never go below zero. Record the money coming in first.`,
           );
         }

@@ -92,6 +92,8 @@ export type TransferRowDto = {
       column only offers its eye when its own drawer has something in it. */
   invoiceCount: number;
   recordCount: number;
+  /** The bank's cut on the paying side, or null when there was none. */
+  chargeAmount: string | null;
   txnDate: string;
   amount: string;
   description: string;
@@ -284,6 +286,27 @@ export const ledgerApi = {
       method: "POST",
       ...json(input),
     }),
+  /** Both halves and the charge, together — `id` is either half. */
+  updateTransfer: (id: string, input: UpdateTransferInput) =>
+    apiFetch<TransactionDto>(`/transactions/transfer/${id}`, {
+      method: "PATCH",
+      ...json(input),
+    }),
+};
+
+/**
+ * A transfer's correction: the whole of what the form shows, not a patch —
+ * an empty box means none. The accounts are not part of it; see the schema on
+ * the API's transactions controller.
+ */
+export type UpdateTransferInput = {
+  txnDate: string;
+  amount: string;
+  usdRate: string;
+  usdAmount?: string;
+  chargeAmount?: string;
+  description: string;
+  paymentMethod: PaymentMethod;
 };
 
 /**

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 108 | **A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused** | **done** — not pushed |
 | 107 | **Accounts overview: the two pale cards deepened — ink and ocean** | **done** — not pushed, at the owner's word |
 | 106 | **An edit form shows the files already attached, and one attach is one file** | **done** — four screens, and the rest checked |
 | 105 | **Accounts overview: every account drawn as a bank card** | **done** |
@@ -85,6 +86,65 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 108. A transfer can be edited — both halves and its charge together; and why M/S. EXPROVIA's $50 was refused — 28 Sep 2026
+
+Two asks from the owner in one message: *"money transfer er ekhane edit button
+rakho jate edit kora jay records"*, and M/S. EXPROVIA showing ৳4,99,800 yet
+refusing a $50 transfer — *"eta indetailed check koro properly"*.
+
+**Why the $50 was refused — the rule was right, the sentence was not.** The
+owner's own screenshots carry the answer: the ৳5,00,000 Cash In
+(TXN-2026-000083) is dated **29/09/2026**, the transfer **28/09/2026**. An
+account can never go below zero on ANY day (`common/money/overdraft.ts`
+checks the lowest running balance, not today's), and on the 28th that account
+held ৳0 — so ৳6,075 + ৳200 would have put it at −৳6,275.
+The screens show ৳4,99,800 because a balance "as it stands now" counts the
+29th already. The refusal then said *"Record the money coming in first"* about
+money that was recorded. Rebuilt locally exactly as on the live site (opening
+৳0, ৳5,00,000 on the 29th with ৳200 charge, $50 at 121.5 on the 28th):
+refused, as live. Now, when the account ends in credit and only dips on the
+way, the message names both days and the way out — *"… does not hold enough
+money on 28/09/2026: it would stand at −৳6,275.00 that day … The money that
+covers this is dated 29/09/2026, later than this entry — date this on or after
+29/09/2026, or correct the date of the entry that brought the money in."* A
+true shortfall keeps the old sentence; dates now print dd/mm/yyyy in both.
+Dated the 29th, the same transfer goes through. **For the owner:** either date
+the transfer 29/09 or later, or — if the Cash In's 29/09 was a slip — correct
+that entry's date.
+
+**Editing a transfer.** Left out on purpose until now (the old comment on the
+row said why): the only edit endpoint changed one row, and half a pair
+corrected is two accounts that disagree. New `PATCH
+/transactions/transfer/:id` (either half's id; schema on the controller, the
+precedent for a one-screen schema) rewrites **both** halves — date, taka,
+rate, dollars, description, method — and the bank charge on the paying side
+(same row updated, or taken off when emptied), in one database transaction;
+the period lock on both dates; never-below-zero on **both** accounts (a
+transfer corrected down can overdraw the receiving side that already spent
+it); dollars stated as a set or cleared as a set. The accounts do not change —
+void and record again, the Cash In rule. The form opens titled "Edit transfer
+TXN-…" on the stored figures (the stored taka, until the dollars or rate
+move — Cash In's rule), accounts shown and fixed, the slip on its clip,
+removable. Edit is on the row and in the record's popup, which now also shows
+the bank charge (`chargeAmount` added to the transfers list).
+
+**A hole closed with it.** All transactions offered its ordinary Edit on
+either half of a transfer, and `PATCH /transactions/:id` accepted it — one
+half's amount or date changed alone. It now refuses (400, naming Money
+Transfer), and the ledger table no longer draws Edit on a transfer row.
+
+**Proved** by `.transfereditqa.mjs` (new), **32/32**: the live refusal rebuilt
+and its new sentence, through the API and the form; the edit from the row and
+from the popup, both halves and the charge moving together, balances exact,
+re-dating, charge removal, slip removal, overdraft refused on either side and
+changing nothing, half-edit refused, a voided transfer closed. `.transferqa`
+26/26, `.attachqa` 75/75, `.rowdetailqa` 49/49, `.popupqa` 47/47; integration
+suite 03 99/99 with the new route in the matrix. Four CI steps green.
+
+Found on the way, not changed: a balance "as it stands now" counts entries
+dated in the future, which is how a screen can say ৳4,99,800 on a day the
+account holds ৳0.
 
 ## 107. Accounts overview: the two pale cards deepened — ink and ocean — 28 Sep 2026
 

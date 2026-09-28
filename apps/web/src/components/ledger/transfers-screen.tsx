@@ -41,6 +41,7 @@ import type { AccountWithBalance } from "@/lib/masters";
 import { serial } from "@/lib/pagination";
 import { cn, formatDate } from "@/lib/utils";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import {
   RowDetails,
   rowOpener,
@@ -79,6 +80,8 @@ export function TransfersScreen({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [creating, setCreating] = useState(false);
+  /** The transfer being corrected — both halves and its charge, together. */
+  const [editing, setEditing] = useState<TransferRowDto | null>(null);
   const [voiding, setVoiding] = useState<TransferRowDto | null>(null);
   /** Which pair's paperwork is open, and which number was clicked. */
   const [documentsFor, setDocumentsFor] = useState<{
@@ -383,12 +386,21 @@ export function TransfersScreen({
                         />
                         <RowActions
                           /*
-                            No edit, and that is a decision rather than a gap:
-                            an edit endpoint touches one row, and changing half
-                            a pair would leave the two accounts disagreeing —
-                            the exact fault the pair exists to prevent. A wrong
-                            transfer is voided or deleted and recorded again.
+                            Edit corrects the PAIR — both halves and the bank
+                            charge in one write (`updateTransfer`), which is
+                            what the old "no edit" was waiting for: an endpoint
+                            that touched one row would have left the two
+                            accounts disagreeing. The owner: "money transfer er
+                            ekhane edit button rakho jate edit kora jay
+                            records". The accounts themselves still cannot
+                            change; a transfer landed in the wrong one is
+                            voided and recorded again.
                           */
+                          onEdit={
+                            canWrite && !voided
+                              ? () => setEditing(row)
+                              : undefined
+                          }
                           second="void"
                           onSecond={
                             canWrite && !voided
@@ -425,6 +437,16 @@ export function TransfersScreen({
         onClose={() => setCreating(false)}
         onSaved={() => load(1)}
       />
+      {/* A fresh form per transfer, so its boxes start from that transfer's
+          own figures rather than the last one opened. */}
+      <TransferForm
+        key={editing?.outId ?? "none"}
+        open={Boolean(editing)}
+        accounts={accounts}
+        transfer={editing ?? undefined}
+        onClose={() => setEditing(null)}
+        onSaved={() => load(page)}
+      />
       {/*
         The void dialog wants a transaction; the out half carries the pair's
         identity and the API voids its twin with it — the same door the
@@ -439,6 +461,14 @@ export function TransfersScreen({
         <TransferDetails
           row={showing}
           onClose={() => setShowing(null)}
+          onEdit={
+            canWrite && !showing.voidedAt
+              ? () => {
+                  setShowing(null);
+                  setEditing(showing);
+                }
+              : undefined
+          }
           onOpenDocuments={(row, which) =>
             setDocumentsFor({
               row,
@@ -567,10 +597,13 @@ function AccountCell({ id, name }: { id: string; name: string }) {
 function TransferDetails({
   row,
   onClose,
+  onEdit,
   onOpenDocuments,
 }: {
   row: TransferRowDto;
   onClose: () => void;
+  /** Absent for a reader, and for a voided transfer. */
+  onEdit?: () => void;
   onOpenDocuments: (row: TransferRowDto, which: "invoice" | "payment") => void;
 }) {
   const paper = (
@@ -637,6 +670,16 @@ function TransferDetails({
           label: "USD rate",
           value: row.usdRate ? Number(row.usdRate).toFixed(2) : null,
         },
+        {
+          label: "Bank charge",
+          value: row.chargeAmount ? (
+            <Amount
+              value={row.chargeAmount}
+              tone="neutral"
+              showCounterpart={false}
+            />
+          ) : null,
+        },
       ],
     },
     {
@@ -670,6 +713,16 @@ function TransferDetails({
       title={row.description}
       description={`${formatDate(row.txnDate)} · ${row.refNo}`}
       sections={sections}
+      footer={
+        onEdit ? (
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={onEdit}>
+              <PencilSimpleIcon weight="duotone" size={17} />
+              Edit
+            </Button>
+          </div>
+        ) : undefined
+      }
     />
   );
 }

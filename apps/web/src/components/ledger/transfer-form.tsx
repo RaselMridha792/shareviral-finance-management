@@ -8,7 +8,7 @@ import {
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { AttachClip } from "@/components/files/attach-clip";
+import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -21,12 +21,16 @@ import {
 import { formatMoney } from "@finance/shared";
 
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
-import { ledgerApi } from "@/lib/ledger";
+import { ledgerApi, type TransferRowDto } from "@/lib/ledger";
 import type { AccountWithBalance } from "@/lib/masters";
 
 /**
  * Moving money between our own accounts. Creates two linked rows — one out,
  * one in — so each account's register matches its own bank statement.
+ *
+ * Handed a `transfer`, it corrects that one instead: both halves and the bank
+ * charge change together through `updateTransfer`, the accounts stay as they
+ * are, and the files already on it are listed on the clips.
  */
 /**
  * How an account reads in the picker: in its own currency.
@@ -51,13 +55,26 @@ function optionLabel(account: AccountWithBalance): string {
   return `${account.name} — ${formatMoney(account.balance)}`;
 }
 
+/** A stored rate as a person types one: 121.500000 reads 121.5. */
+function typedRate(rate: string | null | undefined): string {
+  if (!rate) return "";
+  const value = Number(rate);
+  return Number.isFinite(value) ? String(value) : rate;
+}
+
 export function TransferForm({
   open,
   accounts,
+  transfer,
   onClose,
   onSaved,
 }: {
   open: boolean;
+  /**
+   * The transfer being corrected, or nothing for a new one. The screen mounts
+   * a fresh form per transfer (`key`), so the boxes start from its figures.
+   */
+  transfer?: TransferRowDto;
   /**
    * With balances, because the account rule refuses a transfer past what the
    * account holds — the picker saying "৳48,750.00" beside the name is the
@@ -78,16 +95,39 @@ export function TransferForm({
    * computed until touched, exactly the Cash In rule. The ledger still
    * stores taka.
    */
-  const [fromId, setFromId] = useState(accounts[0]?.id ?? "");
-  const [toId, setToId] = useState(accounts[1]?.id ?? "");
-  const usdPrimary = [fromId, toId].some(
-    (id) =>
-      accounts.find((candidate) => candidate.id === id)?.currency === "USD",
+  const editing = Boolean(transfer);
+  const [fromId, setFromId] = useState(
+    transfer?.fromAccountId ?? accounts[0]?.id ?? "",
   );
-  const [usdAmount, setUsdAmount] = useState("");
-  const [usdRate, setUsdRate] = useState("");
-  const [typedBdt, setTypedBdt] = useState("");
-  const [bdtTouched, setBdtTouched] = useState(false);
+  const [toId, setToId] = useState(
+    transfer?.toAccountId ?? accounts[1]?.id ?? "",
+  );
+  /*
+   * A correction keeps its dollars box when the transfer stated dollars, even
+   * if one of its accounts has since been archived and is missing from the
+   * list that decides this for a new one.
+   */
+  const usdPrimary =
+    [fromId, toId].some(
+      (id) =>
+        accounts.find((candidate) => candidate.id === id)?.currency === "USD",
+    ) || Boolean(transfer?.usdAmount);
+  const [usdAmount, setUsdAmount] = useState(transfer?.usdAmount ?? "");
+  const [usdRate, setUsdRate] = useState(typedRate(transfer?.usdRate));
+  /*
+   * A correction opens on the taka it STORED, not a figure recomputed from the
+   * dollars and the rate — the bank's figure is the fact, and a rate rounded
+   * to six places could otherwise move it by a paisa on a save nobody meant
+   * to change it with. Treated as already typed, so it stays put until
+   * somebody changes it — or moves the dollars or the rate, at which point the
+   * arithmetic takes over again, exactly as a correction on Cash In does.
+   */
+  const [typedBdt, setTypedBdt] = useState(transfer?.amount ?? "");
+  const [bdtTouched, setBdtTouched] = useState(editing);
+  /** On a correction, a moved input hands the taka back to the arithmetic. */
+  const inputsMoved = () => {
+    if (editing) setBdtTouched(false);
+  };
 
   const derivedBdt = (() => {
     const usd = Number(usdAmount.replace(/[,\s$]/g, ""));
@@ -106,6 +146,15 @@ export function TransferForm({
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [bankFiles, setBankFiles] = useState<File[]>([]);
   /*
+   * What is already on the transfer — on its out half, where its files hang.
+   * Listed on the clips, openable, and taken off on save; a new transfer has
+   * nothing to list.
+   */
+  const papers = useStoredPapers(
+    "transaction",
+    open ? transfer?.outId : undefined,
+  );
+  /*
    * The "number or slip" choice is gone with the box it governed.
    *
    * It existed to say which of two things a reference was — a number the bank
@@ -121,25 +170,41 @@ export function TransferForm({
 
     const data = new FormData(event.currentTarget);
     try {
-      const row = await ledgerApi.transfer({
+      /* What a new transfer and a correction both send. */
+      const common = {
         txnDate: String(data.get("txnDate")),
-        fromAccountId: String(data.get("fromAccountId")),
-        toAccountId: String(data.get("toAccountId")),
         amount: String(data.get("amount")),
-        /* On the FROM account, where a transfer charge is taken. */
+        /* On the FROM account, where a transfer charge is taken. An empty box
+           on a correction takes an existing charge off. */
         chargeAmount:
           String(data.get("chargeAmount") ?? "").replace(/[,\s৳]/g, "") ||
           undefined,
         description: String(data.get("description")),
-        invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
-        reference: String(data.get("reference") ?? "") || undefined,
         /* The rate always; the dollars only when dollars actually moved. */
         usdRate: usdRate.trim(),
         ...(usdPrimary && usdAmount.trim()
           ? { usdAmount: usdAmount.replace(/[,\s$]/g, "") }
           : {}),
         paymentMethod: String(data.get("paymentMethod")) as never,
-      });
+      };
+      const row = transfer
+        ? /* Both halves and the charge, together. No accounts: a transfer
+             landed in the wrong one is voided and recorded again. */
+          await ledgerApi.updateTransfer(transfer.outId, common)
+        : await ledgerApi.transfer({
+            ...common,
+            fromAccountId: String(data.get("fromAccountId")),
+            toAccountId: String(data.get("toAccountId")),
+            invoiceNo: String(data.get("invoiceNo") ?? "") || undefined,
+            reference: String(data.get("reference") ?? "") || undefined,
+          });
+
+      /*
+       * What was marked to come off goes first, then what was picked goes up
+       * — so replacing a slip is one save, and a paper taken off and attached
+       * again ends as one copy, not two.
+       */
+      const unremoved = await papers.commit();
 
       /*
        * Uploaded one at a time and never thrown: by now the money has moved,
@@ -172,11 +237,20 @@ export function TransferForm({
       }
 
       await onSaved();
-      if (failed.length) {
+      if (failed.length || unremoved.length) {
         setInvoiceFiles([]);
         setBankFiles([]);
         setError(
-          `The transfer is recorded, but the ${failed.join(" and the ")} did not upload — open it from the table's number and attach again.`,
+          [
+            failed.length
+              ? `The transfer is ${editing ? "saved" : "recorded"}, but the ${failed.join(" and the ")} did not upload — open it with Edit and attach again.`
+              : null,
+            unremoved.length
+              ? `${unremoved.map((one) => one.name).join(" and ")} could not be removed: ${unremoved.map((one) => one.reason).join(" ")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
         );
         setPending(false);
         return;
@@ -194,7 +268,7 @@ export function TransferForm({
     }
   }
 
-  if (accounts.length < 2) {
+  if (!editing && accounts.length < 2) {
     return (
       <Drawer open={open} onClose={onClose} title="Move money between accounts">
         <p className="text-sm text-muted-foreground">
@@ -209,8 +283,14 @@ export function TransferForm({
     <Drawer
       open={open}
       onClose={onClose}
-      title="Move money between accounts"
-      description="Records two entries so each account matches its own statement."
+      title={
+        transfer ? `Edit transfer ${transfer.refNo}` : "Move money between accounts"
+      }
+      description={
+        editing
+          ? "Both entries and the bank charge change together. The accounts cannot change — void it and record it again instead."
+          : "Records two entries so each account matches its own statement."
+      }
     >
       <form
         id="transfer-form"
@@ -218,7 +298,11 @@ export function TransferForm({
         className="flex flex-col gap-4"
       >
         <Field label="Date" required error={fieldErrors.txnDate}>
-          <DateInput name="txnDate" required defaultValue={todayInDhaka()} />
+          <DateInput
+            name="txnDate"
+            required
+            defaultValue={transfer?.txnDate ?? todayInDhaka()}
+          />
         </Field>
 
         <div className="flex items-end gap-2">
@@ -228,18 +312,26 @@ export function TransferForm({
             error={fieldErrors.fromAccountId}
             className="flex-1"
           >
-            <Select
-              name="fromAccountId"
-              required
-              value={fromId}
-              onChange={(event) => setFromId(event.target.value)}
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {optionLabel(account)}
+            {transfer ? (
+              <Select disabled value={transfer.fromAccountId}>
+                <option value={transfer.fromAccountId}>
+                  {transfer.fromAccountName}
                 </option>
-              ))}
-            </Select>
+              </Select>
+            ) : (
+              <Select
+                name="fromAccountId"
+                required
+                value={fromId}
+                onChange={(event) => setFromId(event.target.value)}
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {optionLabel(account)}
+                  </option>
+                ))}
+              </Select>
+            )}
           </Field>
           <ArrowRight className="mb-3 size-4 shrink-0 text-muted-foreground" />
           <Field
@@ -248,18 +340,26 @@ export function TransferForm({
             error={fieldErrors.toAccountId}
             className="flex-1"
           >
-            <Select
-              name="toAccountId"
-              required
-              value={toId}
-              onChange={(event) => setToId(event.target.value)}
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {optionLabel(account)}
+            {transfer ? (
+              <Select disabled value={transfer.toAccountId}>
+                <option value={transfer.toAccountId}>
+                  {transfer.toAccountName}
                 </option>
-              ))}
-            </Select>
+              </Select>
+            ) : (
+              <Select
+                name="toAccountId"
+                required
+                value={toId}
+                onChange={(event) => setToId(event.target.value)}
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {optionLabel(account)}
+                  </option>
+                ))}
+              </Select>
+            )}
           </Field>
         </div>
 
@@ -281,7 +381,10 @@ export function TransferForm({
                 required
                 placeholder="0.00"
                 value={usdAmount}
-                onChange={(event) => setUsdAmount(event.target.value)}
+                onChange={(event) => {
+                  setUsdAmount(event.target.value);
+                  inputsMoved();
+                }}
               />
             </Field>
           ) : null}
@@ -296,7 +399,10 @@ export function TransferForm({
               className="col-amount"
               placeholder="122.77"
               value={usdRate}
-              onChange={(event) => setUsdRate(event.target.value)}
+              onChange={(event) => {
+                setUsdRate(event.target.value);
+                inputsMoved();
+              }}
               required
             />
           </Field>
@@ -339,7 +445,11 @@ export function TransferForm({
           error={fieldErrors.chargeAmount}
           hint="Its own entry under Bank charges. Leave it empty when there was none."
         >
-          <MoneyInput name="chargeAmount" placeholder="0.00" />
+          <MoneyInput
+            name="chargeAmount"
+            placeholder="0.00"
+            defaultValue={transfer?.chargeAmount ?? ""}
+          />
         </Field>
 
         <Field label="Description" required error={fieldErrors.description}>
@@ -347,6 +457,7 @@ export function TransferForm({
             name="description"
             required
             placeholder="Moved to petty cash"
+            defaultValue={transfer?.description ?? ""}
           />
         </Field>
 
@@ -364,6 +475,7 @@ export function TransferForm({
               name={DOCUMENT_NAMES.invoice}
               files={invoiceFiles}
               onPick={setInvoiceFiles}
+              papers={papers}
               emptyLabel="No invoice attached"
             />
           </Field>
@@ -379,13 +491,17 @@ export function TransferForm({
               name={DOCUMENT_NAMES.bank_statement}
               files={bankFiles}
               onPick={setBankFiles}
+              papers={papers}
               emptyLabel="No reference attached"
             />
           </Field>
         </div>
 
         <Field label="Method">
-          <Select name="paymentMethod" defaultValue="bank_transfer">
+          <Select
+            name="paymentMethod"
+            defaultValue={transfer?.paymentMethod ?? "bank_transfer"}
+          >
             {PAYMENT_METHODS.map((method) => (
               <option key={method} value={method}>
                 {PAYMENT_METHOD_LABELS[method]}
@@ -415,7 +531,7 @@ export function TransferForm({
           disabled={pending}
         >
           {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Record the transfer
+          {editing ? "Save changes" : "Record the transfer"}
         </Button>
       </div>
     </Drawer>

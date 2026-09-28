@@ -30,6 +30,9 @@ const has = (role, permission) => ROLE_PERMISSIONS[role].includes(permission);
 const ROUTES = [
   ["GET", "/transactions?page=1&pageSize=1", ["transactions.read"]],
   ["POST", "/transactions", ["transactions.write"], {}],
+  // Correcting a transfer, both halves (#108). A made-up id: an allowed role
+  // stops at validation before the id is ever looked up.
+  ["PATCH", "/transactions/transfer/00000000-0000-4000-8000-000000000000", ["transactions.write"], {}],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],
