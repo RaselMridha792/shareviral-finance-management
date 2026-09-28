@@ -73,8 +73,15 @@ const db = new pg.Client({ connectionString: env.DATABASE_URL_UNPOOLED || env.DA
 await db.connect();
 
 const rowsBefore = new Set((await db.query("select id from transactions")).rows.map((r) => r.id));
+/*
+ * Read as text. `pg` turns a `date` into a JS Date at LOCAL midnight, and
+ * toISOString() then reads it back in UTC — a day early east of Greenwich
+ * (Dhaka is +06), so a correct lock looked wrong and a restore would have
+ * moved it back a day.
+ */
+const LOCK_SQL = "select books_locked_through::text as books_locked_through from app_settings where id = 1";
 const [{ books_locked_through: originalLock }] =
-  (await db.query("select books_locked_through from app_settings where id = 1")).rows;
+  (await db.query(LOCK_SQL)).rows;
 
 const setLock = async (through) => {
   const r = await send("/settings/lock-books", "POST", { booksLockedThrough: through });
@@ -110,7 +117,7 @@ try {
   const place = async (date, why) => {
     const r = await send("/transactions", "POST", {
       accountId: account.id, direction: "in", txnDate: date, amount: "13.00",
-      categoryId: inCat.id, description: why, paymentMethod: "bank_transfer",
+      categoryId: inCat.id, description: why, paymentMethod: "bank_transfer", usdRate: "122.50",
     });
     if (r.status !== 201 && r.status !== 200) throw new Error(`could not place ${date}: HTTP ${r.status} ${JSON.stringify(r.body)}`);
     made.push(r.body.id);
@@ -119,14 +126,16 @@ try {
 
   const insideRow = await place(INSIDE_DAY, "T13 — inside the period about to close");
   const outsideRow = await place(OPEN_DAY, "T13 — outside it");
-  ok("placed two rows while the books were open", `${INSIDE_DAY} and ${OPEN_DAY}`);
+  // Its own row, so voiding it leaves `insideRow` to prove the edits below.
+  const voidRow = await place(INSIDE_DAY, "T13 — inside, to be voided after closing");
+  ok("placed three rows while the books were open", `two on ${INSIDE_DAY}, one on ${OPEN_DAY}`);
 
   /* ------------------------------------------------------- close the books */
 
   await setLock(LOCKED_DAY);
   locked = true;
   const [{ books_locked_through: stored }] =
-    (await db.query("select books_locked_through from app_settings where id = 1")).rows;
+    (await db.query(LOCK_SQL)).rows;
   const storedIso = stored instanceof Date ? stored.toISOString().slice(0, 10) : String(stored).slice(0, 10);
   storedIso === LOCKED_DAY
     ? ok("the books are closed through the lock date", storedIso)
@@ -137,7 +146,7 @@ try {
   refused("a new entry dated inside the closed period is refused",
     await send("/transactions", "POST", {
       accountId: account.id, direction: "in", txnDate: LOCKED_DAY, amount: "13.00",
-      categoryId: inCat.id, description: "T13 — should never exist", paymentMethod: "bank_transfer",
+      categoryId: inCat.id, description: "T13 — should never exist", paymentMethod: "bank_transfer", usdRate: "122.50",
     }),
     "the lock date itself is closed, so the boundary is inclusive");
 
@@ -145,7 +154,7 @@ try {
     await (async () => {
       const r = await send("/transactions", "POST", {
         accountId: account.id, direction: "in", txnDate: NEXT_DAY, amount: "13.00",
-        categoryId: inCat.id, description: "T13 — the day after the lock", paymentMethod: "bank_transfer",
+        categoryId: inCat.id, description: "T13 — the day after the lock", paymentMethod: "bank_transfer", usdRate: "122.50",
       });
       if (r.body?.id) made.push(r.body.id);
       return r;
@@ -156,15 +165,27 @@ try {
     await send(`/transactions/${insideRow}`, "PATCH", { description: "T13 — edited after closing" }),
     "even a description, because the row itself is sealed");
 
-  refused("voiding an entry inside the closed period is refused",
-    await send(`/transactions/${insideRow}/void`, "POST", { reason: "T13 — should not be possible" }),
-    "voiding is a change to a reported month like any other");
+  /*
+   * Voiding one is ALLOWED, on the owner's decision of 31 Aug 2026 (ecad091,
+   * and the comment on `void` in transactions.service.ts): the trash could
+   * already move an entry out of a closed month, and asked which way to settle
+   * it he opened `void`. A void erases nothing — the row stays, struck
+   * through and out of every total, with who and why in the audit log — so a
+   * closed month can be corrected, not quietly rewritten.
+   */
+  allowed("voiding an entry inside the closed period goes through",
+    await send(`/transactions/${voidRow}/void`, "POST", { reason: "T13 — a mistake in a closed month" }),
+    "a void marks the mistake and keeps the row; creating and editing stay refused");
+  const [voided] = (await db.query("select voided_at, amount::text from transactions where id = $1", [voidRow])).rows;
+  voided?.voided_at && voided.amount === "13.00"
+    ? ok("and the voided row is still there, figure intact", "struck through rather than deleted")
+    : bad("the voided row is kept", JSON.stringify(voided));
 
   if (other) {
     refused("a transfer dated inside the closed period is refused",
       await send("/transactions/transfer", "POST", {
         txnDate: LOCKED_DAY, fromAccountId: account.id, toAccountId: other.id,
-        amount: "13.00", description: "T13 — transfer into a closed month",
+        amount: "13.00", description: "T13 — transfer into a closed month", usdRate: "122.50",
       }),
       "both legs are ledger rows, so both are covered");
   } else {
@@ -215,7 +236,7 @@ try {
     await db.query("update app_settings set books_locked_through = $1 where id = 1", [back]);
   }
   const [{ books_locked_through: now }] =
-    (await db.query("select books_locked_through from app_settings where id = 1")).rows;
+    (await db.query(LOCK_SQL)).rows;
   const nowIso = now instanceof Date ? now.toISOString().slice(0, 10) : now === null ? null : String(now).slice(0, 10);
   const wanted = originalLock
     ? (originalLock instanceof Date ? originalLock.toISOString().slice(0, 10) : String(originalLock).slice(0, 10))

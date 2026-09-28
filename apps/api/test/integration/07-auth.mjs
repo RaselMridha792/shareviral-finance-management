@@ -170,6 +170,25 @@ const attacked = await familyOf(refresh2);
 const otherFamilies = (await db.query(
   "select distinct family_id from refresh_tokens where user_id = $1 and family_id <> $2", [userId, attacked])).rows.map((r) => r.family_id);
 
+/*
+ * A spent token that turns up within 30 seconds of its rotation is not a
+ * replay: it is the loser of a refresh race — two requests sent before either
+ * reply's cookie landed (a812869, 27 Aug 2026; `answerTheStraggler` in
+ * token.service.ts). It is answered with an access token and NO refresh
+ * cookie, so only the winner ever writes one, and nothing is revoked.
+ */
+const straggler = await refresh(refresh1);
+straggler.status === 200 && straggler.jar.sfm_access && !straggler.jar.sfm_refresh
+  ? ok("a spent token inside the race window is answered, not condemned", "an access token and no refresh cookie")
+  : bad("the refresh-race straggler", `HTTP ${straggler.status}, refresh cookie ${straggler.jar.sfm_refresh ? "set" : "none"}`);
+
+// A replay is what arrives after that window. Rather than wait thirty
+// seconds, the spent token's rotation is aged past it.
+await db.query(
+  "update refresh_tokens set revoked_at = revoked_at - interval '60 seconds' where token_hash = encode(sha256($1::bytea), 'hex')",
+  [refresh1],
+);
+
 const liveInAttackedBefore = await liveInFamily(attacked);
 const liveElsewhereBefore = (await Promise.all(otherFamilies.map(liveInFamily))).reduce((a, b) => a + b, 0);
 

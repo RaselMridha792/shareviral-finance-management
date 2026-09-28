@@ -51,7 +51,12 @@ const runList = runs?.items ?? runs ?? [];
 const fixture = await makePayrollRun(send, api);
 const draft = { id: fixture.runId, periodYear: 2026, periodMonth: 9 };
 const accounts = (await api("/accounts")).body ?? [];
-const payFrom = accounts[0];
+/*
+ * The account with the most in it, not the first by name. An account can
+ * never go below zero, so a run paid from whichever sorts first is refused
+ * the moment that one is a small account — and says nothing about payroll.
+ */
+const payFrom = [...accounts].sort((a, b) => Number(b.balance) - Number(a.balance))[0];
 
 let paidRun = null;
 if (!draft) meh("payroll", "no draft run to take through");
@@ -74,7 +79,7 @@ else {
       ? ok("finalising moves no money", `balance unchanged at ${before.toFixed(2)}`)
       : bad("finalising moves no money", `balance moved by ${moved.toFixed(2)}`);
 
-    const paid = await send(`/payroll/runs/${draft.id}/pay`, "POST", { accountId: payFrom.id, paymentDate: "2026-08-14" });
+    const paid = await send(`/payroll/runs/${draft.id}/pay`, "POST", { accountId: payFrom.id, paymentDate: "2026-08-14", usdRate: "122.50" });
     if (paid.status !== 200 && paid.status !== 201) bad("mark paid", `HTTP ${paid.status} ${JSON.stringify(paid.body?.errors ?? paid.body?.message ?? "")}`);
     else {
       paidRun = draft.id;
@@ -172,7 +177,7 @@ else {
 
     const mapped = await send(`/imports/${batchId}/mapping`, "POST", {
       columnMap: { Date: "txnDate", Narration: "description", Debit: "amountOut", Credit: "amountIn" },
-      defaults: { accountId: importAccount.id, dateFormat: "dmy", fallbackCategoryId: importCat.id },
+      defaults: { accountId: importAccount.id, dateFormat: "dmy", fallbackCategoryId: importCat.id, usdRate: "122.50" },
     });
     mapped.status === 200 ? ok("mapping applied", `status ${mapped.body.status}`) : bad("mapping applied", `HTTP ${mapped.status} ${JSON.stringify(mapped.body?.errors ?? "")}`);
 
@@ -199,7 +204,7 @@ else {
       secondBatch = again.body.batch.id;
       await send(`/imports/${secondBatch}/mapping`, "POST", {
         columnMap: { Date: "txnDate", Narration: "description", Debit: "amountOut", Credit: "amountIn" },
-        defaults: { accountId: importAccount.id, dateFormat: "dmy", fallbackCategoryId: importCat.id },
+        defaults: { accountId: importAccount.id, dateFormat: "dmy", fallbackCategoryId: importCat.id, usdRate: "122.50" },
       });
       const dupPreview = await api(`/imports/${secondBatch}/preview?page=1&pageSize=50`);
       const dupes = (dupPreview.body?.rows ?? []).filter((r) => r.status === "duplicate");

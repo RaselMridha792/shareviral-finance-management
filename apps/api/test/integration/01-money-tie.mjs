@@ -111,6 +111,8 @@ if (!account || !leaf) {
         txnDate: "2026-08-14", amount, direction,
         description: `T1 tie check ${amount}`,
         accountId: account.id, categoryId: category.id,
+        // Every entry states the day's rate since #67 — the schema refuses one without.
+        usdRate: "122.50",
       }),
     });
     if (res.status === 201) made.push(res.body.id);

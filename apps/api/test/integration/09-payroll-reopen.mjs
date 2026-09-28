@@ -48,7 +48,12 @@ const runs = (await api("/payroll/runs")).body;
 // the suite builds its own rather than skipping and calling that a pass.
 const fixture = await makePayrollRun(send, api);
 const draft = { id: fixture.runId, periodYear: 2026, periodMonth: 9 };
-const account = ((await api("/accounts")).body ?? [])[0];
+/*
+ * The account with the most in it, not the first by name. An account can
+ * never go below zero, so a run paid from whichever sorts first is refused
+ * the moment that one is a small account — and says nothing about payroll.
+ */
+const account = [...((await api("/accounts")).body ?? [])].sort((a, b) => Number(b.balance) - Number(a.balance))[0];
 
 // Remember exactly which ledger rows existed before, so cleanup can tell
 // this script's rows from everybody else's.
@@ -59,7 +64,7 @@ const rowsBefore = new Set(
 if (!draft || !account) meh("fixture", "no draft run or no account");
 else {
   await send(`/payroll/runs/${draft.id}/finalize`, "POST");
-  const paid = await send(`/payroll/runs/${draft.id}/pay`, "POST", { accountId: account.id, paymentDate: "2026-08-14" });
+  const paid = await send(`/payroll/runs/${draft.id}/pay`, "POST", { accountId: account.id, paymentDate: "2026-08-14", usdRate: "122.50" });
   if (paid.status !== 200 && paid.status !== 201) bad("pay", `HTTP ${paid.status}`);
   else {
     ok("paid", "a ledger entry now exists for the run");
@@ -118,7 +123,7 @@ else {
 
     await send(`/payroll/runs/${draft.id}/finalize`, "POST");
     const payAgain = await send(`/payroll/runs/${draft.id}/pay`, "POST", {
-      accountId: account.id, paymentDate: "2026-08-14",
+      accountId: account.id, paymentDate: "2026-08-14", usdRate: "122.50",
     });
     payAgain.status === 200 || payAgain.status === 201
       ? ok("the corrected run can be paid again", `HTTP ${payAgain.status} — reopening is a way forward, not a dead end`)

@@ -64,6 +64,8 @@ if (!account || !outCat) {
     txnDate: "2026-08-14", amount: "5000.00", direction: "out",
     description: "T2 rent check", accountId: account.id, categoryId: outCat.id,
     receiptUrl: "https://drive.google.com/file/d/T2CHECK/view",
+    // Every entry states the day's rate since #67 — the schema refuses one without.
+    usdRate: "122.50",
   });
   if (created.status !== 201) bad("create", `HTTP ${created.status} ${JSON.stringify(created.body?.errors ?? "")}`);
   else {
@@ -91,7 +93,7 @@ if (!account || !outCat) {
   const noBill = await send("/transactions", "POST", {
     txnDate: "2026-08-14", amount: "9000.00", direction: "out",
     description: "T2 withheld without a bill", accountId: account.id, categoryId: outCat.id,
-    withheldTaxAmount: "1000.00",
+    withheldTaxAmount: "1000.00", usdRate: "122.50",
   });
   noBill.status === 400
     ? ok("tax withheld demands a gross bill", "refused, as the schema says")
@@ -100,7 +102,7 @@ if (!account || !outCat) {
   const withBill = await send("/transactions", "POST", {
     txnDate: "2026-08-14", amount: "9000.00", direction: "out",
     description: "T2 withheld with a bill", accountId: account.id, categoryId: outCat.id,
-    withheldTaxAmount: "1000.00", billAmount: "10000.00",
+    withheldTaxAmount: "1000.00", billAmount: "10000.00", usdRate: "122.50",
   });
   if (withBill.status === 201) { made.push(withBill.body.id); ok("tax withheld with a bill", `${withBill.body.refNo}, bill 10000 = paid 9000 + tax 1000`); }
   else bad("tax withheld with a bill", `HTTP ${withBill.status} ${JSON.stringify(withBill.body?.errors ?? "")}`);
@@ -110,7 +112,7 @@ if (!account || !outCat) {
     const transfer = await send("/transactions/transfer", "POST", {
       txnDate: "2026-08-14", amount: "2500.00",
       fromAccountId: account.id, toAccountId: other.id,
-      description: "T2 transfer check",
+      description: "T2 transfer check", usdRate: "122.50",
     });
     if (transfer.status !== 201 && transfer.status !== 200) bad("transfer", `HTTP ${transfer.status} ${JSON.stringify(transfer.body?.errors ?? transfer.body?.message ?? "")}`);
     else {

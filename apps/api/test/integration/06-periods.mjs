@@ -102,6 +102,8 @@ const place = async (date, amount, why) => {
   const r = await send("/transactions", "POST", {
     accountId: account.id, direction: "in", txnDate: date, amount: amount.toFixed(2),
     categoryId: inCat.id, description: why, paymentMethod: "bank_transfer",
+    // Every entry states the day's rate since #67 — the schema refuses one without.
+    usdRate: "122.50",
   });
   if (r.status !== 201 && r.status !== 200) throw new Error(`could not place ${date}: HTTP ${r.status} ${JSON.stringify(r.body)}`);
   made.push(r.body.id);

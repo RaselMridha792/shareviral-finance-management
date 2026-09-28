@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 103 | **The API integration suite passes again — 13 of 13** | **done** |
 | 102 | **A dollar account with no entries read "~" even with its dollars stated** | **done** |
 | 101 | **The account form asks a dollar account for its opening in dollars** | **done** |
 | 100 | **Paying a subscription with a malformed id: a 400, not a 500** | **done** |
@@ -80,6 +81,43 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 103. The API integration suite passes again — 13 of 13 — 28 Sep 2026
+
+The owner: *"calao"*. `npm run test:integration` had not been run in weeks.
+First run: **205 passed, 20 failed, 7 suites red.** Every failure was the suite
+being out of date, not the app — no application code changed here, only
+`apps/api/test/integration/`. Now **285 passed, 0 failed, 13 of 13**; the 10
+inconclusive are the local books having no payroll or TDS rows to check
+against.
+
+What had gone stale, and what each test does now:
+
+- **No `usdRate`** (01, 02, 06, 08, 09, 13) — required on every entry, pay
+  and import since #67. Each call now states one.
+- **07 auth — replaying a refresh token "was not refused".** It was not
+  meant to be: since a812869 (27 Aug) a spent token presented within 30 s of
+  its rotation is a refresh race and is answered with an access token and no
+  refresh cookie. The test replayed instantly, inside that window. It now
+  checks the straggler is answered that way, then ages the rotation past the
+  window and checks the replay kills the family, as before. `token.service.ts`
+  untouched.
+- **08, 09 — payroll paid from whichever account sorts first**, which locally
+  is a small one, so "an account can never go below zero" refused it. They pay
+  from the account holding the most.
+- **13 — voiding in a closed month "was not refused".** Allowed since the
+  owner's decision of 31 Aug (ecad091). The test now voids its own row inside
+  the closed period, expects it to go through, and checks the row is kept with
+  its figure. Creating, editing, backdating and transfers are still refused.
+- **13 — the lock "read back a day early".** The test read a `date` as a JS
+  Date and printed it in UTC; in Dhaka that is the day before. Read as text
+  now. Worth knowing: its restore step had the same bug, and would have moved
+  a real lock back a day.
+
+**The run deletes local test rows.** `resetDemoBooks` removes every entry past
+`TXN-2026-000021`, which on the local Neon database included four `TXN-TEST-*`
+rows. They were backed up before the run and put back after; their audit rows
+were not kept. Local only — the suite never reaches the live database.
 
 ## 102. A dollar account with no entries read "~" even with its dollars stated — 28 Sep 2026
 
