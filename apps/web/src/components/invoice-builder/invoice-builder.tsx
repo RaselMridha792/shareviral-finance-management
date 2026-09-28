@@ -6,10 +6,13 @@ import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowC
 import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash";
 import { FilePlusIcon } from "@phosphor-icons/react/dist/ssr/FilePlus";
+import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
 import { ListBulletsIcon } from "@phosphor-icons/react/dist/ssr/ListBullets";
 import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil";
 import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
@@ -19,6 +22,8 @@ import { TextBIcon } from "@phosphor-icons/react/dist/ssr/TextB";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple";
 import { UserCircleIcon } from "@phosphor-icons/react/dist/ssr/UserCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import { LoaderCircle } from "lucide-react";
+import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -38,10 +43,12 @@ import {
   inUsd,
   lineMinor,
   priceMinor,
+  problemWith,
   qtyMilli,
   rateOf,
   readSavedDraft,
   saveDraft,
+  shrinkLogo,
   totalMinor,
   type Block,
   type InvoiceDraft,
@@ -50,12 +57,14 @@ import {
   type PayLine,
   type TextLine,
 } from "@/components/invoice-builder/invoice-draft";
+import { InvoiceModal } from "@/components/invoice-builder/invoice-modal";
 import {
   InvoiceSheet,
   SHAREVIRAL_MARK,
   SHEET_CSS,
   printSheet,
 } from "@/components/invoice-builder/invoice-sheet";
+import { SheetFit } from "@/components/invoice-builder/sheet-fit";
 import { useUsdRate } from "@/components/money/rate-provider";
 import { useSettings } from "@/components/settings-provider";
 import { Button } from "@/components/ui/button";
@@ -69,6 +78,8 @@ import {
   Textarea,
 } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { ApiError } from "@/lib/api-client";
+import { invoicesApi, type InvoiceDto } from "@/lib/invoices";
 import { cn } from "@/lib/utils";
 
 /**
@@ -83,14 +94,23 @@ import { cn } from "@/lib/utils";
  * with the dollar equivalent at a typed rate, the bank rows, the notes, and
  * the eye buttons that leave a block off the sheet.
  *
- * It keeps nothing on the server — an invoice here is a document, not a
- * ledger entry, and nothing in the books changes because one was drawn. What
- * is typed is kept in this browser, so a reload does not lose it.
+ * Saved, an invoice is kept on the server (#118, 29 Sep 2026 — *"invoice
+ * builder theke save invoice a click korar por oita ekta modal a success
+ * message dekhabe"*) and listed on All invoices, where it can be opened,
+ * edited and deleted. It is a document, not a ledger entry: nothing in the
+ * books changes because one was saved. Until a NEW invoice is saved, what is
+ * typed is kept in this browser, so a reload does not lose it.
  */
-export function InvoiceBuilder() {
-  /* The draft lives in this browser's storage, which the server cannot read —
-     so the server draws the header alone, and the builder starts on the
-     client with the kept draft already in its first render. */
+export type BuilderMode =
+  /** Add New: a fresh invoice, offered the number after the last one. */
+  | { kind: "new"; nextNumber: string | null }
+  /** A saved invoice, opened from All invoices. */
+  | { kind: "edit"; invoice: InvoiceDto };
+
+export function InvoiceBuilder({ mode }: { mode: BuilderMode }) {
+  /* A new invoice's draft lives in this browser's storage, which the server
+     cannot read — so the server draws the header alone, and the builder
+     starts on the client with the kept draft already in its first render. */
   const mounted = useSyncExternalStore(
     subscribeNothing,
     () => true,
@@ -98,15 +118,36 @@ export function InvoiceBuilder() {
   );
   const rate = useUsdRate();
 
+  if (mode.kind === "edit") {
+    return (
+      <Builder
+        /* Filled over a fresh one, so a field added to the builder after
+           this invoice was saved still has a value. */
+        initial={{ ...freshDraft(rate), ...mode.invoice.document }}
+        rate={rate}
+        saved={mode.invoice}
+        nextNumber={null}
+      />
+    );
+  }
   if (!mounted) {
     return (
       <>
-        <Header />
+        <Header title="Invoice Builder" />
         <Card className="h-[480px] animate-pulse" />
       </>
     );
   }
-  return <Builder initial={readSavedDraft() ?? freshDraft(rate)} rate={rate} />;
+  return (
+    <Builder
+      initial={
+        readSavedDraft() ?? freshDraft(rate, mode.nextNumber ?? undefined)
+      }
+      rate={rate}
+      saved={null}
+      nextNumber={mode.nextNumber}
+    />
+  );
 }
 
 function subscribeNothing() {
@@ -114,36 +155,56 @@ function subscribeNothing() {
 }
 
 function Header({
+  title,
+  description = "Fill in the left and the invoice follows. Save keeps it on All invoices.",
   onReset,
-  onDownload,
+  onSave,
+  saving = false,
 }: {
+  title: string;
+  description?: string;
+  /** Absent once the invoice is saved — Reset is for a new one. */
   onReset?: () => void;
-  onDownload?: () => void;
+  onSave?: () => void;
+  saving?: boolean;
 }) {
   return (
     <PageHeader
-      title="Invoice Builder"
+      title={title}
       icon={FilePlusIcon}
-      description="Fill in the left and the invoice follows. Download saves it as a PDF."
+      description={description}
       actions={
         <>
-          <Button
-            variant="secondary"
-            onClick={onReset}
-            disabled={!onReset}
-            data-invoice-reset
+          <Link
+            href="/invoices"
+            className="sv-button-quiet inline-flex h-11 items-center gap-2 rounded-lg bg-surface px-4 text-[14px] font-extrabold transition-colors"
           >
-            <ArrowCounterClockwiseIcon weight="bold" size={16} />
-            Reset
-          </Button>
+            <FilesIcon weight="duotone" size={17} />
+            All invoices
+          </Link>
+          {onReset ? (
+            <Button variant="secondary" onClick={onReset} data-invoice-reset>
+              <ArrowCounterClockwiseIcon weight="bold" size={16} />
+              Reset
+            </Button>
+          ) : null}
+          {/*
+            The owner: *"akhonkar download button ta save invoice name hoye
+            jabe"*. Downloading moved to the saved invoice — the message
+            after saving, and the invoice's own popup on All invoices.
+          */}
           <Button
             variant="primary"
-            onClick={onDownload}
-            disabled={!onDownload}
-            data-invoice-download
+            onClick={onSave}
+            disabled={!onSave || saving}
+            data-invoice-save
           >
-            <DownloadSimpleIcon weight="bold" size={16} />
-            Download PDF
+            {saving ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <FloppyDiskIcon weight="bold" size={16} />
+            )}
+            Save invoice
           </Button>
         </>
       }
@@ -156,12 +217,26 @@ type SectionKey = "brand" | "info" | "to" | "from" | "items" | "pay" | "notes";
 function Builder({
   initial,
   rate,
+  saved,
+  nextNumber,
 }: {
   initial: InvoiceDraft;
   rate: number | null;
+  /** The invoice this is, once saved; null for one not saved yet. */
+  saved: InvoiceDto | null;
+  nextNumber: string | null;
 }) {
   const settings = useSettings();
   const [draft, setDraft] = useState(initial);
+  /* Which saved invoice this is. Set by the first save of a new one, so the
+     next save edits it rather than making a second copy. */
+  const [savedId, setSavedId] = useState<string | null>(saved?.id ?? null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState<{
+    invoice: InvoiceDto;
+    created: boolean;
+  } | null>(null);
   /* Bumped by Reset, so the boxes that hold their own text (the colours)
      start again with the draft. */
   const [generation, setGeneration] = useState(0);
@@ -179,12 +254,13 @@ function Builder({
   const [logoError, setLogoError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  /* Kept a moment after the typing stops, not on every key — a logo makes
-     the draft a large string. */
+  /* A new invoice's draft, kept a moment after the typing stops rather than
+     on every key. A saved invoice is kept by saving it, not here. */
   useEffect(() => {
+    if (savedId) return;
     const id = window.setTimeout(() => setKept(saveDraft(draft)), 400);
     return () => window.clearTimeout(id);
-  }, [draft]);
+  }, [draft, savedId]);
 
   const patch = (changes: Partial<InvoiceDraft>) =>
     setDraft((current) => ({ ...current, ...changes }));
@@ -292,20 +368,24 @@ function Builder({
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
-      setLogoError("That image is over 1 MB. Pick a smaller one.");
+      setLogoError("That image is over 5 MB. Pick a smaller one.");
       return;
     }
     setLogoError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") patch({ logo: reader.result });
-    };
-    reader.readAsDataURL(file);
+    void shrinkLogo(file)
+      .then((logo) => {
+        if (logo) patch({ logo });
+        else
+          setLogoError(
+            "That image is too detailed to keep as a logo, even scaled down. Use a simpler PNG or SVG.",
+          );
+      })
+      .catch(() => setLogoError("That image could not be read."));
   }
 
   function startAgain() {
     forgetDraft();
-    setDraft(freshDraft(rate));
+    setDraft(freshDraft(rate, nextNumber ?? undefined));
     setGeneration((value) => value + 1);
     setConfirmingReset(false);
     setLogoError(null);
@@ -314,6 +394,40 @@ function Builder({
   function download() {
     if (!sheetRef.current) return;
     void printSheet(sheetRef.current, draft.number.trim() || "Invoice");
+  }
+
+  async function save() {
+    const problem = problemWith(draft);
+    if (problem) {
+      setSaveError(problem);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const created = !savedId;
+      const invoice = savedId
+        ? await invoicesApi.update(savedId, draft)
+        : await invoicesApi.create(draft);
+      if (created) {
+        /* Saved, so the browser's copy has done its job; and the address
+           becomes the invoice's own, so a reload opens it rather than a
+           blank Add New. The history API keeps this component — and the
+           message below — where they are. */
+        forgetDraft();
+        setSavedId(invoice.id);
+        window.history.replaceState(null, "", `/invoices/${invoice.id}/edit`);
+      }
+      setJustSaved({ invoice, created });
+    } catch (caught) {
+      setSaveError(
+        caught instanceof ApiError
+          ? caught.message
+          : "The invoice was not saved. Try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   /* --- figures ----------------------------------------------------------- */
@@ -326,7 +440,98 @@ function Builder({
   return (
     <>
       <style>{SHEET_CSS}</style>
-      <Header onReset={() => setConfirmingReset(true)} onDownload={download} />
+      <Header
+        title={
+          savedId
+            ? `Invoice ${saved?.invoiceNumber ?? draft.number}`
+            : "Invoice Builder"
+        }
+        description={
+          savedId
+            ? "Change anything on the left, then Save invoice to keep it."
+            : undefined
+        }
+        onReset={savedId ? undefined : () => setConfirmingReset(true)}
+        onSave={() => void save()}
+        saving={saving}
+      />
+
+      {saveError ? (
+        <p
+          role="alert"
+          className="rounded-[11px] bg-(--sv-neg-tint) px-4 py-3 text-[13.5px] font-semibold text-(--sv-neg)"
+          data-invoice-save-error
+        >
+          {saveError}
+        </p>
+      ) : null}
+
+      <InvoiceModal
+        open={Boolean(justSaved)}
+        onClose={() => setJustSaved(null)}
+        size="narrow"
+        title="Invoice saved"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={download}
+              data-invoice-saved-download
+            >
+              <DownloadSimpleIcon weight="bold" size={15} />
+              Download PDF
+            </Button>
+            <Link
+              href="/invoices"
+              className="sv-button-quiet inline-flex h-[38px] items-center gap-[7px] rounded-lg bg-surface px-[13px] text-[13px] font-extrabold transition-colors"
+            >
+              <FilesIcon weight="duotone" size={15} />
+              All invoices
+            </Link>
+            <Link
+              href="/invoices/new"
+              className="sv-button-quiet inline-flex h-[38px] items-center gap-[7px] rounded-lg bg-surface px-[13px] text-[13px] font-extrabold transition-colors"
+            >
+              <PlusIcon weight="bold" size={14} />
+              New invoice
+            </Link>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setJustSaved(null)}
+              data-invoice-saved-close
+            >
+              Keep editing
+            </Button>
+          </>
+        }
+      >
+        {justSaved ? (
+          <div
+            className="flex flex-col items-center gap-3 py-2 text-center"
+            data-invoice-saved={justSaved.invoice.id}
+          >
+            <span className="grid size-16 place-items-center rounded-full bg-(--sv-pos-tint) text-(--sv-pos)">
+              <CheckCircleIcon weight="fill" size={40} />
+            </span>
+            <p className="text-[15.5px]">
+              <span className="font-extrabold">
+                {justSaved.invoice.invoiceNumber}
+              </span>{" "}
+              {justSaved.created ? "is saved." : "is saved with your changes."}
+            </p>
+            <p className="text-[13.5px] text-(--sv-muted)">
+              {justSaved.invoice.clientName ?? "No client named"} ·{" "}
+              {formatMoney(justSaved.invoice.totalAmount, {
+                format: settings.numberFormat,
+              })}
+              . It is on All invoices, where it can be opened, edited or
+              deleted.
+            </p>
+          </div>
+        ) : null}
+      </InvoiceModal>
 
       {/*
         The preview is only as wide as the sheet — 794px, the padding and a
@@ -373,8 +578,7 @@ function Builder({
               className="rounded-[11px] bg-(--sv-neg-tint) px-4 py-3 text-[13px] text-(--sv-neg)"
             >
               This browser would not keep the draft — the logo may be too large.
-              The invoice on screen is not affected; download it before you
-              leave.
+              The invoice on screen is not affected; save it before you leave.
             </p>
           ) : null}
 
@@ -391,7 +595,7 @@ function Builder({
               <div className="flex flex-wrap items-center gap-3">
                 <span
                   className="inline-flex h-12 items-center rounded-[10px] px-3.5"
-                  style={{ background: draft.primary }}
+                  style={{ background: draft.background }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- the logo as the sheet shows it, from a data URL */}
                   <img
@@ -427,7 +631,8 @@ function Builder({
                 </span>
               ) : (
                 <span className="text-[12px] text-(--sv-muted)">
-                  Shown on the primary colour, up to 1 MB.
+                  Shown on the background colour, scaled to the size it prints
+                  at.
                 </span>
               )}
             </div>
@@ -448,32 +653,53 @@ function Builder({
                   data-invoice-field="tagline"
                 />
               </Field>
+            </div>
+            {/*
+              Two colours where there was one "primary". The owner, 29 Sep
+              2026, marking the logo's tile, the table head and the total on
+              one screenshot and the title, the two company names and the
+              project title on another: *"mark kora background gular color er
+              jonne background color ekta option thakbe and text heading gulao
+              dynamic color choose korar option thakbe"*.
+            */}
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <ColourField
-                label="Primary colour"
-                value={draft.primary}
-                onChange={(primary) => patch({ primary })}
+                label="Background colour"
+                hint="Logo tile, table head, total"
+                value={draft.background}
+                onChange={(background) => patch({ background })}
+                data-invoice-colour="background"
+              />
+              <ColourField
+                label="Heading colour"
+                hint="Title, company names, project"
+                value={draft.heading}
+                onChange={(heading) => patch({ heading })}
+                data-invoice-colour="heading"
               />
               <ColourField
                 label="Accent colour"
+                hint="Top rule, table rule, total figure"
                 value={draft.accent}
                 onChange={(accent) => patch({ accent })}
+                data-invoice-colour="accent"
               />
+              <Field label="Status badge">
+                <Select
+                  value={draft.status}
+                  onChange={(event) =>
+                    patch({ status: event.target.value as InvoiceStatus })
+                  }
+                  data-invoice-field="status"
+                >
+                  {STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
-            <Field label="Status badge">
-              <Select
-                value={draft.status}
-                onChange={(event) =>
-                  patch({ status: event.target.value as InvoiceStatus })
-                }
-                data-invoice-field="status"
-              >
-                {STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </Select>
-            </Field>
           </Section>
 
           {/* --- Invoice info ------------------------------------------- */}
@@ -835,39 +1061,18 @@ function Builder({
 /*  The preview                                                                */
 /* -------------------------------------------------------------------------- */
 
-const SHEET_WIDTH = 794;
-
 /**
- * The sheet at its real size where there is room, and shrunk to the column
- * where there is not — zoomed rather than scrolled sideways, so the whole
- * page is always in view while typing. Held in view beside the form on a wide
+ * The sheet beside the form: at its real size where there is room, zoomed to
+ * the column where there is not, and held in view beside the form on a wide
  * screen.
  */
 function Preview({ children }: { children: ReactNode }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const box = boxRef.current;
-    if (!box) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = entry?.contentRect.width ?? SHEET_WIDTH;
-      setScale(Math.min(1, width / SHEET_WIDTH));
-    });
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <div
       className="min-w-0 rounded-[11px] bg-(--sv-subtle) p-[clamp(12px,2vw,24px)] [scrollbar-width:thin] xl:sticky xl:top-[84px] xl:max-h-[calc(100dvh-100px)] xl:overflow-y-auto"
       data-invoice-preview-box
     >
-      <div ref={boxRef} className="flex justify-center">
-        <div style={{ zoom: scale }} data-invoice-preview>
-          {children}
-        </div>
-      </div>
+      <SheetFit>{children}</SheetFit>
     </div>
   );
 }
@@ -1140,17 +1345,22 @@ function AddButton({
  */
 function ColourField({
   label,
+  hint,
   value,
   onChange,
+  "data-invoice-colour": which,
 }: {
   label: string;
+  /** Where the colour shows, under the boxes. */
+  hint?: string;
   value: string;
   onChange: (hex: string) => void;
+  "data-invoice-colour"?: string;
 }) {
   const [text, setText] = useState(value);
   const valid = hexColour(text) !== null;
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" data-invoice-colour={which}>
       <span className="text-[13px] font-extrabold">{label}</span>
       <div className="flex items-center gap-2">
         <input
@@ -1176,6 +1386,9 @@ function ColourField({
           }}
         />
       </div>
+      {hint ? (
+        <span className="text-[12px] text-(--sv-muted)">{hint}</span>
+      ) : null}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import { TeamMembersModule } from "./modules/team-members/team-members.module";
 import { TransactionsModule } from "./modules/transactions/transactions.module";
 import { UsersModule } from "./modules/users/users.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
+import { InvoicesModule } from "./modules/invoices/invoices.module";
 import { VendorsModule } from "./modules/vendors/vendors.module";
 
 @Module({
@@ -59,6 +60,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     AccountsModule,
     CategoriesModule,
     SubscriptionsModule,
+    InvoicesModule,
     VendorsModule,
     TransactionsModule,
     ExportsModule,

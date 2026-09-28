@@ -34,7 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 117 | **Invoice Builder: no empty band beside the sheet** | **done** — not pushed |
+| 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — schema d93d860 pushed first, alone |
+| 117 | **Invoice Builder: no empty band beside the sheet** | **done** — deployed |
 | 116 | **Invoice Builder, a page of its own** | **done** — deployed |
 | 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — deployed |
 | 114 | **A joining salary is the first pay figure, automatically** | **done** — deployed |
@@ -95,6 +96,81 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 118. Invoices are saved: All Invoices, Add New, and two more colours — 29 Sep 2026
+
+The owner, 29 Sep: *"invoice builder take amra sidebar er Insight section a
+niye jabo oikhane invoice builder name ta expandable thakbe and etar under a
+duita option thakbe — All Invoice, Add New. All invoice a table format a
+invoice gula save thakbe. okhan theke view kora jabe, edit kora jabe, delete
+kora jabe ... akhonkar download button ta save invoice name hoye jabe ...
+table a jekono jaygay click korlei popup a invoice ta view kora jabe. invoice
+builder theke save invoice a click korar por oita ekta modal a success
+message dekhabe"*, and, marking the logo tile, the table head and the total
+on one screenshot and the title, both company names and the project title on
+another: a background colour and a heading colour of their own.
+
+- **Schema, alone first (d93d860):** `deploy/sql/2026-09-29-invoices.sql` —
+  one new table, `invoices`: the builder's whole state in `document` (jsonb),
+  and the number, status, client (first bill-to line with words), dates,
+  total and rate read out of it on save for the list. The total is worked out
+  on the server in paisa from the items, never taken from the browser. Number
+  unique among live invoices, case-insensitive (partial index). Not a ledger
+  entry. Applied locally twice (idempotent).
+- **API:** `modules/invoices` — `GET /invoices` (page, `q` over number,
+  client and project title, `status`), `GET /invoices/next-number` (the last
+  number plus one in its own shape: INV-009 → INV-010), `GET /:id`, `POST`,
+  `PATCH`. Every route on `transactions.write` (super admin, CFO), reading
+  too. A taken number is a 409 in words; a price or quantity that is not a
+  number is refused by item. The audit rows keep the facts, not the logo.
+  **Deleting is the trash's** — kind `invoice` in `trash.registry.ts`, so
+  Settings → Trashed can restore it; restoring one whose number was given to
+  another invoice since is refused in words (`trash.service.ts`).
+  `03-permissions.mjs` lists the four routes (not run — the suite resets the
+  local demo books; `.invoiceapiqa` covers the same 403s).
+- **Rail:** Money's "Invoice Builder" row is gone; **Insight → Invoice Builder
+  (expandable) → All Invoices / Add New**, after Bank statement. The parent
+  carries the permission too, so CEO/HR see nothing. `/invoice-builder` now
+  308s to `/invoices/new`. The pages are gated in `invoices/layout.tsx`.
+- **All Invoices** (`/invoices`): status tabs, search, the table (number,
+  invoice to, project, dates, status pill in the sheet's badge colour, amount
+  with its dollars at the invoice's OWN rate, saved by), Edit and Move to
+  trash on each row. **A click anywhere on a row** opens the invoice as it
+  prints, in a wide popup, with Move to trash, Edit and Download PDF.
+  (`InvoiceModal` is a local copy of the Drawer at 920px — the Drawer takes
+  no width, and giving it one would change every popup in the app.)
+- **The builder** (`/invoices/new`, `/invoices/:id/edit`): the header's
+  Download became **Save invoice**; saving shows an **"Invoice saved"** message
+  (Download PDF, All invoices, New invoice, Keep editing). The first save of a
+  new invoice moves the address to its own (`history.replaceState`), lets go
+  of the browser draft, and later saves edit it rather than copy it. A new
+  invoice is offered the next number (and the payment reference with it).
+  Reset only before the first save.
+- **Colours:** "Primary" became **Background colour** (logo tile, table head,
+  total) and **Heading colour** (title, bold bill lines, project title,
+  Payment Terms), beside Accent. Text on the background follows it — white
+  on dark, ink on light — so a pale background stays readable. A draft kept
+  from before gives its one colour to both.
+- **Size:** Express reads JSON bodies up to 100 KB and answers a larger one
+  with a 500. So an uploaded logo is scaled in the browser to what prints (90px
+  tall, WebP/PNG, ≤ 60,000 characters — an 1800×600 PNG came out at 15,000),
+  the server caps it at 80,000, and the builder refuses an invoice over 95 KB
+  in words before sending it. Items ≤ 100, description ≤ 500 characters.
+
+**Proved** by `.invoiceapiqa.mjs` (new) **30/30** and `.invoiceqa.mjs`
+(rewritten) **50/50** — rail and access for 4 roles, the redirect, every
+colour on the sheet (and ink on a light background), poisha totals, eyes,
+logo scaling, draft kept, save/message/address, second save edits, Download
+prints one A4 page from the message and from the popup, list/search/tabs, row
+click opens it, Edit reopens it, bin, Add New after a save, no empty band at
+1440/1680/1920, phones. Light and dark looked at. Four CI steps green.
+
+**Found, not fixed (not this page's):** while the harnesses ran, Neon dropped
+the connection and the dev API died — `Error: Connection terminated
+unexpectedly` as an unhandled `'error'` event on a checked-out `pg` client
+(the pool's own handler in `db/index.ts` only covers idle ones). The live
+database is a container beside the API, so a drop there is rarer, but one
+would take the API down the same way until the container restarts it.
 
 ## 117. Invoice Builder: no empty band beside the sheet — 28 Sep 2026
 

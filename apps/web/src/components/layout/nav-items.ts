@@ -7,12 +7,14 @@ import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ChartPieSliceIcon } from "@phosphor-icons/react/dist/ssr/ChartPieSlice";
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
 import { FilePlusIcon } from "@phosphor-icons/react/dist/ssr/FilePlus";
+import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
 import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
 import { InvoiceIcon } from "@phosphor-icons/react/dist/ssr/Invoice";
 import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
@@ -165,17 +167,6 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ArrowsDownUpIcon,
         permission: "transactions.read",
       },
-      {
-        // An invoice drawn and downloaded as a PDF — the owner's own builder,
-        // brought into the app on 28 Sep 2026. It writes nothing to the books;
-        // gated on `transactions.write` because an invoice asks for money on
-        // the company's behalf and prints its bank account.
-        key: "invoice-builder",
-        href: "/invoice-builder",
-        label: "Invoice Builder",
-        icon: FilePlusIcon,
-        permission: "transactions.write",
-      },
     ],
   },
   {
@@ -247,6 +238,41 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Bank statement",
         icon: FileTextIcon,
         permission: "transactions.read",
+      },
+      {
+        /*
+         * The owner's builder, brought in on 28 Sep 2026 under Money, and
+         * moved here the next day when invoices started being saved: *"invoice
+         * builder take amra sidebar er Insight section a niye jabo oikhane
+         * invoice builder name ta expandable thakbe and etar under a duita
+         * option thakbe"*. An invoice writes nothing to the books.
+         *
+         * The parent carries the permission too, not only its two rows: a
+         * parent with no permission of its own stays on the rail with nothing
+         * under it for a role that can see neither (see `visibleFor`).
+         * `transactions.write`, because an invoice asks for money on the
+         * company's behalf and prints its bank account.
+         */
+        key: "invoices",
+        label: "Invoice Builder",
+        icon: FilePlusIcon,
+        permission: "transactions.write",
+        children: [
+          {
+            key: "invoices-all",
+            href: "/invoices",
+            label: "All Invoices",
+            icon: FilesIcon,
+            permission: "transactions.write",
+          },
+          {
+            key: "invoices-new",
+            href: "/invoices/new",
+            label: "Add New",
+            icon: PlusCircleIcon,
+            permission: "transactions.write",
+          },
+        ],
       },
       {
         key: "assistant",

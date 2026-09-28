@@ -23,6 +23,7 @@ export type TrashKind =
   | "compensation"
   | "payroll-run"
   | "subscription"
+  | "invoice"
   | "tds-deposit"
   | "withholding-return"
   | "income-tax"
@@ -177,6 +178,23 @@ const REGISTRY: TrashEntry[] = [
     title: "coalesce(r.tool_name, r.plan_name)",
     detail: "r.status::text || ' · ' || coalesce(r.cost_bdt, '0')",
     occurredAt: "r.start_date::text",
+  },
+  {
+    /*
+     * A saved invoice (#118). On `transactions.write`, as every invoice route
+     * is. Restoring one whose number has been given to another invoice since
+     * is refused in trash.service.ts — the number is unique among live ones.
+     */
+    kind: "invoice",
+    label: "invoice",
+    plural: "Invoices",
+    table: "invoices",
+    permission: "transactions.write",
+    module: "invoices",
+    title: "r.invoice_number",
+    detail:
+      "coalesce(r.client_name, 'No client') || ' · ' || r.total_amount::text",
+    occurredAt: "coalesce(r.issued_on, r.created_at::date)::text",
   },
   {
     kind: "tds-deposit",

@@ -25,8 +25,12 @@ import {
  *
  * Like the payslip it carries its own palette rather than the app's tokens: a
  * document with the company's branding on it must look the same in dark mode,
- * on paper and in the saved PDF a year later. Two of its colours are the
- * user's to pick and reach the sheet as `--inv-primary` and `--inv-accent`.
+ * on paper and in the saved PDF a year later. Three of its colours are the
+ * user's to pick and reach the sheet as `--inv-bg` (the logo's tile, the
+ * table head, the total), `--inv-heading` (the title, the bold bill lines,
+ * the project title, Payment Terms) and `--inv-accent`. What is written ON
+ * the background follows it: white on a dark one, ink on a light one
+ * (`--inv-on-bg`), so a pale background never leaves white text on white.
  *
  * Blocks with nothing in them are left out, as the builder did — an empty
  * bill column, a bank box with no rows.
@@ -55,10 +59,16 @@ export function InvoiceSheet({
   );
   const issued = sheetDate(draft.issuedOn);
 
+  const lightBackground = isLight(draft.background);
   const palette = {
-    "--inv-primary": draft.primary,
+    "--inv-bg": draft.background,
+    "--inv-heading": draft.heading,
     "--inv-accent": draft.accent,
     "--inv-badge": STATUS_COLOURS[draft.status],
+    "--inv-on-bg": lightBackground ? "#14181f" : "#ffffff",
+    /* The total's figure is the accent on a dark tile, as drawn; on a light
+       one the accent (lime, by default) would not read, so the heading. */
+    "--inv-total-figure": lightBackground ? draft.heading : draft.accent,
   } as CSSProperties;
 
   return (
@@ -215,6 +225,21 @@ export function InvoiceSheet({
   );
 }
 
+/**
+ * Whether a colour is light enough that white on it would not read — the
+ * relative luminance of WCAG, past the point where ink contrasts better.
+ */
+function isLight(hex: string): boolean {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!match) return false;
+  const [r, g, b] = match
+    .slice(1)
+    .map((part) => parseInt(part, 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.179;
+}
+
 function filled(lines: TextLine[]): TextLine[] {
   return lines.filter((line) => line.text.trim() !== "");
 }
@@ -238,7 +263,7 @@ function BillColumn({
           style={{
             fontSize: `${line.size}px`,
             fontWeight: line.bold ? 700 : 400,
-            color: line.bold ? "var(--inv-primary)" : "#555555",
+            color: line.bold ? "var(--inv-heading)" : "#555555",
           }}
         >
           {line.text}
@@ -411,7 +436,7 @@ export const SHEET_CSS = `
   margin-bottom: 7px;
   padding: 9px 16px;
   border-radius: 10px;
-  background: var(--inv-primary);
+  background: var(--inv-bg);
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
 }
 .inv-logo img { display: block; height: 30px; max-width: 175px; object-fit: contain; }
@@ -422,7 +447,7 @@ export const SHEET_CSS = `
   font-weight: 800;
   line-height: 1;
   letter-spacing: -1.5px;
-  color: var(--inv-primary);
+  color: var(--inv-heading);
 }
 .inv-head-meta { margin-top: 8px; font-size: 11.5px; line-height: 2; color: var(--inv-ink-soft); }
 .inv-head-meta strong { font-weight: 600; color: var(--inv-ink); }
@@ -482,13 +507,13 @@ export const SHEET_CSS = `
   text-transform: uppercase;
   color: #9aa3bb;
 }
-.inv-order-name { margin-bottom: 14px; font-size: 14px; font-weight: 700; color: var(--inv-primary); }
+.inv-order-name { margin-bottom: 14px; font-size: 14px; font-weight: 700; color: var(--inv-heading); }
 .inv-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.inv-table thead tr { background: var(--inv-primary); }
+.inv-table thead tr { background: var(--inv-bg); }
 .inv-table thead th {
   padding: 11px 10px;
   border-bottom: 2px solid var(--inv-accent);
-  color: #ffffff;
+  color: var(--inv-on-bg);
   font-size: 11.5px;
   font-weight: 600;
   text-align: left;
@@ -513,13 +538,13 @@ export const SHEET_CSS = `
   margin-top: 5px;
   padding: 11px 16px;
   border-radius: 8px;
-  background: var(--inv-primary);
-  color: #ffffff;
+  background: var(--inv-bg);
+  color: var(--inv-on-bg);
   font-size: 12.5px;
   font-weight: 700;
 }
 .inv-total span:first-child { white-space: nowrap; }
-.inv-total span:last-child { color: var(--inv-accent); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.inv-total span:last-child { color: var(--inv-total-figure); font-size: 14px; font-weight: 800; white-space: nowrap; }
 .inv-usd {
   display: flex;
   justify-content: space-between;
@@ -543,7 +568,7 @@ export const SHEET_CSS = `
   border-bottom: 1px solid #e4e8f0;
   font-size: 12.5px;
 }
-.inv-terms strong { font-weight: 700; color: var(--inv-primary); }
+.inv-terms strong { font-weight: 700; color: var(--inv-heading); }
 .inv-terms span { color: #555555; }
 
 .inv-bank {

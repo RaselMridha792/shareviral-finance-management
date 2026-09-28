@@ -4,11 +4,13 @@ import { fromMinorUnits, isValidAmount, todayInDhaka } from "@finance/shared";
  * One invoice as the builder holds it — every box on the left, and which
  * blocks of the sheet are switched off.
  *
- * Nothing here reaches the server. The owner brought the builder as a page of
- * its own (`invoice_builder_ShareViral.html`, 28 Sep 2026) that kept the
- * invoice in the page and lost it on a reload; the one thing added is that
- * the draft is kept in this browser, so a refresh or a wrong click in the
- * sidebar does not throw away a half-typed invoice.
+ * The owner brought the builder as a page of its own
+ * (`invoice_builder_ShareViral.html`, 28 Sep 2026) that kept the invoice in
+ * the page and lost it on a reload. A new invoice's draft is kept in this
+ * browser until it is saved, so a refresh or a wrong click in the sidebar
+ * does not throw it away; saved, the whole of this goes to the server as the
+ * invoice's `document` (#118) — the API checks the same shape
+ * (`apps/api/src/modules/invoices/invoice-document.ts`).
  */
 export type TextLine = {
   id: number;
@@ -55,7 +57,18 @@ export type InvoiceDraft = {
   logo: string | null;
   companyName: string;
   tagline: string;
-  primary: string;
+  /**
+   * The dark tiles: the logo's, the table head's, the total's. The owner, 29
+   * Sep 2026, marking those three on a screenshot: *"mark kora background
+   * gular color er jonne background color ekta option thakbe"*.
+   */
+  background: string;
+  /**
+   * The headings: the "Invoice" title, the bold bill lines (who it is to and
+   * from), the project title, Payment Terms — *"text heading gulao dynamic
+   * color choose korar option thakbe"*. Both were one "primary" colour.
+   */
+  heading: string;
   accent: string;
   status: InvoiceStatus;
 
@@ -87,8 +100,22 @@ export type InvoiceDraft = {
 
 export const STORAGE_KEY = "sfm.invoice-builder.v1";
 
-/** The largest logo kept: a data URL of this is ~1.4 MB of localStorage. */
-export const MAX_LOGO_BYTES = 1024 * 1024;
+/** The largest image accepted for the logo, before it is scaled down. */
+export const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+
+/**
+ * The largest scaled logo kept, as data-URL text.
+ *
+ * The API reads a saved invoice as one JSON body, and Express stops reading
+ * at 100 KB — past that the save fails before any of this app's code sees
+ * it. The logo is the only part of an invoice that could get near that, so
+ * it is scaled to the size it prints at first (`shrinkLogo`) and held under
+ * this. The server's own limit is a little above it.
+ */
+export const MAX_LOGO_CHARS = 60_000;
+
+/** A whole invoice as JSON, kept safely under the API's 100 KB. */
+export const MAX_DOCUMENT_CHARS = 95_000;
 
 const MONTHS = [
   "January",
@@ -124,9 +151,14 @@ function addDays(iso: string, days: number): string {
  * A fresh invoice: the owner's builder's own contents, dated today.
  *
  * `usdRate` is the latest rate on file when there is one — the builder's
- * fixed 120 was a placeholder for a rate it had no way to know.
+ * fixed 120 was a placeholder for a rate it had no way to know. `number` is
+ * the next one after the last invoice saved, when the page knows it; the
+ * payment reference starts as the same.
  */
-export function freshDraft(usdRate: number | null): InvoiceDraft {
+export function freshDraft(
+  usdRate: number | null,
+  number = "INV-001",
+): InvoiceDraft {
   const today = todayInDhaka();
   const [year, month] = today.split("-");
   return {
@@ -134,11 +166,12 @@ export function freshDraft(usdRate: number | null): InvoiceDraft {
     logo: null,
     companyName: "ShareViral™",
     tagline: "Level Up Your Earnings",
-    primary: "#0a0a0a",
+    background: "#0a0a0a",
+    heading: "#0a0a0a",
     accent: "#bfff00",
     status: "SENT",
 
-    number: "INV-001",
+    number,
     issuedOn: today,
     dueOn: addDays(today, 30),
     currencyLabel: "৳ — BDT",
@@ -213,7 +246,7 @@ export function freshDraft(usdRate: number | null): InvoiceDraft {
       {
         id: 18,
         label: "Payment Reference",
-        value: "INV-001",
+        value: number,
         bold: false,
         size: 12.5,
       },
@@ -255,8 +288,17 @@ export function readSavedDraft(): InvoiceDraft | null {
     ) {
       return null;
     }
+    /* A draft kept before the one colour became two (29 Sep 2026) gives
+       its colour to both. */
+    const legacy = parsed as Partial<InvoiceDraft> & { primary?: string };
+    const colours =
+      typeof legacy.primary === "string" && !legacy.background
+        ? { background: legacy.primary, heading: legacy.primary }
+        : {};
     // Filled over a fresh one, so a field added later has a value.
-    return { ...freshDraft(null), ...parsed } as InvoiceDraft;
+    const { primary: _primary, ...rest } = legacy;
+    void _primary;
+    return { ...freshDraft(null), ...rest, ...colours } as InvoiceDraft;
   } catch {
     return null;
   }
@@ -278,6 +320,66 @@ export function forgetDraft() {
   } catch {
     // Nothing kept, nothing to forget.
   }
+}
+
+/**
+ * An uploaded logo, scaled to what the sheet prints.
+ *
+ * The sheet shows the logo 30px tall and at most 175px wide; three times that
+ * is sharp on paper and in the PDF, and is a few tens of KB rather than the
+ * megabytes a logo straight off a designer's disk can be. WebP where the
+ * browser writes it (it keeps a transparent background, and is smaller), PNG
+ * where it does not. Null when even the scaled image is too large to save.
+ */
+export async function shrinkLogo(file: File): Promise<string | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const width = image.naturalWidth || 525;
+    const height = image.naturalHeight || 90;
+    const scale = Math.min(1, 90 / height, 525 / width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const type of ["image/webp", "image/png"]) {
+      const data = canvas.toDataURL(type, 0.92);
+      if (data.startsWith(`data:${type}`) && data.length <= MAX_LOGO_CHARS) {
+        return data;
+      }
+    }
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * What is wrong with the invoice as it stands, in a sentence, or null.
+ *
+ * The same refusals the server makes, said before the request rather than
+ * after it — and the size one especially, which the server cannot say at all.
+ */
+export function problemWith(draft: InvoiceDraft): string | null {
+  if (!draft.number.trim()) return "Give the invoice a number.";
+  for (const [index, item] of draft.items.entries()) {
+    if (priceMinor(item.price) === null) {
+      return `Item ${index + 1}: the unit price is not an amount.`;
+    }
+    if (qtyMilli(item.qty) === null) {
+      return `Item ${index + 1}: the quantity is not a number (up to 3 decimals).`;
+    }
+  }
+  if (JSON.stringify(draft).length > MAX_DOCUMENT_CHARS) {
+    return "This invoice is too large to save. Use a smaller logo, or shorten the longest descriptions.";
+  }
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -37,6 +37,12 @@ const ROUTES = [
   // so it needs both; its history is read like the plan itself.
   ["POST", "/subscriptions/00000000-0000-4000-8000-000000000000/upgrade", ["vendors.write", "transactions.write"], {}],
   ["GET", "/subscriptions/00000000-0000-4000-8000-000000000000/upgrades", ["vendors.read"]],
+  // Saved invoices (#118): every route on transactions.write, reading too —
+  // an invoice prints the company's bank account. Deleting is the trash's.
+  ["GET", "/invoices?page=1&pageSize=1", ["transactions.write"]],
+  ["GET", "/invoices/next-number", ["transactions.write"]],
+  ["POST", "/invoices", ["transactions.write"], {}],
+  ["PATCH", "/invoices/00000000-0000-4000-8000-000000000000", ["transactions.write"], {}],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],

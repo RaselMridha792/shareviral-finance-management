@@ -1,27 +1,12 @@
-import { hasPermission } from "@finance/shared";
-import { redirect } from "next/navigation";
-
-import { InvoiceBuilder } from "@/components/invoice-builder/invoice-builder";
-import { getSession } from "@/lib/api-client";
-
-export const dynamic = "force-dynamic";
-
-export const metadata = { title: "Invoice Builder · SFM" };
+import { permanentRedirect } from "next/navigation";
 
 /**
- * An invoice drawn and saved as a PDF — see `invoice-builder.tsx`.
+ * The Invoice Builder moved under Invoices when invoices started being saved
+ * (#118): All invoices at `/invoices`, the builder at `/invoices/new`.
  *
- * Gated on `transactions.write`, the people who put money into the books:
- * an invoice asks somebody for money on the company's behalf and prints its
- * bank account. The check is here rather than in `proxy.ts`'s route map,
- * because the page fetches nothing — there is no API refusal behind it to
- * fall back on, so the page is where the boundary is.
+ * Left behind for the day it was live at this address — a bookmark, a link
+ * in a note. The permission check is the new page's (`invoices/layout.tsx`).
  */
-export default async function InvoiceBuilderPage() {
-  const user = await getSession();
-  if (!user) redirect("/login");
-  if (!hasPermission(user.role, "transactions.write")) {
-    redirect("/no-access?from=/invoice-builder&needs=transactions.write");
-  }
-  return <InvoiceBuilder />;
+export default function InvoiceBuilderRedirect() {
+  permanentRedirect("/invoices/new");
 }

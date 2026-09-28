@@ -757,6 +757,37 @@ export class TrashService {
     }
   }
 
+  /**
+   * An invoice's number has to still be free.
+   *
+   * The number is unique among LIVE invoices, so a trashed one's number can be
+   * given to a new invoice — and then restoring the old one would put two
+   * live invoices on one number, which the index refuses as a 500. Refused
+   * here instead, in words.
+   */
+  private async assertInvoiceNumberStillFree(
+    entry: TrashEntry,
+    row: Record<string, unknown>,
+  ) {
+    if (entry.kind !== "invoice") return;
+    const number = row.invoice_number;
+    if (typeof number !== "string") return;
+
+    const taken = await this.db.client.execute(
+      sql`select count(*)::int as n
+            from invoices
+           where lower(invoice_number) = lower(${number})
+             and deleted_at is null`,
+    );
+    if (Number((taken.rows as unknown as { n: number }[])[0]?.n ?? 0) > 0) {
+      throw new BadRequestException(
+        `Another invoice has the number ${number} now. ` +
+          "Restoring this one would give two invoices one number. " +
+          "Change the other invoice's number first, or leave this one in the trash.",
+      );
+    }
+  }
+
   private async assertDateStillFree(
     entry: TrashEntry,
     row: Record<string, unknown>,
@@ -795,6 +826,7 @@ export class TrashService {
     await this.assertRestoreFits(entry, row);
     await this.assertDateStillFree(entry, row);
     await this.assertChargeStillFree(entry, ids);
+    await this.assertInvoiceNumberStillFree(entry, row);
 
     // Restoring an "out" row spends the money again. The account rule holds
     // on the way out of the trash exactly as it does everywhere else.
