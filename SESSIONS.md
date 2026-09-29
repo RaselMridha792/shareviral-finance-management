@@ -34,7 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — not pushed; **schema 4810803 goes first, alone** |
+| 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — deployed (schema 4810803 and the code in one push; the deploy applies the SQL before the swap) |
 | 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — deployed (schema d93d860 first, alone) |
 | 117 | **Invoice Builder: no empty band beside the sheet** | **done** — deployed |
 | 116 | **Invoice Builder, a page of its own** | **done** — deployed |
