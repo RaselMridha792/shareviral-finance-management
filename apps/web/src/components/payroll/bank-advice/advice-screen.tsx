@@ -178,7 +178,7 @@ export function AdviceScreen({
                   ) : (
                     <FileXlsIcon weight="duotone" size={17} />
                   )}
-                  Excel
+                  Bank&apos;s Excel
                 </Button>
                 <Button
                   variant="primary"
@@ -192,7 +192,7 @@ export function AdviceScreen({
                   ) : (
                     <DownloadSimpleIcon weight="bold" size={16} />
                   )}
-                  Download CSV for S2B
+                  S2B upload file (CSV)
                 </Button>
               </>
             ) : null}
@@ -230,7 +230,7 @@ export function AdviceScreen({
             <span className="font-extrabold">Ready for the bank.</span>{" "}
             {advice.downloadedAt
               ? `Downloaded ${formatDate(advice.downloadedAt.slice(0, 10))} at ${advice.downloadedAt.slice(11, 16)}${advice.downloadedByName ? ` by ${advice.downloadedByName}` : ""}.`
-              : "Download the CSV and upload it on S2B."}
+              : "Download the S2B upload file and upload it on S2B."}
           </span>
         </p>
       ) : (
@@ -257,6 +257,37 @@ export function AdviceScreen({
           </ul>
         </div>
       )}
+
+      {/*
+        Which file is which, said once where both are downloaded. The owner,
+        29 Sep 2026: "kono kichu missing thakle r format thik na thakle bank
+        accept korbena" — and the one way a correct file goes wrong is being
+        opened in Excel and saved again on the way to the bank.
+      */}
+      {canPay ? (
+        <div
+          className="grid gap-3 rounded-[11px] bg-(--sv-subtle) px-4 py-3.5 text-[13px] sm:grid-cols-2"
+          data-advice-files
+        >
+          <p>
+            <span className="font-extrabold">S2B upload file (CSV)</span> — the
+            file the bank&apos;s instructions end with: the Bank Standard
+            Format, row 1 deleted, saved as CSV (Comma delimited). Upload it to
+            S2B as it is.{" "}
+            <span className="text-(--sv-warn)">
+              Do not open it in Excel and save it again — Excel takes the
+              leading zeros off the account numbers.
+            </span>
+          </p>
+          <p>
+            <span className="font-extrabold">Bank&apos;s Excel</span> — the
+            bank&apos;s own &ldquo;Bank Standard Format&rdquo; sheet with these
+            payments filled in, every other cell as the bank made it. To check
+            or keep; following the bank&apos;s steps with it (delete row 1, Save
+            As → CSV (Comma delimited)) gives the same file as the CSV.
+          </p>
+        </div>
+      ) : null}
 
       {downloadError ? (
         <p

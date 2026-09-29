@@ -1,5 +1,4 @@
-import { toMinorUnits } from "@finance/shared";
-import ExcelJS from "exceljs";
+import { toMinorUnits, todayInDhaka } from "@finance/shared";
 import { z } from "zod";
 
 /**
@@ -27,7 +26,13 @@ import { z } from "zod";
  *     confirmation to it.
  *
  * Every other column stays empty. The CSV writes all 44 on every row, as
- * Excel does when it saves the sheet.
+ * Excel does when it saves the sheet — the bank's template carries a cell in
+ * every column of every row, the H and T rows included.
+ *
+ * Both files come from the same row values (`cellsOf`, `edge`): the CSV
+ * here, and the bank's own workbook filled in `bank-workbook.ts`. Deleting
+ * row 1 of that workbook and saving it as "CSV (Comma delimited)", as the
+ * bank's instructions say, gives the CSV this file writes.
  */
 
 export const PAYMENT_TYPES = ["PAY", "ACH", "BT", "RTGS"] as const;
@@ -101,19 +106,11 @@ const COL = {
   email: 43, // AR
 } as const;
 
-/** The columns the bank's sample marks yellow — the ones filled per payment. */
-const FILLED = [
-  COL.paymentType,
-  COL.debitAccount,
-  COL.valueDate,
-  COL.name,
-  COL.bankCode,
-  COL.accountNo,
-  COL.details,
-  COL.currency,
-  COL.amount,
-  COL.email,
-];
+/** The one column the bank's sheet holds as a number; every other is text. */
+export const AMOUNT_COLUMN = COL.amount;
+
+/** Column P, which the workbook holds as text so its leading zeros stay. */
+export const BANK_CODE_COLUMN = COL.bankCode;
 
 /* -------------------------------------------------------------------------- */
 /*  Cleaning what is typed                                                     */
@@ -234,6 +231,11 @@ export function adviceProblems(advice: {
   if (!/^[A-Z]{3}$/.test(advice.debitCityCode))
     problems.push("The debit city code must be three letters, like DHK");
   if (!advice.valueDate) problems.push("No value date");
+  else if (advice.valueDate < todayInDhaka())
+    /* The bank's instructions: "It can be present or future date." */
+    problems.push(
+      "The value date has passed — the bank takes today or a later date",
+    );
   if (advice.lineCount === 0) problems.push("There are no payments in it");
   return problems;
 }
@@ -342,7 +344,8 @@ function bankAmount(amount: string): string {
   return `${whole}.${paisa.replace(/0$/, "")}`;
 }
 
-function cellsOf(advice: FileAdvice, line: FileLine): string[] {
+/** One P row's 44 values, A to AR, as text; "" where the bank leaves it. */
+export function cellsOf(advice: FileAdvice, line: FileLine): string[] {
   const cells = new Array<string>(COLUMN_NAMES.length).fill("");
   cells[COL.recordType] = "P";
   cells[COL.paymentType] = line.paymentType;
@@ -361,7 +364,8 @@ function cellsOf(advice: FileAdvice, line: FileLine): string[] {
   return cells;
 }
 
-function edge(record: "H" | "T"): string[] {
+/** The H row above the payments, or the T row below them. */
+export function edge(record: "H" | "T"): string[] {
   const cells = new Array<string>(COLUMN_NAMES.length).fill("");
   cells[0] = record;
   if (record === "H") cells[1] = "P";
@@ -386,62 +390,6 @@ export function buildCsv(advice: FileAdvice, lines: FileLine[]): Buffer {
   ];
   const text = rows.map((row) => row.map(csvField).join(",")).join("\r\n");
   return Buffer.from(`${text}\r\n`, "utf8");
-}
-
-/**
- * The same, as the bank's own workbook: its column names in row 1, the
- * filled cells yellow as in its sample, every value held as text so Excel
- * does not strip the leading zeros from the account numbers. For reading,
- * checking and keeping — the upload is the CSV.
- */
-export async function buildWorkbook(
-  advice: FileAdvice,
-  lines: FileLine[],
-): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "ShareViral Finance";
-  const sheet = workbook.addWorksheet("Bank Standard Format");
-
-  sheet.addRow([...COLUMN_NAMES]);
-  sheet.addRow(edge("H"));
-  for (const line of lines) sheet.addRow(cellsOf(advice, line));
-  sheet.addRow(edge("T"));
-
-  const header = sheet.getRow(1);
-  header.font = { bold: true };
-  header.fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: "FFD9D9D9" },
-  };
-
-  for (let index = 0; index < lines.length; index++) {
-    const row = sheet.getRow(index + 3);
-    for (const column of FILLED) {
-      const cell = row.getCell(column + 1);
-      if (column === COL.amount) {
-        // A number, as the bank's sample holds it; the rest stay text.
-        cell.value = Number(cell.value);
-      } else {
-        cell.numFmt = "@";
-      }
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFFF00" },
-      };
-    }
-  }
-
-  COLUMN_NAMES.forEach((name, index) => {
-    sheet.getColumn(index + 1).width = Math.max(
-      10,
-      Math.min(32, name.length + 2),
-    );
-  });
-  sheet.views = [{ state: "frozen", ySplit: 1 }];
-
-  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 /** A header value may only hold Latin-1 — see exports.controller.ts. */

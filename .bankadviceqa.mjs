@@ -18,8 +18,14 @@
  *      line clears it; the type rules (BT only SCB, ACH/RTGS not SCB);
  *   C. the CSV is the bank's: H row, a P row per payment, T row, 44 fields
  *      each, the right columns, DD/MM/YYYY, Excel-style amounts, CRLF, no
- *      header row, no BOM; downloading stamps it; the workbook has the
- *      bank's column names, text account numbers with their zeros, numbers;
+ *      header row, no BOM; downloading stamps it. The workbook IS the bank's
+ *      template (the embedded copy of its "Bank Standard Format Final-R1"):
+ *      every part but the sheet, its strings and the two cleaned ones byte
+ *      for byte; the sheet's widths, hidden columns and footer, row 1, the H
+ *      row and the T row as the bank's; each payment row styled exactly as
+ *      the bank's filled example row 4 (P as text, its zeros kept); and the
+ *      bank's own steps on it — delete row 1, save as CSV — give our CSV;
+ *      a value date gone by is refused;
  *   D. add, change and remove a payment; change the advice's details;
  *   E. who: HR and the CEO read, only payroll.pay builds and downloads;
  *   F. the trash takes an advice and gives it back;
@@ -34,6 +40,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import puppeteer from "puppeteer-core";
@@ -225,13 +232,70 @@ try {
   check("downloading stamps it, with who", stamped?.stamped === true && stamped?.by === users.super_admin.id);
 
   const xlsxRes = await call("GET", `/bank-advices/${adviceId}/xlsx`, undefined, true);
+  const xlsx = Buffer.from(await xlsxRes.arrayBuffer());
+  check("the workbook answers 200, named as the bank names its file", xlsxRes.status === 200 && /Bank%20Standard%20Format%20Final/.test(xlsxRes.headers.get("content-disposition") ?? "") && /\.xlsx/.test(xlsxRes.headers.get("content-disposition") ?? ""), xlsxRes.headers.get("content-disposition"));
+  if (SHOTS) fs.writeFileSync(path.join(SHOTS, "advice.xlsx"), xlsx);
+  // The bank's template, from the copy the API carries.
+  const templateSource = fs.readFileSync("apps/api/src/modules/bank-advices/bank-template.ts", "utf8");
+  const template = Buffer.from([...templateSource.matchAll(/^  "([A-Za-z0-9+/=]+)",$/gm)].map((m) => m[1]).join(""), "base64");
+  const bankZip = await JSZip.loadAsync(template);
+  const ourZip = await JSZip.loadAsync(xlsx);
+  const changed = [];
+  for (const [name, entry] of Object.entries(bankZip.files)) {
+    if (entry.dir) continue;
+    const a = await entry.async("nodebuffer");
+    const b = await ourZip.file(name)?.async("nodebuffer");
+    if (!b || !a.equals(b)) changed.push(name);
+  }
+  check(
+    "every part of the bank's workbook is the bank's bytes, but the sheet, its strings and the date saved",
+    JSON.stringify(changed.sort()) === JSON.stringify(["docProps/core.xml", "xl/sharedStrings.xml", "xl/worksheets/sheet1.xml"]),
+    changed.join(", "),
+  );
+  const bankSheet = await bankZip.file("xl/worksheets/sheet1.xml").async("string");
+  const ourSheet = await ourZip.file("xl/worksheets/sheet1.xml").async("string");
+  const head = (x) => x.slice(0, x.indexOf("<sheetData>")).replace(/<dimension[^>]*>/, "");
+  const foot = (x) => x.slice(x.indexOf("</sheetData>"));
+  const rowOf = (x, n) => new RegExp(`<row r="${n}"[^>]*?(?:/>|>[\\s\\S]*?</row>)`).exec(x)?.[0];
+  check("the sheet's columns — widths, hidden ones — and its footer label are the bank's", head(bankSheet) === head(ourSheet) && foot(bankSheet) === foot(ourSheet));
+  check("row 1 (the column names) and row 2 (H) are the bank's own", rowOf(bankSheet, 1) === rowOf(ourSheet, 1) && rowOf(bankSheet, 2) === rowOf(ourSheet, 2));
+  const tAt = 2 + 3 + 1;
+  const plainRow = (xml, n) => xml?.replace(new RegExp(`r="([A-Z]*)${n}"`, "g"), 'r="$1#"');
+  check("the T row is the bank's, after the payments", plainRow(rowOf(bankSheet, 8), 8) === plainRow(rowOf(ourSheet, tAt), tAt));
+  const stylesOf = (xml) => [...(xml ?? "").matchAll(/<c r="([A-Z]+)\d+" s="(\d+)"/g)].map((m) => `${m[1]}${m[2]}`);
+  const expectedStyles = stylesOf(rowOf(bankSheet, 4)).map((cell) => (cell === "P6" ? "P4" : cell));
+  const paymentStyles = [3, 4, 5].map((n) => stylesOf(rowOf(ourSheet, n)));
+  check(
+    "every payment row styled as the bank's filled example (row 4) — P as text so its zeros stay",
+    paymentStyles.every((row) => JSON.stringify(row) === JSON.stringify(expectedStyles)),
+    paymentStyles[0].join(" "),
+  );
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(Buffer.from(await xlsxRes.arrayBuffer()));
+  await workbook.xlsx.load(xlsx);
   const sheet = workbook.worksheets[0];
-  const head = sheet.getRow(1).values.slice(1);
-  const xScb = [...Array(sheet.rowCount).keys()].map((i) => sheet.getRow(i + 1)).find((r) => r.getCell(11).value === "SCB HOLDER NAME");
-  check("the workbook: the bank's 44 column names in row 1, H in row 2, T last", xlsxRes.status === 200 && head.length === 44 && head[0] === "Record Type" && head[43] === "Beneficiary Email ID" && sheet.getRow(2).getCell(1).value === "H" && sheet.getRow(sheet.rowCount).getCell(1).value === "T", `${head.length} columns, ${sheet.rowCount} rows`);
-  check("account numbers kept as text with their zeros, the amount a number", xScb?.getCell(9).value === expectedDebit && xScb?.getCell(20).value === "01702374701" && typeof xScb?.getCell(39).value === "number", JSON.stringify([xScb?.getCell(9).value, xScb?.getCell(20).value, xScb?.getCell(39).value]));
+  const xScb = [3, 4, 5].map((n) => sheet.getRow(n)).find((r) => r.getCell(11).value === "SCB HOLDER NAME");
+  check("the sheet is \"Bank Standard Format\"; account numbers text with their zeros, the amount a number", sheet.name === "Bank Standard Format" && xScb?.getCell(9).value === expectedDebit && xScb?.getCell(16).value === SCB && xScb?.getCell(20).value === "01702374701" && typeof xScb?.getCell(39).value === "number", JSON.stringify([sheet.name, xScb?.getCell(9).value, xScb?.getCell(20).value, xScb?.getCell(39).value]));
+  // The bank's instructions, followed on our workbook: delete row 1, save as
+  // CSV (Comma delimited) — row 2 to the T row, 44 columns each, as text.
+  const followed = [];
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const fields = [];
+    for (let c = 1; c <= 44; c++) {
+      const v = sheet.getRow(r).getCell(c).value;
+      const text = v === null || v === undefined ? "" : String(v);
+      fields.push(/[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+    }
+    followed.push(fields.join(","));
+    if (sheet.getRow(r).getCell(1).value === "T") break;
+  }
+  const csvNow = await (await call("GET", `/bank-advices/${adviceId}/csv`, undefined, true)).text();
+  check("the bank's steps on our workbook give our CSV, byte for byte", `${followed.join("\r\n")}\r\n` === csvNow);
+
+  const yesterday = new Date(Date.now() - 86400000 + 6 * 3600000).toISOString().slice(0, 10);
+  const past = await call("PATCH", `/bank-advices/${adviceId}`, { title: `${MARK} Salary July 2031`, accountId: account.id, debitCityCode: "DHK", valueDate: yesterday, note: null });
+  const pastCsv = await call("GET", `/bank-advices/${adviceId}/csv`);
+  check("a value date gone by is refused — the bank takes today or later", past.body?.problems?.some((p) => /value date has passed/.test(p)) && pastCsv.status === 400, `${pastCsv.status} ${pastCsv.body?.message}`);
+  await call("PATCH", `/bank-advices/${adviceId}`, { title: `${MARK} Salary July 2031`, accountId: account.id, debitCityCode: "DHK", valueDate: "2031-07-31", note: null });
 
   /* ------------------------------------------------------------------ */
   console.log("\nD. Add, change, remove");

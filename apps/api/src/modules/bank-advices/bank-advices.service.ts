@@ -22,7 +22,6 @@ import {
   SCB_CODE,
   adviceProblems,
   buildCsv,
-  buildWorkbook,
   cleanAccountNo,
   cleanBankCode,
   debitAccountNoOf,
@@ -33,6 +32,7 @@ import {
   type LineInput,
   type ListAdvicesQuery,
 } from "./bank-format";
+import { buildWorkbook } from "./bank-workbook";
 
 export type BankAdviceRow = {
   id: string;
@@ -510,9 +510,13 @@ export class BankAdvicesService {
     };
   }
 
+  /**
+   * Named as the bank names its own: "Bank Standard Format Final" — the file
+   * its instructions save — then which advice it is.
+   */
   private fileName(advice: BankAdviceDto, extension: "csv" | "xlsx") {
     const safe = advice.title.replace(/[\\/:*?"<>|]+/g, "-").trim();
-    return `Bank advice - ${safe}.${extension}`;
+    return `Bank Standard Format Final - ${safe}.${extension}`;
   }
 
   /**

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — not pushed |
 | 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — deployed (schema 4810803 and the code in one push; the deploy applies the SQL before the swap) |
 | 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — deployed (schema d93d860 first, alone) |
 | 117 | **Invoice Builder: no empty band beside the sheet** | **done** — deployed |
@@ -97,6 +98,50 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 120. Bank Advice: the bank's own workbook, and nothing it would refuse — 29 Sep 2026
+
+The owner, after #119 went live: *"ekta vul ache. export ta ektu valo kore
+dekho ... pdf instructions and demo je xl file ta dilam exact same korte
+hobe. kono kichu missing thakle r format thik na thakle bank accept
+korbena"*.
+
+Taken apart at the XML level, the bank's "Bank Standard Format Final-R1.xlsx"
+is more than 44 column names: hidden columns (D–F, L–O, Q–S, V–AK,
+AN–AQ), its own widths, thin borders, yellow cells, a cell in every column
+of every row (the "empty" ones are empty text), the H and T rows running to
+AR, apostrophe-prefixed text for the account numbers and the date, the sheet
+running to row 1000, and the bank's INTERNAL label. #119's Excel drew its own
+sheet and had none of that.
+
+- **The Excel is now the bank's file** (`bank-template.ts`, the template
+  embedded as base64 — only `dist` reaches the API image — with the two bank
+  staff names in docProps/core.xml replaced and a path on one of their
+  machines removed; `bank-workbook.ts` fills it with jszip, which comes with
+  exceljs). Every part but the sheet, its strings and the save date is the
+  bank's bytes; each payment row copies the bank's filled example (row 4)
+  cell for cell and style for style, except P held as text (the sample's
+  225261729 lost its zeros; the PDF says '00240100436).
+- **The CSV is proved to be the bank's steps:** deleting row 1 of our
+  workbook and saving it as CSV gives our CSV byte for byte (harness). It was
+  already right — H row, P rows, T row, 44 fields, no header, CRLF, no BOM;
+  column names identical to the bank's character for character.
+- **A value date gone by is refused** ("It can be present or future date"):
+  flagged on the advice, the download refused; the drawers offer today or
+  the sheet's date if it is still ahead, and `min` is today.
+- Files are named as the bank names its own: "Bank Standard Format Final -
+  <advice>.csv / .xlsx". The buttons read **S2B upload file (CSV)** and
+  **Bank's Excel**, with a note on the page saying which to upload — and not
+  to open the CSV in Excel and save it again (Excel strips the zeros).
+- Not done, on purpose: Excel's own CSV of the bank's template would also
+  carry ~990 lines of commas for the formatted rows under T. Ours stops at T;
+  a parser the bank's own steps satisfy reads the file to its T row.
+- `package-lock.json` is untouched: `npm install jszip` rewrote its
+  `libc: glibc` fields (a different npm), which could change the native
+  binaries the Alpine image gets. Reverted; jszip is used through exceljs.
+
+**Proved** by `.bankadviceqa.mjs` **59/59** (seven new checks on the files).
+Four CI steps green.
 
 ## 119. Bank Advice: the bank's payment file, built from payroll — 29 Sep 2026
 
