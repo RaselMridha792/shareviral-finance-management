@@ -21,6 +21,7 @@ export * from "./categories";
 export * from "./vendors";
 export * from "./subscriptions";
 export * from "./invoices";
+export * from "./bank-advices";
 export * from "./settings";
 export * from "./transactions";
 export * from "./imports";
