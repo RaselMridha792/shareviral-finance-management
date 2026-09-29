@@ -33,6 +33,7 @@ import { EmptyState } from "@/components/ui/patterns";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { PayrollTabs } from "@/components/payroll/payroll-tabs";
 import { Pagination } from "@/components/ui/pagination";
 import {
   SerialCell,
@@ -222,6 +223,9 @@ export function PayrollListScreen({
           ) : null
         }
       />
+
+      {/* Payroll and Bank Advice, as the two tabs of one place (#119). */}
+      <PayrollTabs active="payroll" />
 
       {/*
         `total`, not `items.length`: with twenty rows to a page an empty *page*

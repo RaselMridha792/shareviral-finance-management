@@ -43,6 +43,12 @@ const ROUTES = [
   ["GET", "/invoices/next-number", ["transactions.write"]],
   ["POST", "/invoices", ["transactions.write"], {}],
   ["PATCH", "/invoices/00000000-0000-4000-8000-000000000000", ["transactions.write"], {}],
+  // Bank advices (#119): read like the salary sheet, built and downloaded on
+  // payroll.pay — the file is what sends the salaries out.
+  ["GET", "/bank-advices?page=1&pageSize=1", ["payroll.read"]],
+  ["POST", "/bank-advices/from-payroll", ["payroll.pay"], {}],
+  ["POST", "/bank-advices", ["payroll.pay"], {}],
+  ["GET", "/bank-advices/00000000-0000-4000-8000-000000000000/csv", ["payroll.pay"]],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],

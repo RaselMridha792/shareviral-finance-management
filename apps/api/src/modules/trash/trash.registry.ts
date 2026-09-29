@@ -24,6 +24,7 @@ export type TrashKind =
   | "payroll-run"
   | "subscription"
   | "invoice"
+  | "bank-advice"
   | "tds-deposit"
   | "withholding-return"
   | "income-tax"
@@ -195,6 +196,24 @@ const REGISTRY: TrashEntry[] = [
     detail:
       "coalesce(r.client_name, 'No client') || ' · ' || r.total_amount::text",
     occurredAt: "coalesce(r.issued_on, r.created_at::date)::text",
+  },
+  {
+    /*
+     * A bank advice — the payment file for the bank (#119) — with its
+     * payments, which ride on it (ON DELETE CASCADE on a permanent delete).
+     * On `payroll.pay`, as building one is.
+     */
+    kind: "bank-advice",
+    label: "bank advice",
+    plural: "Bank advices",
+    table: "bank_advices",
+    permission: "payroll.pay",
+    module: "payroll",
+    title: "r.title",
+    detail:
+      "(select count(*) from bank_advice_lines l where l.bank_advice_id = r.id)::text || ' payments · ' || " +
+      "(select coalesce(sum(l.amount), 0) from bank_advice_lines l where l.bank_advice_id = r.id)::text",
+    occurredAt: "r.value_date::text",
   },
   {
     kind: "tds-deposit",

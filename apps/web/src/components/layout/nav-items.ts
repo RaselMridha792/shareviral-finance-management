@@ -5,6 +5,7 @@ import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRi
 import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ChartPieSliceIcon } from "@phosphor-icons/react/dist/ssr/ChartPieSlice";
+import { CoinsIcon } from "@phosphor-icons/react/dist/ssr/Coins";
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
 import { FilePlusIcon } from "@phosphor-icons/react/dist/ssr/FilePlus";
 import { FilesIcon } from "@phosphor-icons/react/dist/ssr/Files";
@@ -180,11 +181,38 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: "team.read",
       },
       {
-        key: "payroll",
-        href: "/payroll",
-        label: "Payroll",
-        icon: MoneyIcon,
+        /*
+         * Payroll and the bank file it produces, together. The owner, 29 Sep
+         * 2026: *"akhon jeta peoples ache oitar under a payroll ache etar
+         * sidebar structure tao change hobe ... 1. Payroll and Exports:
+         * a. Payroll b. Bank data sheet"* — and the names were left to us:
+         * "Bank Advice" is what a Bangladeshi finance office calls the
+         * salary instruction sent to the bank, and "Payroll & Bank" says
+         * what the two rows under it are.
+         *
+         * The parent carries `payroll.read` too, so a role with neither row
+         * does not get an empty heading (see `visibleFor`).
+         */
+        key: "payroll-bank",
+        label: "Payroll & Bank",
+        icon: CoinsIcon,
         permission: "payroll.read",
+        children: [
+          {
+            key: "payroll",
+            href: "/payroll",
+            label: "Payroll",
+            icon: MoneyIcon,
+            permission: "payroll.read",
+          },
+          {
+            key: "bank-advice",
+            href: "/payroll/bank-advice",
+            label: "Bank Advice",
+            icon: BankIcon,
+            permission: "payroll.read",
+          },
+        ],
       },
     ],
   },

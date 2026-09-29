@@ -34,7 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — schema d93d860 pushed first, alone |
+| 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — not pushed; **schema 4810803 goes first, alone** |
+| 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — deployed (schema d93d860 first, alone) |
 | 117 | **Invoice Builder: no empty band beside the sheet** | **done** — deployed |
 | 116 | **Invoice Builder, a page of its own** | **done** — deployed |
 | 115 | **A bank charge names its entry, and is asked in the entry's own currency** | **done** — deployed |
@@ -96,6 +97,67 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 119. Bank Advice: the bank's payment file, built from payroll — 29 Sep 2026
+
+The owner, 29 Sep, with Standard Chartered's "Bank Standard Format
+Final-R1.xlsx" and "Preparing Excel File.pdf": *"amake every month bank a
+ekta excel sheet submit korte hoy jeta manually banano onek problem. tai ami
+cai eta payroll page er arekta tab hisebe thakuk, etar alada ekta page hobe.
+etay sobgula excel sundor vabe table a list kora thakbe edit delete update
+kora jabe. eta mainly generate hobe payroll theke"* — and the rail to become
+People → "Payroll and Exports" → Payroll / "Bank data sheet", names ours to
+choose.
+
+- **Names:** "Payroll & Bank" (parent), "Bank Advice" (the Bangladeshi
+  finance term for the salary instruction to the bank). People → Team, then
+  Payroll & Bank → Payroll (`/payroll`) / Bank Advice
+  (`/payroll/bank-advice`). Both pages carry Payroll | Bank Advice tabs
+  (`payroll-tabs.tsx`, links). Under `/payroll`, so `proxy.ts` already gates
+  it on `payroll.read`.
+- **Schema, alone first (4810803):** `2026-09-29-bank-advices.sql` —
+  `bank_advices` (title, run, account, debit A/C as written, city code, value
+  date, note, downloaded at/by) and `bank_advice_lines` (type ACH/BT/RTGS/PAY,
+  beneficiary, bank code, account, details, currency, amount, email, member,
+  payroll line). Bank code and account may be empty: the page flags them.
+  Applied locally twice.
+- **The bank's rules** live in `modules/bank-advices/bank-format.ts`: H row, P
+  rows, T row, 44 columns A–AR; C `ON`, G `BD`, H city, I = 00 + account, J
+  DD/MM/YYYY, K name, P = SCBLBDDXXXX or 00 + 9-digit routing, T digits only,
+  U details, AL/AM currency and amount (Excel-style: 100000, 1234.5), AR
+  email. CSV with no header row, CRLF, no BOM; plus the bank's own workbook
+  (column names, yellow cells, account numbers as text) to read and keep.
+  A line is "not ready" (in words) for: no name/account/code, non-digits,
+  a code that is neither, BT to another bank, ACH/RTGS to SCB, amount 0,
+  no details, a bad email, or characters the bank's single-byte CSV cannot
+  carry (Bangla, curly quotes). Nothing downloads until all are ready.
+- **From payroll:** one line per person with net > 0, bank details from the
+  team record NOW (else the sheet's snapshot): SCB by SWIFT or name →
+  SCBLBDDXXXX, else 00 + routing; the account holder's name if set; net pay;
+  emails only if asked. A wallet-only person is left out and named; a person
+  with no bank details is IN and flagged. Totals summed in SQL.
+- **API** `/bank-advices`: list, get on `payroll.read`; from-payroll, create,
+  edit, lines add/edit/delete, `:id/csv`, `:id/xlsx` on `payroll.pay` (super
+  admin, CFO — not HR, not CEO). The CSV download stamps who and when. Audit
+  rows (sensitive) for build, line changes, downloads. Deleting an advice is
+  the trash's (kind `bank-advice`); a line is removed outright (it is a row of
+  the file, like a cell cleared), with an audit row. `03-permissions.mjs`
+  lists four routes (not run — the suite resets the local books).
+- **Pages:** the list (name, sheet, paid from, value date, payments, total,
+  status Empty / N to fill in / Ready / Downloaded + date, made by; row click
+  opens it; bin), and one advice (four facts, a Ready/Not-ready banner, the
+  payments table with a Check column and a total, drawers for a payment —
+  "Standard Chartered / Another bank + routing" rather than a code to type —
+  and for the details; Download CSV for S2B and Excel, fetched as files so a
+  refusal is a sentence on the page). HR/CEO read, row click read-only.
+
+**Proved** by `.bankadviceqa.mjs` (new) **52/52** on four throwaway people and
+a July 2031 sheet: the build rules, refusal and fix, type rules, the CSV byte
+by byte (rows, 44 fields, columns, date, amounts, CRLF, no BOM, no header),
+the workbook, add/change/remove, details, roles, trash and restore, and the
+browser (rail, tabs, drawer with the left-out list, fixing a row, Download,
+add/delete a payment, HR read-only, list row click, bin, fits at 1440 and
+390). Four CI steps green.
 
 ## 118. Invoices are saved: All Invoices, Add New, and two more colours — 29 Sep 2026
 
