@@ -62,12 +62,43 @@ describe("the HR boundary", () => {
   });
 });
 
+describe("the doors from the HR portal (30 Sep 2026)", () => {
+  it("let HR send a one-off amount without reaching the salary sheet", () => {
+    assert.equal(hasPermission("hr", "payroll.oneoff.submit"), true);
+    assert.equal(hasPermission("hr", "payroll.write"), false);
+    assert.equal(hasPermission("hr", "payroll.pay"), false);
+  });
+
+  it("let HR send budgets and spends, but not decide or pay them", () => {
+    assert.equal(hasPermission("hr", "hrbudget.submit"), true);
+    assert.equal(hasPermission("hr", "hrbudget.manage"), false);
+    assert.equal(hasPermission("hr", "hrbudget.read"), false);
+  });
+
+  it("leave deciding and paying to the roles that hold the bank", () => {
+    const manage = ROLES.filter((role) =>
+      hasPermission(role, "hrbudget.manage"),
+    );
+    assert.deepEqual(manage, ["super_admin", "cfo"]);
+  });
+
+  it("let the CEO read the HR Budget page and nothing more of it", () => {
+    assert.equal(hasPermission("ceo", "hrbudget.read"), true);
+    assert.equal(hasPermission("ceo", "hrbudget.submit"), false);
+    assert.equal(hasPermission("ceo", "hrbudget.manage"), false);
+    assert.equal(hasPermission("ceo", "payroll.oneoff.submit"), false);
+  });
+});
+
 describe("the CEO is read-only", () => {
   const writePermissions = PERMISSIONS.filter(
     (p) =>
       p.endsWith(".write") ||
       p.endsWith(".pay") ||
       p.endsWith(".void") ||
+      // Sending something in, and deciding on it, both change the books.
+      p.endsWith(".submit") ||
+      p.endsWith(".manage") ||
       p === "users.manage" ||
       p === "imports.run",
   );

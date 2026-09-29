@@ -32,6 +32,23 @@ export const PERMISSIONS = [
   "payroll.read",
   "payroll.write",
   "payroll.pay",
+  /**
+   * A one-off amount — a bonus — sent in for a month's salary sheet, and its
+   * state read back. The HR portal's door (30 Sep 2026): it lands in the
+   * sheet's bonus column and never in `compensation_history`, where it would
+   * become the person's salary every month after. Not `payroll.write`, which
+   * builds, changes and finalises whole sheets to reach that one column.
+   */
+  "payroll.oneoff.submit",
+
+  /**
+   * HR's budgets and the spending against them, sent to finance (30 Sep
+   * 2026). `submit` sends them and reads their state back — the HR portal's
+   * door; `read` is the HR Budget page; `manage` approves, refuses and pays.
+   */
+  "hrbudget.submit",
+  "hrbudget.read",
+  "hrbudget.manage",
 
   "tds.read",
   "tds.write",
@@ -68,6 +85,7 @@ const READ_ONLY_EVERYTHING: Permission[] = [
   "team.read",
   "team.compensation.read",
   "payroll.read",
+  "hrbudget.read",
   "tds.read",
   "incometax.read",
   "reports.view",
@@ -110,6 +128,10 @@ const OPERATIONAL_FULL: Permission[] = [
   "payroll.read",
   "payroll.write",
   "payroll.pay",
+  "payroll.oneoff.submit",
+  "hrbudget.submit",
+  "hrbudget.read",
+  "hrbudget.manage",
   "tds.read",
   "tds.write",
   "incometax.read",
@@ -181,6 +203,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
      * somebody else releases the money.
      */
     "payroll.read",
+    /**
+     * Two doors in from the HR portal, and only doors (30 Sep 2026): sending
+     * a one-off amount for a month's sheet, and sending a budget or a spend
+     * against one — each with its state read back. Neither decides anything:
+     * the sheet is still built and paid by finance, and a budget or a spend
+     * is approved, refused and paid by `hrbudget.manage`, which HR does not
+     * hold. The HR Budget page itself (`hrbudget.read`) is finance's.
+     */
+    "payroll.oneoff.submit",
+    "hrbudget.submit",
     "vendors.read",
     "categories.read",
     /**
