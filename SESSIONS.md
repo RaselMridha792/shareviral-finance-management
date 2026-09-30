@@ -34,8 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — not pushed; **permissions 87e713b, then schema 0df033a, each alone first** |
-| 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — not pushed |
+| 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — deployed 30 Sep (one push; the deploy applies the SQL before the swap) |
+| 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — deployed 30 Sep |
 | 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — deployed (schema 4810803 and the code in one push; the deploy applies the SQL before the swap) |
 | 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — deployed (schema d93d860 first, alone) |
 | 117 | **Invoice Builder: no empty band beside the sheet** | **done** — deployed |
