@@ -34,8 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — not pushed; schema f6ebbc1 + 169c2c6, alone |
-| 125 | **HR Requests: money moves when finance says it moves** | **done** — not pushed; **permissions 457c184, then schema 79735bc, each alone** |
+| 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
+| 125 | **HR Requests: money moves when finance says it moves** | **done** — deployed 1 Oct (one push; the deploy applies the SQL before the swap) |
 | 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — deployed 30 Sep |
 | 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — deployed 30 Sep |
 | 122 | **HR Budget rings the bell, and a payment carries its invoice and reference** | **done** — not pushed; **schema ce6af5c first, alone** |
