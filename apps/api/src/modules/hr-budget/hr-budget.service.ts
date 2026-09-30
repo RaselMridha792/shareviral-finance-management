@@ -1,20 +1,23 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { formatMoney, type Paginated } from "@finance/shared";
+import { formatIsoDate, formatMoney, type Paginated } from "@finance/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
 import {
+  appSettings,
   hrBudgetPeriods,
   hrBudgetSpends,
   teamMembers,
   users,
 } from "../../db/schema";
+import { NotificationsService } from "../notifications/notifications.service";
 import { TransactionsService } from "../transactions/transactions.service";
 import type {
   DecisionInput,
@@ -114,13 +117,19 @@ export type SpendRow = SpendState & {
  * Paying a spend writes an ordinary expense through the ledger's own door
  * (`TransactionsService.create`: the period lock, the overdraft rule, the
  * audit row), and the spend points at it.
+ *
+ * A request's first arrival rings the bell for the people who decide it
+ * (#122), unless Settings → Notifications has it switched off.
  */
 @Injectable()
 export class HrBudgetService {
+  private readonly log = new Logger(HrBudgetService.name);
+
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
     private readonly transactions: TransactionsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -173,6 +182,14 @@ export class HrBudgetService {
       });
       return row;
     });
+
+    if (written?.inserted)
+      await this.ring({
+        kind: "period",
+        id: written.id,
+        title: `HR sent a budget: ${input.categoryName}`,
+        body: `${formatMoney(input.amount, { currency: "BDT" })} for ${formatIsoDate(input.startsOn)} to ${formatIsoDate(input.endsOn)}, from ${input.recordedByName}. Waiting for a decision.`,
+      });
 
     const [state] = await this.periodStates([input.externalId]);
     return {
@@ -241,11 +258,64 @@ export class HrBudgetService {
       return row;
     });
 
+    if (written?.inserted)
+      await this.ring({
+        kind: "spend",
+        id: written.id,
+        title: `HR sent a spend: ${input.purpose}`,
+        body: `${formatMoney(input.amount, { currency: "BDT" })}, spent on ${formatIsoDate(input.spentOn)}${input.employeeName ? ` for ${input.employeeName}` : ""}, from ${input.recordedByName}. Waiting for a decision.`,
+      });
+
     const [state] = await this.spendStates([input.externalId]);
     return {
       outcome: !written ? "conflict" : written.inserted ? "created" : "amended",
       state,
     };
+  }
+
+  /**
+   * The bell for a request that has just arrived (#122).
+   *
+   * The owner, 30 Sep 2026: *"Hr budget a kono request asle setao jate
+   * notifications jay"*. Once per request, on its first arrival: a resend
+   * that amends it is the same request, and the page shows its figures as
+   * they are now. To the roles that approve and pay — `hrbudget.manage` is
+   * the CFO's and the super admin's.
+   *
+   * Never allowed to fail the send. By now HR's request is in the books, and
+   * a 500 here would have the HR portal send it again for a bell.
+   */
+  private async ring(args: {
+    kind: "period" | "spend";
+    id: string;
+    title: string;
+    body: string;
+  }) {
+    try {
+      const [settings] = await this.db.client
+        .select({ on: appSettings.notifyHrBudget })
+        .from(appSettings)
+        .where(eq(appSettings.id, 1))
+        .limit(1);
+      if (settings?.on === false) return;
+
+      const userIds = await this.notifications.recipientsInRoles([
+        "cfo",
+        "super_admin",
+      ]);
+      await this.notifications.raise({
+        userIds,
+        kind: "hr_budget",
+        dedupeKey: `hr-${args.kind}:${args.id}`,
+        title: args.title.slice(0, 200),
+        body: args.body,
+        href: args.kind === "period" ? "/hr-budget?tab=budgets" : "/hr-budget",
+      });
+    } catch (error) {
+      this.log.warn(
+        `The bell for HR ${args.kind} ${args.id} did not ring: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /** The states of the budgets named — the ones not here are left out. */
@@ -560,7 +630,10 @@ export class HrBudgetService {
           .where(eq(hrBudgetSpends.id, id));
       },
     });
-    return (await this.spendStates([spend.externalId]))[0];
+    /* With the entry it became, so the page can file the invoice and the
+       bank's slip on it (#122). */
+    const [state] = await this.spendStates([spend.externalId]);
+    return { ...state, transactionId: entry.id, transactionRef: entry.refNo };
   }
 
   private async spendRow(id: string) {

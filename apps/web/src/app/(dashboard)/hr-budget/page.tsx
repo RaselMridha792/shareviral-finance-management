@@ -16,8 +16,17 @@ export const metadata = { title: "HR Budget · SFM" };
  *
  * The accounts and headings are for paying a spend only, and fall back to
  * empty for a reader who cannot pay.
+ *
+ * `?tab=budgets` opens on the Budgets list — where the bell sends a budget
+ * that has just arrived (#122).
  */
-export default async function HrBudgetPage() {
+export default async function HrBudgetPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const search = await searchParams;
+  const tab = search.tab === "budgets" ? "budgets" : "spends";
   const user = await getSession();
   if (!user) redirect("/login");
   if (!hasPermission(user.role, "hrbudget.read")) {
@@ -35,6 +44,9 @@ export default async function HrBudgetPage() {
 
   return (
     <HrBudgetScreen
+      /* Keyed, so the bell's link lands on its tab even from this page. */
+      key={tab}
+      initialTab={tab}
       accounts={accounts.filter(
         (account) => account.type === "bank" || account.type === "cash",
       )}

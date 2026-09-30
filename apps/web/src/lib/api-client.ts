@@ -545,6 +545,8 @@ export type NotificationSwitches = {
   tdsDeadline: boolean;
   payrollUnpaid: boolean;
   significantChanges: boolean;
+  /** A budget or a spend arrived from the HR portal (#122). */
+  hrBudget: boolean;
 };
 
 export const notificationsApi = {

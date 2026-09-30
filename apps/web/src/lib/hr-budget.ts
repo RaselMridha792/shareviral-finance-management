@@ -111,9 +111,13 @@ export const hrBudgetApi = {
       method: "POST",
       body: JSON.stringify({ decision, note }),
     }),
+  /** Answers with the entry it wrote, to file the papers on (#122). */
   paySpend: (id: string, input: PaySpendInput) =>
-    apiFetch<unknown>(`/hr-budget/spends/${id}/pay`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    apiFetch<{ transactionId: string; transactionRef: string }>(
+      `/hr-budget/spends/${id}/pay`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
 };

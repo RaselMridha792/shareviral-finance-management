@@ -4,6 +4,8 @@ import { formatMoney, todayInDhaka } from "@finance/shared";
 import { LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { AttachClip } from "@/components/files/attach-clip";
+import { FileManager } from "@/components/files/file-manager";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { useUsdRate } from "@/components/money/rate-provider";
 import { useSettings } from "@/components/settings-provider";
@@ -16,7 +18,8 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/field";
-import { ApiError } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { ApiError, uploadTransactionFile } from "@/lib/api-client";
 import {
   hrBudgetApi,
   type Decision,
@@ -177,11 +180,27 @@ export function DecisionDrawer({
   );
 }
 
+/** The two papers a payment carries, under the ledger's own kinds. */
+type PaperKind = "invoice" | "bank_statement";
+
+const PAPER_NAMES: Record<PaperKind, string> = {
+  invoice: "invoice or receipt",
+  bank_statement: "transaction screenshot",
+};
+
 /**
  * Paying an approved spend: the expense it becomes in the books — which
  * account it leaves, under which heading, on which day, at which rate. The
  * ledger's own rules hold: a closed month, or an account that would go below
  * zero, is refused in words.
+ *
+ * And the two papers every other money form asks for (#122) — the owner:
+ * *"jokhon to pay korbe tokhono reference and invoice upload korar option dite
+ * hobe"*. Attached, never typed, as on the ledger's own form: the invoice,
+ * and the bank's slip as the Reference. They go up once the expense exists,
+ * filed on it, so Other expenses shows them in its Invoice and Reference
+ * columns like any entry's. A paper that fails to go up does not undo the
+ * payment — the drawer says so and offers the upload again.
  */
 export function PayDrawer({
   spend,
@@ -198,19 +217,51 @@ export function PayDrawer({
 }) {
   const settings = useSettings();
   const rate = useUsdRate();
+  const toast = useToast();
   const { pending, error, fieldErrors, run } = useSubmit();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [categoryId, setCategoryId] = useState("");
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [slipFiles, setSlipFiles] = useState<File[]>([]);
+  /* Set once the money is in the books and a paper did not go up after it. */
+  const [paid, setPaid] = useState<{
+    transactionId: string;
+    transactionRef: string;
+    failed: { kind: PaperKind; reason: string }[];
+  } | null>(null);
   const usable = categories.filter(
     (group) => group.kind === "out" || group.kind === "both",
   );
+
+  /** One at a time, never throwing: the payment is already recorded. */
+  async function attach(transactionId: string) {
+    const failed: { kind: PaperKind; reason: string }[] = [];
+    const papers = [
+      ...invoiceFiles.map((file) => ({ kind: "invoice" as const, file })),
+      ...slipFiles.map((file) => ({ kind: "bank_statement" as const, file })),
+    ];
+    for (const paper of papers) {
+      try {
+        await uploadTransactionFile(transactionId, paper.file, paper.kind);
+      } catch (caught) {
+        failed.push({
+          kind: paper.kind,
+          reason:
+            caught instanceof ApiError
+              ? caught.message
+              : "The upload did not go through.",
+        });
+      }
+    }
+    return failed;
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const text = (name: string) => String(data.get(name) ?? "").trim();
     await run(async () => {
-      await hrBudgetApi.paySpend(spend.id, {
+      const entry = await hrBudgetApi.paySpend(spend.id, {
         accountId,
         categoryId,
         txnDate: text("txnDate"),
@@ -218,8 +269,54 @@ export function PayDrawer({
         description: text("description"),
         notes: text("notes") || null,
       });
+      const failed = await attach(entry.transactionId);
+      if (failed.length > 0) {
+        setPaid({ ...entry, failed });
+        return;
+      }
+      toast.show(
+        invoiceFiles.length + slipFiles.length > 0
+          ? `Paid as ${entry.transactionRef}, papers attached.`
+          : `Paid as ${entry.transactionRef}.`,
+        "success",
+      );
       onDone();
     });
+  }
+
+  if (paid) {
+    /* The spend is paid now, so closing — either way — reloads the list. */
+    return (
+      <Drawer
+        open
+        onClose={onDone}
+        title="Paid — a paper did not go up"
+        description={`${formatMoney(spend.amount, { format: settings.numberFormat })} — ${spend.purpose}.`}
+        footer={
+          <Button type="button" variant="primary" onClick={onDone}>
+            Done
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-4" data-hrb-paid>
+          <p className="rounded-lg bg-(--sv-neg-tint) px-3 py-2 text-sm">
+            <span className="font-medium">Recorded as</span>{" "}
+            <span className="num">{paid.transactionRef}</span> — the payment is
+            in the books. What did not go up is the{" "}
+            {paid.failed.map((one) => PAPER_NAMES[one.kind]).join(" and the ")}:{" "}
+            {paid.failed.map((one) => one.reason).join(" ")} Attach it here;
+            nothing needs typing again.
+          </p>
+          <FileManager
+            owner="transaction"
+            ownerId={paid.transactionId}
+            kinds={[...new Set(paid.failed.map((one) => one.kind))]}
+            canWrite
+            emptyLabel="Nothing attached yet."
+          />
+        </div>
+      </Drawer>
+    );
   }
 
   return (
@@ -295,6 +392,32 @@ export function PayDrawer({
             data-hrb-field="description"
           />
         </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Invoice"
+            hint="Attach the invoice itself — there is no number to type"
+          >
+            <AttachClip
+              kind="invoice"
+              name={PAPER_NAMES.invoice}
+              files={invoiceFiles}
+              onPick={setInvoiceFiles}
+              emptyLabel="No invoice attached"
+            />
+          </Field>
+          <Field
+            label="Reference"
+            hint="Attach the bank's slip — there is no number to type"
+          >
+            <AttachClip
+              kind="bank_statement"
+              name={PAPER_NAMES.bank_statement}
+              files={slipFiles}
+              onPick={setSlipFiles}
+              emptyLabel="No reference attached"
+            />
+          </Field>
+        </div>
         <Field label="Notes" error={fieldErrors.notes}>
           <Textarea name="notes" rows={2} maxLength={1000} />
         </Field>

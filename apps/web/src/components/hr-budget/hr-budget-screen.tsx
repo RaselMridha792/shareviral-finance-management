@@ -76,9 +76,12 @@ const PERIOD_TABS: ReadonlyArray<{ id: PeriodStatus | "all"; label: string }> =
  * Nothing here is typed by finance except the decision: the rows are HR's.
  */
 export function HrBudgetScreen({
+  initialTab = "spends",
   accounts,
   categories,
 }: {
+  /** Budgets when the bell sent somebody here about one (#122). */
+  initialTab?: Tab;
   accounts: AccountDto[];
   categories: CategoryNode[];
 }) {
@@ -88,7 +91,7 @@ export function HrBudgetScreen({
      API asks for both. */
   const canPay = canManage && canWriteLedger;
   const money = useMoney();
-  const [tab, setTab] = useState<Tab>("spends");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [spendStatus, setSpendStatus] = useState<SpendStatus | "all">("all");
   const [periodStatus, setPeriodStatus] = useState<PeriodStatus | "all">("all");
   const [budgetFilter, setBudgetFilter] = useState<HrBudgetPeriodDto | null>(

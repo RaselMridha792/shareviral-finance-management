@@ -58,6 +58,7 @@ export class NotificationsController {
         tdsDeadline: appSettings.notifyTdsDeadline,
         payrollUnpaid: appSettings.notifyPayrollUnpaid,
         significantChanges: appSettings.notifySignificantChanges,
+        hrBudget: appSettings.notifyHrBudget,
       })
       .from(appSettings)
       .where(eq(appSettings.id, 1))
@@ -68,6 +69,7 @@ export class NotificationsController {
       tdsDeadline: row?.tdsDeadline ?? true,
       payrollUnpaid: row?.payrollUnpaid ?? true,
       significantChanges: row?.significantChanges ?? false,
+      hrBudget: row?.hrBudget ?? true,
     };
   }
 
@@ -81,6 +83,7 @@ export class NotificationsController {
       tdsDeadline?: boolean;
       payrollUnpaid?: boolean;
       significantChanges?: boolean;
+      hrBudget?: boolean;
     },
     @CurrentUser() actor: AuthenticatedUser,
   ) {
@@ -98,6 +101,9 @@ export class NotificationsController {
           : {}),
         ...(body.significantChanges !== undefined
           ? { notifySignificantChanges: body.significantChanges }
+          : {}),
+        ...(body.hrBudget !== undefined
+          ? { notifyHrBudget: body.hrBudget }
           : {}),
         updatedAt: new Date(),
         updatedBy: actor.id,

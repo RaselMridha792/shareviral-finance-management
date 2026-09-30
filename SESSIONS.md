@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 122 | **HR Budget rings the bell, and a payment carries its invoice and reference** | **done** — not pushed; **schema ce6af5c first, alone** |
 | 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — deployed 30 Sep (one push; the deploy applies the SQL before the swap) |
 | 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — deployed 30 Sep |
 | 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — deployed (schema 4810803 and the code in one push; the deploy applies the SQL before the swap) |
@@ -99,6 +100,36 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 122. HR Budget rings the bell, and a payment carries its invoice and reference — 30 Sep 2026
+
+Two asks from the owner, both on HR Budget:
+*"Hr budget a kono request asle setao jate notifications jay oi option ta
+rakho ekhane"* (Settings → Notifications), and *"to pay korbe tokhono
+reference and invoice upload korar option dite hobe"* (the Pay drawer).
+
+- **Schema (ce6af5c, alone):** `app_settings.notify_hr_budget`, default on.
+- **The bell:** `HrBudgetService.ring`. Raised the moment a budget or spend
+  first arrives, not by the 9am job. It goes to active CFOs and super admins
+  (the `hrbudget.manage` roles), kind `hr_budget`, dedupe `hr-spend:<id>` /
+  `hr-period:<id>`. A resend that amends does not ring again. It never fails
+  the send: a bell error is logged, and HR still gets its 201.
+- A budget's bell links to `/hr-budget?tab=budgets`. The page reads `?tab=`,
+  and the screen is keyed on it so the link works from the page itself.
+- **Settings:** a fifth row, "HR sent a budget or a spend", with the three
+  date rows. `GET/POST /notifications/settings` carry `hrBudget`.
+- **Pay drawer:** Invoice and Reference clips (`AttachClip`), the same as
+  the ledger form (attached, never typed). They are filed on the expense the
+  payment writes, as `invoice` and `bank_statement`, so Other expenses shows
+  them. The pay route now also answers with `transactionId` and
+  `transactionRef`. If an upload fails, the payment stands: the drawer says
+  so and offers the upload (`FileManager`), never a second payment.
+- `lib/` touched only for types with one reader each: `NotificationSwitches`
+  (the settings panel) and `hrBudgetApi.paySpend` (HR Budget).
+
+**Proved:** `.hrbellqa.mjs` 23/23, read back from `notifications`, `app_settings`
+and `files`. The failed upload is forced by aborting the request. Also
+`.hrbudgetqa` 38/38 and `.hrbudgetuiqa` 20/20; the four CI steps are green.
 
 ## 121. The HR portal's doors: HR Budget, and one-off amounts for a salary sheet — 30 Sep 2026
 

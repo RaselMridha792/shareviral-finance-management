@@ -7,6 +7,7 @@ import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { FlaskIcon } from "@phosphor-icons/react/dist/ssr/Flask";
 import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { PiggyBankIcon } from "@phosphor-icons/react/dist/ssr/PiggyBank";
 import { PlayIcon } from "@phosphor-icons/react/dist/ssr/Play";
 import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
@@ -25,11 +26,12 @@ import {
 /**
  * Settings → Notifications.
  *
- * Four switches and a button, and the page's whole job is making the fourth
- * switch read differently from the first three. Three of these are a date
- * arriving — a renewal, a deadline, a month that ended — and a person either
- * wants to be told or does not. The fourth watches what colleagues do, which is
- * a different kind of decision, so it sits apart and says who it tells.
+ * Five switches and a button, and the page's whole job is making the one that
+ * watches colleagues read differently from the rest. Three are a date
+ * arriving — a renewal, a deadline, a month that ended — and a fourth is a
+ * request arriving from the HR portal (#122); a person either wants to be
+ * told or does not. The last watches what colleagues do, which is a
+ * different kind of decision, so it sits apart and says who it tells.
  */
 
 const EVENTS: {
@@ -57,6 +59,15 @@ const EVENTS: {
     icon: MoneyIcon,
     label: "A month ended and its payroll is not paid",
     detail: "Raised once for that month, not once a day until it is.",
+  },
+  {
+    /* The owner, 30 Sep 2026: "Hr budget a kono request asle setao jate
+       notifications jay oi option ta rakho ekhane". */
+    key: "hrBudget",
+    icon: PiggyBankIcon,
+    label: "HR sent a budget or a spend",
+    detail:
+      "The moment it arrives from the HR portal, not at 9am — once per request, to the people who approve and pay it. Sent again with changes, it does not ring twice.",
   },
 ];
 
@@ -90,7 +101,9 @@ export function NotificationsPanel() {
   async function toggle(key: keyof NotificationSwitches, value: boolean) {
     // Moved here first, then saved. A switch that waits for a round trip
     // before it moves is one somebody clicks twice.
-    setSwitches((current) => (current ? { ...current, [key]: value } : current));
+    setSwitches((current) =>
+      current ? { ...current, [key]: value } : current,
+    );
     try {
       await notificationsApi.updateSettings({ [key]: value });
     } catch {
