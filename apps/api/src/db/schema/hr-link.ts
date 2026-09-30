@@ -12,7 +12,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { payrollLines, teamMembers } from "./team";
+import { compensationHistory, payrollLines, teamMembers } from "./team";
 import { transactions } from "./transactions";
 
 /**
@@ -114,6 +114,18 @@ export const payrollOneOffs = pgTable(
     }),
     /** What it added to that line's bonus — an amend moves the difference. */
     appliedAmount: numeric("applied_amount", { precision: 14, scale: 2 }),
+    /**
+     * Finance's decision (#125) — received, held, approved, refused. Only an
+     * approved one-off goes on a sheet. See 2026-09-30-hr-requests.sql.
+     */
+    status: varchar("status", { length: 10 }).notNull().default("received"),
+    statusNote: text("status_note"),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** When it went on a sheet line: the money moved. */
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    /** On a sheet before approvals existed: approved by nobody, and said so. */
+    beforeApprovals: boolean("before_approvals").notNull().default(false),
     sendCount: integer("send_count").notNull().default(1),
     receivedAt: timestamp("received_at", { withTimezone: true })
       .notNull()
@@ -133,6 +145,55 @@ export const payrollOneOffs = pgTable(
   ],
 );
 
+/**
+ * A pay change sent by the HR portal (#125). Only an approval writes the
+ * `compensation_history` row, and `compensationId` points at it. Rows with
+ * `beforeApprovals` were copied in from pay HR set before this existed.
+ */
+export const compensationRequests = pgTable(
+  "compensation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: uuid("external_id"),
+    teamMemberId: uuid("team_member_id")
+      .notNull()
+      .references(() => teamMembers.id, { onDelete: "cascade" }),
+    grossAmount: numeric("gross_amount", { precision: 14, scale: 2 }).notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    changeReason: varchar("change_reason", { length: 200 }),
+    hrNote: text("hr_note"),
+    requestedByName: varchar("requested_by_name", { length: 120 }),
+    hrApprovedByName: varchar("hr_approved_by_name", { length: 120 }),
+    hrApprovedAt: timestamp("hr_approved_at", { withTimezone: true }),
+    status: varchar("status", { length: 10 }).notNull().default("received"),
+    statusNote: text("status_note"),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    compensationId: uuid("compensation_id").references(
+      () => compensationHistory.id,
+      { onDelete: "set null" },
+    ),
+    beforeApprovals: boolean("before_approvals").notNull().default(false),
+    sendCount: integer("send_count").notNull().default(1),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("compensation_requests_external_key").on(t.externalId),
+    index("compensation_requests_status_idx").on(t.status, t.receivedAt),
+    index("compensation_requests_member_idx").on(
+      t.teamMemberId,
+      t.effectiveFrom,
+    ),
+  ],
+);
+
 export type HrBudgetPeriod = typeof hrBudgetPeriods.$inferSelect;
 export type HrBudgetSpend = typeof hrBudgetSpends.$inferSelect;
 export type PayrollOneOff = typeof payrollOneOffs.$inferSelect;
+export type CompensationRequest = typeof compensationRequests.$inferSelect;
