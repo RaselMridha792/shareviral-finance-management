@@ -109,6 +109,14 @@ services:
       # Inside the container. The host side is ./uploads, below.
       UPLOAD_DIR: /data/uploads
       TZ: Asia/Dhaka
+      # The HR portal's webhook door (#128): finance tells it the moment one
+      # of its money requests is decided, instead of it waiting for its
+      # hourly poll. Off while the secret is empty, and nothing depends on
+      # it being on — the poll still collects every decision. The secret is
+      # the same string as FINANCE_WEBHOOK_SECRET in /opt/hrm/deploy/.env,
+      # copied across on the server, never through a chat window.
+      HR_WEBHOOK_URL: ${HR_WEBHOOK_URL:-https://hrmapi.hellonizam.com/api/finance/webhook/decisions}
+      HR_WEBHOOK_SECRET: ${HR_WEBHOOK_SECRET:-}
     volumes:
       # Uploaded files, on the host rather than in the container's own layer.
       #
