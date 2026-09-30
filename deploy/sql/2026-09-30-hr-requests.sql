@@ -106,6 +106,15 @@ create table if not exists compensation_requests (
     check (external_id is not null or before_approvals)
 );
 
+-- The state rule, set again outside CREATE TABLE: a database that already
+-- has this table (one that ran an earlier draft of this file) keeps the
+-- constraint it was created with, and this makes every copy converge.
+alter table compensation_requests
+  drop constraint if exists compensation_requests_status_check;
+alter table compensation_requests
+  add constraint compensation_requests_status_check
+    check (status in ('received', 'approved', 'refused', 'held', 'withdrawn'));
+
 create index if not exists compensation_requests_status_idx
   on compensation_requests (status, received_at desc);
 create index if not exists compensation_requests_member_idx
