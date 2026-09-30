@@ -275,16 +275,20 @@ export function AdviceScreen({
             Format, row 1 deleted, saved as CSV (Comma delimited). Upload it to
             S2B as it is.{" "}
             <span className="text-(--sv-warn)">
-              Do not open it in Excel and save it again — Excel takes the
-              leading zeros off the account numbers.
+              Do not open it in Google Sheets or Excel — both read the account
+              and routing numbers as figures and drop their leading zeros
+              (0001702374701 shows as 1702374701), and saved again the bank
+              refuses it.
             </span>
           </p>
           <p>
             <span className="font-extrabold">Bank&apos;s Excel</span> — the
             bank&apos;s own &ldquo;Bank Standard Format&rdquo; sheet with these
-            payments filled in, every other cell as the bank made it. To check
-            or keep; following the bank&apos;s steps with it (delete row 1, Save
-            As → CSV (Comma delimited)) gives the same file as the CSV.
+            payments filled in, every other cell as the bank made it. Open this
+            one to check the file: its account numbers, routing numbers and date
+            are text cells, so the zeros show. Following the bank&apos;s steps
+            with it (delete row 1, Save As → CSV (Comma delimited)) gives the
+            same file as the CSV.
           </p>
         </div>
       ) : null}

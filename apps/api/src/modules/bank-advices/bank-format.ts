@@ -141,6 +141,10 @@ export function cleanAccountNo(input: string | null | undefined): string {
 /**
  * The debit account as column I wants it: two zeros, then the number. A
  * number that already starts with the two zeros is left as it is.
+ *
+ * Every way a debit account reaches a file goes through this — picked from
+ * Accounts, typed on the advice, or read back from an advice saved before
+ * the typed one was given its zeros (#123).
  */
 export function debitAccountNoOf(accountNumber: string | null | undefined) {
   const digits = (accountNumber ?? "").replace(/\D/g, "");
@@ -226,8 +230,20 @@ export function adviceProblems(advice: {
   lineCount: number;
 }): string[] {
   const problems: string[] = [];
-  if (!/^\d{8,24}$/.test(advice.debitAccountNo))
+  /*
+   * Column I is the account at Standard Chartered the money leaves, and the
+   * bank's instructions show its one shape: 01122334401 written as
+   * 0001122334401 — two zeros and the 11 digits, 13 in all; its sample file
+   * holds 0007433000443. A number that has lost a zero on the way (10
+   * digits, from a spreadsheet that read it as a figure) would be written
+   * with its two zeros and still be wrong, so the length is checked too.
+   */
+  if (!advice.debitAccountNo)
     problems.push("The account it is paid from has no account number");
+  else if (!/^00\d{11}$/.test(advice.debitAccountNo))
+    problems.push(
+      "The debit account must be the 11-digit Standard Chartered number, which the file writes with two zeros in front — 01122334401 as 0001122334401",
+    );
   if (!/^[A-Z]{3}$/.test(advice.debitCityCode))
     problems.push("The debit city code must be three letters, like DHK");
   if (!advice.valueDate) problems.push("No value date");

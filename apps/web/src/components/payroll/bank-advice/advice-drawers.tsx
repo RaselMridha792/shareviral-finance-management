@@ -458,7 +458,11 @@ export function AdviceDetailsDrawer({
             label="Debit A/C No."
             required
             error={fieldErrors.debitAccountNo}
-            hint="As the file writes it: two zeros, then the account number"
+            hint={
+              debitNoOf(debit)
+                ? `In the file: ${debitNoOf(debit)} — two zeros, then the account number; they are added if you leave them off`
+                : "The account number — the file writes two zeros in front of it"
+            }
           >
             <Input
               value={debit}

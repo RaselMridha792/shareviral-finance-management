@@ -159,7 +159,10 @@ export class BankAdvicesService {
       (counted.rows as unknown as { n: number }[])[0]?.n ?? 0,
     );
     return {
-      items: rows.rows as unknown as BankAdviceRow[],
+      items: (rows.rows as unknown as BankAdviceRow[]).map((row) => ({
+        ...row,
+        debitAccountNo: debitAccountNoOf(row.debitAccountNo),
+      })),
       page: query.page,
       pageSize: query.pageSize,
       total,
@@ -193,10 +196,19 @@ export class BankAdvicesService {
       .where(eq(bankAdviceLines.bankAdviceId, id))
       .orderBy(asc(bankAdviceLines.position), asc(bankAdviceLines.createdAt));
 
+    /* An advice saved before a typed debit account was given its two
+       zeros is read with them, so its file and its page say what the bank's
+       instructions do (#123). */
+    const debitAccountNo = debitAccountNoOf(row.debitAccountNo);
     return {
       ...row,
+      debitAccountNo,
       lines: lines.map((line) => ({ ...line, problems: lineProblems(line) })),
-      problems: adviceProblems({ ...row, lineCount: lines.length }),
+      problems: adviceProblems({
+        ...row,
+        debitAccountNo,
+        lineCount: lines.length,
+      }),
     };
   }
 
@@ -589,10 +601,14 @@ export class BankAdvicesService {
     return account;
   }
 
-  /** The debit account as the file writes it: typed, else the account's. */
+  /**
+   * The debit account as the file writes it: typed, else the account's —
+   * with its two zeros either way. A typed number was stored as typed, so
+   * 01702374701 went into column I without them (#123).
+   */
   private async debitOf(input: AdviceInput): Promise<string> {
     const typed = (input.debitAccountNo ?? "").replace(/\D/g, "");
-    if (typed) return typed;
+    if (typed) return debitAccountNoOf(typed);
     if (!input.accountId) return "";
     return debitAccountNoOf(
       (await this.accountOf(input.accountId)).accountNumber,

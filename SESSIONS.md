@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 124 | **To do: colours and fonts from Settings (the HR portal's Brief 3)** | **not started** — the brief is in `docs/briefs/2026-09-30-theme-from-settings.md`; touches the root layout, shared code and the schema, so ask first |
+| 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — not pushed |
 | 122 | **HR Budget rings the bell, and a payment carries its invoice and reference** | **done** — not pushed; **schema ce6af5c first, alone** |
 | 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — deployed 30 Sep (one push; the deploy applies the SQL before the swap) |
 | 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — deployed 30 Sep |
@@ -100,6 +102,55 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 124. To do: colours and fonts from Settings — 30 Sep 2026
+
+Not started. The owner: *"ami amader applications er color and fonts gulake
+setting theke dynamic vabe control korbo. tomar hater kajta ses hole eta
+dhorba. akhon apatoto etake to do te rakho"*. The HR portal's Brief 3 is kept
+word for word in `docs/briefs/2026-09-30-theme-from-settings.md`.
+
+It touches the root layout, `new-design.css`, `packages/shared` and the
+schema. So ask the owner first, and send the migration alone. Its §8 lists
+the decisions that are ours; the public read in §6.1 is an auth-adjacent
+choice, so put it to the owner.
+
+## 123. Bank Advice: column I always carries its two zeros — 30 Sep 2026
+
+The owner's screenshot was of the CSV opened in Google Sheets: column I read
+1702374701 and P read 70270602. They asked for the PDF's instructions to be
+read again, column by column, *"kono kichu missing na jay"*.
+
+- **The fault, in our code:** a debit account **typed** on the advice form
+  went into column I as typed. `debitOf` returned the digits without
+  `debitAccountNoOf`, so 01702374701 went out without its 00. Only an
+  account picked from Accounts got the zeros. The check was just `8-24
+  digits`, so nothing caught it.
+- **Fixed:** a typed number gets its zeros. An advice saved before the fix is
+  read (page, list, file) with them. Column I must now be `00` + 11 digits,
+  the shape the bank's instructions and sample both show (0001122334401,
+  0007433000443). A number that lost a zero on the way is flagged, and the
+  file is refused until it is fixed.
+- **Not a fault in the file, but the likely source of the screenshot:**
+  Google Sheets and Excel read a CSV's number columns as figures and drop the
+  leading zeros. P's routing numbers are always `00` + 9 digits in the file
+  (`lineProblems` refuses anything else), yet Sheets showed 70270602. The
+  page's note now names Google Sheets as well as Excel, and says to check
+  the zeros in the Bank's Excel. Its I, J, P and T cells are text with the
+  apostrophe, as the bank's sample row 4 has them.
+- The form's hint shows the value as the file will write it: "In the file:
+  0001702374701".
+- The bank's own sample holds P4 as the number 225261729, without zeros.
+  The PDF says `'00240100436`, and the file follows the PDF.
+
+**Proved:** `.bankcolqa.mjs` 53/53. It checks every column rule in the PDF
+against the CSV's bytes and the Excel's cells, including typing without the
+zeros, a row saved before the fix, and the 10-digit guard. `.bankadviceqa`
+59/59; the four CI steps are green.
+
+**Open, for the owner:** the live advice's debit account. If the account on
+file lost its leading zero, the page now says so. Fix it in Accounts
+(11 digits, e.g. 01702374701).
 
 ## 122. HR Budget rings the bell, and a payment carries its invoice and reference — 30 Sep 2026
 
