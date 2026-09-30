@@ -20,11 +20,7 @@ import {
 } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, uploadTransactionFile } from "@/lib/api-client";
-import {
-  hrBudgetApi,
-  type Decision,
-  type HrBudgetSpendDto,
-} from "@/lib/hr-budget";
+import { hrBudgetApi, type HrBudgetSpendDto } from "@/lib/hr-budget";
 import type { AccountDto, CategoryNode } from "@/lib/masters";
 
 function useSubmit() {
@@ -83,103 +79,6 @@ function Footer({
   );
 }
 
-const WORDS: Record<Decision, { title: string; label: string }> = {
-  approved: { title: "Approve", label: "Approve" },
-  refused: { title: "Refuse", label: "Refuse" },
-  received: { title: "Put back to waiting", label: "Put back" },
-};
-
-/**
- * Approve, refuse, or put a decision back — for a budget or a spend. A
- * refusal says why, because the HR portal shows the note to HR; an approval
- * may say something too.
- */
-export function DecisionDrawer({
-  kind,
-  id,
-  decision,
-  summary,
-  onClose,
-  onDone,
-}: {
-  kind: "period" | "spend";
-  id: string;
-  decision: Decision;
-  /** What it is, in a line: "Hiring, 01/09–30/11 · ৳5,00,000". */
-  summary: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { pending, error, fieldErrors, run } = useSubmit();
-  const words = WORDS[decision];
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const note =
-      String(new FormData(event.currentTarget).get("note") ?? "").trim() ||
-      null;
-    await run(async () => {
-      if (kind === "period") await hrBudgetApi.decidePeriod(id, decision, note);
-      else await hrBudgetApi.decideSpend(id, decision, note);
-      onDone();
-    });
-  }
-
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      title={`${words.title} — ${kind === "period" ? "budget" : "spend"}`}
-      description={summary}
-      footer={
-        <Footer
-          form="hrb-decision"
-          pending={pending}
-          label={words.label}
-          danger={decision === "refused"}
-          onClose={onClose}
-        />
-      }
-    >
-      <form
-        id="hrb-decision"
-        onSubmit={onSubmit}
-        className="flex flex-col gap-4"
-      >
-        {decision === "received" ? (
-          <p className="text-[13.5px] text-(--sv-muted)">
-            It goes back to waiting. HR can send it again with changes, and
-            finance decides it afresh.
-          </p>
-        ) : (
-          <Field
-            label={decision === "refused" ? "Why it is refused" : "Note"}
-            required={decision === "refused"}
-            error={fieldErrors.note}
-            hint="HR sees this"
-          >
-            <Textarea
-              name="note"
-              rows={3}
-              maxLength={500}
-              required={decision === "refused"}
-              data-hrb-field="note"
-            />
-          </Field>
-        )}
-        {error ? (
-          <p
-            role="alert"
-            className="rounded-lg bg-(--sv-neg-tint) px-3 py-2 text-sm text-(--sv-neg)"
-          >
-            {error}
-          </p>
-        ) : null}
-      </form>
-    </Drawer>
-  );
-}
-
 /** The two papers a payment carries, under the ledger's own kinds. */
 type PaperKind = "invoice" | "bank_statement";
 
@@ -209,7 +108,8 @@ export function PayDrawer({
   onClose,
   onDone,
 }: {
-  spend: HrBudgetSpendDto;
+  /* Only what paying needs, so HR Requests can open it too (#125). */
+  spend: Pick<HrBudgetSpendDto, "id" | "amount" | "purpose">;
   accounts: AccountDto[];
   categories: CategoryNode[];
   onClose: () => void;

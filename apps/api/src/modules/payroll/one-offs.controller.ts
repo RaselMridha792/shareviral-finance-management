@@ -48,9 +48,13 @@ export class PayrollOneOffsController {
     const result = await this.oneOffs.submit(body, actor);
     if (result.outcome === "conflict") {
       response.status(409);
+      const decision = result.state?.decision;
       return {
         statusCode: 409,
-        message: `The ${body.periodYear}-${String(body.periodMonth).padStart(2, "0")} salary sheet is ${result.sheetStatus.replace(/_/g, " ")}, so this was not changed. Send it for another month.`,
+        message:
+          decision === "approved" || decision === "rejected"
+            ? `Finance has already ${decision} this one-off, so this was not changed. A different amount is a new request.`
+            : `The ${body.periodYear}-${String(body.periodMonth).padStart(2, "0")} salary sheet is ${result.sheetStatus.replace(/_/g, " ")}, so this was not changed. Send it for another month.`,
         state: result.state,
         sheetStatus: result.sheetStatus,
       };

@@ -18,6 +18,7 @@ import { SettingsNav } from "@/components/layout/settings-nav";
 import { SidebarFooter } from "@/components/layout/sidebar-footer";
 import { useSidebarCollapsed } from "@/components/layout/sidebar-state";
 import { cn } from "@/lib/utils";
+import { WaitingBadge } from "@/components/hr-requests/waiting-badge";
 
 /**
  * The rail, as the September 2026 handoff draws it.
@@ -153,6 +154,7 @@ function NavRow({
     <>
       <Tile icon={item.icon} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {item.badge === "hr-requests-waiting" ? <WaitingBadge /> : null}
       {comingSoon ? (
         <span className="text-[10px] tracking-wide text-(--sv-muted) uppercase">
           soon

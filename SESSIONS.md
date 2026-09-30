@@ -34,7 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — not pushed; **schema 673e608 first, alone** |
+| 125 | **HR Requests: money moves when finance says it moves** | **done** — not pushed; **permissions 457c184, then schema 79735bc, each alone** |
+| 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — deployed 30 Sep |
 | 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — deployed 30 Sep |
 | 122 | **HR Budget rings the bell, and a payment carries its invoice and reference** | **done** — not pushed; **schema ce6af5c first, alone** |
 | 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — deployed 30 Sep (one push; the deploy applies the SQL before the swap) |
@@ -102,6 +103,78 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 125. HR Requests: money moves when finance says it moves — 30 Sep 2026
+
+The owner found a raise sent from the HR portal in a month's payroll that
+nobody in finance had approved: *"eta kora jabena"*. The HR portal's Brief 4
+asked for the fix. The owner's answers (and the brief's §8, which agrees):
+- the CFO and the Super Admin decide, and HR never does;
+- every amount, from ৳1, needs approval;
+- a month's salary sheet cannot be started, built or finalised while a pay
+  change or one-off for it waits; the pop-up names the people;
+- a joining salary still goes straight in.
+
+- **Permissions (457c184, alone):** HR loses `team.compensation.write`
+  (the route it used now answers 403) and gains `team.compensation.request`.
+  `hrrequests.read` goes to the CFO, the Super Admin and the CEO;
+  `hrrequests.decide` to the CFO and the Super Admin.
+- **Schema (79735bc, alone):**
+  - `compensation_requests`, for pay changes;
+  - a state on `payroll_one_offs`;
+  - `held` on budgets and spends.
+  What HR already applied is copied in or marked `before_approvals`:
+  approved by nobody, and said so. A joining-salary row is left out.
+- **API** (`modules/hr-requests`):
+  - `POST /hr-requests/pay-changes`: HR's new door, keyed on `externalId`.
+    201, then 200 on an amend while waiting or held, then 409 with the state
+    once decided.
+  - `GET /hr-requests/{pay-changes,one-offs,budgets,spends}/status`: one
+    shape, `{externalId, state: pending|held|approved|rejected, note,
+    decidedByName, decidedAt, appliedAt}`, with unknown ids left out.
+  - The list, detail and decision routes. A reject or a hold needs a note.
+  - Approving a pay change writes the salary through
+    `TeamMembersService.setCompensation`, from HR's date.
+  - An applied approval is final (a raise, a one-off on a sheet, a paid
+    spend); anything else can be put back to waiting.
+  - One-offs: stored, never applied on arrival; only approved ones go on a
+    sheet (`applyPendingOneOffs`).
+  - `payroll.service` refuses `createRun`, `generateLines`, `syncMembers`
+    and `finalize` via `hr-requests/blocking.ts`. It names each person in
+    `errors.hrRequests`, with row links in `errors.hrRequestLinks`.
+  - A pay change blocks every month from its date on, not only the first:
+    a raise from 1 Aug still undecided in September leaves September's pay
+    undecided too.
+  - The bell covers all four kinds (`kind hr_request`, link to HR Requests).
+- **Web:**
+  - `/hr-requests` (People → HR Requests, with the waiting count) replaces
+    HR Budget. `/hr-budget` redirects there, and `hr-budget-screen.tsx` is
+    gone.
+  - One table for all four kinds: Waiting (oldest first) by default, plus
+    kind and month filters and search.
+  - A row opens a pop-up: what HR asked, the salary before, the sheets it
+    reaches, finance's decision, and history.
+  - Approve, Hold and Reject from the row or the pop-up, through one drawer;
+    Pay for approved spends.
+  - The salary sheet and "Start a payroll month" show the blocked list by
+    name, with a Decide link per person.
+  - Dates from timestamps show the Dhaka day, not the UTC one.
+
+**Proved:**
+- `.hrrequestsqa.mjs` 50/50 (API and browser, every write read back).
+- `.oneoffqa` rewritten for approvals, 34/34. `.hrbellqa` updated for the
+  new bell and page, 23/23. `.hrbudgetqa` 38/38.
+- `.hrbudgetuiqa` removed with the page it drove.
+- `03-permissions.mjs` lists the new routes (not run, since it resets the
+  local books).
+- The four CI steps are green (342 tests).
+
+**For the owner after the deploy:** HR Requests → Approved lists the rows
+marked "Applied earlier". Those are the pay changes HR set before approvals
+existed, the one the owner saw included. The local database had none.
+
+**The HR portal must move** raises to `POST /api/hr-requests/pay-changes`.
+Until it does, its raises get a 403, and no money moves.
 
 ## 124. Settings → Appearance: the app's colours and type — 30 Sep 2026
 

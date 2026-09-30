@@ -11,9 +11,10 @@ import {
   payrollOneOffs,
   payrollRuns,
   teamMembers,
+  users,
 } from "../../db/schema";
-import { applyPendingOneOffs, type SubmitOneOffInput } from "./one-offs";
-import { PayrollService } from "./payroll.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import type { SubmitOneOffInput } from "./one-offs";
 
 export type OneOffState = {
   externalId: string;
@@ -21,8 +22,16 @@ export type OneOffState = {
   periodYear: number;
   periodMonth: number;
   amount: string;
-  /** waiting: no line for it yet · on_sheet: in the bonus · paid: the sheet or line is paid. */
+  /** waiting: not on a sheet · on_sheet: in the bonus · paid: the sheet or line is paid. */
   state: "waiting" | "on_sheet" | "paid";
+  /**
+   * Finance's decision (#125): nothing goes on a sheet until it is approved.
+   * The same four words GET /hr-requests/one-offs/status answers with.
+   */
+  decision: "pending" | "held" | "approved" | "rejected";
+  /** The CFO's own words, with a hold or a refusal. */
+  note: string | null;
+  decidedByName: string | null;
   /** That month's sheet, or null when there is none. */
   sheetStatus: string | null;
   updatedAt: Date;
@@ -57,18 +66,19 @@ const MONTHS = [
  * they are not compensation. `payroll.oneoff.submit`: HR sends and reads
  * back; it does not build, change or pay a sheet.
  *
- * A send is keyed on the HR portal's id. It amends while the sheet it sits on
- * (or is bound for) is still a draft — the old amount taken back off the
- * line, the new one put on — and is refused with a 409 once that month's
- * sheet is finalised, partly paid or paid: the money on it is settled, and
- * HR picks another month.
+ * A send is a REQUEST (#125). It is stored and waits for the CFO or the
+ * Super Admin on the HR Requests page; only an approval puts it on a sheet.
+ * Keyed on the HR portal's id, a repeat amends while it waits — or while it
+ * is held, which puts it back to waiting — and is answered with a 409 and
+ * its state once it is decided, or once that month's sheet is finalised,
+ * partly paid or paid.
  */
 @Injectable()
 export class PayrollOneOffsService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
-    private readonly payroll: PayrollService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async submit(
@@ -94,6 +104,14 @@ export class PayrollOneOffsService {
       );
       if (written.outcome === "conflict") return written;
       const [state] = await this.states([input.externalId]);
+      if (written.outcome === "created") {
+        await this.notifications.ringHrRequest({
+          kind: "one_off",
+          id: written.id,
+          title: `HR sent a one-off for ${member.fullName}`,
+          body: `${formatMoney(input.amount, { currency: "BDT" })} on the ${MONTHS[input.periodMonth - 1]} ${input.periodYear} sheet${input.note ? ` — ${input.note}` : ""}. Waiting for a decision.`,
+        });
+      }
       return { outcome: written.outcome, state };
     } catch (error) {
       /* Two first sends at once: the second meets the first's row. Once
@@ -112,7 +130,7 @@ export class PayrollOneOffsService {
     member: { id: string; fullName: string },
     actor: AuthenticatedUser,
   ): Promise<
-    | { outcome: "created" | "amended" }
+    | { outcome: "created" | "amended"; id: string }
     | Extract<OneOffResult, { outcome: "conflict" }>
   > {
     const [existing] = await tx
@@ -122,28 +140,9 @@ export class PayrollOneOffsService {
       .limit(1)
       .for("update");
 
-    /* The sheet it is on now, if it has been put on one. */
-    const [current] = existing?.payrollLineId
-      ? await tx
-          .select({
-            runId: payrollRuns.id,
-            status: payrollRuns.status,
-            isPaid: payrollLines.isPaid,
-          })
-          .from(payrollLines)
-          .innerJoin(payrollRuns, eq(payrollRuns.id, payrollLines.payrollRunId))
-          .where(eq(payrollLines.id, existing.payrollLineId))
-          .limit(1)
-      : [];
-
     /* The sheet for the month it is sent for. */
     const [target] = await tx
-      .select({
-        id: payrollRuns.id,
-        status: payrollRuns.status,
-        periodYear: payrollRuns.periodYear,
-        periodMonth: payrollRuns.periodMonth,
-      })
+      .select({ status: payrollRuns.status })
       .from(payrollRuns)
       .where(
         and(
@@ -154,38 +153,18 @@ export class PayrollOneOffsService {
       )
       .limit(1);
 
-    const settled = (status: string | undefined) =>
-      Boolean(status) && status !== "draft";
-    if (
-      settled(current?.status) ||
-      current?.isPaid ||
-      settled(target?.status)
-    ) {
+    /* Decided — approved (it may be on a sheet already) or refused — or a
+       month whose money is settled: answered, not changed. */
+    const decided =
+      existing?.status === "approved" || existing?.status === "refused";
+    const settled = Boolean(target?.status) && target?.status !== "draft";
+    if (decided || settled) {
       const [state] = existing ? await this.states([input.externalId], tx) : [];
       return {
         outcome: "conflict",
         state: state ?? null,
-        sheetStatus:
-          (settled(current?.status) ? current?.status : target?.status) ??
-          "paid",
+        sheetStatus: target?.status ?? "none",
       };
-    }
-
-    const touched = new Set<string>();
-
-    /* Take the old amount back off the line it was on. */
-    if (existing?.payrollLineId && existing.appliedAmount && current) {
-      await tx
-        .update(payrollLines)
-        .set({
-          /* Never below zero: finance may have lowered the bonus by
-             hand after this was added. */
-          bonusAmount: sql`greatest(${payrollLines.bonusAmount} - ${existing.appliedAmount}::numeric, 0)`,
-          netAmountOverride: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(payrollLines.id, existing.payrollLineId));
-      touched.add(current.runId);
     }
 
     const values = {
@@ -194,8 +173,11 @@ export class PayrollOneOffsService {
       periodMonth: input.periodMonth,
       amount: input.amount,
       note: input.note ?? null,
-      payrollLineId: null,
-      appliedAmount: null,
+      /* A resend after a hold answers it: back to waiting. */
+      status: "received",
+      statusNote: null,
+      decidedBy: null,
+      decidedAt: null,
       updatedAt: new Date(),
     };
     let id: string;
@@ -213,14 +195,6 @@ export class PayrollOneOffsService {
       id = row.id;
     }
 
-    /* Onto this month's sheet at once, if it is a draft with them on it. */
-    if (target) {
-      await applyPendingOneOffs(tx, target);
-      touched.add(target.id);
-    }
-    for (const runId of touched)
-      await this.payroll.recalculateTotals(tx, runId);
-
     const month = `${MONTHS[input.periodMonth - 1]} ${input.periodYear}`;
     await this.audit.record(tx, {
       action: existing ? "update" : "create",
@@ -229,12 +203,12 @@ export class PayrollOneOffsService {
       module: "payroll",
       isSensitive: true,
       summary: existing
-        ? `${actor.fullName} changed ${member.fullName}'s one-off for the ${month} sheet to ${formatMoney(input.amount)} (was ${formatMoney(existing.amount)})`
-        : `${actor.fullName} sent a one-off of ${formatMoney(input.amount)} for ${member.fullName} on the ${month} sheet`,
+        ? `${actor.fullName} changed ${member.fullName}'s one-off for the ${month} sheet to ${formatMoney(input.amount)} (was ${formatMoney(existing.amount)}) — waiting for a decision`
+        : `${actor.fullName} sent a one-off of ${formatMoney(input.amount)} for ${member.fullName} on the ${month} sheet — waiting for a decision`,
       after: { externalId: input.externalId, ...values },
     });
 
-    return { outcome: existing ? "amended" : "created" };
+    return { outcome: existing ? "amended" : "created", id };
   }
 
   /** The state of each one-off named — the ones not here are left out. */
@@ -250,6 +224,9 @@ export class PayrollOneOffsService {
         periodYear: payrollOneOffs.periodYear,
         periodMonth: payrollOneOffs.periodMonth,
         amount: payrollOneOffs.amount,
+        status: payrollOneOffs.status,
+        note: payrollOneOffs.statusNote,
+        decidedByName: users.fullName,
         updatedAt: payrollOneOffs.updatedAt,
         onLine: sql<boolean>`${payrollOneOffs.payrollLineId} is not null`,
         linePaid: payrollLines.isPaid,
@@ -262,15 +239,22 @@ export class PayrollOneOffsService {
       })
       .from(payrollOneOffs)
       .leftJoin(payrollLines, eq(payrollLines.id, payrollOneOffs.payrollLineId))
+      .leftJoin(users, eq(users.id, payrollOneOffs.decidedBy))
       .where(inArray(payrollOneOffs.externalId, externalIds));
 
-    return rows.map(({ onLine, linePaid, ...row }) => ({
+    return rows.map(({ onLine, linePaid, status, ...row }) => ({
       ...row,
       state: !onLine
         ? "waiting"
         : linePaid || row.sheetStatus === "paid"
           ? "paid"
           : "on_sheet",
+      decision:
+        status === "received"
+          ? "pending"
+          : status === "refused"
+            ? "rejected"
+            : (status as "held" | "approved"),
     }));
   }
 }

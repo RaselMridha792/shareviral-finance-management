@@ -22,11 +22,7 @@ import { LockSimpleOpenIcon } from "@phosphor-icons/react/dist/ssr/LockSimpleOpe
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { VaultIcon } from "@phosphor-icons/react/dist/ssr/Vault";
-import {
-  Calculator,
-  LoaderCircle,
-  Printer,
-} from "lucide-react";
+import { Calculator, LoaderCircle, Printer } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -46,6 +42,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, StatCell, StatStrip } from "@/components/ui/patterns";
 import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+import {
+  BlockedDialog,
+  blockedBy,
+  type Blocked,
+} from "@/components/hr-requests/blocked-dialog";
 import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
 import {
@@ -143,9 +144,7 @@ export function SalarySheetScreen({
       refresh();
     } catch (caught) {
       setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not set the rate.",
+        caught instanceof ApiError ? caught.message : "Could not set the rate.",
       );
     } finally {
       setFilling(false);
@@ -306,6 +305,9 @@ export function SalarySheetScreen({
    * remedy was eighteen profiles, opened one at a time.
    */
   const [skipped, setSkipped] = useState<string[]>([]);
+  /* HR's requests for this month's pay, waiting (#125): a pop-up that names
+     them, rather than an error line that only counts them. */
+  const [blocked, setBlocked] = useState<Blocked | null>(null);
 
   async function act(fn: () => Promise<unknown>, message?: string) {
     setBusy(true);
@@ -319,9 +321,12 @@ export function SalarySheetScreen({
       setSkipped(withMessage?.skipped ?? []);
       refresh();
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : "Something went wrong.",
-      );
+      const heldUp = blockedBy(caught);
+      if (heldUp) setBlocked(heldUp);
+      else
+        setError(
+          caught instanceof ApiError ? caught.message : "Something went wrong.",
+        );
     } finally {
       setBusy(false);
     }
@@ -368,6 +373,9 @@ export function SalarySheetScreen({
 
   return (
     <>
+      {blocked ? (
+        <BlockedDialog blocked={blocked} onClose={() => setBlocked(null)} />
+      ) : null}
       <Link
         href="/payroll"
         className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
@@ -798,10 +806,7 @@ export function SalarySheetScreen({
         </Card>
       )}
 
-      <TdsWorkingDrawer
-        line={workingFor}
-        onClose={() => setWorkingFor(null)}
-      />
+      <TdsWorkingDrawer line={workingFor} onClose={() => setWorkingFor(null)} />
 
       <PayForm
         open={paying}

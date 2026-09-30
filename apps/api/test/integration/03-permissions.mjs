@@ -62,6 +62,16 @@ const ROUTES = [
   // One-off amounts for a salary sheet (#121): HR's door, not payroll.write.
   ["POST", "/payroll/one-offs", ["payroll.oneoff.submit"], {}],
   ["GET", "/payroll/one-offs?externalIds=00000000-0000-4000-8000-000000000000", ["payroll.oneoff.submit"]],
+  // HR Requests (#125): HR asks, the CFO and the Super Admin decide.
+  ["POST", "/team-members/00000000-0000-4000-8000-000000000000/compensation", ["team.compensation.write"], {}],
+  ["POST", "/hr-requests/pay-changes", ["team.compensation.request"], {}],
+  ["GET", "/hr-requests/pay-changes/status?externalIds=00000000-0000-4000-8000-000000000000", ["team.compensation.request"]],
+  ["GET", "/hr-requests/one-offs/status?externalIds=00000000-0000-4000-8000-000000000000", ["payroll.oneoff.submit"]],
+  ["GET", "/hr-requests/budgets/status?externalIds=00000000-0000-4000-8000-000000000000", ["hrbudget.submit"]],
+  ["GET", "/hr-requests/spends/status?externalIds=00000000-0000-4000-8000-000000000000", ["hrbudget.submit"]],
+  ["GET", "/hr-requests?page=1", ["hrrequests.read"]],
+  ["GET", "/hr-requests/waiting", ["hrrequests.read"]],
+  ["POST", "/hr-requests/pay_change/00000000-0000-4000-8000-000000000000/decision", ["hrrequests.decide"], {}],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],

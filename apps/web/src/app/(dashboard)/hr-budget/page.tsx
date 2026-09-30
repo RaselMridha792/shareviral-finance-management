@@ -1,24 +1,10 @@
-import { hasPermission } from "@finance/shared";
 import { redirect } from "next/navigation";
 
-import { HrBudgetScreen } from "@/components/hr-budget/hr-budget-screen";
-import { getSession } from "@/lib/api-client";
-import { accountsApi, categoriesApi } from "@/lib/masters";
-
-export const dynamic = "force-dynamic";
-
-export const metadata = { title: "HR Budget · SFM" };
-
 /**
- * What the HR portal sends finance (#121). Gated here on `hrbudget.read`: the
- * route map in `proxy.ts` is the gate every page passes through, and a new
- * page's check does not need to be a change to it.
- *
- * The accounts and headings are for paying a spend only, and fall back to
- * empty for a reader who cannot pay.
- *
- * `?tab=budgets` opens on the Budgets list — where the bell sends a budget
- * that has just arrived (#122).
+ * HR Budget (#121) held two of the four money requests the HR portal sends;
+ * HR Requests (#125) holds all four, on one page, and this address goes
+ * there \u2014 on its budgets when a link asked for `?tab=budgets`, else on its
+ * spends. Kept so the bell's older links and bookmarks still land.
  */
 export default async function HrBudgetPage({
   searchParams,
@@ -26,31 +12,9 @@ export default async function HrBudgetPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const search = await searchParams;
-  const tab = search.tab === "budgets" ? "budgets" : "spends";
-  const user = await getSession();
-  if (!user) redirect("/login");
-  if (!hasPermission(user.role, "hrbudget.read")) {
-    redirect("/no-access?from=/hr-budget&needs=hrbudget.read");
-  }
-  const canPay =
-    hasPermission(user.role, "hrbudget.manage") &&
-    hasPermission(user.role, "transactions.write");
-  const [accounts, categories] = canPay
-    ? await Promise.all([
-        accountsApi.list().catch(() => []),
-        categoriesApi.tree().catch(() => []),
-      ])
-    : [[], []];
-
-  return (
-    <HrBudgetScreen
-      /* Keyed, so the bell's link lands on its tab even from this page. */
-      key={tab}
-      initialTab={tab}
-      accounts={accounts.filter(
-        (account) => account.type === "bank" || account.type === "cash",
-      )}
-      categories={categories}
-    />
+  redirect(
+    search.tab === "budgets"
+      ? "/hr-requests?kind=budget&state=all"
+      : "/hr-requests?kind=spend&state=all",
   );
 }

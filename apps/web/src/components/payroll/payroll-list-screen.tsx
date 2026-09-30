@@ -51,6 +51,11 @@ import {
   type EligibleMemberDto,
   type PayrollRunDto,
 } from "@/lib/payroll";
+import {
+  BlockedList,
+  blockedBy,
+  type Blocked,
+} from "@/components/hr-requests/blocked-dialog";
 import { MemberPicker } from "./member-picker";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -535,9 +540,10 @@ export function PayrollListScreen({
         consequences={
           <p>
             The sheets leave this list and the trash can put them back. A run
-            that has been <span className="font-medium text-foreground">paid</span>{" "}
-            cannot go at all — its entries are on the ledger — and if one is in
-            the selection the whole request is refused rather than half done.
+            that has been{" "}
+            <span className="font-medium text-foreground">paid</span> cannot go
+            at all — its entries are on the ledger — and if one is in the
+            selection the whole request is refused rather than half done.
           </p>
         }
         pending={bulkPending}
@@ -588,6 +594,8 @@ function NewRunForm({
   const today = todayInDhaka();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* HR's requests for this month's pay, waiting (#125): named, not hunted. */
+  const [blocked, setBlocked] = useState<Blocked | null>(null);
 
   const currentYear = Number(today.slice(0, 4));
   const currentMonth = Number(today.slice(5, 7));
@@ -646,6 +654,7 @@ function NewRunForm({
     event.preventDefault();
     setPending(true);
     setError(null);
+    setBlocked(null);
 
     const data = new FormData(event.currentTarget);
     try {
@@ -663,11 +672,14 @@ function NewRunForm({
       await payrollApi.syncMembers(run.id, [...chosen]).catch(() => undefined);
       onCreated(run.id);
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not start that run.",
-      );
+      const heldUp = blockedBy(caught);
+      if (heldUp) setBlocked(heldUp);
+      else
+        setError(
+          caught instanceof ApiError
+            ? caught.message
+            : "Could not start that run.",
+        );
       setPending(false);
     }
   }
@@ -755,6 +767,14 @@ function NewRunForm({
           >
             {error}
           </p>
+        ) : null}
+        {blocked ? (
+          <div role="alert" className="flex flex-col gap-2.5" data-blocked>
+            <p className="text-sm font-extrabold text-(--sv-warn)">
+              {blocked.message}
+            </p>
+            <BlockedList blocked={blocked} />
+          </div>
         ) : null}
       </form>
 

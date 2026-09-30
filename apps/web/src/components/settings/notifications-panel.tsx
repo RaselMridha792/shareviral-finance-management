@@ -65,9 +65,9 @@ const EVENTS: {
        notifications jay oi option ta rakho ekhane". */
     key: "hrBudget",
     icon: PiggyBankIcon,
-    label: "HR sent a budget or a spend",
+    label: "HR sent a money request",
     detail:
-      "The moment it arrives from the HR portal, not at 9am — once per request, to the people who approve and pay it. Sent again with changes, it does not ring twice.",
+      "A pay change, a one-off, a budget or a spend from the HR portal — the moment it arrives, not at 9am, once per request, to the people who decide it. Sent again with changes, it does not ring twice.",
   },
 ];
 

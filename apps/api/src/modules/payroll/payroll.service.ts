@@ -56,6 +56,7 @@ import {
 import { SettingsService } from "../settings/settings.service";
 import { TaxPolicyService } from "../tds/tax-policy.service";
 import { nextRefNos } from "../transactions/ref-no";
+import { assertNothingBlocks } from "../hr-requests/blocking";
 import { applyPendingOneOffs } from "./one-offs";
 
 const MONTHS = [
@@ -289,6 +290,15 @@ export class PayrollService {
       });
     }
 
+    /* Not while HR's request for this month's pay waits for a decision
+       (#125) — refused here, before an empty sheet exists to explain. */
+    await assertNothingBlocks(
+      this.db.client,
+      input.periodYear,
+      input.periodMonth,
+      "start the salary sheet",
+    );
+
     return this.audit.mutate({
       action: "create",
       entityTable: "payroll_runs",
@@ -328,6 +338,12 @@ export class PayrollService {
         "This run is finalised — reopen it before regenerating the list.",
       );
     }
+    await assertNothingBlocks(
+      this.db.client,
+      run.periodYear,
+      run.periodMonth,
+      "build the list",
+    );
 
     const monthEnd = lastDayOf(run.periodYear, run.periodMonth);
 
@@ -804,6 +820,12 @@ export class PayrollService {
     if (!lines.length) {
       throw new BadRequestException("Build the salary sheet first.");
     }
+    await assertNothingBlocks(
+      this.db.client,
+      run.periodYear,
+      run.periodMonth,
+      "finalise the sheet",
+    );
 
     await this.audit.mutate({
       action: "finalize",
@@ -1494,6 +1516,12 @@ export class PayrollService {
         "This run is finalised — reopen it before changing who is on it.",
       );
     }
+    await assertNothingBlocks(
+      this.db.client,
+      run.periodYear,
+      run.periodMonth,
+      "change who is on the sheet",
+    );
 
     const wanted = new Set(input.teamMemberIds);
 

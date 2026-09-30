@@ -4,18 +4,24 @@
  * database every time: the one-off's row, the line's bonus, the sheet's
  * totals — and compensation_history, which must never move.
  *
+ * Since #125 a one-off is a REQUEST: stored, waiting for the CFO or the
+ * Super Admin, and on a sheet only once approved.
+ *
  * On two throwaway people and a throwaway month years ahead:
- *   1. no sheet yet: 201, waiting; a repeat amends (200, send_count 2);
- *   2. the sheet built with them on it: into the bonus, on_sheet;
- *   3. an amend while it is a draft moves the bonus by the difference;
- *      a second one-off adds to it; Build list again keeps both;
- *   4. taken off the sheet: back to waiting; put back: in again;
- *   5. the sheet finalised: a repeat is 409 with the state and the sheet's
- *      status, nothing moves; a first send for that month is 409, nothing
+ *   1. no sheet yet: 201, waiting and pending; a repeat amends (200,
+ *      send_count 2);
+ *   2. the month's sheet cannot be started while it waits - the refusal
+ *      names the person; approved, it can;
+ *   3. the sheet built with them on it: into the bonus, on_sheet;
+ *   4. a second one-off while the sheet is a draft: NOT in the bonus, and
+ *      Build list and Finalise are refused; approved, it is added at once;
+ *      Build list again keeps both;
+ *   5. taken off the sheet: off it; put back: in again;
+ *   6. decided is final to HR: a resend is 409 with the decision; an
+ *      applied approval cannot be put back; HR cannot decide;
+ *   7. the sheet finalised: a first send for that month is 409, nothing
  *      stored; a paid sheet reads as paid;
- *   6. refusals: a number for the amount, month 13, an unknown person;
- *   7. who: HR sends and reads; the CEO cannot;
- *   8. compensation_history untouched throughout.
+ *   8-10. refusals, who, and compensation_history untouched.
  *
  *     node .oneoffqa.mjs      (needs the API: npm run dev, :4001)
  */
@@ -85,7 +91,7 @@ async function wipe() {
 }
 
 const oneOff = (externalId, teamMemberId, over = {}) => ({ externalId, teamMemberId, periodYear: YEAR, periodMonth: MONTH, amount: "15000.00", note: "Festival bonus", ...over });
-const ooRow = async (externalId) => (await q(`select amount::text amt, payroll_line_id::text line, applied_amount::text applied, send_count, period_month from payroll_one_offs where external_id = $1`, [externalId]))[0];
+const ooRow = async (externalId) => (await q(`select id::text, status, amount::text amt, payroll_line_id::text line, applied_amount::text applied, send_count, period_month from payroll_one_offs where external_id = $1`, [externalId]))[0];
 const lineOf = async (runId, memberId) => (await q(`select id::text, bonus_amount::text bonus, gross_amount::text gross, net_amount::text net, net_amount_override::text override from payroll_lines where payroll_run_id = $1 and team_member_id = $2`, [runId, memberId]))[0];
 const comp = async (ids) => (await q(`select team_member_id::text m, gross_amount::text g, effective_from::text f, effective_to::text t from compensation_history where team_member_id = any($1::uuid[]) order by 1, 3`, [ids]));
 
@@ -107,8 +113,8 @@ try {
   console.log("\n1. No sheet for that month yet");
   const first = await hr("POST", "/payroll/one-offs", oneOff(O1, A));
   let row = await ooRow(O1);
-  check("201, waiting, no sheet", first.status === 201 && first.body?.state === "waiting" && first.body?.sheetStatus === null && first.body?.amount === "15000.00", msg(first));
-  check("…the row as sent, on no line", row?.amt === "15000.00" && row?.line === null && row?.send_count === 1, JSON.stringify(row));
+  check("201, waiting and pending, no sheet", first.status === 201 && first.body?.state === "waiting" && first.body?.decision === "pending" && first.body?.sheetStatus === null && first.body?.amount === "15000.00", msg(first));
+  check("…the row as sent, on no line", row?.amt === "15000.00" && row?.line === null && row?.send_count === 1 && row?.status === "received", JSON.stringify(row));
   const again = await hr("POST", "/payroll/one-offs", oneOff(O1, A, { amount: "18000", note: null }));
   row = await ooRow(O1);
   check("a repeat amends: 200, one row, the new amount, send_count 2", again.status === 200 && row?.amt === "18000.00" && row?.send_count === 2 && (await q(`select count(*)::int n from payroll_one_offs where external_id = $1`, [O1]))[0].n === 1, msg(again));
@@ -116,63 +122,81 @@ try {
   check("a note left out is the same as null", noNote.status === 200, msg(noNote));
 
   /* ------------------------------------------------------------------ */
-  console.log("\n2. The sheet built with them on it");
+  console.log("\n2. The month waits for the decision");
+  const early = await finance("POST", "/payroll/runs", { periodYear: YEAR, periodMonth: MONTH, notes: MARK });
+  check("the sheet cannot be started while it waits: 409, naming Anika", early.status === 409 && (early.body?.errors?.hrRequests ?? []).some((l) => l.includes("Anika") && l.includes("one-off")), msg(early));
+  const o1Id = (await ooRow(O1)).id;
+  const ok1 = await finance("POST", `/hr-requests/one_off/${o1Id}/decision`, { decision: "approved" });
+  check("approved with no sheet yet: it goes on when the sheet is built", ok1.status === 200 && /when that sheet is built/.test(ok1.body?.notice ?? "") && (await ooRow(O1)).line === null, `${ok1.status} ${ok1.body?.notice}`);
+
+  /* ------------------------------------------------------------------ */
+  console.log("\n3. The sheet built with them on it");
   const run = await finance("POST", "/payroll/runs", { periodYear: YEAR, periodMonth: MONTH, notes: MARK });
   const RUN = run.body?.id;
   await finance("POST", `/payroll/runs/${RUN}/members`, { teamMemberIds: [A, B] });
   let la = await lineOf(RUN, A);
   row = await ooRow(O1);
-  check("the one-off is in A's bonus; the line's net counts it", la?.bonus === "18000.00" && row?.line === la?.id && row?.applied === "18000.00" && Number(la?.net) === Number(la?.gross) + 18000 - Number((await q(`select tds_amount::text t, other_additions::text a, other_deductions::text d from payroll_lines where id = $1`, [la?.id]))[0].t), JSON.stringify(la));
+  check("the approved one-off is in A's bonus; the line's net counts it", run.status === 201 && la?.bonus === "18000.00" && row?.line === la?.id && row?.applied === "18000.00" && Number(la?.net) === Number(la?.gross) + 18000 - Number((await q(`select tds_amount::text t from payroll_lines where id = $1`, [la?.id]))[0].t), JSON.stringify(la));
   const lb = await lineOf(RUN, B);
   check("…and nowhere else — B's bonus is nothing", lb?.bonus === "0.00", lb?.bonus);
   let st = (await hr("GET", `/payroll/one-offs?externalIds=${O1}`)).body?.[0];
-  check("state on_sheet, sheet draft", st?.state === "on_sheet" && st?.sheetStatus === "draft", JSON.stringify(st));
+  check("state on_sheet, approved, sheet draft", st?.state === "on_sheet" && st?.decision === "approved" && st?.sheetStatus === "draft", JSON.stringify(st));
   const totals = (await q(`select total_additions::text a from payroll_runs where id = $1`, [RUN]))[0];
   check("the sheet's totals count it", totals?.a === "18000.00", totals?.a);
 
   /* ------------------------------------------------------------------ */
-  console.log("\n3. Amend, add, rebuild");
-  await finance("PATCH", `/payroll/lines/${la.id}`, { netAmount: "1.00" });
-  const amend = await hr("POST", "/payroll/one-offs", oneOff(O1, A, { amount: "20000" }));
-  la = await lineOf(RUN, A);
-  check("an amend on a draft sheet moves the bonus by the difference, and clears a typed net", amend.status === 200 && la?.bonus === "20000.00" && la?.override === null && (await ooRow(O1)).applied === "20000.00", `${amend.status} ${la?.bonus} override ${la?.override}`);
+  console.log("\n4. A second one-off while the sheet is a draft");
   const second = await hr("POST", "/payroll/one-offs", oneOff(O2, A, { amount: "5000.50", note: "Spot award" }));
   la = await lineOf(RUN, A);
-  check("a second one-off for the same month adds to it", second.status === 201 && second.body?.state === "on_sheet" && la?.bonus === "25000.50", `${second.status} ${la?.bonus}`);
+  check("201, pending — and NOT in the bonus", second.status === 201 && second.body?.decision === "pending" && la?.bonus === "18000.00", `${second.status} ${la?.bonus}`);
+  const rebuildBlocked = await finance("POST", `/payroll/runs/${RUN}/generate-lines`);
+  const finaliseBlocked = await finance("POST", `/payroll/runs/${RUN}/finalize`);
+  check("Build list and Finalise are refused while it waits", rebuildBlocked.status === 409 && finaliseBlocked.status === 409, `${rebuildBlocked.status}/${finaliseBlocked.status}`);
+  await finance("PATCH", `/payroll/lines/${la.id}`, { netAmount: "1.00" });
+  const o2Id = (await ooRow(O2)).id;
+  const ok2 = await finance("POST", `/hr-requests/one_off/${o2Id}/decision`, { decision: "approved" });
+  la = await lineOf(RUN, A);
+  check("approved: added to the draft at once, a typed net cleared", ok2.status === 200 && la?.bonus === "23000.50" && la?.override === null && /Added to/.test(ok2.body?.notice ?? ""), `${ok2.status} ${la?.bonus} ${ok2.body?.notice}`);
   await finance("POST", `/payroll/runs/${RUN}/generate-lines`);
   la = await lineOf(RUN, A);
   const both = await q(`select payroll_line_id::text l from payroll_one_offs where external_id = any($1::uuid[])`, [[O1, O2]]);
-  check("Build list again: the new line carries both", la?.bonus === "25000.50" && both.every((b) => b.l === la?.id), `${la?.bonus} ${JSON.stringify(both)}`);
+  check("Build list again: the new line carries both", la?.bonus === "23000.50" && both.every((b) => b.l === la?.id), `${la?.bonus} ${JSON.stringify(both)}`);
 
   /* ------------------------------------------------------------------ */
-  console.log("\n4. Off the sheet, and back");
+  console.log("\n5. Off the sheet, and back");
   await finance("POST", `/payroll/runs/${RUN}/members`, { teamMemberIds: [B] });
   st = (await hr("GET", `/payroll/one-offs?externalIds=${O1},${O2}`)).body ?? [];
-  check("taken off the sheet: both back to waiting", st.length === 2 && st.every((s) => s.state === "waiting"), JSON.stringify(st.map((s) => s.state)));
+  check("taken off the sheet: both off it, still approved", st.length === 2 && st.every((s) => s.state === "waiting" && s.decision === "approved"), JSON.stringify(st.map((s) => `${s.state}/${s.decision}`)));
   await finance("POST", `/payroll/runs/${RUN}/members`, { teamMemberIds: [A, B] });
   la = await lineOf(RUN, A);
-  check("put back: in the bonus again, once", la?.bonus === "25000.50", la?.bonus);
+  check("put back: in the bonus again, once", la?.bonus === "23000.50", la?.bonus);
 
   /* ------------------------------------------------------------------ */
-  console.log("\n5. A settled sheet");
+  console.log("\n6. Decided is final to HR");
+  const resend = await hr("POST", "/payroll/one-offs", oneOff(O1, A, { amount: "99999" }));
+  row = await ooRow(O1);
+  check("a resend after approval: 409 with the decision; nothing moves", resend.status === 409 && resend.body?.state?.decision === "approved" && row?.amt === "18000.00" && (await lineOf(RUN, A))?.bonus === "23000.50", `${resend.status} ${JSON.stringify(resend.body?.state?.decision)}`);
+  const takeBack = await finance("POST", `/hr-requests/one_off/${o1Id}/decision`, { decision: "received" });
+  check("an applied one-off cannot be put back (409)", takeBack.status === 409, msg(takeBack));
+  const hrDecides = await hr("POST", `/hr-requests/one_off/${o2Id}/decision`, { decision: "refused", note: "x" });
+  check("HR cannot decide a one-off (403)", hrDecides.status === 403, msg(hrDecides));
+
+  /* ------------------------------------------------------------------ */
+  console.log("\n7. A settled sheet");
   const fin = await finance("POST", `/payroll/runs/${RUN}/finalize`);
   check("the sheet finalised", fin.status === 200 || fin.status === 201, msg(fin));
-  const late = await hr("POST", "/payroll/one-offs", oneOff(O1, A, { amount: "99999" }));
-  la = await lineOf(RUN, A);
-  row = await ooRow(O1);
-  check("a repeat now: 409 with the state and the sheet's status; nothing moves", late.status === 409 && late.body?.sheetStatus === "finalized" && late.body?.state?.state === "on_sheet" && row?.amt === "20000.00" && la?.bonus === "25000.50", `${late.status} ${JSON.stringify(late.body?.state)} ${row?.amt} ${la?.bonus}`);
   const fresh = crypto.randomUUID();
   const firstLate = await hr("POST", "/payroll/one-offs", oneOff(fresh, B, { amount: "1000" }));
   check("a first send for that month: 409, state null, nothing stored", firstLate.status === 409 && firstLate.body?.state === null && firstLate.body?.sheetStatus === "finalized" && (await q(`select count(*)::int n from payroll_one_offs where external_id = $1`, [fresh]))[0].n === 0, msg(firstLate));
   const moved = await hr("POST", "/payroll/one-offs", oneOff(fresh, B, { amount: "1000", periodMonth: 10 }));
-  check("…sent for the next month instead: 201, waiting", moved.status === 201 && moved.body?.state === "waiting" && moved.body?.periodMonth === 10, msg(moved));
+  check("…sent for the next month instead: 201, waiting, pending", moved.status === 201 && moved.body?.state === "waiting" && moved.body?.decision === "pending" && moved.body?.periodMonth === 10, msg(moved));
   await q(`update payroll_runs set status = 'paid' where id = $1`, [RUN]);
   st = (await hr("GET", `/payroll/one-offs?externalIds=${O1}`)).body?.[0];
   check("a paid sheet reads as paid", st?.state === "paid" && st?.sheetStatus === "paid", JSON.stringify(st));
   await q(`update payroll_runs set status = 'finalized' where id = $1`, [RUN]);
 
   /* ------------------------------------------------------------------ */
-  console.log("\n6. Refusals");
+  console.log("\n8. Refusals");
   for (const [label, body, code] of [
     ["the amount as a JSON number", oneOff(crypto.randomUUID(), B, { amount: 1000, periodMonth: 11 }), 400],
     ["month 13", oneOff(crypto.randomUUID(), B, { periodMonth: 13 }), 400],
@@ -185,7 +209,7 @@ try {
   }
 
   /* ------------------------------------------------------------------ */
-  console.log("\n7. Who");
+  console.log("\n9. Who");
   if (users.ceo) {
     const c = as(users.ceo);
     const s = await c("POST", "/payroll/one-offs", oneOff(crypto.randomUUID(), B, { periodMonth: 11 }));
@@ -198,7 +222,7 @@ try {
   check("state by ids, unknown ones left out", unknown.body?.length === 1, String(unknown.body?.length));
 
   /* ------------------------------------------------------------------ */
-  console.log("\n8. The salary itself");
+  console.log("\n10. The salary itself");
   check("compensation_history never moved", JSON.stringify(await comp([A, B])) === compBefore, compBefore);
   const audit = await q(`select summary, is_sensitive from audit_logs where entity_table = 'payroll_one_offs' and entity_id::text in (select id::text from payroll_one_offs where external_id = any($1::uuid[]))`, [[O1, O2]]);
   check("an audit row per send, sensitive", audit.length >= 5 && audit.every((a) => a.is_sensitive), `${audit.length} rows`);

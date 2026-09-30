@@ -15,12 +15,15 @@ import { payrollLines, payrollOneOffs } from "../../db/schema";
  * lands in the sheet's bonus column instead — `payroll_lines.bonus_amount`,
  * which the generated net already adds — and nowhere else.
  *
- * It is added to the person's line on that month's sheet when the sheet is
- * built (Build list, or the person added to it), or at once if a draft sheet
- * already has them. What it added is kept (`applied_amount`), so an amend
- * moves the bonus by the difference rather than adding again. A line that
- * goes — the person taken off, the list rebuilt — sets it back to waiting
- * (the foreign key sets null), and the next build adds it again.
+ * It goes on a sheet only once finance has APPROVED it (#125 — the owner:
+ * "taka poysar ... HRM theke dewa matro sorasori aprove hoye jay. eta kora
+ * jabena"). Approved, it is added to the person's line on that month's
+ * sheet — at once if a draft sheet already has them, else when the sheet is
+ * built (Build list, or the person added to it). What it added is kept
+ * (`applied_amount`). A line that goes — the person taken off, the list
+ * rebuilt — sets it back to off-sheet (the foreign key sets null), and the
+ * next build adds it again. A waiting one blocks that month's sheet being
+ * built or finalised until it is decided (`hr-requests/blocking.ts`).
  */
 
 export const submitOneOffSchema = z.strictObject({
@@ -37,8 +40,8 @@ export const submitOneOffSchema = z.strictObject({
 export type SubmitOneOffInput = z.infer<typeof submitOneOffSchema>;
 
 /**
- * Adds every waiting one-off for this sheet's month to the line of the person
- * it is for, when the sheet has one. Called inside the transaction that built
+ * Adds every APPROVED one-off for this sheet's month that is not on a line yet
+ * to the line of the person it is for, when the sheet has one. Called inside the transaction that built
  * or changed the sheet's lines, before its totals are worked out again.
  *
  * Integer paisa throughout: the bonus is added in SQL, never in JavaScript.
@@ -65,6 +68,7 @@ export async function applyPendingOneOffs(
       and(
         eq(payrollOneOffs.periodYear, run.periodYear),
         eq(payrollOneOffs.periodMonth, run.periodMonth),
+        eq(payrollOneOffs.status, "approved"),
         isNull(payrollOneOffs.payrollLineId),
       ),
     );
@@ -76,6 +80,7 @@ export async function applyPendingOneOffs(
       .set({
         payrollLineId: one.lineId,
         appliedAmount: one.amount,
+        appliedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(payrollOneOffs.id, one.id));

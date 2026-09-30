@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { formatIsoDate, formatMoney, type Paginated } from "@finance/shared";
@@ -11,7 +10,6 @@ import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
 import {
-  appSettings,
   hrBudgetPeriods,
   hrBudgetSpends,
   teamMembers,
@@ -31,7 +29,7 @@ import type {
 /** What the HR portal reads back about a budget. */
 export type PeriodState = {
   externalId: string;
-  status: "received" | "approved" | "refused";
+  status: "received" | "approved" | "refused" | "held";
   statusNote: string | null;
   decidedByName: string | null;
   decidedAt: Date | null;
@@ -45,7 +43,7 @@ export type SpendState = {
   budgetExternalId: string;
   /** Whether the budget it names has arrived here. */
   budgetKnown: boolean;
-  status: "received" | "approved" | "refused" | "paid";
+  status: "received" | "approved" | "refused" | "held" | "paid";
   statusNote: string | null;
   decidedByName: string | null;
   decidedAt: Date | null;
@@ -123,8 +121,6 @@ export type SpendRow = SpendState & {
  */
 @Injectable()
 export class HrBudgetService {
-  private readonly log = new Logger(HrBudgetService.name);
-
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
@@ -163,9 +159,14 @@ export class HrBudgetService {
           set: {
             ...values,
             sendCount: sql`${hrBudgetPeriods.sendCount} + 1`,
+            /* A resend after a hold answers it: back to waiting (#125). */
+            status: "received",
+            statusNote: null,
+            decidedBy: null,
+            decidedAt: null,
             updatedAt: new Date(),
           },
-          setWhere: sql`${hrBudgetPeriods.status} = 'received'`,
+          setWhere: sql`${hrBudgetPeriods.status} in ('received', 'held')`,
         })
         .returning({
           id: hrBudgetPeriods.id,
@@ -184,8 +185,8 @@ export class HrBudgetService {
     });
 
     if (written?.inserted)
-      await this.ring({
-        kind: "period",
+      await this.notifications.ringHrRequest({
+        kind: "budget",
         id: written.id,
         title: `HR sent a budget: ${input.categoryName}`,
         body: `${formatMoney(input.amount, { currency: "BDT" })} for ${formatIsoDate(input.startsOn)} to ${formatIsoDate(input.endsOn)}, from ${input.recordedByName}. Waiting for a decision.`,
@@ -238,9 +239,13 @@ export class HrBudgetService {
           set: {
             ...values,
             sendCount: sql`${hrBudgetSpends.sendCount} + 1`,
+            status: "received",
+            statusNote: null,
+            decidedBy: null,
+            decidedAt: null,
             updatedAt: new Date(),
           },
-          setWhere: sql`${hrBudgetSpends.status} = 'received'`,
+          setWhere: sql`${hrBudgetSpends.status} in ('received', 'held')`,
         })
         .returning({
           id: hrBudgetSpends.id,
@@ -259,7 +264,7 @@ export class HrBudgetService {
     });
 
     if (written?.inserted)
-      await this.ring({
+      await this.notifications.ringHrRequest({
         kind: "spend",
         id: written.id,
         title: `HR sent a spend: ${input.purpose}`,
@@ -271,51 +276,6 @@ export class HrBudgetService {
       outcome: !written ? "conflict" : written.inserted ? "created" : "amended",
       state,
     };
-  }
-
-  /**
-   * The bell for a request that has just arrived (#122).
-   *
-   * The owner, 30 Sep 2026: *"Hr budget a kono request asle setao jate
-   * notifications jay"*. Once per request, on its first arrival: a resend
-   * that amends it is the same request, and the page shows its figures as
-   * they are now. To the roles that approve and pay — `hrbudget.manage` is
-   * the CFO's and the super admin's.
-   *
-   * Never allowed to fail the send. By now HR's request is in the books, and
-   * a 500 here would have the HR portal send it again for a bell.
-   */
-  private async ring(args: {
-    kind: "period" | "spend";
-    id: string;
-    title: string;
-    body: string;
-  }) {
-    try {
-      const [settings] = await this.db.client
-        .select({ on: appSettings.notifyHrBudget })
-        .from(appSettings)
-        .where(eq(appSettings.id, 1))
-        .limit(1);
-      if (settings?.on === false) return;
-
-      const userIds = await this.notifications.recipientsInRoles([
-        "cfo",
-        "super_admin",
-      ]);
-      await this.notifications.raise({
-        userIds,
-        kind: "hr_budget",
-        dedupeKey: `hr-${args.kind}:${args.id}`,
-        title: args.title.slice(0, 200),
-        body: args.body,
-        href: args.kind === "period" ? "/hr-budget?tab=budgets" : "/hr-budget",
-      });
-    } catch (error) {
-      this.log.warn(
-        `The bell for HR ${args.kind} ${args.id} did not ring: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   /** The states of the budgets named — the ones not here are left out. */

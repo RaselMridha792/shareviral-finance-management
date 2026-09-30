@@ -1,8 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { DbService } from "../../db/db.service";
-import { notifications, users } from "../../db/schema";
+import { appSettings, notifications, users } from "../../db/schema";
+
+/** The four money requests the HR portal sends (#125). */
+export type HrRequestKind = "pay_change" | "one_off" | "budget" | "spend";
 
 /**
  * The bell, and the only place anything writes to it.
@@ -38,7 +41,47 @@ export type RaiseArgs = {
 
 @Injectable()
 export class NotificationsService {
+  private readonly log = new Logger(NotificationsService.name);
+
   constructor(private readonly db: DbService) {}
+
+  /**
+   * The bell for a money request that has just arrived from the HR portal
+   * (#122, and all four kinds since #125), unless Settings → Notifications
+   * has it switched off. Once per request, to the people who decide it — the
+   * CFO and the Super Admin (`hrrequests.decide`).
+   *
+   * Never allowed to fail the send: by now HR's request is stored, and a 500
+   * here would have the HR portal send it again for a bell.
+   */
+  async ringHrRequest(args: {
+    kind: HrRequestKind;
+    id: string;
+    title: string;
+    body: string;
+  }): Promise<void> {
+    try {
+      const [settings] = await this.db.client
+        .select({ on: appSettings.notifyHrBudget })
+        .from(appSettings)
+        .where(eq(appSettings.id, 1))
+        .limit(1);
+      if (settings?.on === false) return;
+
+      await this.raise({
+        userIds: await this.recipientsInRoles(["cfo", "super_admin"]),
+        kind: "hr_request",
+        dedupeKey: `hr-${args.kind}:${args.id}`,
+        title: args.title.slice(0, 200),
+        body: args.body,
+        href: `/hr-requests?kind=${args.kind}`,
+      });
+    } catch (error) {
+      this.log.warn(
+        `The bell for HR ${args.kind} ${args.id} did not ring: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   /**
    * Raise one for each person, and return how many were actually new.

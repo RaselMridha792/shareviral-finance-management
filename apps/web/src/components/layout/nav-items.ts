@@ -15,7 +15,7 @@ import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
 import { InvoiceIcon } from "@phosphor-icons/react/dist/ssr/Invoice";
 import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
-import { PiggyBankIcon } from "@phosphor-icons/react/dist/ssr/PiggyBank";
+import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
@@ -52,6 +52,8 @@ export type NavItem = {
   children?: NavItem[];
   /** Not built yet — shown greyed out so the shape of the app is visible. */
   comingSoon?: boolean;
+  /** A live count beside the label. Only HR Requests has one (#125). */
+  badge?: "hr-requests-waiting";
 };
 
 export type NavGroup = { title: string; items: NavItem[] };
@@ -216,14 +218,16 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
-        // What the HR portal sends finance — budgets and the spending against
-        // them — to approve, refuse and pay (30 Sep 2026). Under People
-        // because it is HR's; its own permission because it is money.
-        key: "hr-budget",
-        href: "/hr-budget",
-        label: "HR Budget",
-        icon: PiggyBankIcon,
-        permission: "hrbudget.read",
+        // Every money request the HR portal sends — a pay change, a one-off,
+        // a budget, a spend — waiting for the CFO or the Super Admin (#125).
+        // It took HR Budget's place, which held two of the four; /hr-budget
+        // comes here. The count is what waits.
+        key: "hr-requests",
+        href: "/hr-requests",
+        label: "HR Requests",
+        icon: TrayIcon,
+        permission: "hrrequests.read",
+        badge: "hr-requests-waiting",
       },
     ],
   },

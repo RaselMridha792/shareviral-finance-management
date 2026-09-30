@@ -125,7 +125,7 @@ const open = async (user, url, width = 1440) => {
   return { page, context };
 };
 const search = async (page, text) => {
-  const box = await page.$("input[placeholder^='Purpose'], input[placeholder^='Category']");
+  const box = await page.$("input[placeholder^='Person']");
   await box.click();
   await page.keyboard.down("Control");
   await page.keyboard.press("KeyA");
@@ -168,7 +168,7 @@ try {
   const b1 = await bellsFor(`hr-spend:${s1id}`);
   check(
     "a spend's first arrival rings once for every active CFO and super admin",
-    s1.status === 201 && b1.length === deciders.length && b1.map((b) => b.uid).join() === deciders.join() && b1.every((b) => b.kind === "hr_budget" && b.href === "/hr-budget"),
+    s1.status === 201 && b1.length === deciders.length && b1.map((b) => b.uid).join() === deciders.join() && b1.every((b) => b.kind === "hr_request" && b.href === "/hr-requests?kind=spend"),
     `${s1.status} ${b1.length}/${deciders.length}`,
   );
   check(
@@ -181,15 +181,15 @@ try {
 
   const again = await hr("POST", "/hr-budget/spends", spendBody({ externalId: S1, purpose: `${MARK} Laptop bags`, amount: "1300.00" }));
   const b1b = await bellsFor(`hr-spend:${s1id}`);
-  const total1 = (await q(`select count(*)::int n from notifications where kind = 'hr_budget' and title like $1`, [`%${MARK}%`]))[0].n;
+  const total1 = (await q(`select count(*)::int n from notifications where kind = 'hr_request' and title like $1`, [`%${MARK}%`]))[0].n;
   check("sent again with a change: an amend, and no second bell", again.status === 200 && b1b.length === deciders.length && total1 === deciders.length, `${again.status} ${b1b.length} ${total1}`);
 
   const p1 = await hr("POST", "/hr-budget/periods", { externalId: PERIOD, categoryName: `${MARK} Equipment`, startsOn: "2026-09-01", endsOn: "2026-10-31", amount: "50000", note: null, recordedByName: "Nusrat (HR)" });
   const pid = (await q(`select id::text from hr_budget_periods where external_id = $1`, [PERIOD]))[0].id;
-  const bp = await bellsFor(`hr-period:${pid}`);
+  const bp = await bellsFor(`hr-budget:${pid}`);
   check(
     "a budget's arrival rings too, and links to the Budgets list",
-    p1.status === 201 && bp.length === deciders.length && bp[0]?.href === "/hr-budget?tab=budgets" && bp[0]?.title === `HR sent a budget: ${MARK} Equipment` && bp[0]?.body.includes("01/09/2026 to 31/10/2026"),
+    p1.status === 201 && bp.length === deciders.length && bp[0]?.href === "/hr-requests?kind=budget" && bp[0]?.title === `HR sent a budget: ${MARK} Equipment` && bp[0]?.body.includes("01/09/2026 to 31/10/2026"),
     `${p1.status} ${bp.length} ${bp[0]?.href} | ${bp[0]?.body}`,
   );
   const feed = await admin("GET", "/notifications");
@@ -211,9 +211,9 @@ try {
   console.log("\nSettings → Notifications");
   {
     const { page, context } = await open(users.super_admin, "/settings?tab=notifications");
-    await page.waitForFunction(() => document.body.textContent.includes("HR sent a budget or a spend"), { timeout: 20000 });
+    await page.waitForFunction(() => document.body.textContent.includes("HR sent a money request"), { timeout: 20000 });
     const row = await page.evaluate(() => {
-      const title = [...document.querySelectorAll("p")].find((p) => p.textContent.trim() === "HR sent a budget or a spend");
+      const title = [...document.querySelectorAll("p")].find((p) => p.textContent.trim() === "HR sent a money request");
       const box = title?.closest(".sv-switch-row");
       const sw = box?.querySelector("[role='switch']");
       const card = box?.parentElement;
@@ -228,7 +228,7 @@ try {
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "bell-settings.png") });
     const click = () =>
       page.evaluate(() => {
-        const title = [...document.querySelectorAll("p")].find((p) => p.textContent.trim() === "HR sent a budget or a spend");
+        const title = [...document.querySelectorAll("p")].find((p) => p.textContent.trim() === "HR sent a money request");
         title.closest(".sv-switch-row").querySelector("[role='switch']").click();
       });
     await click();
@@ -244,9 +244,9 @@ try {
   /* ------------------------------------------------------------------ */
   console.log("\nThe bell's link");
   {
-    const { page, context } = await open(finance, "/hr-budget?tab=budgets");
+    const { page, context } = await open(finance, "/hr-requests?kind=budget&state=all");
     const onBudgets = await until(() => page.evaluate((m) => [...document.querySelectorAll("tr[data-row-id]")].some((tr) => tr.textContent.includes(`${m} Equipment`)), MARK));
-    check("/hr-budget?tab=budgets opens on Budgets", Boolean(onBudgets));
+    check("the bell's budget link opens HR Requests on budgets", Boolean(onBudgets));
     await context.close();
   }
 
@@ -255,7 +255,7 @@ try {
   await fin("POST", `/hr-budget/spends/${s1id}/decision`, { decision: "approved", note: null });
   await fin("POST", `/hr-budget/spends/${s2id}/decision`, { decision: "approved", note: null });
   {
-    const { page, context } = await open(finance, "/hr-budget");
+    const { page, context } = await open(finance, "/hr-requests?kind=spend&state=all");
     await openPay(page, `${MARK} Laptop bags`);
     const clips = await page.evaluate(() => {
       const form = document.querySelector("#hrb-pay");
@@ -294,7 +294,7 @@ try {
   /* ------------------------------------------------------------------ */
   console.log("\nAn upload that fails");
   {
-    const { page, context } = await open(finance, "/hr-budget");
+    const { page, context } = await open(finance, "/hr-requests?kind=spend&state=all");
     await openPay(page, `${MARK} Team lunch`);
     const [invoiceInput] = await page.$$("#hrb-pay input[type='file']");
     await invoiceInput.uploadFile(invoicePng);
@@ -343,7 +343,7 @@ try {
   }
   await q(`update app_settings set notify_hr_budget = $1 where id = 1`, [switchBefore]);
   const ids = (await q(`select id::text from hr_budget_periods where category_name like $1 union all select id::text from hr_budget_spends where purpose like $1`, [`${MARK}%`])).map((r) => r.id);
-  await q(`delete from notifications where kind = 'hr_budget' and title like $1`, [`%${MARK}%`]);
+  await q(`delete from notifications where kind in ('hr_budget', 'hr_request') and title like $1`, [`%${MARK}%`]);
   await q(`delete from audit_logs where entity_id::text = any($1)`, [ids]);
   await q(`delete from hr_budget_spends where purpose like $1`, [`${MARK}%`]);
   await q(`delete from hr_budget_periods where category_name like $1`, [`${MARK}%`]);
