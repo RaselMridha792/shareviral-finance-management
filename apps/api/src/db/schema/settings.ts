@@ -191,6 +191,15 @@ export const appSettings = pgTable(
      */
     notifyHrBudget: boolean("notify_hr_budget").notNull().default(true),
 
+    /**
+     * The look of the app, from Settings -> Appearance (#124). NULL is the
+     * design as the stylesheet draws it, never a stored copy of it. Shapes in
+     * `@finance/shared` (appearance.ts); read through its schemas, so a value
+     * that does not parse is treated as NULL rather than written into a page.
+     */
+    theme: jsonb("theme"),
+    typography: jsonb("typography"),
+
     anthropicApiKey: text("anthropic_api_key"),
     anthropicKeySetAt: timestamp("anthropic_key_set_at", {
       withTimezone: true,
