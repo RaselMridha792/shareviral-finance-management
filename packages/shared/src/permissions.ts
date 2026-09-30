@@ -27,7 +27,14 @@ export const PERMISSIONS = [
   "team.write",
   // Salary. Deliberately separate from team.* — this is the HR boundary.
   "team.compensation.read",
+  /** Sets a salary, and it takes effect: finance's act, never HR's (#125). */
   "team.compensation.write",
+  /**
+   * Asks for a salary change, which then waits for finance (#125). The HR
+   * portal's door. The owner, 30 Sep 2026: "jekhanei takar onko thakbe
+   * oikhanei dorkar aproval" — a figure in taka moves when finance says so.
+   */
+  "team.compensation.request",
 
   "payroll.read",
   "payroll.write",
@@ -49,6 +56,15 @@ export const PERMISSIONS = [
   "hrbudget.submit",
   "hrbudget.read",
   "hrbudget.manage",
+
+  /**
+   * Every money request from the HR portal — a pay change, a one-off, a
+   * budget, a spend — on one page (#125). `read` sees the queue; `decide`
+   * approves, rejects or holds, and only an approval moves anything. The
+   * owner: CFO and Super Admin decide; HR never decides what HR sent.
+   */
+  "hrrequests.read",
+  "hrrequests.decide",
 
   "tds.read",
   "tds.write",
@@ -86,6 +102,7 @@ const READ_ONLY_EVERYTHING: Permission[] = [
   "team.compensation.read",
   "payroll.read",
   "hrbudget.read",
+  "hrrequests.read",
   "tds.read",
   "incometax.read",
   "reports.view",
@@ -125,6 +142,7 @@ const OPERATIONAL_FULL: Permission[] = [
   "team.write",
   "team.compensation.read",
   "team.compensation.write",
+  "team.compensation.request",
   "payroll.read",
   "payroll.write",
   "payroll.pay",
@@ -132,6 +150,8 @@ const OPERATIONAL_FULL: Permission[] = [
   "hrbudget.submit",
   "hrbudget.read",
   "hrbudget.manage",
+  "hrrequests.read",
+  "hrrequests.decide",
   "tds.read",
   "tds.write",
   "incometax.read",
@@ -174,7 +194,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
    */
   cfo: OPERATIONAL_FULL,
   /**
-   * HR owns pay at this company, so HR can see and set it.
+   * HR owns pay at this company, so HR can see it, and ask for it to change
+   * — finance decides whether it does (#125, below).
    *
    * This was the opposite for most of the app's life: compensation lived in its
    * own table precisely so that no HR request could reach a salary, and the
@@ -195,7 +216,20 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "team.read",
     "team.write",
     "team.compensation.read",
-    "team.compensation.write",
+    /**
+     * Asking, not setting (#125). Until 30 Sep 2026 HR held
+     * `team.compensation.write`, and a raise sent from the HR portal closed
+     * the old salary row and opened the new one at once — the owner watched
+     * one land in a month's payroll that nobody in finance had approved: "eta
+     * kora jabena". A pay change from HR now waits on the HR Requests page
+     * for the CFO or the Super Admin, and only an approval writes it.
+     *
+     * A joining salary still becomes the first pay figure on its own
+     * (`followJoiningSalary`, under `team.write`) — the owner's choice: "No,
+     * it goes straight in". Setting `currentSalary` on a member is a pay
+     * change and needs `team.compensation.write`, which HR no longer holds.
+     */
+    "team.compensation.request",
     /**
      * The salary sheet, to read. `payroll.write` and `payroll.pay` are not
      * here: deciding a salary and moving the bank balance are different acts,

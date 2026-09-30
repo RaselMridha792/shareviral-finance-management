@@ -23,9 +23,10 @@ describe("the HR boundary", () => {
    * between one person's pay, which is HR's business, and what the company
    * holds, which is not.
    */
-  it("lets HR see and set what people are paid", () => {
+  it("lets HR see what people are paid, and ask — not set — a change (#125)", () => {
     assert.equal(hasPermission("hr", "team.compensation.read"), true);
-    assert.equal(hasPermission("hr", "team.compensation.write"), true);
+    assert.equal(hasPermission("hr", "team.compensation.request"), true);
+    assert.equal(hasPermission("hr", "team.compensation.write"), false);
     assert.equal(canSeeCompensation("hr"), true);
   });
 
@@ -82,6 +83,19 @@ describe("the doors from the HR portal (30 Sep 2026)", () => {
     assert.deepEqual(manage, ["super_admin", "cfo"]);
   });
 
+  it("leave every money request to the CFO and the Super Admin to decide (#125)", () => {
+    const decide = ROLES.filter((role) =>
+      hasPermission(role, "hrrequests.decide"),
+    );
+    assert.deepEqual(decide, ["super_admin", "cfo"]);
+    const setPay = ROLES.filter((role) =>
+      hasPermission(role, "team.compensation.write"),
+    );
+    assert.deepEqual(setPay, ["super_admin", "cfo"]);
+    assert.equal(hasPermission("hr", "hrrequests.read"), false);
+    assert.equal(hasPermission("ceo", "hrrequests.read"), true);
+  });
+
   it("let the CEO read the HR Budget page and nothing more of it", () => {
     assert.equal(hasPermission("ceo", "hrbudget.read"), true);
     assert.equal(hasPermission("ceo", "hrbudget.submit"), false);
@@ -99,6 +113,8 @@ describe("the CEO is read-only", () => {
       // Sending something in, and deciding on it, both change the books.
       p.endsWith(".submit") ||
       p.endsWith(".manage") ||
+      p.endsWith(".request") ||
+      p.endsWith(".decide") ||
       p === "users.manage" ||
       p === "imports.run",
   );
