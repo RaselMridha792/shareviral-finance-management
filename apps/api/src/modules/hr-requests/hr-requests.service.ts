@@ -130,6 +130,12 @@ export type SubmitResult = {
   state: RequestStatus;
 };
 
+export type WithdrawResult = {
+  /** withdrawn now · unchanged: it already was · conflict: decided first. */
+  outcome: "withdrawn" | "unchanged" | "conflict";
+  state: RequestStatus;
+};
+
 /**
  * Every money request from the HR portal, and finance's answer (#125).
  *
@@ -237,6 +243,54 @@ export class HrRequestsService {
       outcome: !written ? "conflict" : written.inserted ? "created" : "amended",
       state,
     };
+  }
+
+  /**
+   * HR takes back a request that still waits (#126): its revision was
+   * cancelled or deleted in the HR portal. The row stays — the CFO's queue
+   * does not silently lose entries — marked withdrawn, off the waiting list,
+   * and no longer holding up a salary sheet. Nobody in finance decided it,
+   * so `decided_by` stays null; `decided_at` is when it was withdrawn.
+   *
+   * Only while it waits or is held. Once decided it is answered with its
+   * state: an approval may have moved money already, and a refusal already
+   * says no.
+   */
+  async withdraw(
+    kind: RequestKind,
+    externalId: string,
+    note: string | null,
+    actor: AuthenticatedUser,
+  ): Promise<WithdrawResult> {
+    const table = sql.raw(TABLE[kind]);
+    const outcome = await this.db.transaction(async (tx) => {
+      const found = await tx.execute(sql`
+        select id::text, status from ${table}
+         where external_id = ${externalId}::uuid
+         for update`);
+      const row = found.rows[0] as { id: string; status: string } | undefined;
+      if (!row) throw new NotFoundException("No request with that id");
+      if (row.status === "withdrawn") return "unchanged" as const;
+      if (row.status !== "received" && row.status !== "held") {
+        return "conflict" as const;
+      }
+      await tx.execute(sql`
+        update ${table} set
+          status = 'withdrawn', status_note = ${note},
+          decided_by = null, decided_at = now(), updated_at = now()
+         where id = ${row.id}::uuid`);
+      await this.audit.record(tx, {
+        action: "update",
+        entityTable: TABLE[kind],
+        entityId: row.id,
+        module: "hr-requests",
+        isSensitive: kind === "pay_change" || kind === "one_off",
+        summary: `${actor.fullName} withdrew the ${KIND_WORD[kind]} for HR${note ? `: ${note}` : ""}`,
+      });
+      return "withdrawn" as const;
+    });
+    const [state] = await this.statuses(kind, [externalId]);
+    return { outcome, state };
   }
 
   /* ------------------------------------------------------------------ */
@@ -372,6 +426,7 @@ export class HrRequestsService {
         waiting: number;
         approved: number;
         rejected: number;
+        withdrawn: number;
         all: number;
       };
     }
@@ -397,6 +452,7 @@ export class HrRequestsService {
       held: sql`r.status = 'held'`,
       approved: sql`r.status = 'approved'`,
       rejected: sql`r.status = 'refused'`,
+      withdrawn: sql`r.status = 'withdrawn'`,
       all: sql`true`,
     };
     const where = sql`${scope} and ${states[query.state]}`;
@@ -416,6 +472,7 @@ export class HrRequestsService {
         select count(*) filter (where r.status in ('received', 'held'))::int as waiting,
                count(*) filter (where r.status = 'approved')::int as approved,
                count(*) filter (where r.status = 'refused')::int as rejected,
+               count(*) filter (where r.status = 'withdrawn')::int as withdrawn,
                count(*)::int as "all",
                count(*) filter (where ${states[query.state]})::int as total
           from (${this.rowsSql()}) r
@@ -425,6 +482,7 @@ export class HrRequestsService {
       waiting: number;
       approved: number;
       rejected: number;
+      withdrawn: number;
       all: number;
       total: number;
     };
@@ -438,6 +496,7 @@ export class HrRequestsService {
         waiting: counts.waiting,
         approved: counts.approved,
         rejected: counts.rejected,
+        withdrawn: counts.withdrawn,
         all: counts.all,
       },
     };
@@ -565,6 +624,11 @@ export class HrRequestsService {
     const to = input.decision;
     const note = input.note?.trim() || null;
 
+    if (from === "withdrawn") {
+      throw new ConflictException(
+        "HR withdrew this request, so there is nothing to decide. If it is wanted after all, HR sends it again.",
+      );
+    }
     if (from === "paid") {
       throw new ConflictException(
         "This spend is paid — the money has moved, and there is nothing left to decide.",

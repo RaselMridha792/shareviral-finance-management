@@ -29,7 +29,7 @@ import type {
 /** What the HR portal reads back about a budget. */
 export type PeriodState = {
   externalId: string;
-  status: "received" | "approved" | "refused" | "held";
+  status: "received" | "approved" | "refused" | "held" | "withdrawn";
   statusNote: string | null;
   decidedByName: string | null;
   decidedAt: Date | null;
@@ -43,7 +43,7 @@ export type SpendState = {
   budgetExternalId: string;
   /** Whether the budget it names has arrived here. */
   budgetKnown: boolean;
-  status: "received" | "approved" | "refused" | "held" | "paid";
+  status: "received" | "approved" | "refused" | "held" | "withdrawn" | "paid";
   statusNote: string | null;
   decidedByName: string | null;
   decidedAt: Date | null;
@@ -449,6 +449,11 @@ export class HrBudgetService {
       .where(eq(hrBudgetPeriods.id, id))
       .limit(1);
     if (!period) throw new NotFoundException("That budget is not here");
+    if (period.status === "withdrawn") {
+      throw new BadRequestException(
+        "HR withdrew that budget, so there is nothing to decide.",
+      );
+    }
     if (period.status === input.decision) {
       throw new BadRequestException(`That budget is already ${input.decision}`);
     }
@@ -491,6 +496,11 @@ export class HrBudgetService {
     actor: AuthenticatedUser,
   ) {
     const spend = await this.spendRow(id);
+    if (spend.status === "withdrawn") {
+      throw new BadRequestException(
+        "HR withdrew that spend, so there is nothing to decide.",
+      );
+    }
     if (spend.status === "paid") {
       throw new BadRequestException(
         "That spend is paid. Its payment is in the books — void that entry first if it was wrong.",

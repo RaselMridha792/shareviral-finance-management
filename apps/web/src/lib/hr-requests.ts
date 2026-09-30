@@ -9,11 +9,18 @@ import { apiFetch } from "./api-client";
  */
 
 export type RequestKind = "pay_change" | "one_off" | "budget" | "spend";
-export type RequestState = "pending" | "held" | "approved" | "rejected";
+export type RequestState =
+  "pending" | "held" | "approved" | "rejected" | "withdrawn";
 /** As stored — what a decision sends. `received` is "back to waiting". */
 export type Decision = "approved" | "refused" | "held" | "received";
 export type StateFilter =
-  "waiting" | "pending" | "held" | "approved" | "rejected" | "all";
+  | "waiting"
+  | "pending"
+  | "held"
+  | "approved"
+  | "rejected"
+  | "withdrawn"
+  | "all";
 
 export type HrRequestDto = {
   kind: RequestKind;
@@ -59,7 +66,13 @@ export type HrRequestDetailDto = HrRequestDto & {
 };
 
 export type HrRequestList = Paginated<HrRequestDto> & {
-  counts: { waiting: number; approved: number; rejected: number; all: number };
+  counts: {
+    waiting: number;
+    approved: number;
+    rejected: number;
+    withdrawn: number;
+    all: number;
+  };
 };
 
 export const KIND_LABELS: Record<RequestKind, string> = {

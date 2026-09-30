@@ -17,6 +17,7 @@ const STATES: StateFilter[] = [
   "held",
   "approved",
   "rejected",
+  "withdrawn",
   "all",
 ];
 

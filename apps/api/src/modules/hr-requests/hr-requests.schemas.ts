@@ -16,7 +16,13 @@ export const requestKindSchema = z.enum(REQUEST_KINDS);
  * budget tables already stored them — received, held, approved, refused —
  * and said here the way the HR portal asked for them.
  */
-export type RequestState = "pending" | "held" | "approved" | "rejected";
+export type RequestState =
+  | "pending"
+  | "held"
+  | "approved"
+  | "rejected"
+  /** HR took it back while it waited (#126): off the queue, never decided. */
+  | "withdrawn";
 
 export function stateOf(status: string): RequestState {
   if (status === "received") return "pending";
@@ -79,12 +85,29 @@ export const decisionSchema = z
   );
 export type DecisionInput = z.infer<typeof decisionSchema>;
 
+/**
+ * HR withdrawing a request that still waits (#126) — the HR portal's
+ * revision was cancelled or deleted. Its reason, if it gives one, is kept.
+ */
+export const withdrawSchema = z.strictObject({
+  note: z.string().trim().max(500).nullable().optional(),
+});
+export type WithdrawInput = z.infer<typeof withdrawSchema>;
+
 export const listRequestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   /** Waiting (pending and held) is the default view: it is the work. */
   state: z
-    .enum(["waiting", "pending", "held", "approved", "rejected", "all"])
+    .enum([
+      "waiting",
+      "pending",
+      "held",
+      "approved",
+      "rejected",
+      "withdrawn",
+      "all",
+    ])
     .default("waiting"),
   kind: requestKindSchema.optional(),
   /** The month it takes effect in, YYYY-MM. */

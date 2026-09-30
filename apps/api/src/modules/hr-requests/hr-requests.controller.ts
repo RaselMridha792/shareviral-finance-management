@@ -11,17 +11,37 @@ import { ZodBody, ZodQuery } from "../../common/pipes/zod-validation.pipe";
 import {
   decisionSchema,
   externalIdsQuerySchema,
+  withdrawSchema,
   listRequestsQuerySchema,
   requestKindSchema,
   submitPayChangeSchema,
   type DecisionInput,
   type ExternalIdsQuery,
   type ListRequestsQuery,
+  type RequestKind,
   type SubmitPayChangeInput,
+  type WithdrawInput,
 } from "./hr-requests.schemas";
-import { HrRequestsService } from "./hr-requests.service";
+import { HrRequestsService, type WithdrawResult } from "./hr-requests.service";
 
 const uuidSchema = z.string().uuid("Not a valid id");
+
+/**
+ * A withdraw's answer: 200 with the state when it is withdrawn (or already
+ * was), 409 with the state when finance decided first.
+ */
+function withdrawn(response: Response, result: WithdrawResult) {
+  if (result.outcome === "conflict") {
+    response.status(409);
+    return {
+      statusCode: 409,
+      message: `Finance has already ${result.state.state === "rejected" ? "rejected" : "decided"} this, so it cannot be withdrawn. Its state is attached.`,
+      state: result.state,
+    };
+  }
+  response.status(200);
+  return result.state;
+}
 
 /**
  * HR Requests (#125): every money request from the HR portal, and finance's
@@ -62,12 +82,80 @@ export class HrRequestsController {
       return {
         statusCode: 409,
         message:
-          "Finance has already decided this pay change, so it was not changed. A different figure is a new request.",
+          result.state.state === "withdrawn"
+            ? "This pay change was withdrawn, so it was not changed. Send it again as a new request, with a new id."
+            : "Finance has already decided this pay change, so it was not changed. A different figure is a new request.",
         state: result.state,
       };
     }
     response.status(result.outcome === "created" ? 201 : 200);
     return result.state;
+  }
+
+  /* ---- HR takes one back while it waits (#126) ----------------------- */
+
+  @Post("pay-changes/:externalId/withdraw")
+  @HttpCode(200)
+  @RequirePermission("team.compensation.request")
+  async withdrawPayChange(
+    @Param("externalId") externalId: string,
+    @ZodBody(withdrawSchema) body: WithdrawInput,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.withdrawOne("pay_change", externalId, body, actor, response);
+  }
+
+  @Post("one-offs/:externalId/withdraw")
+  @HttpCode(200)
+  @RequirePermission("payroll.oneoff.submit")
+  async withdrawOneOff(
+    @Param("externalId") externalId: string,
+    @ZodBody(withdrawSchema) body: WithdrawInput,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.withdrawOne("one_off", externalId, body, actor, response);
+  }
+
+  @Post("budgets/:externalId/withdraw")
+  @HttpCode(200)
+  @RequirePermission("hrbudget.submit")
+  async withdrawBudget(
+    @Param("externalId") externalId: string,
+    @ZodBody(withdrawSchema) body: WithdrawInput,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.withdrawOne("budget", externalId, body, actor, response);
+  }
+
+  @Post("spends/:externalId/withdraw")
+  @HttpCode(200)
+  @RequirePermission("hrbudget.submit")
+  async withdrawSpend(
+    @Param("externalId") externalId: string,
+    @ZodBody(withdrawSchema) body: WithdrawInput,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.withdrawOne("spend", externalId, body, actor, response);
+  }
+
+  private async withdrawOne(
+    kind: RequestKind,
+    externalId: string,
+    body: WithdrawInput,
+    actor: AuthenticatedUser,
+    response: Response,
+  ) {
+    const result = await this.requests.withdraw(
+      kind,
+      uuidSchema.parse(externalId),
+      body.note ?? null,
+      actor,
+    );
+    return withdrawn(response, result);
   }
 
   /* ---- What HR reads back: one shape for all four -------------------- */

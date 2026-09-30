@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — not pushed; schema f6ebbc1 + 169c2c6, alone |
 | 125 | **HR Requests: money moves when finance says it moves** | **done** — not pushed; **permissions 457c184, then schema 79735bc, each alone** |
 | 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — deployed 30 Sep |
 | 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — deployed 30 Sep |
@@ -103,6 +104,46 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 126. HR Requests: HR can withdraw a request that still waits — 1 Oct 2026
+
+Brief 5 from the HR portal's session: when HR cancels or deletes a revision
+whose request still waits here, the CFO is left with a ghost. The owner
+chose "Withdrawn", not deletion.
+
+- **Schema (f6ebbc1, 169c2c6, alone):** `withdrawn` is allowed on all four
+  request tables. It went into the not-yet-deployed hr-requests migration
+  itself, so no later file redefines the constraints.
+  `compensation_requests`' rule is also dropped and re-added after its
+  CREATE, so a database that ran an earlier draft converges. The local one
+  had not, and a withdraw there was a 500.
+- **API:** `POST /api/hr-requests/{pay-changes,one-offs,budgets,spends}/
+  :externalId/withdraw` `{note?}`, on each kind's submit permission.
+  - 200 with the state; 200 again if already withdrawn.
+  - 409 with the state if finance decided first. An approval may already
+    have moved money; a refusal already says no.
+  - 404 for an unknown id.
+  - Withdrawn is off the waiting list and blocks no salary sheet. Finance
+    cannot decide it (the #121 decision routes refuse it too), and a resend
+    of the same id is 409. It reads as `state: "withdrawn"` with HR's reason
+    as `note`, `decidedByName` null and `decidedAt` = when.
+- **Web:** a Withdrawn tab with its count, a "Withdrawn by HR" badge, no
+  buttons, and the pop-up saying when and why.
+
+**Proved:** `.hrrequestsqa.mjs` 62/62 (new section H plus the tab in a
+browser). `.oneoffqa` 34/34, `.hrbudgetqa` 38/38, `.hrbellqa` 23/23. The
+four CI steps are green.
+
+**Answered to Brief 5:**
+- "grandfathered" cannot arrive: no inbound route takes a state, and the
+  schemas are strict.
+- The daily poll is fine on this side.
+- Approval dates from `effectiveFrom`, so both apps agree when a raise
+  starts. Months already paid are not changed, and the approval says so.
+- The joining salary is ungated, by the owner's choice.
+
+**Open, for the owner:** the owner asked whether webhooks or websockets
+could make HR see decisions faster. Not built yet; see the reply of 1 Oct.
 
 ## 125. HR Requests: money moves when finance says it moves — 30 Sep 2026
 

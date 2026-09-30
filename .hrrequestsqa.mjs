@@ -20,6 +20,8 @@
  *   D. budgets and spends in the same queue: held, resent, approved, paid;
  *   E. the list: waiting by default, counts, filters;
  *   F. pay applied before approvals existed reads as such, and is final;
+ *   H. HR withdraws one that waits: off the queue, kept, holding nothing
+ *      up, final to both sides; a decided one cannot be withdrawn;
  *   G. the page: the rail's count, a row's pop-up, deciding from the pop-up
  *      and the row, the old HR Budget address, the salary sheet's pop-up
  *      naming the person, the CEO reading only, no sideways scroll.
@@ -305,6 +307,50 @@ try {
   check("listed as approved by nobody, marked so, and final", listed?.beforeApprovals === true && listed?.decidedByName === null && touch.status === 409, `${JSON.stringify(listed?.beforeApprovals)} ${touch.status}`);
 
   /* ------------------------------------------------------------------ */
+  console.log("\nH. HR withdraws one that still waits (#126)");
+  const W1 = crypto.randomUUID();
+  await hr("POST", "/hr-requests/pay-changes", payChange(W1, A, { grossAmount: "80000.00", effectiveFrom: `${YEAR}-04-01`, changeReason: "Retention", hrApprovedByName: null, hrApprovedAt: null }));
+  const aprilHeld = await fin("POST", "/payroll/runs", { periodYear: YEAR, periodMonth: 4, notes: MARK });
+  check("a waiting pay change from 1 April blocks April", aprilHeld.status === 409, msg(aprilHeld));
+  const w = await hr("POST", `/hr-requests/pay-changes/${W1}/withdraw`, { note: "Revision cancelled in HR" });
+  const wRow = await reqRow(W1);
+  check(
+    "withdrawn: 200, state withdrawn, HR's reason kept, nobody in finance named, the row kept",
+    w.status === 200 && w.body?.state === "withdrawn" && w.body?.note === "Revision cancelled in HR" && w.body?.decidedByName === null && Boolean(w.body?.decidedAt) && w.body?.appliedAt === null && wRow?.status === "withdrawn",
+    JSON.stringify(w.body),
+  );
+  const aprilFree = await fin("POST", "/payroll/runs", { periodYear: YEAR, periodMonth: 4, notes: MARK });
+  check("…and April is free: a withdrawn request holds nothing up", aprilFree.status === 201, msg(aprilFree));
+  const wAgain = await hr("POST", `/hr-requests/pay-changes/${W1}/withdraw`, {});
+  check("withdrawing twice: 200, the same state", wAgain.status === 200 && wAgain.body?.state === "withdrawn" && wAgain.body?.note === "Revision cancelled in HR", msg(wAgain));
+  const wDecide = await fin("POST", `/hr-requests/pay_change/${wRow.id}/decision`, { decision: "approved" });
+  const wResend = await hr("POST", "/hr-requests/pay-changes", payChange(W1, A, { grossAmount: "80000.00", effectiveFrom: `${YEAR}-04-01`, hrApprovedByName: null, hrApprovedAt: null }));
+  check("finance cannot decide it (409); HR's resend of the same id is 409 carrying withdrawn", wDecide.status === 409 && wResend.status === 409 && wResend.body?.state?.state === "withdrawn", `${wDecide.status} ${wResend.status}`);
+  const wApproved = await hr("POST", `/hr-requests/pay-changes/${P1}/withdraw`, {});
+  check("an approved one cannot be withdrawn: 409 with its state", wApproved.status === 409 && wApproved.body?.state?.state === "approved", msg(wApproved));
+  const wUnknown = await hr("POST", `/hr-requests/pay-changes/${crypto.randomUUID()}/withdraw`, {});
+  check("an unknown id: 404", wUnknown.status === 404, msg(wUnknown));
+  if (users.ceo) {
+    const ceoW = await as(users.ceo)("POST", `/hr-requests/pay-changes/${W1}/withdraw`, {});
+    check("the CEO cannot withdraw (403)", ceoW.status === 403, msg(ceoW));
+  }
+  const O3 = crypto.randomUUID();
+  await hr("POST", "/payroll/one-offs", { externalId: O3, teamMemberId: B, periodYear: YEAR, periodMonth: 5, amount: "2500.00", note: `${MARK} Eid` });
+  const wo = await hr("POST", `/hr-requests/one-offs/${O3}/withdraw`, { note: "Paid in cash instead" });
+  const woOld = (await hr("GET", `/payroll/one-offs?externalIds=${O3}`)).body?.[0];
+  check("a one-off withdrawn; the #121 route reads it too", wo.status === 200 && wo.body?.state === "withdrawn" && woOld?.decision === "withdrawn", `${wo.status} ${woOld?.decision}`);
+  const SP2 = crypto.randomUUID();
+  await hr("POST", "/hr-budget/spends", { externalId: SP2, budgetExternalId: PB, spentOn: `${YEAR}-03-20`, amount: "800", purpose: `${MARK} Snacks`, teamMemberId: null, employeeName: null, hrStatus: "proposed", hrApprovedByName: null, hrApprovedAt: null, recordedByName: "Nusrat (HR)", hasReceipt: false });
+  const sp2Id = (await q(`select id::text from hr_budget_spends where external_id = $1`, [SP2]))[0]?.id;
+  await fin("POST", `/hr-requests/spend/${sp2Id}/decision`, { decision: "held", note: "Receipt?" });
+  const ws = await hr("POST", `/hr-requests/spends/${SP2}/withdraw`, {});
+  const wsOld = await fin("POST", `/hr-budget/spends/${sp2Id}/decision`, { decision: "approved", note: null });
+  check("a held spend withdrawn; the #121 decision route refuses it too", ws.status === 200 && ws.body?.state === "withdrawn" && wsOld.status === 400, `${ws.status} ${wsOld.status}`);
+  const listW = await fin("GET", `/hr-requests?state=withdrawn&pageSize=100`);
+  const ourW = (listW.body?.items ?? []).filter((r) => [W1, O3, SP2].includes(r.externalId));
+  check("the Withdrawn list holds all three, and the count says so", ourW.length === 3 && listW.body?.counts?.withdrawn >= 3, `${ourW.length} ${listW.body?.counts?.withdrawn}`);
+
+  /* ------------------------------------------------------------------ */
   console.log("\nG. The page");
   {
     const { page, context } = await open(decider, "/hr-requests");
@@ -362,6 +408,22 @@ try {
     const link = await page.evaluate(() => document.querySelector("[data-blocked-list] a")?.getAttribute("href"));
     check("Build list on the March sheet: a pop-up names Anika's one-off, with a link to decide it", Boolean(buildButton) && /Anika Rahman — one-off/.test(shown ?? "") && /^\/hr-requests\?kind=one_off&open=/.test(link ?? ""), `${shown} ${link}`);
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "hrr-blocked.png") });
+    await context.close();
+  }
+  {
+    const { page, context } = await open(decider, "/hr-requests?state=withdrawn");
+    await until(() => page.evaluate(() => document.querySelectorAll("tr[data-hrr-row]").length > 0));
+    const seen = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll("tr[data-hrr-row]")];
+      const tab = [...document.querySelectorAll("[role='tab']")].find((t) => /Withdrawn/.test(t.textContent));
+      return {
+        rows: rows.length,
+        badges: rows.every((r) => r.textContent.includes("Withdrawn by HR")),
+        buttons: rows.reduce((n, r) => n + r.querySelectorAll("button").length, 0),
+        tabSelected: tab?.getAttribute("aria-selected"),
+      };
+    });
+    check("the Withdrawn tab: every row says Withdrawn by HR, with nothing to press", seen.rows >= 3 && seen.badges && seen.buttons === 0 && seen.tabSelected === "true", JSON.stringify(seen));
     await context.close();
   }
   if (users.ceo) {

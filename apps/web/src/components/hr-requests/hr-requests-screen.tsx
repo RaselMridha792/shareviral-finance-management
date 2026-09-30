@@ -94,6 +94,8 @@ function StateBadge({ row }: { row: HrRequestDto }) {
       );
     case "rejected":
       return <Badge tone="negative">Rejected</Badge>;
+    case "withdrawn":
+      return <Badge tone="neutral">Withdrawn by HR</Badge>;
   }
 }
 
@@ -147,6 +149,7 @@ export function HrRequestsScreen({
     waiting: 0,
     approved: 0,
     rejected: 0,
+    withdrawn: 0,
     all: 0,
   });
   const [total, setTotal] = useState(0);
@@ -231,7 +234,10 @@ export function HrRequestsScreen({
 
   /** What can be done with it now, as buttons — for the row, or the pop-up. */
   const actions = (row: HrRequestDto, inPopup = false): ReactNode[] => {
-    if (!canDecide || row.beforeApprovals) return [];
+    /* Nothing to decide on what HR took back, or on pay applied before
+       approvals existed. */
+    if (!canDecide || row.beforeApprovals || row.state === "withdrawn")
+      return [];
     const waiting = row.state === "pending" || row.state === "held";
     const applied =
       row.state === "approved" &&
@@ -359,6 +365,7 @@ export function HrRequestsScreen({
             { id: "waiting", label: "Waiting", count: counts.waiting },
             { id: "approved", label: "Approved", count: counts.approved },
             { id: "rejected", label: "Rejected", count: counts.rejected },
+            { id: "withdrawn", label: "Withdrawn", count: counts.withdrawn },
             { id: "all", label: "All", count: counts.all },
           ]}
         />
@@ -671,22 +678,34 @@ function detailSections(
     lands.push({ label: "Paid as", value: detail.transactionRef });
   }
 
-  const finance = [
-    { label: "State", value: <StateBadge row={row} /> },
-    {
-      label: "Decided by",
-      value: row.beforeApprovals
-        ? "Nobody — applied before approvals existed (30 Sep 2026)"
-        : row.decidedByName
-          ? `${row.decidedByName}${row.decidedAt ? `, ${dhakaDay(row.decidedAt)}` : ""}`
-          : null,
-    },
-    { label: "Finance's note", value: row.note, block: true },
-    {
-      label: "Money moved",
-      value: row.appliedAt ? dhakaDay(row.appliedAt) : null,
-    },
-  ];
+  const finance =
+    row.state === "withdrawn"
+      ? [
+          { label: "State", value: <StateBadge row={row} /> },
+          {
+            label: "Withdrawn",
+            value: row.decidedAt
+              ? `${dhakaDay(row.decidedAt)} — HR took it back before anybody decided it`
+              : "HR took it back before anybody decided it",
+          },
+          { label: "HR's reason", value: row.note, block: true },
+        ]
+      : [
+          { label: "State", value: <StateBadge row={row} /> },
+          {
+            label: "Decided by",
+            value: row.beforeApprovals
+              ? "Nobody — applied before approvals existed (30 Sep 2026)"
+              : row.decidedByName
+                ? `${row.decidedByName}${row.decidedAt ? `, ${dhakaDay(row.decidedAt)}` : ""}`
+                : null,
+          },
+          { label: "Finance's note", value: row.note, block: true },
+          {
+            label: "Money moved",
+            value: row.appliedAt ? dhakaDay(row.appliedAt) : null,
+          },
+        ];
 
   const sections = [
     { title: "What HR asked", items: asked },

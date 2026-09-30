@@ -28,7 +28,7 @@ export type OneOffState = {
    * Finance's decision (#125): nothing goes on a sheet until it is approved.
    * The same four words GET /hr-requests/one-offs/status answers with.
    */
-  decision: "pending" | "held" | "approved" | "rejected";
+  decision: "pending" | "held" | "approved" | "rejected" | "withdrawn";
   /** The CFO's own words, with a hold or a refusal. */
   note: string | null;
   decidedByName: string | null;
@@ -155,8 +155,11 @@ export class PayrollOneOffsService {
 
     /* Decided — approved (it may be on a sheet already) or refused — or a
        month whose money is settled: answered, not changed. */
+    /* Withdrawn by HR (#126) is closed too: a new request is a new id. */
     const decided =
-      existing?.status === "approved" || existing?.status === "refused";
+      existing?.status === "approved" ||
+      existing?.status === "refused" ||
+      existing?.status === "withdrawn";
     const settled = Boolean(target?.status) && target?.status !== "draft";
     if (decided || settled) {
       const [state] = existing ? await this.states([input.externalId], tx) : [];
@@ -254,7 +257,7 @@ export class PayrollOneOffsService {
           ? "pending"
           : status === "refused"
             ? "rejected"
-            : (status as "held" | "approved"),
+            : (status as "held" | "approved" | "withdrawn"),
     }));
   }
 }
