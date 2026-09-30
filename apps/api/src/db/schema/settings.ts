@@ -185,6 +185,11 @@ export const appSettings = pgTable(
     notifySignificantChanges: boolean("notify_significant_changes")
       .notNull()
       .default(false),
+    /**
+     * A budget or a spend has arrived from the HR portal (#122). Raised the
+     * moment it arrives rather than by the morning job, and once per request.
+     */
+    notifyHrBudget: boolean("notify_hr_budget").notNull().default(true),
 
     anthropicApiKey: text("anthropic_api_key"),
     anthropicKeySetAt: timestamp("anthropic_key_set_at", {
