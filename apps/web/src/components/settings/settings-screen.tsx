@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import type { AppSettingsDto } from "@/components/settings-provider";
 import type { CategoryNode } from "@/lib/masters";
+import { AppearancePanel } from "./appearance-panel";
 import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
 import { AssistantPanel } from "./assistant-panel";
@@ -58,6 +59,14 @@ export function SettingsScreen({
       />
 
       {tab === "company" ? <CompanyPanel settings={initialSettings} /> : null}
+      {tab === "appearance" && canWriteSettings ? (
+        <AppearancePanel
+          initial={{
+            theme: initialSettings.theme ?? null,
+            typography: initialSettings.typography ?? null,
+          }}
+        />
+      ) : null}
       {tab === "categories" ? (
         <CategoriesPanel initialTree={initialTree} />
       ) : null}

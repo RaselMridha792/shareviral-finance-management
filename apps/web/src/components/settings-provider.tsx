@@ -6,6 +6,8 @@ import {
   type FormatMoneyOptions,
   type NumberFormat,
   type SalarySplit,
+  type ThemeDto,
+  type TypographySettings,
 } from "@finance/shared";
 import { createContext, useContext, type ReactNode } from "react";
 
@@ -32,6 +34,9 @@ export type AppSettingsDto = {
   fxReportBasis: "period_end" | "period_average" | "current";
   booksLockedThrough: string | null;
   tdsReminderDays: number;
+  /** Settings → Appearance (#124). Null is the design. */
+  theme: ThemeDto | null;
+  typography: TypographySettings | null;
 };
 
 const SettingsContext = createContext<AppSettingsDto | null>(null);

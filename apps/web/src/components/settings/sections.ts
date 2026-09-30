@@ -5,6 +5,7 @@ import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
@@ -45,7 +46,8 @@ export type SettingsSectionId =
   | "trashed"
   | "assistant"
   | "email"
-  | "notifications";
+  | "notifications"
+  | "appearance";
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
@@ -55,6 +57,18 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     hint: "Name, letterhead, year",
     description: "Company details, payslip letterhead and how figures read.",
     group: "General",
+  },
+  // The Super Admin's alone, as the API is: the look of the company's app
+  // changes for everybody at once (#124).
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: PaletteIcon,
+    hint: "Colours and type",
+    description:
+      "The colours and typefaces every screen is drawn in — for everybody.",
+    group: "General",
+    permission: "settings.write",
   },
   {
     id: "categories",

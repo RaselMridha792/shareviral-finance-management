@@ -9,6 +9,8 @@ import type {
   Paginated,
   PsrStatus,
   SubscriptionSummary,
+  ThemeDto,
+  TypographySettings,
   UpdateAccountInput,
   UpdateCategoryInput,
   UpdateSettingsInput,
@@ -127,8 +129,26 @@ export type VendorDto = {
 
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
 
+/** The look of the app as stored: null is the design. */
+export type Appearance = {
+  theme: ThemeDto | null;
+  typography: TypographySettings | null;
+};
+
 export const settingsApi = {
   get: () => apiFetch<AppSettingsDto>("/settings", { cache: "no-store" }),
+  /* Settings → Appearance (#124). Each answers with both, as stored. */
+  saveTheme: (theme: ThemeDto) =>
+    apiFetch<Appearance>("/settings/theme", { method: "PUT", ...json(theme) }),
+  resetTheme: () =>
+    apiFetch<Appearance>("/settings/theme", { method: "DELETE" }),
+  saveTypography: (typography: TypographySettings) =>
+    apiFetch<Appearance>("/settings/typography", {
+      method: "PUT",
+      ...json(typography),
+    }),
+  resetTypography: () =>
+    apiFetch<Appearance>("/settings/typography", { method: "DELETE" }),
   update: (input: UpdateSettingsInput) =>
     apiFetch<AppSettingsDto>("/settings", { method: "PATCH", ...json(input) }),
   lockBooks: (input: LockBooksInput) =>

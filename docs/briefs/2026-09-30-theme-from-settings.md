@@ -1,6 +1,7 @@
 # Brief 3 — the look of the app, changed from Settings
 
-> **To do (#124), not started.** Pasted in by the owner on 30 Sep 2026 with:
+> **Built as #124 (Settings → Appearance) — see SESSIONS.md for what was
+> chosen and where it differs.** Pasted in by the owner on 30 Sep 2026 with:
 > *"ami amader applications er color and fonts gulake setting theke dynamic
 > vabe control korbo. tomar hater kajta ses hole eta dhorba. akhon apatoto
 > etake to do te rakho"*. Kept here word for word so the session that builds

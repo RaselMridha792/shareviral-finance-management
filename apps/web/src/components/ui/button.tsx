@@ -51,7 +51,9 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-lg font-extrabold transition-[background-color,color,border-color,transform,opacity] duration-200",
+        /* `sv-button` styles nothing here: it is what Settings →
+           Appearance's button face, weight and size address (#124). */
+        "sv-button inline-flex cursor-pointer items-center justify-center rounded-lg font-extrabold transition-[background-color,color,border-color,transform,opacity] duration-200",
         "disabled:cursor-not-allowed disabled:opacity-50",
         VARIANTS[variant],
         SIZES[size],

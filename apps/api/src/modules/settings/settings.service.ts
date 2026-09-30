@@ -1,8 +1,17 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
-import type {
-  IsoDate,
-  LockBooksInput,
-  UpdateSettingsInput,
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
+import {
+  paletteProblem,
+  readTheme,
+  readTypography,
+  type IsoDate,
+  type LockBooksInput,
+  type ThemeDto,
+  type TypographySettings,
+  type UpdateSettingsInput,
 } from "@finance/shared";
 import { eq } from "drizzle-orm";
 
@@ -59,11 +68,98 @@ export class SettingsService {
    * /ai/availability, which returns only whether one is set and its last four
    * characters.
    */
-  async publicView(): Promise<Omit<AppSettings, SecretColumn>> {
+  async publicView(): Promise<
+    Omit<AppSettings, SecretColumn | "theme" | "typography"> & {
+      theme: ThemeDto | null;
+      typography: TypographySettings | null;
+    }
+  > {
     const row = await this.get();
     const visible = { ...row } as Record<string, unknown>;
     for (const column of SECRET_COLUMNS) delete visible[column];
-    return visible as Omit<AppSettings, SecretColumn>;
+    /* Parsed, never passed through: the signed-in layout writes these into
+       a <style> block, so anything that is not a palette or a type choice
+       is read as the design (#124). */
+    visible.theme = readTheme(row.theme);
+    visible.typography = readTypography(row.typography);
+    return visible as Omit<
+      AppSettings,
+      SecretColumn | "theme" | "typography"
+    > & {
+      theme: ThemeDto | null;
+      typography: TypographySettings | null;
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Appearance (#124) — Super Admin only, through settings.write      */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The palette, or null for the design. A palette somebody could not read
+   * is refused, not warned about: it is company-wide, and the screen that
+   * would undo it is one of the screens it made unreadable.
+   */
+  async saveTheme(theme: ThemeDto | null, actor: AuthenticatedUser) {
+    if (theme) {
+      const problem = paletteProblem(theme);
+      if (problem) throw new BadRequestException(problem);
+    }
+    return this.saveAppearance(
+      { theme },
+      theme
+        ? "Changed the app's colours"
+        : "Put the app's colours back to the design",
+      actor,
+    );
+  }
+
+  async saveTypography(
+    typography: TypographySettings | null,
+    actor: AuthenticatedUser,
+  ) {
+    return this.saveAppearance(
+      { typography },
+      typography
+        ? "Changed the app's typefaces and type sizes"
+        : "Put the app's typefaces and type sizes back to the design",
+      actor,
+    );
+  }
+
+  private async saveAppearance(
+    change:
+      { theme: ThemeDto | null } | { typography: TypographySettings | null },
+    summary: string,
+    actor: AuthenticatedUser,
+  ) {
+    await this.get(); // ensure the row exists
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary,
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({
+            theme: appSettings.theme,
+            typography: appSettings.typography,
+          })
+          .from(appSettings)
+          .where(eq(appSettings.id, 1))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(appSettings)
+          .set({ ...change, updatedAt: new Date(), updatedBy: actor.id })
+          .where(eq(appSettings.id, 1));
+      },
+    });
+    const view = await this.publicView();
+    return { theme: view.theme, typography: view.typography };
   }
 
   async get(): Promise<AppSettings> {

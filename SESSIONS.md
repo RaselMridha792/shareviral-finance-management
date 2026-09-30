@@ -34,8 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 124 | **To do: colours and fonts from Settings (the HR portal's Brief 3)** | **not started** — the brief is in `docs/briefs/2026-09-30-theme-from-settings.md`; touches the root layout, shared code and the schema, so ask first |
-| 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — not pushed |
+| 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — not pushed; **schema 673e608 first, alone** |
+| 123 | **Bank Advice: column I always carries its two zeros, and every column checked against the bank's PDF** | **done** — deployed 30 Sep |
 | 122 | **HR Budget rings the bell, and a payment carries its invoice and reference** | **done** — not pushed; **schema ce6af5c first, alone** |
 | 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — deployed 30 Sep (one push; the deploy applies the SQL before the swap) |
 | 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — deployed 30 Sep |
@@ -103,17 +103,69 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 124. To do: colours and fonts from Settings — 30 Sep 2026
+## 124. Settings → Appearance: the app's colours and type — 30 Sep 2026
 
-Not started. The owner: *"ami amader applications er color and fonts gulake
-setting theke dynamic vabe control korbo. tomar hater kajta ses hole eta
-dhorba. akhon apatoto etake to do te rakho"*. The HR portal's Brief 3 is kept
-word for word in `docs/briefs/2026-09-30-theme-from-settings.md`.
+The owner: *"ami amader applications er color and fonts gulake setting theke
+dynamic vabe control korbo"*, then *"next kaj ta suru koro"*. The design is
+the HR portal's Brief 3 (`docs/briefs/2026-09-30-theme-from-settings.md`).
+Asked: the sign-in page keeps the design. So nothing is readable without a
+session, and auth is untouched.
 
-It touches the root layout, `new-design.css`, `packages/shared` and the
-schema. So ask the owner first, and send the migration alone. Its §8 lists
-the decisions that are ours; the public read in §6.1 is an auth-adjacent
-choice, so put it to the owner.
+- **Schema (673e608, alone):** `app_settings.theme` and `.typography`,
+  jsonb, both nullable. NULL is the design, never a stored copy of it.
+- **`@finance/shared` appearance.ts:**
+  - The 26 `--sv-*` colours as tokens, with labels and groups; the defaults
+    are globals.css's values (the harness holds them equal).
+  - `#rrggbb` only. This is a security control: the values are written into
+    a `<style>`.
+  - `paletteProblem` refuses a palette nobody could read: 16 pairs, light
+    and dark, derived from where this design puts text.
+  - Nine self-hosted variable faces, each measured to have tabular figures.
+    DM Sans was dropped because it has none.
+  - `themeCss` / `typographyCss`: the layout and the panel's preview share
+    them.
+- **API:** `GET /settings` carries both, parsed rather than passed through.
+  `PUT`/`DELETE /settings/theme` and `/settings/typography` sit on
+  `settings.write` (Super Admin only). A bad palette is refused with a
+  sentence naming the pair and the ratio. Every change is audited.
+- **Web:**
+  - The signed-in layout writes one `<style id="sv-appearance">`, and writes
+    nothing at the design.
+  - It wins by specificity (`:root:not([data-theme=dark])`,
+    `:root:root[data-theme=dark]`), not by its place in the document, which
+    Next decides.
+  - `.sv-light` (sign-in, preloader) keeps the design.
+  - Body text is `--sv-font`. Headings are h1–h6, and buttons are the
+    `Button` component's new `sv-button` class; both are `!important` because
+    their Tailwind weight classes outrank an element selector, and those
+    rules are written only when changed.
+  - Size is a ratio applied with `zoom`: on `<html>` for the body, divided
+    back out for headings and buttons.
+- **Settings → Appearance** (General, Super Admin only):
+  - Colours, with Light/Dark tabs, previewed live on the whole app. An
+    unreadable try keeps the last readable preview, so the panel never locks
+    itself.
+  - Typeface, weight and size for headings, text and buttons. A face without
+    the chosen weight takes its nearest one.
+  - A proof sheet. Save, Undo, and Reset to the design (asked once).
+- `package-lock.json` gained only the eight font packages. npm on Windows
+  deletes the `libc` fields; the lockfile was rebuilt from the committed one
+  plus the new entries, as additions only.
+
+**Proved:** `.appearanceqa.mjs` 42/42. Every write is read back from
+`app_settings`. The pages are measured in light, dark, 1440 and 390, and the
+sign-in page is untouched. `.sweep.mjs`: every screen still h1 28, pad 24/24,
+gap 18, 0px sideways. The four CI steps are green (341 tests).
+
+**Seen, not touched (for the owner):**
+- The design's own danger button in dark mode is white on #f2a097, at
+  2.0:1. The guard does not hold that pair, or it would refuse the design.
+- The primary button's glow is a fixed lime `rgb(150 200 0)`, so it stays
+  lime under a changed accent.
+- `PATCH /settings` and `POST /settings/lock-books` answer with the whole
+  row from `.returning()`. That includes the encrypted Anthropic key and the
+  card password hash, which `publicView` exists to keep out of a browser.
+  It is the Super Admin's own browser, but it belongs in its own session.
 
 ## 123. Bank Advice: column I always carries its two zeros — 30 Sep 2026
 

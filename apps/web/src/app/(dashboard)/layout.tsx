@@ -1,3 +1,4 @@
+import { appearanceCss } from "@finance/shared";
 import { redirect } from "next/navigation";
 
 import { IdleTimeout } from "@/components/auth/idle-timeout";
@@ -38,8 +39,28 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
     fxApi.rates(1).catch(() => null),
   ]);
 
+  /*
+   * The colours and type chosen in Settings → Appearance (#124), as one
+   * <style> that redefines the stylesheet's own custom properties. It wins by
+   * specificity, not by where it lands, and it is empty at the design — an
+   * app nobody has changed renders exactly as before. Here rather than in the
+   * root layout: the sign-in page keeps the design (the owner's choice), and
+   * this layout already has the settings in hand, so no page pays for a
+   * second request.
+   */
+  const appearance = appearanceCss({
+    theme: settings.theme ?? null,
+    typography: settings.typography ?? null,
+  });
+
   return (
     <SessionProvider user={user}>
+      {appearance ? (
+        <style
+          id="sv-appearance"
+          dangerouslySetInnerHTML={{ __html: appearance }}
+        />
+      ) : null}
       <SettingsProvider settings={settings}>
         {/*
           Outside the layout rather than inside a page, so a toast raised just
