@@ -56,6 +56,7 @@ import {
 import { SettingsService } from "../settings/settings.service";
 import { TaxPolicyService } from "../tds/tax-policy.service";
 import { nextRefNos } from "../transactions/ref-no";
+import { applyPendingOneOffs } from "./one-offs";
 
 const MONTHS = [
   "January",
@@ -400,6 +401,9 @@ export class PayrollService {
           added++;
         }
 
+        /* One-offs HR sent for this month go into the new lines' bonus —
+           the rebuild just took them off with the old lines (#121). */
+        await applyPendingOneOffs(tx, run);
         await this.recalculate(tx, runId);
         return added;
       },
@@ -1588,6 +1592,9 @@ export class PayrollService {
           added++;
         }
 
+        /* Somebody added who has a one-off waiting for this month gets it
+           in their bonus (#121). */
+        await applyPendingOneOffs(tx, run);
         await this.recalculate(tx, runId);
         return { added, removed: toRemove.length };
       },
@@ -1626,6 +1633,14 @@ export class PayrollService {
       .limit(1);
     if (!employee) throw new NotFoundException("No such team member");
     return employee;
+  }
+
+  /**
+   * The run's totals from its lines, for the one-offs door (#121), which
+   * changes a line's bonus from outside this service.
+   */
+  recalculateTotals(tx: DbTransaction, runId: string) {
+    return this.recalculate(tx, runId);
   }
 
   private async recalculate(tx: DbTransaction, runId: string) {

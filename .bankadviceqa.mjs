@@ -437,7 +437,8 @@ try {
   await page.select("[data-line-field='type']", "BT");
   await page.type("[data-line-field='details']", "Rent");
   await page.click("[data-advice-submit]");
-  await settle(2000);
+  // The row, not a clock: under load the save can take longer than a guess.
+  await page.waitForFunction(() => [...document.querySelectorAll("tr[data-row-id]")].some((tr) => tr.textContent.includes("Rent Landlord")), { timeout: 20000 }).catch(() => {});
   const four = await page.$$eval("tr[data-row-id]", (trs) => trs.map((tr) => tr.children[2].textContent.trim()));
   check("Add payment puts a fourth row in", four.length === 4 && four.some((t) => t.startsWith("Rent Landlord")), four.join(" | "));
   const rentId = await page.evaluate(() => [...document.querySelectorAll("tr[data-row-id]")].find((tr) => tr.children[2].textContent.includes("Rent Landlord"))?.getAttribute("data-row-id"));

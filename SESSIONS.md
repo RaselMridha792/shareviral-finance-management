@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 121 | **The HR portal's doors: HR Budget, and one-off amounts for a salary sheet** | **done** — not pushed; **permissions 87e713b, then schema 0df033a, each alone first** |
 | 120 | **Bank Advice: the bank's own workbook, and nothing it would refuse** | **done** — not pushed |
 | 119 | **Bank Advice: the bank's payment file, built from payroll** | **done** — deployed (schema 4810803 and the code in one push; the deploy applies the SQL before the swap) |
 | 118 | **Invoices are saved: All Invoices, Add New, and two more colours** | **done** — deployed (schema d93d860 first, alone) |
@@ -98,6 +99,62 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 121. The HR portal's doors: HR Budget, and one-off amounts for a salary sheet — 30 Sep 2026
+
+Two briefs from the HR portal's Claude session (`shareviral-hrm`), pasted in
+by the owner; the owner's decisions, relayed in the second and confirmed here
+("হ্যাঁ, ধাপে ধাপে বানাও"): *"hr theke jokhon budget dibe kono kichur oita finance
+a request jabe er jonne hr budet name finance a ekta new page o banate hobe
+and properly sob information manage korte hobe"* — budgets AND each spend
+come over; finance approves, pays and records them; a bonus is its own flow.
+
+- **Checked the brief's claims about us first.** Two of three were wrong on
+  their side and told them: a refused pay route is 403 (the guard runs before
+  `assertCanSeeCompensation`, whose 404 is unreachable — every live role holds
+  `team.compensation.read`), and the CEO reads pay too. And confirmed their
+  hazard: a bonus through `POST /team-members/:id/compensation` becomes the
+  person's salary every month after.
+- **Permissions (87e713b, alone):** `payroll.oneoff.submit` and
+  `hrbudget.submit` for hr/cfo/super_admin; `hrbudget.read` for cfo, super
+  admin, ceo; `hrbudget.manage` for cfo, super admin. HR still cannot build
+  or pay a sheet or decide a budget; the CEO test counts .submit/.manage as
+  changes.
+- **Schema (0df033a, alone):** `hr_budget_periods`, `hr_budget_spends` (names
+  its budget by HR id, no FK — it may arrive first; `transaction_id` when
+  paid), `payroll_one_offs` (`payroll_line_id` + `applied_amount`). Every row
+  keyed on the HR portal's id, unique.
+- **HR Budget** (`modules/hr-budget`, page `/hr-budget` under People):
+  - `POST /api/hr-budget/periods` and `/spends`: 201 first; 200 a repeat that amends while
+    `received`; 409 **with the state** once finance acted (written by the
+    controller — the global filter drops anything but message/errors).
+  - `GET .../periods/status` and `.../spends/status?externalIds=`.
+  - The page: Spends and Budgets tabs, status tabs, search; the row opens its record.
+  - Approve, refuse (note required, HR reads it), put back.
+  - Pay writes an ordinary expense through `TransactionsService.create`: the period lock,
+    the overdraft rule, the audit row. It needs `transactions.write` too.
+- **One-offs** (`payroll/one-offs.ts`, `.service`, `.controller`):
+  - `POST /api/payroll/one-offs` and `GET ?externalIds=`.
+  - Lands in `payroll_lines.bonus_amount`, never `compensation_history`.
+  - Added at once to a draft sheet's line, else when the sheet is built or the person
+    added: **`generateLines` and `syncMembers` now call `applyPendingOneOffs`**
+    before their totals, the one change to payroll.service besides a public
+    `recalculateTotals`.
+  - An amend moves the bonus by the difference (floored at 0) and clears a typed net,
+    as `updateLine` does.
+  - A finalised, partly paid or paid sheet answers 409 with `state` (null on a
+    first send, nothing stored) and `sheetStatus`.
+- `03-permissions.mjs` lists the eleven new routes (not run — resets the local
+  books; the harnesses cover the same 403s).
+
+**Proved** (every write read back from the database, the repeat twice):
+`.hrbudgetqa.mjs` 38/38, `.hrbudgetuiqa.mjs` 20/20, `.oneoffqa.mjs` 29/29.
+Payroll unchanged: `.joiningpayqa` 50/50, `.netpayqa` 19, `.payrollpickqa`
+17, `.prorataqa` 22, `.sheetqa` 7. Four CI steps green. `.bankadviceqa`
+flaked once on a fixed 2s wait; it now waits for the row (59/59).
+
+**Open:** the salary sheet does not yet say which part of a bonus came from
+HR (the one-off is in the bonus figure; the record is in `payroll_one_offs`).
 
 ## 120. Bank Advice: the bank's own workbook, and nothing it would refuse — 29 Sep 2026
 

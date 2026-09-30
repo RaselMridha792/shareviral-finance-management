@@ -59,6 +59,9 @@ const ROUTES = [
   ["GET", "/hr-budget/spends?page=1&pageSize=1", ["hrbudget.read"]],
   ["POST", "/hr-budget/periods/00000000-0000-4000-8000-000000000000/decision", ["hrbudget.manage"], {}],
   ["POST", "/hr-budget/spends/00000000-0000-4000-8000-000000000000/pay", ["hrbudget.manage", "transactions.write"], {}],
+  // One-off amounts for a salary sheet (#121): HR's door, not payroll.write.
+  ["POST", "/payroll/one-offs", ["payroll.oneoff.submit"], {}],
+  ["GET", "/payroll/one-offs?externalIds=00000000-0000-4000-8000-000000000000", ["payroll.oneoff.submit"]],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],
