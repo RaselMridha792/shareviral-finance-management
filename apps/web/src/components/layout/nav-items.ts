@@ -15,6 +15,7 @@ import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
 import { InvoiceIcon } from "@phosphor-icons/react/dist/ssr/Invoice";
 import { MoneyIcon } from "@phosphor-icons/react/dist/ssr/Money";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { PiggyBankIcon } from "@phosphor-icons/react/dist/ssr/PiggyBank";
 import { PlusCircleIcon } from "@phosphor-icons/react/dist/ssr/PlusCircle";
 import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
@@ -213,6 +214,16 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: "payroll.read",
           },
         ],
+      },
+      {
+        // What the HR portal sends finance — budgets and the spending against
+        // them — to approve, refuse and pay (30 Sep 2026). Under People
+        // because it is HR's; its own permission because it is money.
+        key: "hr-budget",
+        href: "/hr-budget",
+        label: "HR Budget",
+        icon: PiggyBankIcon,
+        permission: "hrbudget.read",
       },
     ],
   },

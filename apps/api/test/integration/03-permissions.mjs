@@ -49,6 +49,16 @@ const ROUTES = [
   ["POST", "/bank-advices/from-payroll", ["payroll.pay"], {}],
   ["POST", "/bank-advices", ["payroll.pay"], {}],
   ["GET", "/bank-advices/00000000-0000-4000-8000-000000000000/csv", ["payroll.pay"]],
+  // HR Budget (#121): the HR portal's doors on hrbudget.submit, the page on
+  // hrbudget.read, the decisions on hrbudget.manage — paying also writes an
+  // expense, so it needs transactions.write too.
+  ["POST", "/hr-budget/periods", ["hrbudget.submit"], {}],
+  ["GET", "/hr-budget/periods/status?externalIds=00000000-0000-4000-8000-000000000000", ["hrbudget.submit"]],
+  ["POST", "/hr-budget/spends", ["hrbudget.submit"], {}],
+  ["GET", "/hr-budget/periods?page=1&pageSize=1", ["hrbudget.read"]],
+  ["GET", "/hr-budget/spends?page=1&pageSize=1", ["hrbudget.read"]],
+  ["POST", "/hr-budget/periods/00000000-0000-4000-8000-000000000000/decision", ["hrbudget.manage"], {}],
+  ["POST", "/hr-budget/spends/00000000-0000-4000-8000-000000000000/pay", ["hrbudget.manage", "transactions.write"], {}],
   ["GET", "/accounts", ["accounts.read"]],
   ["POST", "/accounts", ["accounts.write"], {}],
   ["GET", "/categories/tree", ["categories.read"]],

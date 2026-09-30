@@ -35,6 +35,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { InvoicesModule } from "./modules/invoices/invoices.module";
 import { BankAdvicesModule } from "./modules/bank-advices/bank-advices.module";
+import { HrBudgetModule } from "./modules/hr-budget/hr-budget.module";
 import { VendorsModule } from "./modules/vendors/vendors.module";
 
 @Module({
@@ -63,6 +64,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     SubscriptionsModule,
     InvoicesModule,
     BankAdvicesModule,
+    HrBudgetModule,
     VendorsModule,
     TransactionsModule,
     ExportsModule,
