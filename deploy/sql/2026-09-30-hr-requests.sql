@@ -14,12 +14,15 @@
 --   held       not yet: a question, a paper         (HR reads "held")
 --   approved   agreed; only this writes anything     (HR reads "approved")
 --   refused    no, for good; the note says why      (HR reads "rejected")
+--   withdrawn  HR took it back while it waited      (HR reads "withdrawn")
+--              -- off the waiting list, kept on record, never decided;
+--              decided_at is when, decided_by is null (nobody in finance)
 --
 -- Idempotent throughout. The constraints this file redefines are defined in
 -- one earlier file only (2026-09-30-hr-link.sql), inside CREATE TABLE IF NOT
 -- EXISTS, so replaying the directory in order cannot put the older rule back.
 
--- ---- 1. Budgets and spends: `held` -------------------------------------
+-- ---- 1. Budgets and spends: `held`, `withdrawn` -------------------------
 -- A hold is a decision deferred, not a decision: it records who held it and
 -- when (decided_at is set), and it stays in the waiting list.
 
@@ -27,13 +30,13 @@ alter table hr_budget_periods
   drop constraint if exists hr_budget_periods_status_check;
 alter table hr_budget_periods
   add constraint hr_budget_periods_status_check
-    check (status in ('received', 'approved', 'refused', 'held'));
+    check (status in ('received', 'approved', 'refused', 'held', 'withdrawn'));
 
 alter table hr_budget_spends
   drop constraint if exists hr_budget_spends_status_check;
 alter table hr_budget_spends
   add constraint hr_budget_spends_status_check
-    check (status in ('received', 'approved', 'refused', 'held', 'paid'));
+    check (status in ('received', 'approved', 'refused', 'held', 'withdrawn', 'paid'));
 
 -- ---- 2. One-offs: a state ------------------------------------------------
 -- Until today a one-off went on the salary sheet the moment it arrived.
@@ -50,7 +53,7 @@ alter table payroll_one_offs
   drop constraint if exists payroll_one_offs_status_check;
 alter table payroll_one_offs
   add constraint payroll_one_offs_status_check
-    check (status in ('received', 'approved', 'refused', 'held'));
+    check (status in ('received', 'approved', 'refused', 'held', 'withdrawn'));
 
 -- What is already on a sheet was applied before approvals existed: approved,
 -- with no decider and no note, and marked so. What is not on a sheet yet has
@@ -97,7 +100,7 @@ create table if not exists compensation_requests (
   updated_at          timestamptz not null default now(),
   constraint compensation_requests_external_key unique (external_id),
   constraint compensation_requests_status_check
-    check (status in ('received', 'approved', 'refused', 'held')),
+    check (status in ('received', 'approved', 'refused', 'held', 'withdrawn')),
   constraint compensation_requests_amount_check check (gross_amount > 0),
   constraint compensation_requests_origin_check
     check (external_id is not null or before_approvals)
