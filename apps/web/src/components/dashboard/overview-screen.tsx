@@ -19,6 +19,7 @@ import { useState, useTransition } from "react";
 import { AccountBlocks } from "@/components/dashboard/account-blocks";
 import { ExpenseRow } from "@/components/dashboard/expense-row";
 import { Greeting } from "@/components/dashboard/greeting";
+import { QuickLinks } from "@/components/dashboard/quick-links";
 import { useSettings } from "@/components/settings-provider";
 
 /**
@@ -220,6 +221,7 @@ export function OverviewScreen({
             or record the month&apos;s funding with its rate.
           </p>
         ) : null}
+        <QuickLinks />
       </Greeting>
 
       {/* --- one block per account, in the order somebody chose ---------- */}

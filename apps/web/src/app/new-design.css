@@ -53,19 +53,13 @@
    The rail
    -------------------------------------------------------------------------- */
 
-/* Slides to nothing and back, at the handoff's own pace and curve. */
+/* Slides between its full width and its icons-only strip, at the handoff's
+   own pace and curve. */
 .sv-rail {
   box-shadow:
     1px 0 1px rgb(6 8 0 / 0.03),
     6px 0 30px rgb(6 8 0 / 0.05);
   transition: width 0.45s var(--sv-ease);
-}
-
-/* Hidden, it keeps neither its hairline nor its shadow: at width 0 the 1px
-   border would otherwise stay behind as a line down the left of every page. */
-.sv-rail[inert] {
-  border-right-width: 0;
-  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

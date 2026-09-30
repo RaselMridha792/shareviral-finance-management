@@ -3,6 +3,7 @@
 import { hasPermission, type Role } from "@finance/shared";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
 import { TrendUpIcon } from "@phosphor-icons/react/dist/ssr/TrendUp";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,7 +17,12 @@ import {
 } from "@/components/layout/nav-items";
 import { SettingsNav } from "@/components/layout/settings-nav";
 import { SidebarFooter } from "@/components/layout/sidebar-footer";
-import { useSidebarCollapsed } from "@/components/layout/sidebar-state";
+import {
+  RailCompactContext,
+  toggleSidebar,
+  useRailCompact,
+  useSidebarCollapsed,
+} from "@/components/layout/sidebar-state";
 import { cn } from "@/lib/utils";
 import { WaitingBadge } from "@/components/hr-requests/waiting-badge";
 
@@ -32,11 +38,15 @@ import { WaitingBadge } from "@/components/hr-requests/waiting-badge";
  * starts open. That was the owner's ask before this design, and the handoff
  * draws the same thing — carets, children indented to 22px.
  *
- * NARROWING IS HIDING NOW. The August design folded the rail to an 84px strip
- * of icons; the handoff's toggle takes it to nothing, and the content gets the
- * width. So there is one rail, 270px or gone — which also retired the icons-only
- * branch of every row, and the "widen first, then open" dance a parent needed
- * in the strip.
+ * HIDING LEAVES THE ICONS (1 Oct 2026). The handoff's toggle took the rail to
+ * nothing; the owner asked for the words to go and the icons to stay, each
+ * still a link: *"sidebar hide button a click korle sudhu lekha hide hobe
+ * sidebar er icons jate dekha jay and click kore navigate ko kora jay"*. So
+ * the rail is 270px or an 80px strip (`RailCompactContext`), and the button
+ * that switches them is in the rail's own head now, beside the name, not in
+ * the top bar: *"sidebar hide korar panel ta vitore dhukao"*. In the strip a
+ * row is its tile, its name on hover; a parent that opens a list goes to its
+ * first screen instead, since there is no room for the list.
  *
  * SETTINGS HAS ITS OWN RAIL. While /settings is open the main nav steps aside
  * for a way back and Settings' sections (`settings-nav.tsx`), which is where
@@ -45,6 +55,8 @@ import { WaitingBadge } from "@/components/hr-requests/waiting-badge";
 
 /** The handoff's width. */
 const WIDTH = 270;
+/** Icons only: a 32px tile, its 5px edge, and room either side. */
+const COMPACT_WIDTH = 80;
 
 /* -------------------------------------------------------------------------- */
 /*  Which row is the current page                                              */
@@ -120,11 +132,37 @@ function visibleFor(role: Role | undefined, item: NavItem): NavItem | null {
  * active: a border colour written as a utility loses to globals.css's
  * unlayered `* { border-color }`, so it has to be plain CSS.
  */
-function rowClass({ active, sub }: { active: boolean; sub?: boolean }) {
+function rowClass({
+  active,
+  sub,
+  compact,
+}: {
+  active: boolean;
+  sub?: boolean;
+  compact?: boolean;
+}) {
   return cn(
     "sv-nav-row flex w-full items-center gap-3 rounded-[11px] text-[15.5px] whitespace-nowrap",
-    sub ? "py-[5px] pr-2.5 pl-[22px]" : "px-2.5 py-1.5",
+    compact
+      ? "justify-center py-1.5"
+      : sub
+        ? "py-[5px] pr-2.5 pl-[22px]"
+        : "px-2.5 py-1.5",
     active ? "font-extrabold" : "font-bold",
+  );
+}
+
+/** The strip's row: the tile, and HR Requests' count pinned to its corner. */
+function CompactBody({ item }: { item: NavItem }) {
+  return (
+    <span className="relative">
+      <Tile icon={item.icon} />
+      {item.badge === "hr-requests-waiting" ? (
+        <span className="absolute -top-2 -right-3 scale-90">
+          <WaitingBadge />
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -149,8 +187,11 @@ function NavRow({
   onNavigate?: () => void;
 }) {
   const { href, label, comingSoon } = item;
+  const compact = useRailCompact();
 
-  const body = (
+  const body = compact ? (
+    <CompactBody item={item} />
+  ) : (
     <>
       <Tile icon={item.icon} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -168,7 +209,7 @@ function NavRow({
     return (
       <span
         className={cn(
-          rowClass({ active: false, sub }),
+          rowClass({ active: false, sub, compact }),
           "cursor-not-allowed opacity-45",
         )}
         aria-disabled="true"
@@ -185,7 +226,10 @@ function NavRow({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       data-active={active || undefined}
-      className={rowClass({ active, sub })}
+      className={rowClass({ active, sub, compact })}
+      /* In the strip the name is not on the screen, so it is on the link. */
+      aria-label={compact ? label : undefined}
+      title={compact ? label : undefined}
     >
       {body}
     </Link>
@@ -221,6 +265,29 @@ function NavGroupRow({
   // the rail still answers "where am I" at a glance. Open, the child does.
   const wearsActive = holdsCurrentPage && !open;
   const Caret = open ? CaretDownIcon : CaretRightIcon;
+  const compact = useRailCompact();
+
+  /* In the strip there is no room for the list under a parent, so the
+     parent goes to its first screen — Accounts to its overview, Payroll &
+     Bank to Payroll — and wears the marker while any of its screens is
+     open. */
+  if (compact) {
+    const first = (item.children ?? []).find((child) => child.href)?.href;
+    if (!first) return null;
+    return (
+      <Link
+        href={first}
+        onClick={onNavigate}
+        aria-label={item.label}
+        title={item.label}
+        aria-current={holdsCurrentPage ? "page" : undefined}
+        data-active={holdsCurrentPage || undefined}
+        className={rowClass({ active: holdsCurrentPage, compact })}
+      >
+        <CompactBody item={item} />
+      </Link>
+    );
+  }
 
   return (
     <div className="flex flex-col">
@@ -264,6 +331,7 @@ function NavGroupRow({
 /* -------------------------------------------------------------------------- */
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const compact = useRailCompact();
   const pathname = usePathname();
   const user = useSession();
   /**
@@ -337,18 +405,51 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     /* The nav is what scrolls, not the whole rail. The brand stays at the top
        and the footer at the bottom; only the list between them moves. */
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex flex-none items-center gap-[11px] border-b px-5 py-[18px]">
+      <div
+        className={cn(
+          "flex flex-none items-center border-b",
+          compact
+            ? "flex-col gap-2.5 px-2 py-3.5"
+            : "gap-[11px] py-[18px] pr-3 pl-5",
+        )}
+      >
         <span className="grid size-10 flex-none place-items-center rounded-[11px] bg-(--sv-accent) text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.3)]">
           <TrendUpIcon weight="duotone" size={23} />
         </span>
-        <div className="min-w-0 leading-[1.1]">
-          <p className="text-[17px] font-extrabold tracking-[-0.02em] whitespace-nowrap">
-            ShareViral
-          </p>
-          <p className="text-[10.5px] tracking-[0.16em] whitespace-nowrap text-(--sv-violet-ink) uppercase">
-            Finance
-          </p>
-        </div>
+        {compact ? null : (
+          <div className="min-w-0 flex-1 leading-[1.1]">
+            <p className="text-[17px] font-extrabold tracking-[-0.02em] whitespace-nowrap">
+              ShareViral
+              {/* The owner: "ShareViral name tar opore dan pase choto kore
+                  TM lekha thakbe". */}
+              <sup
+                className="ml-0.5 text-[8.5px] font-extrabold tracking-normal text-(--sv-muted)"
+                data-trademark
+              >
+                TM
+              </sup>
+            </p>
+            <p className="text-[10.5px] tracking-[0.16em] whitespace-nowrap text-(--sv-violet-ink) uppercase">
+              Finance
+            </p>
+          </div>
+        )}
+        {/* The desktop rail's own switch; the mobile drawer closes itself. */}
+        {onNavigate ? null : (
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={
+              compact ? "Show the menu's names" : "Hide the menu's names"
+            }
+            aria-pressed={compact}
+            title={compact ? "Show the menu" : "Hide the menu"}
+            className="grid size-8.5 flex-none cursor-pointer place-items-center rounded-lg text-(--sv-violet-ink) transition-colors hover:bg-(--sv-violet-tint)"
+            data-rail-toggle
+          >
+            <SidebarSimpleIcon weight="duotone" size={19} />
+          </button>
+        )}
       </div>
 
       {underPath(pathname, "/settings") ? (
@@ -359,13 +460,26 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       ) : (
         <nav
           aria-label="Main"
-          className="flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5 pt-1 pb-3.5"
+          className={cn(
+            "flex flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto pb-3.5",
+            compact ? "px-2 pt-2" : "px-2.5 pt-1",
+          )}
         >
-          {groups.map((group) => (
+          {groups.map((group, index) => (
             <div key={group.title} className="flex flex-col gap-0.5">
-              <p className="px-3 pt-4 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
-                {group.title}
-              </p>
+              {compact ? (
+                /* The group's name has no room; a hairline keeps the groups. */
+                index > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="mx-3 my-2 h-px bg-(--sv-line)"
+                  />
+                ) : null
+              ) : (
+                <p className="px-3 pt-4 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
+                  {group.title}
+                </p>
+              )}
               {group.items.map((item) => renderItem(item))}
             </div>
           ))}
@@ -379,19 +493,19 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Sidebar() {
   const collapsed = useSidebarCollapsed();
+  const width = collapsed ? COMPACT_WIDTH : WIDTH;
 
   return (
     <aside
-      // Hidden, not merely narrow: `inert` takes the links out of the tab
-      // order too, or a keyboard would walk through a rail nobody can see.
-      inert={collapsed}
-      aria-hidden={collapsed || undefined}
       className="sv-rail sticky top-0 hidden h-dvh flex-none self-start overflow-hidden border-r bg-(--sv-surface) lg:block"
-      style={{ width: collapsed ? 0 : WIDTH }}
+      style={{ width }}
+      data-compact={collapsed || undefined}
     >
       {/* Its own width, so the contents do not reflow while the rail slides. */}
-      <div className="h-full" style={{ width: WIDTH }}>
-        <SidebarContent />
+      <div className="h-full" style={{ width }}>
+        <RailCompactContext.Provider value={collapsed}>
+          <SidebarContent />
+        </RailCompactContext.Provider>
       </div>
     </aside>
   );

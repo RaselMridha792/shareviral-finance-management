@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 
 /**
  * Whether the rail is narrowed, shared between the rail and the top bar.
@@ -57,4 +57,19 @@ export function useSidebarCollapsed(): boolean {
     // The server has no preference to read, so it always renders it wide.
     () => false,
   );
+}
+
+/**
+ * Whether the rail being drawn is the narrow one — icons only (1 Oct 2026).
+ *
+ * The owner: *"sidebar hide button a click korle sudhu lekha hide hobe
+ * sidebar er icons jate dekha jay and click kore navigate ko kora jay"*.
+ * Hiding the rail used to take it to nothing; now it takes it to its icons,
+ * each still a link, its name on hover. Given by the desktop rail to every
+ * row, the Settings rail and the footer; the mobile drawer is always wide.
+ */
+export const RailCompactContext = createContext(false);
+
+export function useRailCompact(): boolean {
+  return useContext(RailCompactContext);
 }

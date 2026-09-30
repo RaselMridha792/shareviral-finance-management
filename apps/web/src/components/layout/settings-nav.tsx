@@ -20,6 +20,7 @@ import { emailApi, trashApi } from "@/lib/api-client";
 import { auditApi } from "@/lib/audit";
 import { usersApi } from "@/lib/users";
 import { cn } from "@/lib/utils";
+import { useRailCompact } from "@/components/layout/sidebar-state";
 
 /**
  * The rail while Settings is open, as the September 2026 handoff draws it.
@@ -130,16 +131,27 @@ export function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
   const can = (section: SettingsSection) => canOpen(role, section);
   const current = settingsSectionFor(useSearchParams().get("tab"), can);
   const badges = useBadges(role);
+  /* The icons-only rail (1 Oct 2026): each section its tile, named on
+     hover; the groups kept apart by a hairline, the badges left out. */
+  const compact = useRailCompact();
 
   return (
     <nav
       aria-label="Settings"
-      className="flex flex-1 flex-col overflow-x-hidden overflow-y-auto px-2.5 pt-3 pb-4"
+      className={cn(
+        "flex flex-1 flex-col overflow-x-hidden overflow-y-auto pt-3 pb-4",
+        compact ? "px-2" : "px-2.5",
+      )}
     >
       <Link
         href="/"
         onClick={onNavigate}
-        className="sv-button-quiet mb-2 flex items-center gap-[11px] rounded-[11px] bg-(--sv-subtle) py-[9px] pr-3 pl-[9px] text-[14px] font-extrabold"
+        aria-label={compact ? "Back to dashboard" : undefined}
+        title={compact ? "Back to dashboard" : undefined}
+        className={cn(
+          "sv-button-quiet mb-2 flex items-center gap-[11px] rounded-[11px] bg-(--sv-subtle) text-[14px] font-extrabold",
+          compact ? "justify-center py-[9px]" : "py-[9px] pr-3 pl-[9px]",
+        )}
       >
         <span className="sv-back-tile grid size-8 flex-none place-items-center rounded-lg bg-(--sv-surface)">
           <ArrowLeftIcon
@@ -148,16 +160,22 @@ export function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
             className="text-(--sv-violet)"
           />
         </span>
-        Back to dashboard
+        {compact ? null : "Back to dashboard"}
       </Link>
 
-      <p className="flex items-center gap-[9px] px-3 pt-2 pb-0.5 text-[17px] font-extrabold">
+      <p
+        className={cn(
+          "flex items-center gap-[9px] pt-2 pb-0.5 text-[17px] font-extrabold",
+          compact ? "justify-center" : "px-3",
+        )}
+        title={compact ? "Settings" : undefined}
+      >
         <GearSixIcon
           weight="duotone"
           size={20}
           className="text-(--sv-violet)"
         />
-        Settings
+        {compact ? null : "Settings"}
       </p>
 
       {SETTINGS_GROUPS.map((group) => {
@@ -167,9 +185,16 @@ export function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
         if (sections.length === 0) return null;
         return (
           <div key={group} className="flex flex-col">
-            <p className="px-3 pt-3.5 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
-              {group}
-            </p>
+            {compact ? (
+              <span
+                aria-hidden="true"
+                className="mx-3 my-2.5 h-px bg-(--sv-line)"
+              />
+            ) : (
+              <p className="px-3 pt-3.5 pb-1.5 text-[11px] font-extrabold tracking-[0.14em] whitespace-nowrap text-(--sv-muted) uppercase">
+                {group}
+              </p>
+            )}
             {sections.map((section) => {
               const active = section.id === current.id;
               const badge = badges[section.id];
@@ -199,20 +224,27 @@ export function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
                     window.scrollTo(0, 0);
                     onNavigate?.();
                   }}
-                  className="sv-nav-row mb-[3px] flex w-full items-center gap-[11px] rounded-[11px] py-2 pr-2.5 pl-[9px]"
+                  aria-label={compact ? section.label : undefined}
+                  title={compact ? section.label : undefined}
+                  className={cn(
+                    "sv-nav-row mb-[3px] flex w-full items-center gap-[11px] rounded-[11px] py-2",
+                    compact ? "justify-center" : "pr-2.5 pl-[9px]",
+                  )}
                 >
                   <span className="sv-nav-tile grid size-8 flex-none place-items-center rounded-lg">
                     <Glyph weight="duotone" size={18} />
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14.5px] font-extrabold">
-                      {section.label}
+                  {compact ? null : (
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14.5px] font-extrabold">
+                        {section.label}
+                      </span>
+                      <span className="block truncate text-[12px] font-semibold text-(--sv-muted)">
+                        {section.hint}
+                      </span>
                     </span>
-                    <span className="block truncate text-[12px] font-semibold text-(--sv-muted)">
-                      {section.hint}
-                    </span>
-                  </span>
-                  {badge ? (
+                  )}
+                  {badge && !compact ? (
                     <span
                       className={cn(
                         "flex-none rounded-full px-2 py-[3px] text-[10.5px] font-extrabold tabular-nums",

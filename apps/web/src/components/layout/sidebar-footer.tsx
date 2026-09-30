@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/session-provider";
+import { useRailCompact } from "@/components/layout/sidebar-state";
+import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api-client";
 
 /**
@@ -23,6 +25,8 @@ import { logout } from "@/lib/api-client";
 export function SidebarFooter() {
   const user = useSession();
   const router = useRouter();
+  /* The icons-only rail: the initials and the door, one above the other. */
+  const compact = useRailCompact();
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
@@ -47,7 +51,12 @@ export function SidebarFooter() {
       .join("") || user.email[0].toUpperCase();
 
   return (
-    <div className="sv-user-card mx-2.5 mb-3 flex flex-none items-center gap-[11px] rounded-[11px] bg-(--sv-violet-tint) p-3">
+    <div
+      className={cn(
+        "sv-user-card mb-3 flex flex-none items-center rounded-[11px] bg-(--sv-violet-tint)",
+        compact ? "mx-2 flex-col gap-2 p-2" : "mx-2.5 gap-[11px] p-3",
+      )}
+    >
       <span
         className="grid size-[38px] flex-none place-items-center rounded-full bg-(--sv-accent) text-[13px] font-extrabold text-(--sv-on-accent)"
         title={`${user.fullName} — ${ROLE_LABELS[user.role]}`}
@@ -55,10 +64,12 @@ export function SidebarFooter() {
         {initials}
       </span>
 
-      <div className="min-w-0 flex-1 leading-[1.25]">
-        <p className="truncate text-[14px] font-extrabold">{user.fullName}</p>
-        <p className="truncate text-[12px] text-(--sv-muted)">{user.email}</p>
-      </div>
+      {compact ? null : (
+        <div className="min-w-0 flex-1 leading-[1.25]">
+          <p className="truncate text-[14px] font-extrabold">{user.fullName}</p>
+          <p className="truncate text-[12px] text-(--sv-muted)">{user.email}</p>
+        </div>
+      )}
 
       <button
         type="button"

@@ -2,7 +2,6 @@
 
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { ListIcon } from "@phosphor-icons/react/dist/ssr/List";
-import { SidebarSimpleIcon } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -11,10 +10,6 @@ import { trailFor, useLeafCrumb } from "@/components/layout/breadcrumb";
 import { CHROME_BUTTON } from "@/components/layout/chrome";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { MobileSidebar } from "@/components/layout/sidebar";
-import {
-  toggleSidebar,
-  useSidebarCollapsed,
-} from "@/components/layout/sidebar-state";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -44,13 +39,12 @@ export function Topbar() {
   const trail = trailFor(pathname);
   const leaf = useLeafCrumb();
   const crumbs = leaf ? [...trail, { label: leaf }] : trail;
-  const collapsed = useSidebarCollapsed();
 
   return (
     <>
       <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[1.5px] bg-(--sv-surface) px-[clamp(16px,2vw,24px)] py-3">
-        {/* One job per width: on a wide screen it hides and shows the rail; on
-            a narrow one there is no rail, so it opens the drawer. */}
+        {/* A narrow screen has no rail, so this opens the drawer. On a wide
+            one the rail's own head carries its switch (1 Oct 2026). */}
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
@@ -58,16 +52,6 @@ export function Topbar() {
           className={cn(CHROME_BUTTON, "lg:hidden")}
         >
           <ListIcon weight="duotone" size={21} />
-        </button>
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label={collapsed ? "Show the menu" : "Hide the menu"}
-          aria-pressed={collapsed}
-          title={collapsed ? "Show the menu" : "Hide the menu"}
-          className={cn(CHROME_BUTTON, "hidden lg:inline-flex")}
-        >
-          <SidebarSimpleIcon weight="duotone" size={21} />
         </button>
 
         {/*

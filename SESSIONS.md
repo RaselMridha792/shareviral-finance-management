@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — not pushed |
 | 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
 | 125 | **HR Requests: money moves when finance says it moves** | **done** — deployed 1 Oct (one push; the deploy applies the SQL before the swap) |
 | 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — deployed 30 Sep |
@@ -104,6 +105,50 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 127. The rail's own switch, icons when hidden, and quick links — 1 Oct 2026
+
+The owner, with screenshots:
+- *"dashboard er ekhane Hr Request, Bank Advise, Payroll, Invoice Builder
+  quicklinks rakho choto icons sohokare"*;
+- *"sidebar hide korar panel ta vitore dhukao. also ShareViral name tar opore
+  dan pase choto kore TM lekha thakbe ... sidebar hide button a click korle
+  sudhu lekha hide hobe sidebar er icons jate dekha jay and click kore
+  navigate ko kora jay"*.
+
+- **Quick links** (`dashboard/quick-links.tsx`, under the greeting):
+  HR Requests (with its waiting count), Bank Advice, Payroll and Invoice
+  Builder (`/invoices/new`). They use the rail's icons and permissions, so
+  HR sees only the two it can open.
+- **The rail:**
+  - The switch moved from the top bar into the rail's head, beside the name
+    (the phone keeps its menu button, and the drawer has no switch).
+  - "ShareViral" carries a small TM.
+  - Hidden, it is an 80px strip (`RailCompactContext` in `sidebar-state.ts`):
+    each row is its tile, a link named on hover (`title`, `aria-label`).
+  - A parent (Accounts, Expenses, Payroll & Bank, Invoice Builder) goes to
+    its first screen and wears the marker while any of its screens is open.
+  - HR Requests' count is pinned to its tile, and hairlines replace the
+    group names.
+  - Settings' rail and the footer have the same narrow form.
+  - The choice is remembered (`svf-sidebar` = `rail`, as before).
+  - The rail is no longer `inert` when hidden, and its dead CSS went.
+- Touches shared layout (`sidebar.tsx`, `settings-nav.tsx`,
+  `sidebar-footer.tsx`, `topbar.tsx`), at the owner's own ask.
+
+**Proved:** `.railqa.mjs` 18/18 in a browser: the switch's place, the TM,
+270 ↔ 80, no names in the strip, every icon navigating, the reload, the
+Settings strip, the phone drawer, the quick links by permission, and no
+sideways scroll. The four CI steps are green.
+
+**Found, not fixed (auth, needs its own session):**
+- The admin password reset exists: Settings → People who can sign in, the
+  key icon, `POST /users/:id/reset-password`. It revokes sessions and is
+  audited.
+- But its "they will be asked to choose their own password when they next
+  sign in" is not true. `mustChangePassword` is stored and never acted on:
+  no screen asks, and the web has no way to change your own password at
+  all (`POST /auth/change-password` exists with no caller).
 
 ## 126. HR Requests: HR can withdraw a request that still waits — 1 Oct 2026
 
