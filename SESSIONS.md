@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 132 | **The Assistant on Gemini, through the Google Cloud connection** | **built, ON TRIAL** — pushed 2 Oct at the owner's word to test on the live site; **the quality bar has not been run** |
 | 131 | **Settings → Connections, and the Assistant through Google Cloud (Vertex AI)** | **done** — step 2 of the Google brief; the owner's Google Cloud setup is still to do
 | 130 | **Schema: Google Cloud for the Assistant — the provider, the sealed service-account key, the region** | **done** — pushed alone, step 1 of the Google brief |
 | 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — deployed 1 Oct |
@@ -109,6 +110,140 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 132. The Assistant on Gemini, through the Google Cloud connection — 2 Oct 2026
+
+`docs/briefs/2026-10-02-gemini-on-google-cloud.md`, steps 1 and 2. **Step 3,
+the quality results, is not done**, and that is the first thing the next
+session should know:
+
+- **Gemini is offered on trial. It has not cleared the bar in `ai.ts`.** The
+  brief says it goes into the picker only after the test conversations are run
+  on it. They could not be run: the local database holds no Google key. Asked
+  to paste the key into the local Settings, the owner chose instead to test on
+  the live site ("live test korbo, commit koro", 2 Oct). So it is pushed, and
+  the model's own line in Settings says "On trial … check the account and the
+  amount on every draft before saving it".
+- **Nothing changes for anybody until a Super Admin picks it.** The row still
+  says what it said. Gemini answers only after Settings → Assistant → *Reach
+  the model through: Google Cloud* and *Which model answers: Gemini 2.5 Pro*.
+  A draft still reaches the books only when a person presses Save.
+- **To finish step 3:** paste the Google key into the LOCAL Settings →
+  Connections, `npm run dev`, then `node .assistantbar.mjs gemini-2.5-pro`.
+  It costs a few dollars of Gemini (an estimate, not measured). Write the
+  table it prints here. If Gemini fills in an account nobody named, take
+  `gemini-2.5-pro` out of `AI_MODELS` and tell the owner, with the examples.
+  The transcript goes to `.assistantbar.log`.
+
+**What was built:**
+
+- **One turn, two adapters** (`ai-intake/model-turn.ts`). `think()` no longer
+  speaks Anthropic. It builds the prompts and the tools as before and hands
+  them to a `TurnModel`: `converse()` for the rounds of a turn (`ask` /
+  `tell`), `readDocument()` for a PDF. Everything about the books is where it
+  was: the two prompts, the tool definitions, `normalise`, the corrections,
+  the attachments.
+  - `claudeModel` is the old code moved, request for request: the two system
+    blocks with the cache mark, `tool_choice` any / `answer`, `tool_use` and
+    `tool_result`. It serves the Anthropic key and Claude on Vertex.
+  - `geminiModel` (`gemini.ts`) says the same turn Google's way:
+    `systemInstruction` (the stable half first), one `functionDeclarations`
+    list with the schemas unchanged in `parametersJsonSchema`, mode `ANY`,
+    `allowedFunctionNames: ["answer"]` on the last round, `functionCall` /
+    `functionResponse`, `inlineData` for the PDF, no cache marks. Gemini's
+    own content goes back whole, so its thought signatures survive.
+  - Gemini thinks out of `maxOutputTokens`, so it is given the reply's room
+    twice (16,000 for a turn).
+- **`@google/genai` ^2.25.0**, checked against its own README and typings:
+  the constructor is now `enterprise: true` (`vertexai` is the old name), with
+  `project`, `location` and `googleAuthOptions`. The stored key is handed in
+  as a ready `JWT` client, not as `credentials`: given as `credentials` the
+  SDK logs a line about "the API key from the environment variable" on every
+  turn. No `GOOGLE_API_KEY` and no machine login is ever consulted.
+  - npm deleted the 38 `libc` fields again. They were put back. The lock diff
+    is 140 additions and one deletion: `ws` is no longer `dev: true`, because
+    the SDK needs it. `npm ci --dry-run` passes.
+- **Which model goes which way** (`AI_MODEL_PROVIDERS`): Claude with either,
+  Gemini with Google Cloud only. `PATCH /ai/settings` refuses the impossible
+  pair with a sentence ("Gemini 2.5 Pro is reached through Google Cloud, not
+  through Anthropic key. Change the two together."), whether the two are sent
+  together or one is sent against the stored other. It is the service that
+  refuses, not the schema: a schema refusal reads "Validation failed".
+  - A stored model that does not go with the stored provider is read as
+    Claude.
+  - **Removing the Google key** now takes the model back to Claude as well as
+    the provider back to the Anthropic key.
+- **Errors in words** (`gemini-errors.ts`): key refused (with Google's
+  reason), Google not reached, 403 (API off / no billing / role or model),
+  404 (model not available in the region), 429 (quota), 400 ("a fault in this
+  app, not in the Google Cloud setup"), 5xx.
+  - **Every Gemini refusal is logged in Google's own words**, explained or
+    not, with anything key-shaped cut out (`scrub`). The Claude-on-Vertex
+    check now logs every failure too; it used to log only what it could not
+    explain.
+- **Settings → Assistant**: the card is "How it reaches the model". The model
+  list follows the way chosen: two models through Google Cloud, one (and no
+  picker) with the Anthropic key. Choosing the Anthropic key while on Gemini
+  sends the model with it in one update. The data warning names "Gemini on
+  Vertex AI" when that is where it goes. The Assistant's own picker follows
+  the same list.
+- **Connections → Test** has a fifth line, "Gemini on Vertex AI": one small
+  request with room to think (1,024 tokens, not 1).
+
+**Shared code** (the brief allowed it; nothing existing changed meaning):
+`packages/shared/src/ai.ts` gains the second entry in `AI_MODELS` and its
+labels, `AI_MODEL_PROVIDERS`, `aiModelGoesWith`, `aiModelsFor`,
+`aiModelProviderProblem`, `isGeminiModel`; `connections.ts` gains the
+`gemini` check id. Read by the composer, `assistant-panel.tsx`,
+`assistant-screen.tsx`, `ai-intake.service.ts` and `connections.service.ts`.
+
+**Proved** (with a key Google never issued, so as far as Google's token
+endpoint and no further):
+
+- `gemini.spec.ts`, 17 tests, Google's token and `fetch` stubbed: the URL
+  (`…/v1beta1/projects/<p>/locations/global/publishers/google/models/gemini-2.5-pro:generateContent`),
+  `Bearer` and no `x-goog-api-key`, the body's every part, the look-up loop
+  with the signature kept, `answer` forced on the last round, the PDF sent
+  inline and streamed, a truncated statement reported, each status's
+  sentence, and a private key cut out of a log line.
+- `packages/shared/src/ai.test.ts`, 8 tests: no provider is left without a
+  model, and Gemini never goes with the Anthropic key.
+- `.connectionsqa.mjs`, 56/56 (it was 40), against the local app and the real
+  Google: Gemini refused on the Anthropic key in words; chosen on Google
+  Cloud; a Gemini turn comes back 503 in words, and Google's words are in the
+  log without the key; the Test draws five lines; the screen offers both
+  models, and choosing the Anthropic key takes the model back to Claude;
+  Remove while on Gemini leaves `anthropic` / `claude-opus-5`; the row is left
+  as it was found.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 156,
+  shared 350) pass, each on its own exit code.
+
+**Not proved, because no real key was available locally:**
+
+- **A real Gemini answer.** No request of ours has reached Vertex AI's
+  Gemini. The owner's live test is the first.
+- **Whether Google takes the tool schemas as they are.** `draft` is an object
+  with `additionalProperties: true` and no properties, and `columnMap` allows
+  `["string", "null"]`. If Google refuses them the turn says "Google Cloud
+  would not take the request (…). That is a fault in this app", and the log
+  has Google's reason. That is the first thing to look for.
+- **A PDF statement read by Gemini**, and whether a long one comes back whole
+  through a forced function call. The log line "did not return the document's
+  table: finish …" says why if it does not.
+- **Claude through this refactor on a real key.** `claudeModel` is the old
+  requests moved, and the stubbed Vertex spec still pins the wire format, but
+  neither Anthropic nor Vertex answers Claude for this account today.
+- **The quality bar**, as above.
+
+**Seen, not touched:** a refusal while reading an attached PDF still reaches
+the person as a 500 on either model (noted in #131). With Gemini the log now
+carries Google's reason, but the screen does not.
+
+**Also in this push:** f331362, the brief itself, which was committed and not
+pushed.
+
+**Next:** the quality results (step 3), then step 3 of the earlier brief — a
+pasted Google Sheet or Doc link, read with the same key.
 
 ## 131. Settings → Connections, and the Assistant through Google Cloud — 1 Oct 2026
 
