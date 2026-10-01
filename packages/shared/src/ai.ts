@@ -107,33 +107,54 @@ export const AI_DATA_ACCESS_DETAIL: Record<AiDataAccess, string> = {
  *
  * That is the one failure the code cannot catch, so the cheaper models are not
  * offered. A picker whose wrong option quietly misfiles money is not a saving.
+ *
+ * Gemini (2 Oct 2026) is here ON TRIAL, and has not cleared that bar. Google
+ * gave the project no quota for Claude, Gemini answers on the same key, and
+ * the owner chose to try it on the live site before the test conversations
+ * had been run against it: the local database holds no Google key to run them
+ * with. `.assistantbar.mjs` at the repository root is those conversations.
+ * Run it, write the result in SESSIONS, and if Gemini fills in an account
+ * nobody named, take it out of this list.
  */
-export const AI_MODELS = ["claude-opus-5"] as const;
+export const AI_MODELS = ["claude-opus-5", "gemini-2.5-pro"] as const;
 export const aiModelSchema = z.enum(AI_MODELS);
 export type AiModel = z.infer<typeof aiModelSchema>;
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
   "claude-opus-5": "Opus 5",
+  "gemini-2.5-pro": "Gemini 2.5 Pro",
 };
 
 /** For the composer, where there is room for a name and no more. */
 export const AI_MODEL_SHORT: Record<AiModel, string> = {
   "claude-opus-5": "Opus 5",
+  "gemini-2.5-pro": "Gemini 2.5",
 };
 
 export const AI_MODEL_DETAIL: Record<AiModel, string> = {
   "claude-opus-5":
-    "The only model offered here. On the same test conversations the cheaper ones invented an account nobody had named; this one asked instead.",
+    "On the same test conversations the cheaper Claude models invented an account nobody had named; this one asked instead.",
+  "gemini-2.5-pro":
+    "Google's model, through Google Cloud only. On trial: it has not yet been run against the test conversations that decided between the Claude models, so check the account and the amount on every draft before saving it.",
 };
 
+/** A Gemini model is asked in Google's own way, and only through Google Cloud. */
+export function isGeminiModel(model: string): boolean {
+  return model.startsWith("gemini-");
+}
+
 /**
- * How the assistant reaches Claude: an Anthropic key, or Google Cloud.
+ * How the assistant reaches its model: an Anthropic key, or Google Cloud.
  *
  * The owner, 1 Oct 2026: Anthropic would not answer until the account's
  * identity was verified, and the owner's NID did not get through. Through
  * Google Cloud (Vertex AI) it is the same model and the same assistant; the
  * billing and the checks are Google's. The key for that is the service account
  * under Settings → Connections, which also reads shared Sheets and Docs.
+ *
+ * 2 Oct 2026: Google then gave the project a quota of zero for Claude, and
+ * would not raise it. Gemini answers on the same project and the same key, so
+ * it is offered through this provider too — see AI_MODEL_PROVIDERS.
  */
 export const AI_PROVIDERS = ["anthropic", "vertex"] as const;
 export const aiProviderSchema = z.enum(AI_PROVIDERS);
@@ -148,8 +169,52 @@ export const AI_PROVIDER_DETAIL: Record<AiProvider, string> = {
   anthropic:
     "Straight to Anthropic, with the API key below. Anthropic bills it and runs its own account checks.",
   vertex:
-    "Through Vertex AI, with the service account under Settings → Connections. Google bills it; the model and the assistant are the same.",
+    "Through Vertex AI, with the service account under Settings → Connections. Google bills it; the assistant is the same, with Claude or with Gemini.",
 };
+
+/**
+ * Which model goes which way (2 Oct 2026).
+ *
+ * Claude is reached with an Anthropic key or through Google Cloud. Gemini is
+ * Google's own, so it goes through Google Cloud and no other way — there is no
+ * separate Gemini key here, on purpose: a free-tier key may let Google use the
+ * data, and it could not read the privately shared Sheets and Docs.
+ */
+export const AI_MODEL_PROVIDERS: Record<AiModel, readonly AiProvider[]> = {
+  "claude-opus-5": ["anthropic", "vertex"],
+  "gemini-2.5-pro": ["vertex"],
+};
+
+export function aiModelGoesWith(model: AiModel, provider: AiProvider): boolean {
+  return AI_MODEL_PROVIDERS[model].includes(provider);
+}
+
+/** The models a provider can offer, in the order they are listed. */
+export function aiModelsFor(provider: AiProvider): AiModel[] {
+  return AI_MODELS.filter((model) => aiModelGoesWith(model, provider));
+}
+
+/**
+ * Why a model and a provider cannot be chosen together, in words.
+ *
+ * Asked by the service rather than written into `updateAiSettingsSchema`: a
+ * change usually names one of the two, and only the service knows the stored
+ * other. It also answers with this sentence as the message, where a schema
+ * refusal reads "Validation failed".
+ */
+export function aiModelProviderProblem(
+  model: AiModel,
+  provider: AiProvider,
+): string | null {
+  if (aiModelGoesWith(model, provider)) return null;
+  return `${AI_MODEL_LABELS[model]} is reached through ${AI_MODEL_PROVIDERS[
+    model
+  ]
+    .map((way) => AI_PROVIDER_LABELS[way])
+    .join(
+      " or ",
+    )}, not through ${AI_PROVIDER_LABELS[provider]}. Change the two together.`;
+}
 
 export const updateAiSettingsSchema = z
   .strictObject({

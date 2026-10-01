@@ -1,7 +1,7 @@
-import type { ClaudeClient } from "./claude-errors";
 import { BadRequestException } from "@nestjs/common";
 
 import type { RawRow } from "../imports/row-parser";
+import type { TurnModel } from "./model-turn";
 
 /**
  * Turning a PDF bank statement into rows.
@@ -76,57 +76,34 @@ cannot catch by reading.`;
 const MAX_OUTPUT_TOKENS = 32_000;
 
 export async function readPdfStatement(
-  client: ClaudeClient,
-  model: string,
+  model: TurnModel,
   buffer: Buffer,
 ): Promise<{ headers: string[]; rows: RawRow[] }> {
-  const response = await client.messages
-    .stream({
-      model,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: buffer.toString("base64"),
-              },
-            },
-            { type: "text", text: INSTRUCTION },
-          ],
-        },
-      ],
-      tools: [TRANSCRIBE_TOOL],
-      tool_choice: { type: "tool", name: TRANSCRIBE_TOOL.name },
-    })
-    .finalMessage();
+  const read = await model.readDocument({
+    pdf: buffer,
+    instruction: INSTRUCTION,
+    tool: TRANSCRIBE_TOOL,
+    maxTokens: MAX_OUTPUT_TOKENS,
+  });
 
   /**
    * A statement longer than the budget stops mid-table, and the rows it did
    * produce look perfectly ordinary. Saying so is the whole point: a silently
    * half-read statement is a set of books missing a fortnight.
    */
-  if (response.stop_reason === "max_tokens") {
+  if (read.truncated) {
     throw new BadRequestException(
       "That statement is longer than can be read in one go. Split the PDF by month and attach them one at a time.",
     );
   }
 
-  const call = response.content.find(
-    (block) => block.type === "tool_use" && block.name === TRANSCRIBE_TOOL.name,
-  );
-
-  if (!call || call.type !== "tool_use") {
+  if (!read.input || typeof read.input !== "object") {
     throw new BadRequestException(
       "Nothing that looked like a statement table came back from that PDF. If it is a scan, the import screen takes a spreadsheet.",
     );
   }
 
-  const parsed = call.input as { headers?: unknown; rows?: unknown };
+  const parsed = read.input as { headers?: unknown; rows?: unknown };
   const headers = asStrings(parsed.headers).map((h) => h.trim());
 
   if (!headers.length) {

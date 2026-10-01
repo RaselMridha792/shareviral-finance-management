@@ -28,8 +28,9 @@ import { connectionsApi } from "@/lib/connections";
 /**
  * Settings → Connections: the Google Cloud service account (#131).
  *
- * One key for two jobs — Claude through Vertex AI, when the Assistant is set
- * to go that way, and reading the Sheets and Docs shared with the account.
+ * One key for two jobs — Claude or Gemini through Vertex AI, when the
+ * Assistant is set to go that way, and reading the Sheets and Docs shared
+ * with the account.
  * The key goes one way, in: what comes back is the client email, which is the
  * address files are shared with, and the project.
  */
@@ -73,7 +74,9 @@ export function ConnectionsPanel() {
       router.refresh();
     } catch (caught) {
       setError(
-        caught instanceof ApiError ? caught.message : "Could not save that key.",
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not save that key.",
       );
     } finally {
       setPending(false);
@@ -135,17 +138,18 @@ export function ConnectionsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-2xl text-sm text-muted-foreground">
-        A Google Cloud service account does two things here: it reaches Claude
-        through Vertex AI, when the Assistant is set to go that way, and it
-        reads the Google Sheets and Docs you share with it. It can only read
-        what was shared, and it cannot change anything.
+        A Google Cloud service account does two things here: it reaches the
+        Assistant&apos;s model, Claude or Gemini, through Vertex AI, when the
+        Assistant is set to go that way, and it reads the Google Sheets and Docs
+        you share with it. It can only read what was shared, and it cannot
+        change anything.
       </p>
 
       <Card>
         <CardHeader
           title="Google Cloud"
           icon={GoogleLogoIcon}
-          description="One service-account key, for Claude and for shared files."
+          description="One service-account key, for the Assistant's model and for shared files."
           action={
             configured ? (
               <Badge tone="positive">
@@ -170,12 +174,11 @@ export function ConnectionsPanel() {
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Project <span className="num">{google.projectId}</span> ·
-                    Claude asked in <span className="num">{google.region}</span>
+                    The model asked in{" "}
+                    <span className="num">{google.region}</span>
                     {google.setBy || google.setAt
                       ? ` · Set${google.setBy ? ` by ${google.setBy}` : ""}${
-                          google.setAt
-                            ? ` on ${google.setAt.slice(0, 10)}`
-                            : ""
+                          google.setAt ? ` on ${google.setAt.slice(0, 10)}` : ""
                         }`
                       : ""}
                   </p>
@@ -320,7 +323,7 @@ export function ConnectionsPanel() {
         destructive
         confirmLabel="Remove"
         pending={pending}
-        body="Shared Sheets and Docs can no longer be read. If the Assistant reaches Claude through Google Cloud, it goes back to the Anthropic key."
+        body="Shared Sheets and Docs can no longer be read. If the Assistant goes through Google Cloud, it goes back to the Anthropic key, and to Claude."
         onConfirm={() => void remove()}
         onCancel={() => setConfirming(false)}
       />
@@ -342,7 +345,8 @@ export function ConnectionsPanel() {
             </li>
             <li>
               <strong>Enable the model.</strong> In Vertex AI → Model Garden,
-              find Claude Opus 5 and enable it, accepting the terms.
+              find Claude Opus 5 and enable it, accepting the terms. Gemini
+              needs no enabling.
             </li>
             <li>
               <strong>Create a service account</strong> under IAM → Service
@@ -355,8 +359,9 @@ export function ConnectionsPanel() {
               project and has to be relaxed.
             </li>
             <li>
-              <strong>Share files</strong> with the address shown above once
-              the key is saved, as Viewer. The app sees nothing that was not shared with it.
+              <strong>Share files</strong> with the address shown above once the
+              key is saved, as Viewer. The app sees nothing that was not shared
+              with it.
             </li>
           </ol>
           <a

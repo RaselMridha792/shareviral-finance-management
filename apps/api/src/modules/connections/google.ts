@@ -1,7 +1,8 @@
 import { createPrivateKey } from "node:crypto";
 
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
-import { GoogleAuth, type JWTInput } from "google-auth-library";
+import { GoogleGenAI } from "@google/genai";
+import { GoogleAuth, JWT, type JWTInput } from "google-auth-library";
 
 import { open } from "../../common/crypto/secret-box";
 
@@ -133,5 +134,48 @@ export function vertexClient(
     region,
     googleAuth: googleAuth(account, VERTEX_SCOPE),
     ...options,
+  });
+}
+
+/**
+ * Gemini on the same project, with the same key (2 Oct 2026).
+ *
+ * `enterprise: true` is the SDK's name for "through Google Cloud, not with an
+ * AI Studio key" — the README's own constructor. The stored key signs the
+ * requests and the project and region are named, so the machine's environment
+ * is never consulted: no `GOOGLE_API_KEY`, and no application-default login.
+ *
+ * The key is handed over as a ready client rather than as `credentials`. It
+ * is the same key either way; given as `credentials` the SDK writes a line
+ * about "the API key from the environment variable" to the log on every
+ * turn, and there is no such key.
+ *
+ * `attempts` counts the first request too, so 1 means no retry. The SDK does
+ * not retry at all unless told to.
+ */
+export function geminiClient(
+  account: ServiceAccount,
+  region: string,
+  options: { attempts?: number; timeout?: number } = {},
+) {
+  return new GoogleGenAI({
+    enterprise: true,
+    project: account.project_id,
+    location: region,
+    googleAuthOptions: {
+      authClient: new JWT({
+        email: account.client_email,
+        key: account.private_key,
+        keyId: account.private_key_id,
+        scopes: VERTEX_SCOPE,
+      }),
+      projectId: account.project_id,
+    },
+    httpOptions: {
+      ...(options.timeout ? { timeout: options.timeout } : {}),
+      ...(options.attempts && options.attempts > 1
+        ? { retryOptions: { attempts: options.attempts } }
+        : {}),
+    },
   });
 }

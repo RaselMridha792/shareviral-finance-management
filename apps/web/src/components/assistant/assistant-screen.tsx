@@ -4,6 +4,7 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import {
   AI_TARGET_LABELS,
+  aiModelsFor,
   type AiAttachment,
   type AiAvailability,
   type AiChatSummary,
@@ -527,6 +528,7 @@ export function AssistantScreen({
           onSend={() => void send()}
           thinking={thinking}
           model={model}
+          models={aiModelsFor(availability.provider ?? "anthropic")}
           onModelChange={(next) => void changeModel(next)}
           canChangeModel={canConfigure}
           dataAccess={dataAccess}

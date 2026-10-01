@@ -44,7 +44,14 @@ export type GoogleKeyResult = {
   connection: GoogleConnection;
 };
 
-export const GOOGLE_CHECKS = ["vertex", "sheets", "docs", "drive"] as const;
+/** `vertex` is Claude on Vertex AI; `gemini` is Gemini on the same project. */
+export const GOOGLE_CHECKS = [
+  "vertex",
+  "gemini",
+  "sheets",
+  "docs",
+  "drive",
+] as const;
 export type GoogleCheckId = (typeof GOOGLE_CHECKS)[number];
 
 /** One line of the Test button's answer. */

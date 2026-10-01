@@ -2,7 +2,6 @@
 
 import {
   AI_ATTACHMENT_EXTENSIONS,
-  AI_MODELS,
   AI_MODEL_LABELS,
   AI_MODEL_SHORT,
   type AiDataAccess,
@@ -63,6 +62,7 @@ export function Composer({
   onSend,
   thinking,
   model,
+  models,
   onModelChange,
   canChangeModel,
   dataAccess,
@@ -76,6 +76,8 @@ export function Composer({
   onSend: () => void;
   thinking: boolean;
   model: AiModel;
+  /** The models the way chosen in Settings can reach. */
+  models: AiModel[];
   onModelChange: (model: AiModel) => void;
   canChangeModel: boolean;
   dataAccess: AiDataAccess;
@@ -349,7 +351,7 @@ export function Composer({
 
             {/* A picker with one option is a control that does nothing. It
                 comes back on its own if a second model is ever offered. */}
-            {canChangeModel && AI_MODELS.length > 1 ? (
+            {canChangeModel && models.length > 1 ? (
               <div className="relative">
                 <label className="sr-only" htmlFor="assistant-model">
                   Which model answers
@@ -362,7 +364,7 @@ export function Composer({
                   }
                   className="h-8 cursor-pointer appearance-none rounded-lg bg-transparent pr-7 pl-2.5 text-xs font-medium text-muted-foreground transition outline-none hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 >
-                  {AI_MODELS.map((option) => (
+                  {models.map((option) => (
                     <option
                       key={option}
                       value={option}

@@ -2,6 +2,9 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import {
   AI_MODELS,
   AI_MODEL_LABELS,
+  aiModelGoesWith,
+  aiModelsFor,
+  isGeminiModel,
   type AiModel,
   type GoogleCheck,
   type GoogleCheckId,
@@ -18,7 +21,13 @@ import { DbService } from "../../db/db.service";
 import { appSettings, users } from "../../db/schema";
 import { explainClaudeError } from "../ai-intake/claude-errors";
 import {
+  asGeminiError,
+  explainGeminiError,
+  scrub,
+} from "../ai-intake/gemini-errors";
+import {
   GOOGLE_READ_SCOPES,
+  geminiClient,
   googleAuth,
   openServiceAccount,
   readServiceAccount,
@@ -28,6 +37,7 @@ import {
 
 const LABELS: Record<GoogleCheckId, string> = {
   vertex: "Claude on Vertex AI",
+  gemini: "Gemini on Vertex AI",
   sheets: "Google Sheets",
   docs: "Google Docs",
   drive: "Google Drive",
@@ -158,8 +168,15 @@ export class ConnectionsService {
    * Removes the key, and — if the assistant was going through Google — sends
    * it back to the Anthropic key. Left on Google with no key it would be off
    * for everybody, with a setting the screen no longer offers.
+   *
+   * A model only Google Cloud reaches goes back with it: Gemini on an
+   * Anthropic key is a pair nothing could answer.
    */
   async clearGoogleKey(actor: AuthenticatedUser): Promise<GoogleConnection> {
+    const stored = (await this.row())?.model;
+    const model = AI_MODELS.find((offered) => offered === stored);
+    const stranded = Boolean(model && !aiModelGoesWith(model, "anthropic"));
+
     await this.audit.mutate({
       action: "settings_change",
       entityTable: "app_settings",
@@ -171,6 +188,7 @@ export class ConnectionsService {
           .select({
             setAt: appSettings.googleKeySetAt,
             provider: appSettings.aiProvider,
+            model: appSettings.aiModel,
           })
           .from(appSettings)
           .where(eq(appSettings.id, 1))
@@ -185,6 +203,7 @@ export class ConnectionsService {
             googleKeySetAt: null,
             googleKeySetBy: null,
             aiProvider: "anthropic",
+            ...(stranded ? { aiModel: aiModelsFor("anthropic")[0] } : {}),
             updatedAt: new Date(),
             updatedBy: actor.id,
           })
@@ -196,7 +215,8 @@ export class ConnectionsService {
   }
 
   /**
-   * The Test button: one tiny Claude request, and a look at each Google API.
+   * The Test button: one tiny request to each model, and a look at each
+   * Google API.
    *
    * Each line stands on its own, so the owner sees which of the console steps
    * is still missing rather than one red light for all of them. Nothing is
@@ -210,14 +230,24 @@ export class ConnectionsService {
     }
 
     const region = row?.region || "global";
-    const model: AiModel =
-      AI_MODELS.find((offered) => offered === row?.model) ?? AI_MODELS[0];
+    // Each line asks its own kind: the stored model when it is of that kind,
+    // otherwise the one this app offers.
+    const stored = AI_MODELS.find((offered) => offered === row?.model);
+    const pick = (gemini: boolean): AiModel | undefined =>
+      stored && isGeminiModel(stored) === gemini
+        ? stored
+        : AI_MODELS.find((offered) => isGeminiModel(offered) === gemini);
+    const claude = pick(false);
+    const gemini = pick(true);
 
-    const [vertex, reads] = await Promise.all([
-      this.checkVertex(account, region, model),
+    const [models, reads] = await Promise.all([
+      Promise.all([
+        ...(claude ? [this.checkVertex(account, region, claude)] : []),
+        ...(gemini ? [this.checkGemini(account, region, gemini)] : []),
+      ]),
       this.checkReads(account),
     ]);
-    return { checks: [vertex, ...reads] };
+    return { checks: [...models, ...reads] };
   }
 
   private async checkVertex(
@@ -243,13 +273,51 @@ export class ConnectionsService {
       );
     } catch (error) {
       const detail = explainClaudeError(error, "vertex", { model, region });
-      if (!detail) {
-        this.log.warn(`Vertex check failed: ${String(error)}`);
-      }
+      // Every time, explained or not. Only the unexplained ones used to be
+      // written down, so a refusal the sentence above got wrong left nothing
+      // in the log to check it against. That cost the owner an evening
+      // (2 Oct 2026).
+      this.log.warn(`Claude on Vertex check failed: ${scrub(String(error))}`);
       return check(
         "vertex",
         false,
         detail ?? "Could not reach Google Cloud. Try again in a moment.",
+      );
+    }
+  }
+
+  private async checkGemini(
+    account: ServiceAccount,
+    region: string,
+    model: AiModel,
+  ): Promise<GoogleCheck> {
+    try {
+      // One small request, no retries. Not `maxOutputTokens: 1`, though:
+      // Gemini thinks first, out of the same allowance, and has to be left
+      // room to say anything at all.
+      await geminiClient(account, region, {
+        attempts: 1,
+        timeout: 30_000,
+      }).models.generateContent({
+        model,
+        contents: "hi",
+        config: { maxOutputTokens: 1_024 },
+      });
+      return check(
+        "gemini",
+        true,
+        `${AI_MODEL_LABELS[model]} answered, in the "${region}" region.`,
+      );
+    } catch (caught) {
+      const error = asGeminiError(caught);
+      this.log.warn(
+        `Gemini on Vertex check failed: ${scrub(error instanceof Error ? error.message : String(error))}`,
+      );
+      return check(
+        "gemini",
+        false,
+        explainGeminiError(error, { model, region }) ??
+          "Could not reach Google Cloud. Try again in a moment.",
       );
     }
   }

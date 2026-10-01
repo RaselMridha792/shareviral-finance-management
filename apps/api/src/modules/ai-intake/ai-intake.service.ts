@@ -11,7 +11,10 @@ import {
   AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
+  aiModelGoesWith,
+  aiModelProviderProblem,
   hasPermission,
+  isGeminiModel,
   todayInDhaka,
   type AiAvailability,
   type AiBatch,
@@ -36,8 +39,17 @@ import {
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
-import { explainClaudeError, type ClaudeClient } from "./claude-errors";
+import { explainClaudeError } from "./claude-errors";
+import { geminiModel } from "./gemini";
+import { GeminiError, explainGeminiError } from "./gemini-errors";
 import {
+  claudeModel,
+  type ModelCallResult,
+  type ModelTool,
+  type TurnModel,
+} from "./model-turn";
+import {
+  geminiClient,
   openServiceAccount,
   vertexClient,
   type ServiceAccount,
@@ -68,7 +80,7 @@ import {
 } from "../../db/schema";
 
 /** Used to check a key before the settings row is known to be readable. */
-const DEFAULT_MODEL = "claude-opus-5";
+const DEFAULT_MODEL: AiModel = "claude-opus-5";
 
 /**
  * How many times the model may look something up before it has to answer.
@@ -95,6 +107,13 @@ const MAX_LOOKUPS = 12;
  * what a short answer costs.
  */
 const MAX_ANSWER_TOKENS = 8_000;
+
+/**
+ * Gemini's requests: tried three times in all on a busy or failing Google,
+ * as the Anthropic client does on its own, and given up on after ten minutes
+ * — a long statement is read for most of that.
+ */
+const GEMINI_TURN = { attempts: 3, timeout: 600_000 };
 
 @Injectable()
 export class AiIntakeService {
@@ -144,12 +163,14 @@ export class AiIntakeService {
       .where(eq(appSettings.id, 1))
       .limit(1);
 
-    const model = (AI_MODELS as readonly string[]).includes(row?.model ?? "")
-      ? (row.model as AiModel)
-      : DEFAULT_MODEL;
     const dataAccess = (row?.dataAccess ?? "full") as AiDataAccess;
     const provider: AiProvider =
       row?.provider === "vertex" ? "vertex" : "anthropic";
+    // A model this app does not offer, or one that cannot be reached this way
+    // (the column has no check of its own), is read as the default.
+    const offered = AI_MODELS.find((known) => known === row?.model);
+    const model =
+      offered && aiModelGoesWith(offered, provider) ? offered : DEFAULT_MODEL;
     const route = {
       provider,
       google: openServiceAccount(row?.google),
@@ -182,13 +203,24 @@ export class AiIntakeService {
 
   /** Model, data access and the way to Claude. No key is touched here. */
   async updateSettings(input: UpdateAiSettingsInput, actor: AuthenticatedUser) {
+    const stored = await this.storedKey();
+
     // Google Cloud with no Google key would switch the assistant off for
     // everybody on one click. The screen does not offer it; this is the rule.
-    if (input.provider === "vertex" && !(await this.storedKey()).google) {
+    if (input.provider === "vertex" && !stored.google) {
       throw new BadRequestException(
         "Add the Google Cloud key under Settings → Connections first.",
       );
     }
+
+    // Gemini through an Anthropic key is not a thing that exists. Whichever
+    // of the two was not sent is the stored one, so the row never holds a
+    // pair nothing could answer.
+    const problem = aiModelProviderProblem(
+      input.model ?? stored.model,
+      input.provider ?? stored.provider,
+    );
+    if (problem) throw new BadRequestException(problem);
 
     await this.audit.mutate({
       action: "settings_change",
@@ -200,7 +232,7 @@ export class AiIntakeService {
           input.model ? "model to " + input.model : null,
           input.dataAccess ? "data access to " + input.dataAccess : null,
           input.provider
-            ? "way to Claude to " + AI_PROVIDER_LABELS[input.provider]
+            ? "way to the model to " + AI_PROVIDER_LABELS[input.provider]
             : null,
         ]
           .filter(Boolean)
@@ -406,6 +438,18 @@ export class AiIntakeService {
     const reply = await this.think(input, actor).catch(
       async (error: unknown) => {
         const { provider, model, region } = await this.storedKey();
+
+        if (error instanceof GeminiError) {
+          // Google's own words, every time, whether or not they could be
+          // explained. `scrub` has already cut anything secret out of them.
+          this.log.warn(
+            `Google Cloud refused a Gemini turn (${error.status ?? error.kind}): ${error.message}`,
+          );
+          throw new ServiceUnavailableException(
+            `${explainGeminiError(error, { model, region })} The ordinary forms all still work.`,
+          );
+        }
+
         const detail = explainClaudeError(error, provider, { model, region });
         if (!detail || !(error instanceof Anthropic.APIError)) throw error;
 
@@ -451,8 +495,8 @@ export class AiIntakeService {
     input: AiIntakeRequest,
     actor: AuthenticatedUser,
   ): Promise<AiIntakeReply> {
-    const client = await this.anthropic();
-    const { model, dataAccess } = await this.storedKey();
+    const model = await this.model();
+    const { dataAccess } = await this.storedKey();
     const context = await this.context();
     // After the cache breakpoint, deliberately: a new correction landing must
     // not throw away a 6,000-token prefix that has not changed.
@@ -483,14 +527,7 @@ export class AiIntakeService {
     const recent = input.messages.slice(-60);
     while (recent.length && recent[0].role !== "user") recent.shift();
 
-    const messages: Anthropic.MessageParam[] = (
-      recent.length ? recent : input.messages.slice(-1)
-    ).map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    const tools: Anthropic.Tool[] = [
+    const tools: ModelTool[] = [
       ...lookupTools,
       ...(attachment ? AI_ATTACHMENT_TOOLS : []),
       {
@@ -501,56 +538,30 @@ export class AiIntakeService {
       },
     ];
 
-    for (let round = 0; round <= MAX_LOOKUPS; round++) {
-      const response = await client.messages.create({
-        model,
-        max_tokens: MAX_ANSWER_TOKENS,
-        /**
-         * Two blocks, and the breakpoint between them is the point.
-         *
-         * Everything up to the mark is identical on every turn of every
-         * conversation, so after the first request it is read from cache at
-         * about a tenth of the price. Tools are rendered before `system`, so
-         * one mark on the last stable block covers those too. What follows it
-         * — today, who is asking, the file, the draft so far — is cheap and
-         * changes constantly, which is exactly why it is after.
-         *
-         * Note this pays for itself inside a single conversation: the write
-         * costs a quarter more than a plain request, and the second turn
-         * already reads it back.
-         */
-        system: [
-          {
-            type: "text",
-            text: this.stablePrompt(context, dataAccess),
-            cache_control: { type: "ephemeral" },
-          },
-          {
-            type: "text",
-            text: this.turnPrompt(
-              actor,
-              corrections,
-              input.target,
-              input.draft,
-              attachment ? this.attachments.describe(attachment) : null,
-            ),
-          },
-        ],
-        messages,
-        tools,
-        // On the last round it must stop looking and answer.
-        tool_choice:
-          round === MAX_LOOKUPS
-            ? { type: "tool", name: "answer" }
-            : { type: "any" },
-      });
+    // The same turn for either model; how it is put to each is the adapter's
+    // business — see model-turn.ts.
+    const conversation = model.converse({
+      stablePrompt: this.stablePrompt(context, dataAccess),
+      turnPrompt: this.turnPrompt(
+        actor,
+        corrections,
+        input.target,
+        input.draft,
+        attachment ? this.attachments.describe(attachment) : null,
+      ),
+      messages: recent.length ? recent : input.messages.slice(-1),
+      tools,
+      maxTokens: MAX_ANSWER_TOKENS,
+    });
 
-      const calls = response.content.filter((c) => c.type === "tool_use");
+    for (let round = 0; round <= MAX_LOOKUPS; round++) {
+      // On the last round it must stop looking and answer.
+      const calls = await conversation.ask(
+        round === MAX_LOOKUPS ? "answer" : undefined,
+      );
       const answer = calls.find((c) => c.name === "answer");
 
-      if (answer) {
-        return this.normalise(answer.input as Record<string, unknown>);
-      }
+      if (answer) return this.normalise(answer.input);
 
       if (!calls.length) {
         throw new ServiceUnavailableException(
@@ -558,12 +569,8 @@ export class AiIntakeService {
         );
       }
 
-      messages.push({ role: "assistant", content: response.content });
-
-      const results: Anthropic.ToolResultBlockParam[] = [];
+      const results: ModelCallResult[] = [];
       for (const call of calls) {
-        const args = (call.input ?? {}) as Record<string, unknown>;
-
         // The two lists are dispatched separately on purpose — see
         // AI_ATTACHMENT_TOOLS. One reads the books under this person's
         // permissions; the other reads a file under their ownership.
@@ -571,19 +578,14 @@ export class AiIntakeService {
           AI_ATTACHMENT_TOOL_NAMES.includes(call.name) && input.attachmentId
             ? await this.attachments.runTool(
                 call.name,
-                args,
+                call.input,
                 input.attachmentId,
                 actor,
               )
-            : await this.tools.run(call.name, args, actor);
-        results.push({
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: result.text,
-          is_error: !result.ok,
-        });
+            : await this.tools.run(call.name, call.input, actor);
+        results.push({ call, text: result.text, ok: result.ok });
       }
-      messages.push({ role: "user", content: results });
+      conversation.tell(results);
     }
 
     throw new ServiceUnavailableException(
@@ -604,22 +606,20 @@ export class AiIntakeService {
   async readPdf(
     buffer: Buffer,
   ): Promise<{ headers: string[]; rows: RawRow[] }> {
-    const [client, { model }] = await Promise.all([
-      this.anthropic(),
-      this.storedKey(),
-    ]);
-    return readPdfStatement(client, model, buffer);
+    return readPdfStatement(await this.model(), buffer);
   }
 
   /**
    * Built per call rather than cached: the key can change from Settings at any
    * moment, and a cached client would go on using the old one until a restart.
    *
-   * Through Google Cloud when Settings says so (#131): the same model and the
-   * same requests, sent to Vertex AI with the Connections service account.
+   * Through Google Cloud when Settings says so (#131): the same requests, sent
+   * to Vertex AI with the Connections service account. There the model
+   * decides who is asked — Claude, or Gemini (2 Oct 2026), each through its
+   * own adapter and with nothing else different.
    */
-  private async anthropic(): Promise<ClaudeClient> {
-    const { key, provider, google, region } = await this.storedKey();
+  private async model(): Promise<TurnModel> {
+    const { key, provider, google, region, model } = await this.storedKey();
 
     if (provider === "vertex") {
       if (!google) {
@@ -627,7 +627,9 @@ export class AiIntakeService {
           "The assistant is set to reach Claude through Google Cloud, and no Google Cloud key has been added. A Super Admin can add one under Settings → Connections, or use the ordinary form.",
         );
       }
-      return vertexClient(google, region);
+      return isGeminiModel(model)
+        ? geminiModel(geminiClient(google, region, GEMINI_TURN), model)
+        : claudeModel(vertexClient(google, region), model);
     }
 
     if (!key) {
@@ -635,7 +637,7 @@ export class AiIntakeService {
         "The assistant is not switched on. A Super Admin can add an API key under Settings, or use the ordinary form.",
       );
     }
-    return new Anthropic({ apiKey: key });
+    return claudeModel(new Anthropic({ apiKey: key }), model);
   }
 
   /**

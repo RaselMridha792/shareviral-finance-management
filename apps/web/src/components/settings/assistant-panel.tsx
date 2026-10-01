@@ -8,12 +8,14 @@ import {
   AI_DATA_ACCESS,
   AI_DATA_ACCESS_DETAIL,
   AI_DATA_ACCESS_LABELS,
-  AI_MODELS,
   AI_MODEL_DETAIL,
   AI_MODEL_LABELS,
   AI_PROVIDERS,
   AI_PROVIDER_DETAIL,
   AI_PROVIDER_LABELS,
+  aiModelGoesWith,
+  aiModelsFor,
+  isGeminiModel,
   type AiAvailability,
   type AiDataAccess,
   type AiModel,
@@ -61,7 +63,11 @@ export function AssistantPanel() {
   const provider: AiProvider = status?.provider ?? "anthropic";
   /** Where a question's data goes, named for the warning below. */
   const destination =
-    provider === "vertex" ? "Google Cloud (Claude on Vertex AI)" : "Anthropic";
+    provider === "vertex"
+      ? `Google Cloud (${isGeminiModel(model) ? "Gemini" : "Claude"} on Vertex AI)`
+      : "Anthropic";
+  /** Gemini is Google's own, so the list depends on the way chosen. */
+  const models = aiModelsFor(provider);
   const anthropicInUse = provider === "anthropic";
   const access: AiDataAccess =
     status?.dataAccess && status.dataAccess !== "off"
@@ -158,23 +164,29 @@ export function AssistantPanel() {
 
       <Card>
         <CardHeader
-          title="How it reaches Claude"
+          title="How it reaches the model"
           icon={ArrowsSplitIcon}
-          description="The same model and the same assistant either way; only the bill and the account checks differ."
+          description="The same assistant either way; the bill, the account checks and the models on offer differ."
         />
         <CardBody className="flex flex-col gap-3">
           <Field
-            label="Reach Claude through"
+            label="Reach the model through"
             hint={AI_PROVIDER_DETAIL[provider]}
           >
             <Select
               value={provider}
               disabled={saving}
-              onChange={(event) =>
+              onChange={(event) => {
+                const next = event.target.value as AiProvider;
+                // A model the new way cannot reach changes with it, in the
+                // same update: Gemini on an Anthropic key is refused.
                 void changeSettings({
-                  provider: event.target.value as AiProvider,
-                })
-              }
+                  provider: next,
+                  ...(aiModelGoesWith(model, next)
+                    ? {}
+                    : { model: aiModelsFor(next)[0] }),
+                });
+              }}
             >
               {AI_PROVIDERS.map((option) => (
                 <option
@@ -377,8 +389,8 @@ export function AssistantPanel() {
             <div className="flex items-start gap-3 rounded-lg bg-warning/10 px-4 py-3">
               <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
               <p className="text-sm text-muted-foreground">
-                Real figures from your books will be sent to {destination}{" "}
-                when somebody asks a question. Each lookup still runs as the person
+                Real figures from your books will be sent to {destination} when
+                somebody asks a question. Each lookup still runs as the person
                 asking, so nobody sees more through the assistant than they
                 would by clicking — and pay is unreachable either way.
               </p>
@@ -386,7 +398,7 @@ export function AssistantPanel() {
           ) : null}
 
           <Field label="Which model answers" hint={AI_MODEL_DETAIL[model]}>
-            {AI_MODELS.length > 1 ? (
+            {models.length > 1 ? (
               <Select
                 value={model}
                 disabled={saving}
@@ -394,7 +406,7 @@ export function AssistantPanel() {
                   void changeSettings({ model: event.target.value as AiModel })
                 }
               >
-                {AI_MODELS.map((option) => (
+                {models.map((option) => (
                   <option key={option} value={option}>
                     {AI_MODEL_LABELS[option]}
                   </option>
