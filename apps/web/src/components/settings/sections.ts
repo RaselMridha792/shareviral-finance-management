@@ -7,6 +7,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimpl
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
+import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
@@ -45,6 +46,7 @@ export type SettingsSectionId =
   | "audit"
   | "trashed"
   | "assistant"
+  | "connections"
   | "email"
   | "notifications"
   | "appearance";
@@ -141,8 +143,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "assistant",
     label: "Assistant",
     icon: RobotIcon,
-    hint: "Anthropic API key",
+    hint: "Anthropic or Google Cloud",
     description: "The optional assistant that fills forms from a sentence.",
+    group: "Integrations",
+    permission: "settings.write",
+  },
+  // The Google Cloud service account (#131): Claude through Vertex AI, and
+  // the Sheets and Docs shared with it. Super Admin's, like the Anthropic key.
+  {
+    id: "connections",
+    label: "Connections",
+    icon: PlugsConnectedIcon,
+    hint: "Google Cloud",
+    description:
+      "Outside services the app reaches with a key — Google Cloud for Claude, Sheets and Docs.",
     group: "Integrations",
     permission: "settings.write",
   },

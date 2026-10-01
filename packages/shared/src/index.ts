@@ -31,3 +31,4 @@ export * from "./tax.ts";
 export * from "./reports.ts";
 export * from "./statement.ts";
 export * from "./appearance.ts";
+export * from "./connections.ts";

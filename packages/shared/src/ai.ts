@@ -126,10 +126,36 @@ export const AI_MODEL_DETAIL: Record<AiModel, string> = {
     "The only model offered here. On the same test conversations the cheaper ones invented an account nobody had named; this one asked instead.",
 };
 
+/**
+ * How the assistant reaches Claude: an Anthropic key, or Google Cloud.
+ *
+ * The owner, 1 Oct 2026: Anthropic would not answer until the account's
+ * identity was verified, and the owner's NID did not get through. Through
+ * Google Cloud (Vertex AI) it is the same model and the same assistant; the
+ * billing and the checks are Google's. The key for that is the service account
+ * under Settings → Connections, which also reads shared Sheets and Docs.
+ */
+export const AI_PROVIDERS = ["anthropic", "vertex"] as const;
+export const aiProviderSchema = z.enum(AI_PROVIDERS);
+export type AiProvider = z.infer<typeof aiProviderSchema>;
+
+export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
+  anthropic: "Anthropic key",
+  vertex: "Google Cloud",
+};
+
+export const AI_PROVIDER_DETAIL: Record<AiProvider, string> = {
+  anthropic:
+    "Straight to Anthropic, with the API key below. Anthropic bills it and runs its own account checks.",
+  vertex:
+    "Through Vertex AI, with the service account under Settings → Connections. Google bills it; the model and the assistant are the same.",
+};
+
 export const updateAiSettingsSchema = z
   .strictObject({
     model: aiModelSchema.optional(),
     dataAccess: aiDataAccessSchema.optional(),
+    provider: aiProviderSchema.optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
 export type UpdateAiSettingsInput = z.infer<typeof updateAiSettingsSchema>;
@@ -378,6 +404,14 @@ export type AiAvailability = {
   fromEnvironment?: boolean;
   model?: AiModel;
   dataAccess?: AiDataAccess;
+  /**
+   * Which way Claude is reached. `keyHint` and the two beside it always
+   * describe the Anthropic key, whichever is chosen — the Google one is
+   * described by Settings → Connections.
+   */
+  provider?: AiProvider;
+  /** Whether a Google Cloud key is stored, so the choice can be offered. */
+  googleKeySet?: boolean;
 };
 
 /**

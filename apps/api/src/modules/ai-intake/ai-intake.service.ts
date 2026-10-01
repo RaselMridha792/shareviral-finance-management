@@ -8,6 +8,7 @@ import {
 import {
   AI_BATCH_MAX_ROWS,
   AI_MODELS,
+  AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
   hasPermission,
@@ -21,6 +22,7 @@ import {
   type AiKeyResult,
   type AiMessage,
   type AiModel,
+  type AiProvider,
   type AiTarget,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
@@ -34,6 +36,12 @@ import {
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
+import { explainClaudeError, type ClaudeClient } from "./claude-errors";
+import {
+  openServiceAccount,
+  vertexClient,
+  type ServiceAccount,
+} from "../connections/google";
 import { allFieldReferences, pairedFields } from "./field-reference";
 import {
   CORRECTION_PERMISSION,
@@ -115,6 +123,10 @@ export class AiIntakeService {
     setBy: string | null;
     model: AiModel;
     dataAccess: AiDataAccess;
+    /** Which way Claude is reached, and — for Google — with what, and where. */
+    provider: AiProvider;
+    google: ServiceAccount | null;
+    region: string;
   }> {
     const [row] = await this.db.client
       .select({
@@ -123,6 +135,9 @@ export class AiIntakeService {
         setBy: users.fullName,
         model: appSettings.aiModel,
         dataAccess: appSettings.aiDataAccess,
+        provider: appSettings.aiProvider,
+        google: appSettings.googleServiceAccount,
+        region: appSettings.vertexRegion,
       })
       .from(appSettings)
       .leftJoin(users, eq(appSettings.anthropicKeySetBy, users.id))
@@ -133,6 +148,13 @@ export class AiIntakeService {
       ? (row.model as AiModel)
       : DEFAULT_MODEL;
     const dataAccess = (row?.dataAccess ?? "full") as AiDataAccess;
+    const provider: AiProvider =
+      row?.provider === "vertex" ? "vertex" : "anthropic";
+    const route = {
+      provider,
+      google: openServiceAccount(row?.google),
+      region: row?.region || "global",
+    };
 
     const fromSettings = open(row?.sealed);
     if (fromSettings) {
@@ -143,6 +165,7 @@ export class AiIntakeService {
         setBy: row?.setBy ?? null,
         model,
         dataAccess,
+        ...route,
       };
     }
 
@@ -153,11 +176,20 @@ export class AiIntakeService {
       setBy: null,
       model,
       dataAccess,
+      ...route,
     };
   }
 
-  /** Model and data access. The key is not touched here. */
+  /** Model, data access and the way to Claude. No key is touched here. */
   async updateSettings(input: UpdateAiSettingsInput, actor: AuthenticatedUser) {
+    // Google Cloud with no Google key would switch the assistant off for
+    // everybody on one click. The screen does not offer it; this is the rule.
+    if (input.provider === "vertex" && !(await this.storedKey()).google) {
+      throw new BadRequestException(
+        "Add the Google Cloud key under Settings → Connections first.",
+      );
+    }
+
     await this.audit.mutate({
       action: "settings_change",
       entityTable: "app_settings",
@@ -167,6 +199,9 @@ export class AiIntakeService {
         [
           input.model ? "model to " + input.model : null,
           input.dataAccess ? "data access to " + input.dataAccess : null,
+          input.provider
+            ? "way to Claude to " + AI_PROVIDER_LABELS[input.provider]
+            : null,
         ]
           .filter(Boolean)
           .join(" and "),
@@ -176,6 +211,7 @@ export class AiIntakeService {
           .select({
             model: appSettings.aiModel,
             dataAccess: appSettings.aiDataAccess,
+            provider: appSettings.aiProvider,
           })
           .from(appSettings)
           .where(eq(appSettings.id, 1))
@@ -188,6 +224,7 @@ export class AiIntakeService {
           .set({
             ...(input.model ? { aiModel: input.model } : {}),
             ...(input.dataAccess ? { aiDataAccess: input.dataAccess } : {}),
+            ...(input.provider ? { aiProvider: input.provider } : {}),
             updatedAt: new Date(),
             updatedBy: actor.id,
           })
@@ -200,30 +237,49 @@ export class AiIntakeService {
 
   async availability(): Promise<AiAvailability> {
     const stored = await this.storedKey();
+    const route = {
+      provider: stored.provider,
+      googleKeySet: Boolean(stored.google),
+    };
 
-    if (!stored.key) {
+    // The Anthropic key's own description, whichever way Claude is reached:
+    // the Assistant settings still show that key, and may switch back to it.
+    const anthropicKey = stored.key
+      ? {
+          keyHint: hint(stored.key),
+          setAt: stored.setAt ? stored.setAt.toISOString() : null,
+          setBy: stored.setBy,
+          fromEnvironment: stored.fromEnvironment,
+        }
+      : { keyHint: null, setAt: null, setBy: null, fromEnvironment: false };
+
+    const unavailable =
+      stored.provider === "vertex"
+        ? stored.google
+          ? null
+          : "The assistant is set to reach Claude through Google Cloud, and no Google Cloud key has been added. A Super Admin can add one under Settings → Connections. Everything the assistant would do can be done on the ordinary forms."
+        : stored.key
+          ? null
+          : "No API key has been set, so the assistant cannot run. A Super Admin can add one under Settings. Everything the assistant would do can be done on the ordinary forms.";
+
+    if (unavailable) {
       return {
         configured: false,
-        reason:
-          "No API key has been set, so the assistant cannot run. A Super Admin can add one under Settings. Everything the assistant would do can be done on the ordinary forms.",
-        keyHint: null,
-        setAt: null,
-        setBy: null,
-        fromEnvironment: false,
+        reason: unavailable,
+        ...anthropicKey,
         model: stored.model,
         dataAccess: "off",
+        ...route,
       };
     }
 
     return {
       configured: true,
       reason: null,
-      keyHint: hint(stored.key),
-      setAt: stored.setAt ? stored.setAt.toISOString() : null,
-      setBy: stored.setBy,
-      fromEnvironment: stored.fromEnvironment,
+      ...anthropicKey,
       model: stored.model,
       dataAccess: stored.dataAccess,
+      ...route,
     };
   }
 
@@ -343,29 +399,25 @@ export class AiIntakeService {
      * That reads as *this app is broken*, and sends them looking in exactly
      * the wrong place. The cause is nearly always something they can fix in a
      * couple of minutes, and only if they are told what it is.
+     *
+     * Through Google Cloud the same holds, in Google's terms — see
+     * claude-errors.ts.
      */
-    const reply = await this.think(input, actor).catch((error: unknown) => {
-      if (!(error instanceof Anthropic.APIError)) throw error;
+    const reply = await this.think(input, actor).catch(
+      async (error: unknown) => {
+        const { provider, model, region } = await this.storedKey();
+        const detail = explainClaudeError(error, provider, { model, region });
+        if (!detail || !(error instanceof Anthropic.APIError)) throw error;
 
-      const detail =
-        error.status === 401
-          ? "Anthropic rejected the API key. A Super Admin can replace it under Settings."
-          : error.status === 403 ||
-              /identity verification/i.test(error.message ?? "")
-            ? "Anthropic needs the account verified before it will answer. Whoever owns the key can do that at console.anthropic.com; nothing needs changing here."
-            : error.status === 429
-              ? "The Anthropic account is over its rate limit, or has no credit left."
-              : error.status >= 500
-                ? "Anthropic is not answering at the moment. Try again shortly."
-                : `Anthropic said: ${error.message}`;
-
-      this.log.warn(
-        `Anthropic refused a turn (${error.status}): ${error.message}`,
-      );
-      throw new ServiceUnavailableException(
-        `${detail} The ordinary forms all still work.`,
-      );
-    });
+        // The message and the status only: neither carries the key.
+        this.log.warn(
+          `${provider === "vertex" ? "Google Cloud" : "Anthropic"} refused a turn (${error.status ?? "no status"}): ${error.message}`,
+        );
+        throw new ServiceUnavailableException(
+          `${detail} The ordinary forms all still work.`,
+        );
+      },
+    );
 
     // Written after the answer, not before: a turn that failed leaves no
     // half-conversation in the history, and a question that was never answered
@@ -562,9 +614,22 @@ export class AiIntakeService {
   /**
    * Built per call rather than cached: the key can change from Settings at any
    * moment, and a cached client would go on using the old one until a restart.
+   *
+   * Through Google Cloud when Settings says so (#131): the same model and the
+   * same requests, sent to Vertex AI with the Connections service account.
    */
-  private async anthropic(): Promise<Anthropic> {
-    const { key } = await this.storedKey();
+  private async anthropic(): Promise<ClaudeClient> {
+    const { key, provider, google, region } = await this.storedKey();
+
+    if (provider === "vertex") {
+      if (!google) {
+        throw new ServiceUnavailableException(
+          "The assistant is set to reach Claude through Google Cloud, and no Google Cloud key has been added. A Super Admin can add one under Settings → Connections, or use the ordinary form.",
+        );
+      }
+      return vertexClient(google, region);
+    }
+
     if (!key) {
       throw new ServiceUnavailableException(
         "The assistant is not switched on. A Super Admin can add an API key under Settings, or use the ordinary form.",

@@ -13,6 +13,7 @@ import { AccountsModule } from "./modules/accounts/accounts.module";
 import { ScheduleModule } from "@nestjs/schedule";
 
 import { AiIntakeModule } from "./modules/ai-intake/ai-intake.module";
+import { ConnectionsModule } from "./modules/connections/connections.module";
 import { EmailModule } from "./modules/email/email.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { TrashModule } from "./modules/trash/trash.module";
@@ -80,6 +81,7 @@ import { VendorsModule } from "./modules/vendors/vendors.module";
     ReportsModule,
     AuditLogModule,
     AiIntakeModule,
+    ConnectionsModule,
     EmailModule,
     NotificationsModule,
     TrashModule,

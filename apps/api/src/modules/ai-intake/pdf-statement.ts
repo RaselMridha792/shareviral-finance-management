@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { ClaudeClient } from "./claude-errors";
 import { BadRequestException } from "@nestjs/common";
 
 import type { RawRow } from "../imports/row-parser";
@@ -76,7 +76,7 @@ cannot catch by reading.`;
 const MAX_OUTPUT_TOKENS = 32_000;
 
 export async function readPdfStatement(
-  client: Anthropic,
+  client: ClaudeClient,
   model: string,
   buffer: Buffer,
 ): Promise<{ headers: string[]; rows: RawRow[] }> {

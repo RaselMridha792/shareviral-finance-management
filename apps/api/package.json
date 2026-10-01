@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
+    "@anthropic-ai/vertex-sdk": "^0.20.2",
     "@finance/shared": "*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -43,6 +44,7 @@
     "cookie-parser": "^1.4.7",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
+    "google-auth-library": "^10.9.1",
     "helmet": "^8.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

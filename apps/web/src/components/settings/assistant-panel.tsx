@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { ArrowsSplitIcon } from "@phosphor-icons/react/dist/ssr/ArrowsSplit";
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { ProhibitIcon } from "@phosphor-icons/react/dist/ssr/Prohibit";
 import {
@@ -10,9 +11,13 @@ import {
   AI_MODELS,
   AI_MODEL_DETAIL,
   AI_MODEL_LABELS,
+  AI_PROVIDERS,
+  AI_PROVIDER_DETAIL,
+  AI_PROVIDER_LABELS,
   type AiAvailability,
   type AiDataAccess,
   type AiModel,
+  type AiProvider,
 } from "@finance/shared";
 import {
   CircleAlert,
@@ -24,6 +29,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -52,6 +58,11 @@ export function AssistantPanel() {
   const [saved, setSaved] = useState(false);
 
   const model: AiModel = status?.model ?? "claude-opus-5";
+  const provider: AiProvider = status?.provider ?? "anthropic";
+  /** Where a question's data goes, named for the warning below. */
+  const destination =
+    provider === "vertex" ? "Google Cloud (Claude on Vertex AI)" : "Anthropic";
+  const anthropicInUse = provider === "anthropic";
   const access: AiDataAccess =
     status?.dataAccess && status.dataAccess !== "off"
       ? status.dataAccess
@@ -60,6 +71,7 @@ export function AssistantPanel() {
   async function changeSettings(input: {
     model?: AiModel;
     dataAccess?: AiDataAccess;
+    provider?: AiProvider;
   }) {
     setSaving(true);
     setError(null);
@@ -146,22 +158,79 @@ export function AssistantPanel() {
 
       <Card>
         <CardHeader
+          title="How it reaches Claude"
+          icon={ArrowsSplitIcon}
+          description="The same model and the same assistant either way; only the bill and the account checks differ."
+        />
+        <CardBody className="flex flex-col gap-3">
+          <Field
+            label="Reach Claude through"
+            hint={AI_PROVIDER_DETAIL[provider]}
+          >
+            <Select
+              value={provider}
+              disabled={saving}
+              onChange={(event) =>
+                void changeSettings({
+                  provider: event.target.value as AiProvider,
+                })
+              }
+            >
+              {AI_PROVIDERS.map((option) => (
+                <option
+                  key={option}
+                  value={option}
+                  // Google Cloud with no Google key would switch the
+                  // assistant off for everybody; the API refuses it too.
+                  disabled={option === "vertex" && !status?.googleKeySet}
+                >
+                  {AI_PROVIDER_LABELS[option]}
+                  {option === "vertex" && !status?.googleKeySet
+                    ? " — add the key under Connections first"
+                    : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {!status?.googleKeySet ? (
+            <p className="text-sm text-muted-foreground">
+              To go through Google Cloud, add its key under{" "}
+              <Link
+                href="/settings?tab=connections"
+                className="text-primary hover:underline"
+              >
+                Settings → Connections
+              </Link>{" "}
+              first.
+            </p>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
           title="Anthropic API key"
           icon={KeyIcon}
-          description="Needed for the assistant, and nothing else."
+          description={
+            anthropicInUse
+              ? "Needed for the assistant, and nothing else."
+              : "Not in use while the assistant goes through Google Cloud."
+          }
           action={
-            status?.configured ? (
+            status?.keyHint && anthropicInUse ? (
               <Badge tone="positive">
                 <CircleCheck className="size-3" />
                 Switched on
               </Badge>
+            ) : status?.keyHint ? (
+              <Badge tone="neutral">Saved, not in use</Badge>
             ) : (
               <Badge tone="neutral">Off</Badge>
             )
           }
         />
         <CardBody className="flex flex-col gap-4">
-          {status?.configured ? (
+          {status?.keyHint ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted px-4 py-3">
               <div>
                 <p className="num text-sm font-medium">{status.keyHint}</p>
@@ -190,7 +259,7 @@ export function AssistantPanel() {
 
           <form onSubmit={save} className="flex flex-col gap-4">
             <Field
-              label={status?.configured ? "Replace it" : "Paste the key"}
+              label={status?.keyHint ? "Replace it" : "Paste the key"}
               hint={
                 <>
                   Starts with <code>sk-ant-</code>. It is checked against
@@ -236,7 +305,9 @@ export function AssistantPanel() {
 
             {saved ? (
               <p className="rounded-lg bg-positive/10 px-3 py-2 text-sm text-positive">
-                Saved and working. The Assistant screen is available now.
+                {anthropicInUse
+                  ? "Saved and working. The Assistant screen is available now."
+                  : "Saved and working. Choose Anthropic key above to use it."}
               </p>
             ) : null}
 
@@ -251,7 +322,11 @@ export function AssistantPanel() {
                 ) : (
                   <Sparkles className="size-4" />
                 )}
-                {status?.configured ? "Replace the key" : "Switch it on"}
+                {status?.keyHint
+                  ? "Replace the key"
+                  : anthropicInUse
+                    ? "Switch it on"
+                    : "Save the key"}
               </Button>
 
               <a
@@ -272,7 +347,7 @@ export function AssistantPanel() {
         <CardHeader
           title="What leaves the building"
           icon={ArrowSquareOutIcon}
-          description="Anything the assistant is given is sent to Anthropic to be turned into a sentence. This decides how much that is."
+          description={`Anything the assistant is given is sent to ${destination} to be turned into a sentence. This decides how much that is.`}
         />
         <CardBody className="flex flex-col gap-4">
           <Field
@@ -302,8 +377,8 @@ export function AssistantPanel() {
             <div className="flex items-start gap-3 rounded-lg bg-warning/10 px-4 py-3">
               <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
               <p className="text-sm text-muted-foreground">
-                Real figures from your books will be sent to Anthropic when
-                somebody asks a question. Each lookup still runs as the person
+                Real figures from your books will be sent to {destination}{" "}
+                when somebody asks a question. Each lookup still runs as the person
                 asking, so nobody sees more through the assistant than they
                 would by clicking — and pay is unreachable either way.
               </p>

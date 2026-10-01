@@ -18,6 +18,7 @@ import {
 import { aiApi } from "@/lib/ai";
 import { emailApi, trashApi } from "@/lib/api-client";
 import { auditApi } from "@/lib/audit";
+import { connectionsApi } from "@/lib/connections";
 import { usersApi } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { useRailCompact } from "@/components/layout/sidebar-state";
@@ -95,6 +96,18 @@ function useBadges(role: Role | undefined) {
           put(
             "assistant",
             status.configured
+              ? { text: "On", tone: "positive" }
+              : { text: "Off", tone: "off" },
+          ),
+        )
+        .catch(() => {});
+    if (allowed("connections"))
+      connectionsApi
+        .google()
+        .then((google) =>
+          put(
+            "connections",
+            google.configured
               ? { text: "On", tone: "positive" }
               : { text: "Off", tone: "off" },
           ),

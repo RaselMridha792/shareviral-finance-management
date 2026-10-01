@@ -11,6 +11,7 @@ import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
+import { ConnectionsPanel } from "./connections-panel";
 import { EmailPanel } from "./email-panel";
 import { NotificationsPanel } from "./notifications-panel";
 import { SecurityPanel } from "./security-panel";
@@ -99,6 +100,7 @@ export function SettingsScreen({
       {tab === "audit" && canReadAudit ? <AuditPanel /> : null}
       {tab === "trashed" ? <TrashPanel /> : null}
       {tab === "assistant" && canWriteSettings ? <AssistantPanel /> : null}
+      {tab === "connections" && canWriteSettings ? <ConnectionsPanel /> : null}
       {tab === "email" && canWriteSettings ? <EmailPanel /> : null}
       {tab === "notifications" && canWriteSettings ? (
         <NotificationsPanel />
