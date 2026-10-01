@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 130 | **Schema: Google Cloud for the Assistant — the provider, the sealed service-account key, the region** | **done** — pushed alone, step 1 of the Google brief |
 | 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — deployed 1 Oct |
 | 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — deployed 1 Oct (with 127 and the deploy config, one run); the secret is set on the server |
 | 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — deployed 1 Oct |
@@ -107,6 +108,43 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 130. Schema: Google Cloud for the Assistant — 1 Oct 2026
+
+Step 1 of `docs/briefs/2026-10-01-google-connections.md` (Claude through
+Vertex AI, Sheets and Docs through a service account), alone in its own push
+as the brief and CLAUDE.md ask. No screen changes; nothing reads the new
+columns yet.
+
+- **`deploy/sql/2026-10-01-google-connections.sql`** adds to `app_settings`:
+  - `ai_provider` text, `'anthropic'` by default, checked to
+    `'anthropic' | 'vertex'` (`app_settings_ai_provider_check`, defined inside
+    `ADD COLUMN IF NOT EXISTS`, so in this file only and never redefined);
+  - `google_service_account` (to be sealed with secret-box, as
+    `anthropic_api_key` is), `google_key_set_at`, `google_key_set_by`;
+  - `vertex_region` text, `'global'` by default.
+- **Drizzle** (`db/schema/settings.ts`): the same five, and the check.
+- **Kept out of sight from the start**, because the moment the column is in
+  Drizzle, `GET /settings` would carry it to every role's browser:
+  - `googleServiceAccount` and its set-at/set-by pair are in
+    `SettingsService`'s `SECRET_COLUMNS`;
+  - `googleServiceAccount` is in the audit log's `SECRET_FIELDS`.
+
+**Proved:**
+- `node .sql.mjs` against Neon: the five columns with their defaults, the
+  existing row reads `anthropic` / `global` / no key, and an update to
+  `'openai'` is refused by the check. A second run changes nothing.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (124 + 342)
+  pass, each on its own exit code.
+
+**Next (step 2, its own session):** Settings → Connections, and `anthropic()`
+returning `AnthropicVertex` when the provider is `vertex`. The brief has the
+details, including the two new dependencies and the lock-file warning.
+
+**Seen, not touched (for the owner to schedule):** `resendApiKey` is not in
+`SECRET_COLUMNS` or the audit's `SECRET_FIELDS`. It is sealed, but its
+ciphertext reaches every signed-in browser through `GET /settings`, and a key
+change would put it in an audit row. A two-line fix, in a session of its own.
 
 ## 129. Bank Advice: a routing number of any length, the zeros the file's — 1 Oct 2026
 
