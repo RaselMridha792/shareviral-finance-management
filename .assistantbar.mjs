@@ -16,6 +16,11 @@
  *      a sheet of staff carried over to the letter
  *   D. a PDF bank statement                         — every row, every figure
  *   E. a question that takes three look-ups         — the books' own figures
+ *   F. the owner's own three messages, 2 Oct 2026   — a balance read back in
+ *      the way it was asked; a transfer between our accounts drafted as a
+ *      transfer, with no rate written that nobody gave; nothing said to be
+ *      recorded; and, the rate given, a draft the form will take
+ *      (docs/briefs/2026-10-02-assistant-complete-drafts.md)
  *
  * The invention cases run RUNS times each (six: "two of six" is how the bar
  * was first failed); the rest LIGHT times (two).
@@ -106,6 +111,11 @@ const [{ balance: bankBalance }] = await q(
     where a.name = $1 and a.deleted_at is null group by a.id`,
   [BANK],
 );
+// The other end of the owner's transfer: any other taka account of ours.
+const OTHER = (await q(`select name from accounts where is_active and deleted_at is null and currency <> 'USD' and name <> $1 order by name limit 1`, [BANK]))[0]?.name;
+if (!OTHER) throw new Error("The local books need a second taka account for the transfer cases.");
+/** AI_DRAFT_READY_LINE, in packages/shared/src/ai.ts. */
+const READY = "Draft ready — check every line, then press Save. Nothing is recorded yet.";
 
 /* ------------------------------------------------------------------------ */
 /*  The files                                                               */
@@ -242,6 +252,19 @@ const says = (text, figure) => figuresIn(text).some((n) => Math.abs(n - Number(f
 const same = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 const amountIs = (value, expected) => value === undefined || Math.abs(Number(String(value).replace(/,/g, "")) - expected) < 0.005;
 const hasAccount = (draft) => "accountName" in draft || "accountId" in draft;
+/** "Recorded", said before anybody pressed Save — in any of the ways it is written here. */
+const claimsDone = (text) => /\b(?:recorded|saved|transferred|done)\b|(?:record|save|transfer|entry)\w*\s+(?:ta\s+)?(?:kor(?:e)?(?:ch+i|si)|korlam|kore\s*di|hoye\s*ge|kora\s+hoye)|করেছি|হয়েছে|হয়ে গেছে/i.test(text.replace(READY, ""));
+/** Bangla letters. The taka sign sits in the same block and is not one. */
+const banglaScript = (text) => /[অ-হা-ৌৎড়-ৣ]/.test(text);
+/** The transfer the owner asked for, as a draft: both ends ours, nothing made up. */
+const transferWrong = (reply, amount) =>
+  [
+    reply.target === "transfer" ? null : `drafted as ${reply.target}`,
+    same(reply.draft.fromAccountName, BANK) ? null : `from ${reply.draft.fromAccountName}`,
+    same(reply.draft.toAccountName, OTHER) ? null : `to ${reply.draft.toAccountName}`,
+    amountIs(reply.draft.amount, amount) ? null : `amount ${reply.draft.amount}`,
+    "categoryName" in reply.draft || "counterparty" in reply.draft ? "gave it a category or a counterparty" : null,
+  ].filter(Boolean);
 
 /** Asked to record something with no account named: it asks. */
 const noAccount = (line, amount) => async () => {
@@ -423,6 +446,61 @@ const CASES = [
       // A zero is said in words as often as in digits; only the figures are held to.
       const missing = Object.entries(wanted).filter(([, figure]) => Number(figure) !== 0 && !says(said, figure));
       return { pass: !missing.length, note: missing.length ? `missing ${missing.map(([k, v]) => `${k} ${v}`).join(", ")}` : "every figure as the books have it", said };
+    },
+  },
+
+  /*
+   * The owner's own messages on the live site, 2 Oct 2026, with two accounts
+   * these books have. The brief asked that it "must not ask for a USD rate";
+   * the transfer form and its schema require one on every entry (the owner's
+   * rule, transactions.ts), so what is held to here is that it never WRITES
+   * a rate nobody gave — it asks, once.
+   */
+  {
+    id: "F1", runs: LIGHT, name: "'koto taka ache akhon?' - the balance, in the way it was asked",
+    run: async () => {
+      const { reply, failed } = await talk([`${BANK} account a koto taka ache akhon?`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        says(said, bankBalance) ? null : `wanted ${bankBalance}`,
+        banglaScript(said) ? "answered in Bangla script to Bangla in Latin letters" : null,
+        claimsDone(said) ? "said something was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "the books' figure, in Latin letters", said };
+    },
+  },
+  {
+    id: "F2", runs: RUNS, name: "'1 lakh taka transfer koro' - a transfer, no rate made up, nothing 'recorded'",
+    run: async () => {
+      const { reply, failed } = await talk([`1 lakh taka transfer koro ${BANK} theke ${OTHER} accounts a`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        ...transferWrong(reply, 100000),
+        "usdRate" in reply.draft ? `wrote a rate nobody gave: ${reply.draft.usdRate}` : null,
+        reply.missingFields.length ? null : "offered Save with the rate still unknown",
+        claimsDone(said) ? "said it was recorded" : null,
+        banglaScript(said) ? "answered in Bangla script" : null,
+        reply.nextQuestion && (said.match(/\?/g) ?? []).length > 1 ? "asked more than one question" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : `a transfer; asked for ${reply.missingFields.join(", ")}`, said };
+    },
+  },
+  {
+    id: "F3", runs: LIGHT, name: "the transfer, the rate given - a draft the form will take",
+    run: async () => {
+      const { reply, failed } = await talk([`1 lakh taka transfer koro ${BANK} theke ${OTHER} accounts a, aaj`, "aajker rate 121.5"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        ...transferWrong(reply, 100000),
+        Number(reply.draft.usdRate) === 121.5 ? null : `rate ${reply.draft.usdRate}`,
+        reply.missingFields.length ? `still asking for ${reply.missingFields.join(", ")}` : null,
+        reply.missingFields.length || said === READY ? null : "the line under the draft is not the app's own",
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "ready, with the app's own line under it", said };
     },
   },
 ];

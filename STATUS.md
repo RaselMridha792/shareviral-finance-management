@@ -158,6 +158,11 @@ whatever is missing, one question at a time, then fills in an ordinary editable
 form. It holds no tools and cannot write. Saving posts to the same endpoint the
 manual form posts to, so permissions, validation and the audit trail apply
 identically. It never supplies a USD rate: that is always asked for.
+It drafts money out, money in, a transfer between two of our own accounts, a
+vendor, a team member and a TDS challan. Whether a draft is complete is the
+code's finding, not the model's (2 Oct 2026): every draft is parsed with the
+schema its Save uses, its account and category names looked up in the books,
+before Save is offered — and the line under a ready draft is the app's own.
 
 Switched on from **Settings → Assistant**: a Super Admin pastes an Anthropic
 key and the screen becomes available, with no redeploy. The key is checked

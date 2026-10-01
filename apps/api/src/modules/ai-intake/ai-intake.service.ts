@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import {
   AI_BATCH_MAX_ROWS,
+  AI_DRAFT_READY_LINE,
   AI_MODELS,
   AI_PROVIDER_LABELS,
   AI_TARGETS,
@@ -29,7 +30,8 @@ import {
   type AiTarget,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
-import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
 import {
@@ -54,7 +56,27 @@ import {
   vertexClient,
   type ServiceAccount,
 } from "../connections/google";
-import { allFieldReferences, pairedFields } from "./field-reference";
+import {
+  NAME_FIELDS,
+  allFieldReferences,
+  pairedFields,
+  type NameField,
+} from "./field-reference";
+import {
+  askFor,
+  bareName,
+  categoryLabels,
+  categoryMatches,
+  checkDraft,
+  claimsItIsDone,
+  knowsField,
+  nameOf,
+  namesIn,
+  tidyDraft,
+  underHeading,
+  type NameMatch,
+  type NameMatches,
+} from "./draft-check";
 import {
   CORRECTION_PERMISSION,
   diffDraft,
@@ -114,6 +136,17 @@ const MAX_ANSWER_TOKENS = 8_000;
  * — a long statement is read for most of that.
  */
 const GEMINI_TURN = { attempts: 3, timeout: 600_000 };
+
+/*
+ * What is said in place of a model's sentence that claimed something had been
+ * recorded. Nothing is, until a person presses a button — see `settle`.
+ */
+const NOTHING_RECORDED_LINE =
+  "Nothing has been recorded. I can only draft an entry for you to check and save — tell me what to record.";
+const BATCH_LINE =
+  "Check every row in the table, then save. Nothing is recorded yet.";
+const PLAN_LINE =
+  "Ready to stage. Send to Import shows every row before anything is recorded.";
 
 @Injectable()
 export class AiIntakeService {
@@ -561,7 +594,14 @@ export class AiIntakeService {
       );
       const answer = calls.find((c) => c.name === "answer");
 
-      if (answer) return this.normalise(answer.input);
+      if (answer) {
+        return this.settle(
+          this.normalise(answer.input),
+          context.accounts.map((account) => account.name),
+          // A draft was on the table when this was asked.
+          Boolean(input.target || Object.keys(input.draft ?? {}).length),
+        );
+      }
 
       if (!calls.length) {
         throw new ServiceUnavailableException(
@@ -649,18 +689,24 @@ export class AiIntakeService {
    */
   private async context() {
     const [categoryRows, accountRows, vendorRows] = await Promise.all([
+      // Not a deleted one: it stays `is_active`, and the ledger refuses it.
       this.db.client
         .select({
+          id: categories.id,
           name: categories.name,
           kind: categories.kind,
           parentId: categories.parentId,
         })
         .from(categories)
-        .where(eq(categories.isActive, true))
+        .where(and(eq(categories.isActive, true), isNull(categories.deletedAt)))
         .limit(200),
 
       this.db.client
-        .select({ name: accounts.name })
+        .select({
+          name: accounts.name,
+          type: accounts.type,
+          currency: accounts.currency,
+        })
         .from(accounts)
         .where(and(eq(accounts.isActive, true), isNull(accounts.deletedAt)))
         .limit(50),
@@ -671,6 +717,21 @@ export class AiIntakeService {
         .where(and(eq(vendors.isActive, true), isNull(vendors.deletedAt)))
         .limit(200),
     ]);
+
+    // Two sub-categories may share a name under different headings; those
+    // are listed as "Heading › Name", which `named()` reads back.
+    const headings = new Map(
+      categoryRows
+        .filter((c) => c.parentId === null)
+        .map((c) => [c.id, c.name]),
+    );
+    const leaves = categoryRows
+      .filter((c) => c.parentId !== null)
+      .map((c) => ({
+        ...c,
+        parentName: headings.get(c.parentId ?? "") ?? null,
+      }));
+    const labels = categoryLabels(leaves);
 
     return {
       // Only leaf categories — a payment filed against a heading rather than a
@@ -684,13 +745,19 @@ export class AiIntakeService {
        * could not be saved at all. The separator makes the boundary obvious:
        * everything before the dash is the name to send back.
        */
-      categories: categoryRows
-        .filter((c) => c.parentId !== null)
-        .map(
-          (c) =>
-            `${c.name}  —  ${c.kind === "in" ? "money in" : c.kind === "out" ? "money out" : "either"}`,
-        ),
-      accounts: accountRows.map((a) => a.name),
+      categories: leaves.map(
+        (c) =>
+          `${labels.get(c.id) ?? c.name}  —  ${c.kind === "in" ? "money in" : c.kind === "out" ? "money out" : "either"}`,
+      ),
+      /**
+       * Each account with what kind it is, after the same dash the
+       * categories use — so "cash theke" finds the cash account, and a
+       * dollar account is known for one before a transfer is drafted on it.
+       */
+      accounts: accountRows.map((a) => ({
+        name: a.name,
+        line: `${a.name}  —  ${a.type.replace(/_/g, " ")}${a.currency === "USD" ? ", dollar account" : ""}`,
+      })),
       vendors: vendorRows.map((v) => v.name),
     };
   }
@@ -716,10 +783,22 @@ export class AiIntakeService {
    * The order changed; not one word of what it is told did.
    */
   private stablePrompt(
-    context: { categories: string[]; accounts: string[]; vendors: string[] },
+    context: {
+      categories: string[];
+      accounts: Array<{ name: string; line: string }>;
+      vendors: string[];
+    },
     dataAccess: AiDataAccess,
   ): string {
-    return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: record what somebody describes, and answer questions about what is already recorded. You save nothing yourself.
+    return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: draft what somebody describes, for them to save, and answer questions about what is already recorded. You save nothing yourself.
+
+YOU DRAFT. A PERSON SAVES.
+Nothing you produce is in the books until somebody presses Save on the draft
+card. So never say, in any language, that something is recorded, saved,
+transferred, added, entered or done — no "recorded", no "record korechi", no
+"save hoye geche", no "done". It is not true, and they will believe it.
+When a draft is complete, say nothing about it. The app checks it against what
+the form accepts and writes the line under the draft itself.
 
 HOW TO WRITE
 Answer in one or two sentences. No greeting, no "I'd be happy to", no summary of
@@ -729,6 +808,13 @@ State a figure and where it came from. If you do not know, say what is missing
 in one line.
 Never invent a number, a date or a name. An amount nobody gave you is the single
 most damaging thing you can produce here.
+
+HOW THEY WRITE, AND HOW YOU ANSWER
+Most people here write Bangla in Latin letters with English mixed in:
+"ms/exprovia theke 1 lakh taka transfer koro". Answer the way they wrote —
+Bangla in Latin letters to that, Bangla script to Bangla script, English to
+English. Plain and short, the way a colleague at the next desk would say it:
+not formal Bangla, and not a form.
 
 WHAT THIS APP HOLDS
 - One ledger: every movement of money is IN or OUT of an account, with a date,
@@ -778,10 +864,17 @@ say what you see, say what you are unsure of, and ask. Do not guess a route
 through the app and describe it as though you had checked.
 
 WHERE A NEW RECORD BELONGS — decide this yourself, do not ask
-- Money paid or received, of any kind         -> transaction_out / transaction_in
-- A tool or subscription the company pays for -> vendor
-- Somebody who works here                     -> team_member
-- Tax deposited to the treasury, with challan -> tds_deposit
+- Money paid to or received from somebody else -> transaction_out / transaction_in
+- Money moved between two of OUR OWN accounts  -> transfer
+- A tool or subscription the company pays for  -> vendor
+- Somebody who works here                      -> team_member
+- Tax deposited to the treasury, with challan  -> tds_deposit
+A transfer is when BOTH ends are accounts listed under OUR ACCOUNTS below:
+"EXPROVIA theke Standard Chartered e 1 lakh". Nothing was spent and nobody was
+paid, so it has no category and no counterparty, and it is never
+transaction_out. Give fromAccountName and toAccountName, and do not ask what it
+was for. If only one end is one of our accounts, it is not a transfer: it is
+money going out or coming in.
 Salary is never recorded as a transaction: it comes from a payroll run. If
 somebody describes paying salaries, say so and point them at Payroll.
 Tax withheld belongs only on money going OUT. If a client deducted tax when
@@ -813,7 +906,7 @@ null and missingFields empty.`
 in one line that lookups are switched off in Settings, and answer nothing else.`
 }
 
-They write in Bangla, in English, or in both in one sentence. Answer in whichever they used. Bangla numerals and words for amounts are common: "pnach hajar" and "৫০০০" both mean 5000; "lakh" is 100,000; "crore" is 10,000,000.
+Bangla numerals and words for amounts are common: "pnach hajar" and "৫০০০" both mean 5000; "lakh" is 100,000; "crore" is 10,000,000.
 
 WHAT YOU CAN RECORD
 ${AI_TARGETS.map((t) => `- ${t}: ${AI_TARGET_LABELS[t]}`).join("\n")}
@@ -881,6 +974,9 @@ booking it as taka understates the entry more than a hundredfold. Ask what
 landed in taka, put the dollars in 'originalAmount' with 'originalCurrency'
 "USD", and ask for the rate the bank gave — it goes in 'fxRate' and the entry
 is refused without it.
+A transfer is the same: 'amount' is the taka. Only when one of the two accounts
+is marked "dollar account" do the dollars that moved go beside it, in
+'usdAmount' — ask for them, never work them out.
 
 DATES
 "aaj" is today, "kal" is yesterday for a past payment. Never guess a date
@@ -898,25 +994,41 @@ A FEW THINGS THE SCHEMA CANNOT SAY
 
 THE CATEGORIES THAT EXIST
 Send back ONLY the name — the part before the dash. "Electricity", never
-"Electricity  —  money out". If none fits, leave categoryName out.
+"Electricity  —  money out". Where two share a name they are written with
+their heading, "Office › Rent": send that back whole. Use a "money out" or
+"either" one for money going out and a "money in" or "either" one for money
+coming in. If none fits, leave categoryName out and ask which it should be: a
+payment cannot be saved without one.
 ${context.categories.join("\n") || "(none set up yet)"}
 
-ACCOUNTS: ${context.accounts.join(", ") || "(none)"}
+OUR ACCOUNTS
+The company's own accounts. As with a category, send back ONLY the name — the
+part before the dash. "M/S. EXPROVIA", never "M/S. EXPROVIA  —  bank".
+${context.accounts.map((account) => account.line).join("\n") || "(none)"}
+
 TOOLS AND SUBSCRIPTIONS ON FILE: ${context.vendors.join(", ") || "(none)"}
 These are for recognising what somebody is talking about — never to fill in a
 field on a transaction. A payment records who it went to in its description.
 
 HOW TO ASK
-Ask for ONE missing field at a time, in a short sentence. Do not list
-everything you still need; it reads like a form and they will stop.
+Say in a few words what you understood, then ask for ONE missing thing, in a
+short sentence: "EXPROVIA theke 5,000 taka, internet bill — kon category te
+jabe?" Do not list everything you still need; it reads like a form and they
+will stop.
+If what they said could be more than one account, category or person, do not
+pick one. Name the ones it could be, exactly as the books have them, and ask
+which.
 Never invent a value to fill a gap. An amount you were not told is the single
 most damaging thing you can produce here — leave it missing and ask.
 usdRate is one of these, and it is the easiest to get wrong: you know roughly
-what a dollar is worth and that is exactly why you must not write it. Every
-entry in this app carries the rate the person states for that day. Ask for it
-like any other missing field.
-When nothing is required is missing, set missingFields to [], nextQuestion to
-null, and write a one-sentence summary for them to check.`;
+what a dollar is worth and that is exactly why you must not write it. It is
+REQUIRED wherever the field list above says so — which is every entry that
+moves money, a payment, a receipt or a transfer, whatever currency the account
+is in: the company's rule is that each entry states the day's rate. Ask for it
+like any other missing field, last, and say in a few words that every entry
+carries one. Never ask for it where the list does not have it.
+When nothing required is missing, set missingFields to [] and leave
+nextQuestion and summary out.`;
   }
 
   /**
@@ -1042,6 +1154,132 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
           : null,
       importPlan: importPlanOf(raw.importPlan),
       batch: this.batchOf(raw.batch),
+    };
+  }
+
+  /**
+   * The answer, held to what the code can check (2 Oct 2026).
+   *
+   * `normalise` shapes what the model sent; this decides what it amounts to.
+   * Three things were the model's word and are now the code's, whichever
+   * model answers:
+   *
+   * - **Whether a draft is complete.** It is put through the schema its Save
+   *   will use, with its names looked up in the books — draft-check.ts. What
+   *   that refuses becomes `missingFields` and a question, so the card cannot
+   *   offer Save on a form the endpoint would turn away.
+   * - **Which account a name means.** One that matches several is asked
+   *   about, with the real ones listed, rather than quietly taken as the
+   *   first.
+   * - **The line under a ready draft.** `AI_DRAFT_READY_LINE`, always. The
+   *   model's own sentence is shown only as a question or as an answer, and
+   *   never when it says something has been recorded.
+   */
+  private async settle(
+    reply: AiIntakeReply,
+    accountNames: string[],
+    /** Whether the conversation had a draft on the table when asked. */
+    draftOpen: boolean,
+  ): Promise<AiIntakeReply> {
+    const said = reply.nextQuestion ?? reply.clarification ?? reply.summary;
+    const instead = (
+      summary: string,
+      from: AiIntakeReply = reply,
+    ): AiIntakeReply => {
+      // Not the sentence itself: it may quote a figure from the books.
+      this.log.warn(
+        "The model said something had been recorded; its sentence was replaced.",
+      );
+      return { ...from, nextQuestion: null, clarification: null, summary };
+    };
+
+    /*
+     * A table of rows and a file's plan are cards of their own, saved or
+     * staged by a button. Their sentence and their one-line note are held to
+     * the first person only: "3 of these are already recorded, so I left them
+     * out" is what the model is asked to say beside them.
+     */
+    if (reply.batch || reply.importPlan) {
+      const honest = (note: string | null) =>
+        note && claimsItIsDone(note, false) ? null : note;
+      const carded: AiIntakeReply = {
+        ...reply,
+        batch: reply.batch
+          ? { ...reply.batch, note: honest(reply.batch.note) }
+          : reply.batch,
+        importPlan: reply.importPlan
+          ? { ...reply.importPlan, note: honest(reply.importPlan.note) }
+          : reply.importPlan,
+      };
+      return said && claimsItIsDone(said, false)
+        ? instead(reply.batch ? BATCH_LINE : PLAN_LINE, carded)
+        : carded;
+    }
+
+    // With a draft on the table, "it has been recorded" is as untrue as "I
+    // recorded it" — and dropping the target is how a model says it is done.
+    if (!reply.target) {
+      return said && claimsItIsDone(said, draftOpen)
+        ? instead(NOTHING_RECORDED_LINE)
+        : reply;
+    }
+
+    const target = reply.target;
+    // A category goes one way, and the ledger refuses the other.
+    const way =
+      target === "transaction_in"
+        ? "in"
+        : target === "transaction_out"
+          ? "out"
+          : undefined;
+    const tidy = tidyDraft(reply.draft);
+    const matches: NameMatches = {};
+    for (const { field, said: name } of namesIn(target, tidy)) {
+      matches[field.name] = await this.named(field, name, way);
+    }
+    const checked = checkDraft(target, tidy, matches, accountNames);
+
+    // What the model itself still wants answered — less anything this record
+    // has no field for, which no answer could ever settle.
+    const asked = reply.missingFields
+      .map(nameOf)
+      .filter((field) => knowsField(target, field))
+      .filter((field) => !(field in checked.draft));
+    const missingFields = [
+      ...new Set([...checked.problems.map((p) => p.field), ...asked]),
+    ];
+
+    if (!missingFields.length) {
+      return {
+        ...reply,
+        draft: checked.draft,
+        missingFields,
+        nextQuestion: null,
+        clarification: null,
+        summary: AI_DRAFT_READY_LINE,
+      };
+    }
+
+    // Its own question, in the person's own register, when it has one. The
+    // code's otherwise: about the first thing the schema refused.
+    const own = reply.nextQuestion ?? reply.clarification;
+    const coded =
+      checked.problems[0]?.question ?? askFor(missingFields[0], target);
+    // With no question of its own, what it did say may be the answer to
+    // something asked along the way. It is kept, ahead of the question —
+    // unless it says the thing is done.
+    const aside =
+      !own && reply.summary && !claimsItIsDone(reply.summary, true)
+        ? `${reply.summary} `
+        : "";
+    return {
+      ...reply,
+      draft: checked.draft,
+      missingFields,
+      nextQuestion:
+        own && !claimsItIsDone(own, true) ? own : `${aside}${coded}`,
+      clarification: null,
+      summary: null,
     };
   }
 
@@ -1263,52 +1501,105 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
    */
   async resolve(draft: Record<string, unknown>) {
     const out: Record<string, unknown> = { ...draft };
+    const found: Partial<Record<NameField["name"], string>> = {};
 
-    const categoryName = bareName(
-      takeString(out, "categoryId") ?? takeString(out, "categoryName"),
-    );
-    if (categoryName) {
-      const [row] = await this.db.client
-        .select({ id: categories.id })
-        .from(categories)
-        .where(
-          and(
-            eq(categories.isActive, true),
-            or(
-              sql`lower(${categories.name}) = ${categoryName.toLowerCase()}`,
-              ilike(categories.name, `%${categoryName}%`),
-            ),
-          ),
-        )
-        .limit(1);
-      if (row) out.categoryId = row.id;
-      else {
-        delete out.categoryId;
-        throw new BadRequestException(
-          `There is no category called "${categoryName}". Pick one on the form.`,
-        );
+    for (const field of NAME_FIELDS) {
+      const inIdKey = takeString(out, field.id);
+      const name = bareName(takeString(out, field.name) ?? inIdKey);
+      if (!name) continue;
+
+      const matches = await this.named(field, name);
+      if (matches.length === 1) {
+        out[field.id] = matches[0].id;
+        found[field.name] = matches[0].name;
+        continue;
       }
+
+      /*
+       * Refused, both ways. An account nobody has was left unset, and the
+       * save then failed on "expected string, received undefined". And a name
+       * several accounts share was given to whichever the database returned
+       * first — real money in an account nobody chose.
+       */
+      throw new BadRequestException(
+        matches.length
+          ? `"${name}" could be ${matches.map((m) => m.name).join(", ")}. Type the full name of the one you mean.`
+          : `There is no ${field.kind} called "${name}". Type its name as the app has it.`,
+      );
     }
 
-    const accountName = bareName(takeString(out, "accountName"));
-    if (accountName) {
-      const [row] = await this.db.client
-        .select({ id: accounts.id })
-        .from(accounts)
-        .where(
-          and(
-            isNull(accounts.deletedAt),
-            or(
-              sql`lower(${accounts.name}) = ${accountName.toLowerCase()}`,
-              ilike(accounts.name, `%${accountName}%`),
-            ),
-          ),
-        )
-        .limit(1);
-      if (row) out.accountId = row.id;
+    // A transfer is described by its two accounts when nothing else was said
+    // — as the draft's check does, and for a row of a batch, which that
+    // check never saw.
+    const described =
+      typeof out.description === "string" && out.description.trim();
+    if (found.fromAccountName && found.toAccountName && !described) {
+      out.description = `Transfer from ${found.fromAccountName} to ${found.toAccountName}`;
     }
 
     return out;
+  }
+
+  /**
+   * What the books hold under a name: the one spelled exactly so, or else
+   * every one that contains it.
+   *
+   * Every one, not the first. The caller decides what several means — a
+   * question on a draft, a refusal on a save — and neither is "pick one".
+   */
+  private async named(
+    field: NameField,
+    name: string,
+    /** For a category: the direction of the entry it is wanted for. */
+    way?: "in" | "out",
+  ): Promise<NameMatch[]> {
+    if (field.kind === "account") {
+      const rows = await this.db.client
+        .select({
+          id: accounts.id,
+          name: accounts.name,
+          currency: accounts.currency,
+        })
+        .from(accounts)
+        .where(
+          and(isNull(accounts.deletedAt), ilike(accounts.name, `%${name}%`)),
+        )
+        .orderBy(accounts.name)
+        .limit(12);
+      const exact = rows.filter(
+        (row) => row.name.trim().toLowerCase() === name.toLowerCase(),
+      );
+      return exact.length ? exact : rows;
+    }
+
+    /*
+     * What the ledger itself will take, and nothing else: not a deleted
+     * category (it stays `is_active`, and is refused as "No such category"),
+     * and — when the direction is known — not one that goes the other way.
+     * A draft that named either read as ready and could not be saved.
+     */
+    const parent = alias(categories, "parent");
+    const rows = await this.db.client
+      .select({
+        id: categories.id,
+        name: categories.name,
+        parentId: categories.parentId,
+        parentName: parent.name,
+      })
+      .from(categories)
+      .leftJoin(parent, eq(parent.id, categories.parentId))
+      .where(
+        and(
+          eq(categories.isActive, true),
+          isNull(categories.deletedAt),
+          ilike(categories.name, `%${underHeading(name).leaf}%`),
+          way ? inArray(categories.kind, [way, "both"]) : undefined,
+        ),
+      )
+      .orderBy(categories.name)
+      .limit(50);
+
+    return categoryMatches(rows, name);
   }
 }
 
@@ -1425,12 +1716,13 @@ const REPLY_SCHEMA = {
     },
     nextQuestion: {
       type: "string",
-      description: "The single next question. Omit when nothing is missing.",
+      description:
+        "The single next question, after a few words of what you understood. Omit when nothing is missing.",
     },
     summary: {
       type: "string",
       description:
-        "One sentence describing the completed draft, for them to check.",
+        "The answer to something they asked about the books. Leave it out when you are drafting: the app writes the line under a draft itself.",
     },
     clarification: {
       type: "string",
@@ -1524,27 +1816,5 @@ function isPlaceholder(value: unknown): boolean {
 
   return ["unknown", "n/a", "na", "none", "null", "tbd", "-", "?"].includes(
     text.toLowerCase(),
-  );
-}
-
-/**
- * The name, with any annotation the model copied along with it removed.
- *
- * The prompt lists a category as "Electricity  —  money out" and an account by
- * its plain name, and a model asked for "the name" sometimes returns the whole
- * line. Refusing that is technically correct and useless: the conversation had
- * reached a complete draft and simply could not be saved. Trimming what the
- * prompt itself added is not guesswork — it is undoing our own formatting.
- *
- * A dash inside a real name survives, because only a spaced em-dash separator
- * and a trailing parenthetical are removed.
- */
-function bareName(value: string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  return (
-    value
-      .split(/\s+—\s+/)[0]
-      .replace(/\s*\((?:in|out|both|money in|money out|either)\)\s*$/i, "")
-      .trim() || undefined
   );
 }

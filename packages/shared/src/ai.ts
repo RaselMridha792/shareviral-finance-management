@@ -15,9 +15,19 @@ import { z } from "zod";
  * something typing could not.
  */
 
+/**
+ * `transfer` (2 Oct 2026) is money moved between two of our own accounts.
+ *
+ * It was missing, and the owner found out on the live site: asked to move a
+ * lakh from one of our accounts to another, the assistant had nowhere to put
+ * it, filed it as money going out, and produced a draft with no category that
+ * could not be saved. A transfer has no category and nobody was paid; it is
+ * the Money Transfer form's record, posted to that form's endpoint.
+ */
 export const AI_TARGETS = [
   "transaction_out",
   "transaction_in",
+  "transfer",
   "vendor",
   "team_member",
   "tds_deposit",
@@ -28,6 +38,7 @@ export type AiTarget = z.infer<typeof aiTargetSchema>;
 export const AI_TARGET_LABELS: Record<AiTarget, string> = {
   transaction_out: "Money going out",
   transaction_in: "Money coming in",
+  transfer: "Money moved between our own accounts",
   vendor: "A vendor",
   team_member: "Someone on the team",
   tds_deposit: "A TDS challan",
@@ -37,6 +48,7 @@ export const AI_TARGET_LABELS: Record<AiTarget, string> = {
 export const AI_TARGET_PERMISSION: Record<AiTarget, string> = {
   transaction_out: "transactions.write",
   transaction_in: "transactions.write",
+  transfer: "transactions.write",
   vendor: "vendors.write",
   team_member: "team.write",
   tds_deposit: "tds.write",
@@ -46,10 +58,19 @@ export const AI_TARGET_PERMISSION: Record<AiTarget, string> = {
 export const AI_TARGET_ENDPOINT: Record<AiTarget, string> = {
   transaction_out: "/transactions",
   transaction_in: "/transactions",
+  transfer: "/transactions/transfer",
   vendor: "/vendors",
   team_member: "/team-members",
   tds_deposit: "/tds/deposits",
 };
+
+/**
+ * The line under a draft that is ready to save. Written here, not by the
+ * model (2 Oct 2026): a model's own closing sentence said "transfer record
+ * korechi" about a draft nobody had saved.
+ */
+export const AI_DRAFT_READY_LINE =
+  "Draft ready — check every line, then press Save. Nothing is recorded yet.";
 
 /* -------------------------------------------------------------------------- */
 /*  What the assistant may see, and which model answers                        */
@@ -439,11 +460,18 @@ export type AiIntakeReply = {
   target: AiTarget | null;
   /** Understood so far, in the shape the real endpoint expects. */
   draft: Record<string, unknown>;
-  /** Required fields still unanswered. Empty means the draft is complete. */
+  /**
+   * Fields still unanswered. Empty means the draft is complete — and that is
+   * the API's finding, not the model's: every draft is put through the
+   * schema its Save will use before it is sent (draft-check.ts).
+   */
   missingFields: string[];
   /** The one question to ask next, or null when nothing is missing. */
   nextQuestion: string | null;
-  /** A sentence summarising the draft, for the confirmation step. */
+  /**
+   * An answer to something that was asked — or, under a draft that is ready,
+   * `AI_DRAFT_READY_LINE`. Never the model's own account of a draft.
+   */
   summary: string | null;
   /** Shown when the model could not tell what is being recorded. */
   clarification: string | null;

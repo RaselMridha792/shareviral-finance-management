@@ -33,6 +33,7 @@ export type LearnableField = (typeof LEARNABLE_FIELDS)[number];
 export const CORRECTION_PERMISSION: Record<AiTarget, Permission> = {
   transaction_in: "transactions.read",
   transaction_out: "transactions.read",
+  transfer: "transactions.read",
   vendor: "vendors.read",
   team_member: "team.read",
   tds_deposit: "tds.read",

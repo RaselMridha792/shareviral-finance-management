@@ -19,7 +19,7 @@ const CAPABILITIES = [
   {
     icon: PenLine,
     title: "Write it down",
-    body: "Money out or in, a new vendor, somebody joining, a TDS challan. It fills in the form; you check it and save.",
+    body: "Money out or in, a transfer between our accounts, a new vendor, somebody joining, a TDS challan. It fills in the form; you check it and save.",
   },
   {
     icon: Search,

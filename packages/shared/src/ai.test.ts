@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  AI_DRAFT_READY_LINE,
   AI_MODELS,
   AI_MODEL_PROVIDERS,
   AI_PROVIDERS,
+  AI_TARGETS,
+  AI_TARGET_ENDPOINT,
+  AI_TARGET_PERMISSION,
   aiModelGoesWith,
   aiModelProviderProblem,
   aiModelsFor,
@@ -75,5 +79,19 @@ describe("updateAiSettingsSchema", () => {
 
   it("still refuses an empty change", () => {
     assert.equal(updateAiSettingsSchema.safeParse({}).success, false);
+  });
+});
+
+describe("what the assistant can draft", () => {
+  it("drafts a transfer between our own accounts, for the transfer form's endpoint", () => {
+    assert.ok(AI_TARGETS.includes("transfer"));
+    assert.equal(AI_TARGET_ENDPOINT.transfer, "/transactions/transfer");
+    // The same permission the Money Transfer form's endpoint asks for.
+    assert.equal(AI_TARGET_PERMISSION.transfer, "transactions.write");
+  });
+
+  it("says under a ready draft that nothing is recorded yet", () => {
+    assert.match(AI_DRAFT_READY_LINE, /press Save/);
+    assert.match(AI_DRAFT_READY_LINE, /Nothing is recorded yet/);
   });
 });

@@ -3,6 +3,7 @@ import {
   createTeamMemberSchema,
   createTransactionSchema,
   createVendorSchema,
+  transferSchema,
   type AiTarget,
 } from "@finance/shared";
 import { z } from "zod";
@@ -28,10 +29,15 @@ import { z } from "zod";
  * no schema can express, stay in the prompt beside this.
  */
 
-/** The create schema behind each thing the assistant can draft. */
-const SCHEMAS: Record<AiTarget, z.ZodObject<z.ZodRawShape>> = {
+/**
+ * The create schema behind each thing the assistant can draft — the same one
+ * its endpoint validates with, which is why a draft is checked against it
+ * before it is offered for saving (draft-check.ts).
+ */
+export const TARGET_SCHEMAS: Record<AiTarget, z.ZodObject<z.ZodRawShape>> = {
   transaction_out: createTransactionSchema,
   transaction_in: createTransactionSchema,
+  transfer: transferSchema,
   vendor: createVendorSchema,
   team_member: createTeamMemberSchema,
   tds_deposit: createTdsDepositSchema,
@@ -45,25 +51,62 @@ const SCHEMAS: Record<AiTarget, z.ZodObject<z.ZodRawShape>> = {
  * figure in the right place. The id fields take uuids the model cannot know;
  * it gives names instead and `resolve()` looks them up.
  */
-const NOT_FOR_THE_MODEL = new Set([
+export const NOT_FOR_THE_MODEL = new Set([
   "direction",
   "accountId",
+  "fromAccountId",
+  "toAccountId",
   "categoryId",
   "vendorId",
   "teamMemberId",
+  "billingAccountId",
+  "defaultCategoryId",
   "createdVia",
 ]);
 
-/** Names the model supplies instead of the ids above. */
-const NAME_FIELDS: Record<string, string> = {
-  accountName: "the account's name, exactly as listed above",
-  categoryName: "the category's name, exactly as listed above",
-};
+/**
+ * Names the model supplies instead of ids: the name's field, the id it
+ * becomes, which list it is looked up in, and what the model is told.
+ */
+export const NAME_FIELDS = [
+  {
+    name: "accountName",
+    id: "accountId",
+    kind: "account",
+    note: "the account's name, exactly as listed above",
+  },
+  {
+    name: "categoryName",
+    id: "categoryId",
+    kind: "category",
+    note: "the category's name, exactly as listed above",
+  },
+  {
+    name: "fromAccountName",
+    id: "fromAccountId",
+    kind: "account",
+    note: "OUR account the money leaves — its name, exactly as listed above",
+  },
+  {
+    name: "toAccountName",
+    id: "toAccountId",
+    kind: "account",
+    note: "OUR account the money arrives in — its name, exactly as listed above",
+  },
+] as const;
+
+export type NameField = (typeof NAME_FIELDS)[number];
+
+/** The name fields a target's own schema has an id for. */
+export function nameFieldsFor(target: AiTarget): NameField[] {
+  const shape = TARGET_SCHEMAS[target].shape;
+  return NAME_FIELDS.filter((field) => field.id in shape);
+}
 
 type Described = { name: string; required: boolean; note: string };
 
 export function fieldReferenceFor(target: AiTarget): string {
-  const schema = SCHEMAS[target];
+  const schema = TARGET_SCHEMAS[target];
   const rows: Described[] = [];
 
   for (const [name, field] of Object.entries(schema.shape)) {
@@ -71,10 +114,21 @@ export function fieldReferenceFor(target: AiTarget): string {
     rows.push(describe(name, field as z.ZodType));
   }
 
-  for (const [name, note] of Object.entries(NAME_FIELDS)) {
-    if (target.startsWith("transaction") || target === "tds_deposit") {
-      rows.push({ name, required: name === "accountName", note });
-    }
+  /*
+   * A name where the schema has the id, and only there. Both were offered on
+   * a TDS challan, which has no category: the name became a `categoryId` the
+   * endpoint refuses as a key it does not know.
+   */
+  for (const field of nameFieldsFor(target)) {
+    rows.push({
+      name: field.name,
+      // A challan's account has always been asked for, though its schema
+      // leaves it optional: without one no ledger row is written.
+      required:
+        target === "tds_deposit" ||
+        describe(field.id, schema.shape[field.id] as z.ZodType).required,
+      note: field.note,
+    });
   }
 
   const width = Math.max(...rows.map((r) => r.name.length));
@@ -89,7 +143,7 @@ export function fieldReferenceFor(target: AiTarget): string {
 
 /** Every target's fields, for the one prompt that has to cover all of them. */
 export function allFieldReferences(): string {
-  return (Object.keys(SCHEMAS) as AiTarget[])
+  return (Object.keys(TARGET_SCHEMAS) as AiTarget[])
     .map((target) => `${target}\n${fieldReferenceFor(target)}`)
     .join("\n\n");
 }
@@ -118,12 +172,17 @@ export function pairedFields(): string {
     the other — "A foreign amount needs the rate that converted it". fxRate is
     what the bank actually converted at: taka landed ÷ foreign sent. Ask for it
     rather than working it out, because the rate somebody was given at cash-in
-    governs the whole month's reporting. (usdRate is a different, optional
-    field — a reference rate for reading taka in dollars, not a conversion that
-    happened.)
+    governs the whole month's reporting. (usdRate is a different field — the
+    day's reference rate for reading taka in dollars, not a conversion that
+    happened. It is asked for on its own, wherever the list marks it
+    REQUIRED.)
   * withheldTaxAmount needs billAmount beside it — the gross bill the tax came
     out of — and the bill must cover the amount paid plus that tax.
-  * withheldTaxAmount belongs only on money going out.`;
+  * withheldTaxAmount belongs only on money going out.
+  * chargeAmount and chargeUsd are one bank charge said two ways. Give one,
+    never both.
+  * On a transfer, fromAccountName and toAccountName must be two different
+    accounts.`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -190,6 +249,13 @@ function shapeOf(name: string, field: z.ZodType): string {
   }
   if (name === "originalCurrency")
     return 'the foreign currency code, e.g. "USD"';
+  // The other two that are dollars, and would read as taka or as plain text.
+  if (name === "usdAmount") {
+    return "the DOLLARS that moved — only when a dollar account is on either side. Digits only, 2 decimals.";
+  }
+  if (name === "chargeUsd") {
+    return "the bank's charge in DOLLARS, on a dollar entry. Digits only, 2 decimals.";
+  }
 
   // Case-sensitive on the suffixes: `/On$/i` also matches "descriptiON",
   // which had this describing the description as a date.

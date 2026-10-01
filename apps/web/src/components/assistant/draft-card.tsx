@@ -16,6 +16,13 @@ export const FIELD_LABELS: Record<string, string> = {
   categoryName: "Category",
   accountName: "Account",
   accountId: "Account",
+  // A transfer between our own accounts: the Money Transfer form's words.
+  fromAccountName: "From",
+  toAccountName: "To",
+  usdAmount: "Amount (USD)",
+  usdRate: "USD rate",
+  chargeAmount: "Bank charge",
+  chargeUsd: "Bank charge (USD)",
   billAmount: "Gross bill",
   withheldTaxAmount: "Tax withheld",
   fullName: "Name",
