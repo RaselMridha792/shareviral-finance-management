@@ -248,7 +248,7 @@ try {
     approve.status === 200 && row?.status === "approved" && Boolean(row?.applied_at) && after.length === 2 && after[0].t === `${YEAR}-02-28` && after[1].g === "76000.00" && after[1].f === `${YEAR}-03-01` && after[1].by === decider.id && row?.comp === (await q(`select id::text from compensation_history where team_member_id = $1 and effective_from = $2`, [A, `${YEAR}-03-01`]))[0]?.id,
     JSON.stringify(after),
   );
-  check("…and says March was built at the old figure", /March 2033 was built at the old figure/.test(approve.body?.notice ?? ""), approve.body?.notice);
+  check("…and says what March holds for her, and to build it again", /^March 2033 was built at ৳60,000\.00 for them — press Build list on it to use this figure\.$/.test(approve.body?.notice ?? ""), approve.body?.notice);
   const takeBack = await fin("POST", `/hr-requests/pay_change/${row.id}/decision`, { decision: "received" });
   check("an applied approval cannot be taken back (409)", takeBack.status === 409 && /cannot be taken back/.test(takeBack.body?.message ?? ""), msg(takeBack));
   const approvedStatus = (await hr("GET", `/hr-requests/pay-changes/status?externalIds=${P1}`)).body?.[0];
@@ -366,7 +366,7 @@ try {
     await page.waitForFunction(() => document.querySelector("[data-popup]")?.textContent.includes("What HR asked"), { timeout: 10000 });
     await until(() => page.evaluate(() => document.querySelector("[data-popup]")?.textContent.includes("History")));
     const popup = await page.evaluate(() => document.querySelector("[data-popup]").textContent);
-    check("a row opens everything: what HR asked, the salary before, where it lands, history", /Salary before/.test(popup) && /40,000\.00/.test(popup) && /Annual review/.test(popup) && /History/.test(popup), popup.slice(0, 160));
+    check("a row opens everything: what HR asked, the salary on file for its date, where it lands, history", /On file for that date/.test(popup) && /40,000\.00/.test(popup) && /Annual review/.test(popup) && /History/.test(popup), popup.slice(0, 160));
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "hrr-popup.png") });
     await page.click("[data-popup] [data-hrr-action='reject']");
     await page.waitForSelector("[data-hrr-submit]", { timeout: 10000 });

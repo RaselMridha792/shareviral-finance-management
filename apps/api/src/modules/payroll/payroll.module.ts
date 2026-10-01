@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { HrWebhookModule } from "../hr-webhook/hr-webhook.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { TdsModule } from "../tds/tds.module";
 import { PayrollOneOffsController } from "./one-offs.controller";
@@ -11,7 +12,7 @@ import { PayrollService } from "./payroll.service";
   // For the tax rule. Payroll works the deduction out; the rule itself is the
   // tax module's, so there is one place a rate can come from.
   // Notifications: a one-off from HR rings the bell (#125).
-  imports: [TdsModule, NotificationsModule],
+  imports: [TdsModule, NotificationsModule, HrWebhookModule],
   controllers: [PayrollController, PayrollOneOffsController],
   providers: [PayrollService, PayrollOneOffsService],
   exports: [PayrollService],

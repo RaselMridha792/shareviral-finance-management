@@ -8,6 +8,7 @@ import {
   formatIsoDate,
   formatMoney,
   todayInDhaka,
+  toMinorUnits,
   type Paginated,
 } from "@finance/shared";
 import { sql, type SQL } from "drizzle-orm";
@@ -16,6 +17,7 @@ import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
+import { HrWebhookService } from "../hr-webhook/hr-webhook.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { applyPendingOneOffs } from "../payroll/one-offs";
 import { PayrollService } from "../payroll/payroll.service";
@@ -28,6 +30,13 @@ import {
   type RequestState,
   type SubmitPayChangeInput,
 } from "./hr-requests.schemas";
+import { sheetNotice, type ReachedSheet } from "./sheet-notice";
+import {
+  iso,
+  readStatuses,
+  requestRowsSql,
+  type RequestStatus,
+} from "./request-rows";
 
 const MONTHS = [
   "January",
@@ -94,8 +103,20 @@ export type RequestRow = {
 export type RequestDetail = RequestRow & {
   /** A pay change: the figure in force before it. */
   previousAmount: string | null;
+  /**
+   * A pay change: the figure on file FOR its date and the day that figure
+   * starts, the one in force today, and the next change on file after its
+   * date — which is where an approved figure stops applying. The HR portal
+   * re-sends old revisions when the two apps disagree (its Brief 7 §6), and
+   * these are what tell the CFO it is a correction rather than a raise
+   * (#128).
+   */
+  onFileAmount: string | null;
+  onFileFrom: string | null;
+  currentAmount: string | null;
+  nextChangeOn: string | null;
   /** The salary sheets it reaches, with where each stands. */
-  sheets: { label: string; status: string }[];
+  sheets: ReachedSheet[];
   /** A spend: its budget. A budget: what has been spent against it. */
   budget: {
     categoryName: string | null;
@@ -112,18 +133,7 @@ export type RequestDetail = RequestRow & {
   history: { at: string; summary: string; byName: string | null }[];
 };
 
-/** What the HR portal reads back: the same shape for all four kinds. */
-export type RequestStatus = {
-  externalId: string;
-  state: RequestState;
-  /** The CFO's own words. */
-  note: string | null;
-  /** A name, not an id — the HR portal cannot resolve a finance user. */
-  decidedByName: string | null;
-  decidedAt: string | null;
-  /** When the money actually moved. */
-  appliedAt: string | null;
-};
+export type { RequestStatus } from "./request-rows";
 
 export type SubmitResult = {
   outcome: "created" | "amended" | "conflict";
@@ -165,6 +175,7 @@ export class HrRequestsService {
     private readonly notifications: NotificationsService,
     private readonly team: TeamMembersService,
     private readonly payroll: PayrollService,
+    private readonly webhook: HrWebhookService,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -302,90 +313,16 @@ export class HrRequestsService {
     kind: RequestKind,
     externalIds: string[],
   ): Promise<RequestStatus[]> {
-    if (externalIds.length === 0) return [];
-    const ids = sql.join(
-      externalIds.map((id) => sql`${id}::uuid`),
-      sql`, `,
-    );
-    const result = await this.db.client.execute(sql`
-      select r.external_id::text as "externalId", r.status,
-             r.status_note as "note", u.full_name as "decidedByName",
-             r.decided_at as "decidedAt", r.applied_at as "appliedAt",
-             r.before_approvals as "beforeApprovals"
-        from (${this.rowsSql()}) r
-        left join users u on u.id = r.decided_by
-       where r.kind = ${kind} and r.external_id in (${ids})`);
-    return (
-      result.rows as unknown as (Omit<RequestStatus, "state"> & {
-        status: string;
-        decidedAt: Date | string | null;
-        appliedAt: Date | string | null;
-      })[]
-    ).map(({ status, decidedAt, appliedAt, ...row }) => ({
-      externalId: row.externalId,
-      state: stateOf(status),
-      note: row.note,
-      decidedByName: row.decidedByName,
-      decidedAt: iso(decidedAt),
-      appliedAt: iso(appliedAt),
-    }));
+    return readStatuses(this.db.client, kind, externalIds);
   }
 
   /* ------------------------------------------------------------------ */
   /*  The page                                                           */
   /* ------------------------------------------------------------------ */
 
-  /**
-   * The four kinds as one relation: a row per request, the same columns.
-   * A spend that is paid reads as approved, and its payment day as the day
-   * the money moved.
-   */
+  /** The four kinds as one relation — `request-rows.ts`. */
   private rowsSql(): SQL {
-    return sql`
-      select 'pay_change'::text as kind, c.id, c.external_id,
-             m.full_name::text as subject, c.team_member_id,
-             c.gross_amount as amount, c.effective_from as effective_on,
-             c.change_reason::text as detail,
-             c.requested_by_name::text as requested_by_name,
-             c.hr_approved_by_name::text as hr_approved_by_name,
-             c.hr_approved_at, c.hr_note::text as hr_note,
-             c.status::text as status, c.status_note::text as status_note,
-             c.decided_by, c.decided_at, c.applied_at,
-             c.before_approvals, c.send_count, c.received_at,
-             false as paid
-        from compensation_requests c
-        join team_members m on m.id = c.team_member_id
-      union all
-      select 'one_off', o.id, o.external_id, m.full_name::text,
-             o.team_member_id, o.amount,
-             make_date(o.period_year, o.period_month, 1), o.note::text,
-             null::text, null::text, null::timestamptz, null::text,
-             o.status::text, o.status_note::text, o.decided_by, o.decided_at,
-             o.applied_at, o.before_approvals, o.send_count, o.received_at,
-             false
-        from payroll_one_offs o
-        join team_members m on m.id = o.team_member_id
-      union all
-      select 'budget', p.id, p.external_id, p.category_name::text, null::uuid,
-             p.amount, p.starts_on,
-             to_char(p.starts_on, 'DD/MM/YYYY') || ' to '
-               || to_char(p.ends_on, 'DD/MM/YYYY'),
-             p.recorded_by_name::text, null::text, null::timestamptz,
-             p.note::text, p.status::text, p.status_note::text, p.decided_by,
-             p.decided_at, null::timestamptz, false, p.send_count,
-             p.received_at, false
-        from hr_budget_periods p
-      union all
-      select 'spend', s.id, s.external_id, s.purpose::text, s.team_member_id,
-             s.amount, s.spent_on, s.employee_name::text,
-             s.recorded_by_name::text, s.hr_approved_by_name::text,
-             s.hr_approved_at, null::text,
-             case when s.status = 'paid' then 'approved' else s.status::text end,
-             s.status_note::text, s.decided_by, s.decided_at,
-             case when s.paid_on is not null
-                  then (s.paid_on::timestamp at time zone 'Asia/Dhaka') end,
-             false, s.send_count, s.received_at, s.status = 'paid'
-        from hr_budget_spends s`;
+    return requestRowsSql();
   }
 
   private select(where: SQL): SQL {
@@ -519,6 +456,10 @@ export class HrRequestsService {
     const row = this.shape(raw);
 
     let previousAmount: string | null = null;
+    let onFileAmount: string | null = null;
+    let onFileFrom: string | null = null;
+    let currentAmount: string | null = null;
+    let nextChangeOn: string | null = null;
     let sheets: RequestDetail["sheets"] = [];
     let budget: RequestDetail["budget"] = null;
     let transactionRef: string | null = null;
@@ -532,15 +473,52 @@ export class HrRequestsService {
          order by effective_from desc limit 1`);
       previousAmount =
         (before.rows[0] as { amount: string } | undefined)?.amount ?? null;
+      const onFile = await this.onFileFor(row.teamMemberId, row.effectiveOn);
+      onFileAmount = onFile?.amount ?? null;
+      onFileFrom = onFile?.from ?? null;
+      const figures = await this.db.client.execute(sql`
+        select
+          (select gross_amount::text from compensation_history
+            where team_member_id = ${row.teamMemberId}::uuid
+              and deleted_at is null
+              and effective_from <= (now() at time zone 'Asia/Dhaka')::date
+            order by effective_from desc limit 1) as "current",
+          (select min(effective_from)::text from compensation_history
+            where team_member_id = ${row.teamMemberId}::uuid
+              and deleted_at is null
+              and effective_from > ${row.effectiveOn}::date) as "nextOn"`);
+      const got = figures.rows[0] as
+        { current: string | null; nextOn: string | null } | undefined;
+      currentAmount = got?.current ?? null;
+      nextChangeOn = got?.nextOn ?? null;
     }
     if (kind === "pay_change" || kind === "one_off") {
+      /* A pay change reaches the months from its own until the next change
+         on file: payroll takes the latest figure starting on or before a
+         month's end, so from the next change's month on, that one applies
+         and this does not. */
+      /* With what each sheet holds for the person: a built line keeps the
+         figure it was built with (`sheetNotice`). */
       const reached = await this.db.client.execute(sql`
-        select label, status::text as status from payroll_runs
-         where deleted_at is null
-           and make_date(period_year, period_month, 1)
+        select r.label, r.status::text as status,
+               l.gross_amount::text as gross,
+               l.working_days as "workingDays"
+          from payroll_runs r
+          left join payroll_lines l
+            on l.payroll_run_id = r.id
+           and l.team_member_id = ${row.teamMemberId}::uuid
+         where r.deleted_at is null
+           and make_date(r.period_year, r.period_month, 1)
                ${kind === "pay_change" ? sql`>=` : sql`=`}
                date_trunc('month', ${row.effectiveOn}::date)::date
-         order by period_year, period_month`);
+           ${
+             kind === "pay_change" && nextChangeOn
+               ? sql`and (make_date(r.period_year, r.period_month, 1)
+                          + interval '1 month' - interval '1 day')::date
+                         < ${nextChangeOn}::date`
+               : sql``
+           }
+         order by r.period_year, r.period_month`);
       sheets = reached.rows as RequestDetail["sheets"];
     }
     if (kind === "spend" || kind === "budget") {
@@ -596,6 +574,10 @@ export class HrRequestsService {
     return {
       ...row,
       previousAmount,
+      onFileAmount,
+      onFileFrom,
+      currentAmount,
+      nextChangeOn,
       sheets,
       budget,
       transactionRef,
@@ -611,7 +593,8 @@ export class HrRequestsService {
    * Approve, refuse, hold, or put back to waiting. Only an approval writes
    * anything; an applied approval is final. Answers with the request as it
    * now stands and, where there is one, a sentence the CFO should read — a
-   * sheet already built, or already paid, at the old figure.
+   * sheet already built, or already paid, at another figure, or pay that
+   * does not change at all.
    */
   async decide(
     kind: RequestKind,
@@ -648,14 +631,28 @@ export class HrRequestsService {
     }
 
     let notice: string | null = null;
+    /* One-offs this approval put on a sheet — the one decided, and any other
+       approved one waiting for the same month and line. */
+    let alsoApplied: string[] = [];
     if (kind === "pay_change" && to === "approved") {
       notice = await this.approvePayChange(before, note, actor);
     } else {
       notice = await this.db.transaction(async (tx) => {
-        await this.setStatus(tx, kind, id, from, to, note, actor);
+        await this.setStatus(
+          tx,
+          kind,
+          id,
+          from,
+          before.sendCount,
+          to,
+          note,
+          actor,
+        );
         let said: string | null = null;
         if (kind === "one_off" && to === "approved") {
-          said = await this.putOneOffOnSheet(tx, before);
+          const put = await this.putOneOffOnSheet(tx, before);
+          said = put.said;
+          alsoApplied = put.applied;
         }
         await this.audit.record(tx, {
           action: "update",
@@ -668,6 +665,11 @@ export class HrRequestsService {
         return said;
       });
     }
+
+    /* Committed: the HR portal hears it now rather than at its next poll
+       (#128). A row copied in from before approvals has no id, and is
+       skipped — HR never sent it. */
+    this.webhook.notify(kind, [before.externalId, ...alsoApplied]);
 
     return { request: await this.get(kind, id), notice };
   }
@@ -685,11 +687,18 @@ export class HrRequestsService {
    * people deciding the same request at once, the second is told rather
    * than written over.
    */
+  /**
+   * Moves a request from the state it was read in — and only as it was read:
+   * HR's re-send keeps a waiting request waiting but changes what it asks
+   * for, and always moves its send count, so a re-send landing between the
+   * read and this update is refused rather than decided unseen.
+   */
   private async setStatus(
     tx: DbTransaction,
     kind: RequestKind,
     id: string,
     from: string,
+    sendCount: number,
     to: DecisionInput["decision"],
     note: string | null,
     actor: AuthenticatedUser,
@@ -704,10 +713,11 @@ export class HrRequestsService {
         decided_at = ${waiting ? sql`null` : sql`now()`},
         updated_at = now()
        where id = ${id}::uuid and status = ${from}
+         and send_count = ${sendCount}
        returning id`);
     if (result.rows.length === 0) {
       throw new ConflictException(
-        "Somebody decided this a moment ago. Open it again to see what they did.",
+        "Somebody decided this a moment ago, or HR sent it again. Open it again to see where it stands.",
       );
     }
   }
@@ -730,26 +740,60 @@ export class HrRequestsService {
         "pay_change",
         request.id,
         request.status,
+        request.sendCount,
         "approved",
         note,
         actor,
       );
     });
 
+    /*
+     * The figure already on file for that date, read now rather than when
+     * the pop-up was drawn, and inside the `try`: if it fails, the approval
+     * is undone like any other failure here, never left approved with no
+     * salary behind it.
+     *
+     * When a row starts ON that date with this same figure, the salary
+     * record is left exactly as it is (#128): rewriting it would change
+     * nothing anybody is paid, yet it would stamp the row with this request's
+     * reason and approver — and a joining-salary row stamped so stops
+     * following a corrected joining salary from HR (`followJoiningSalary`).
+     *
+     * Only on that date. The same figure on file from an EARLIER date is
+     * still written as a row of its own: it pays nothing different now, but
+     * it is what keeps this revision's figure when the earlier row is later
+     * corrected — skip it, and the order two requests are approved in would
+     * decide what somebody is paid.
+     */
+    let onFile: { id: string; amount: string; from: string } | null = null;
+    let unchanged = false;
+
     let compensationId: string;
     try {
-      const written = await this.team.setCompensation(
+      onFile = await this.onFileFor(
         request.teamMemberId as string,
-        {
-          grossAmount: request.amount,
-          effectiveFrom: request.effectiveOn,
-          changeReason:
-            request.detail?.slice(0, 200) ||
-            `Approved from HR's request (${request.requestedByName ?? "HR"})`,
-        },
-        actor,
+        request.effectiveOn,
       );
-      compensationId = (written as { id: string }).id;
+      unchanged =
+        onFile !== null &&
+        onFile.from === request.effectiveOn &&
+        toMinorUnits(onFile.amount) === toMinorUnits(request.amount);
+      if (unchanged && onFile) {
+        compensationId = onFile.id;
+      } else {
+        const written = await this.team.setCompensation(
+          request.teamMemberId as string,
+          {
+            grossAmount: request.amount,
+            effectiveFrom: request.effectiveOn,
+            changeReason:
+              request.detail?.slice(0, 200) ||
+              `Approved from HR's request (${request.requestedByName ?? "HR"})`,
+          },
+          actor,
+        );
+        compensationId = (written as { id: string }).id;
+      }
     } catch (error) {
       await this.db.client.execute(sql`
         update compensation_requests set
@@ -771,25 +815,57 @@ export class HrRequestsService {
         entityId: request.id,
         module: "hr-requests",
         isSensitive: true,
-        summary: this.decisionSummary(request, "approved", note, actor),
+        /* What the salary was, said once and kept: after a same-date
+           correction the row it overwrote is gone, and without this line
+           the history would read the correction as a raise. */
+        summary: this.decisionSummary(
+          request,
+          "approved",
+          note,
+          actor,
+          !onFile
+            ? " — no salary was on file for that date"
+            : unchanged
+              ? " — the same figure was already on file from that date, so the salary record was left as it was"
+              : onFile.from === request.effectiveOn
+                ? ` — replacing ${formatMoney(onFile.amount)} that was on file from that date`
+                : ` — was ${formatMoney(onFile.amount)} from ${formatIsoDate(onFile.from)}`,
+        ),
       });
     });
 
-    /* The sheets it reaches that were built — or paid — before it was. */
-    const built = request.sheets.filter((sheet) => sheet.status === "draft");
-    const settled = request.sheets.filter((sheet) => sheet.status !== "draft");
-    const said: string[] = [];
-    if (built.length) {
-      said.push(
-        `${built.map((sheet) => sheet.label).join(", ")} ${built.length === 1 ? "was" : "were"} built at the old figure — press Build list on ${built.length === 1 ? "it" : "each"} to use the new one.`,
+    /* What the sheets it reaches hold for them, where that is not this
+       figure — even when the record does not move, a sheet built before it
+       did still holds what it was built with. */
+    const sheets = sheetNotice(request.sheets, request.amount);
+    const andSheets = (said: string) => (sheets ? `${said} ${sheets}` : said);
+
+    if (unchanged) {
+      return andSheets(
+        "The salary on file for that date was already this figure, so the salary record was left as it was.",
       );
     }
-    if (settled.length) {
-      said.push(
-        `${settled.map((sheet) => sheet.label).join(", ")} ${settled.length === 1 ? "is" : "are"} already finalised or paid at the old figure; the difference is not paid unless HR sends it as a one-off.`,
+    /* The same figure from an earlier date: written above as a row of its
+       own, but the record's figure for those months does not move. */
+    if (
+      onFile &&
+      toMinorUnits(onFile.amount) === toMinorUnits(request.amount)
+    ) {
+      return andSheets(
+        `Pay does not change: the same figure was already on file from ${formatIsoDate(onFile.from)}. It is kept as a salary record of its own from ${formatIsoDate(request.effectiveOn)}.`,
       );
     }
-    return said.length ? said.join(" ") : null;
+    /* A later change starting in the same month decides that month — a
+       sheet takes the figure in force at the month's end — and every month
+       after it, so this figure reaches no sheet at all. */
+    if (
+      request.nextChangeOn &&
+      request.nextChangeOn.slice(0, 7) === request.effectiveOn.slice(0, 7)
+    ) {
+      return `Pay does not change: the later change on file from ${formatIsoDate(request.nextChangeOn)} starts in the same month, and a salary sheet takes the figure in force at the month's end, so this figure reaches no sheet. It is kept on the salary record from ${formatIsoDate(request.effectiveOn)}.`;
+    }
+
+    return sheets;
   }
 
   /**
@@ -800,7 +876,7 @@ export class HrRequestsService {
   private async putOneOffOnSheet(
     tx: DbTransaction,
     request: RequestDetail,
-  ): Promise<string> {
+  ): Promise<{ said: string; applied: string[] }> {
     const [year, month] = request.effectiveOn.split("-").map(Number);
     const label = `${MONTHS[month - 1]} ${year}`;
     const found = await tx.execute(sql`
@@ -813,18 +889,29 @@ export class HrRequestsService {
     const run = found.rows[0] as
       | { id: string; status: string; periodYear: number; periodMonth: number }
       | undefined;
-    if (!run) return `It goes on the ${label} sheet when that sheet is built.`;
+    if (!run) {
+      return {
+        said: `It goes on the ${label} sheet when that sheet is built.`,
+        applied: [],
+      };
+    }
     if (run.status !== "draft") {
       throw new ConflictException(
         `The ${label} sheet is already ${run.status.replace(/_/g, " ")}, so this cannot go on it. Reopen the sheet first, or refuse this and ask HR to send it for another month.`,
       );
     }
     const added = await applyPendingOneOffs(tx, run);
-    if (added === 0) {
-      return `${request.subject} is not on the ${label} sheet yet; it goes on when they are added.`;
+    if (added.length === 0) {
+      return {
+        said: `${request.subject} is not on the ${label} sheet yet; it goes on when they are added.`,
+        applied: [],
+      };
     }
     await this.payroll.recalculateTotals(tx, run.id);
-    return `Added to ${request.subject}'s bonus on the ${label} sheet.`;
+    return {
+      said: `Added to ${request.subject}'s bonus on the ${label} sheet.`,
+      applied: added,
+    };
   }
 
   private decisionSummary(
@@ -832,6 +919,8 @@ export class HrRequestsService {
     to: DecisionInput["decision"],
     note: string | null,
     actor: AuthenticatedUser,
+    /** Said after what was decided: for a pay change, what the salary was. */
+    extra = "",
   ): string {
     const verb = {
       approved: "approved",
@@ -847,13 +936,28 @@ export class HrRequestsService {
           : request.kind === "budget"
             ? `the budget ${request.subject}, ${formatMoney(request.amount)}`
             : `the spend "${request.subject}", ${formatMoney(request.amount)}`;
-    return `${actor.fullName} ${verb} ${what}${note ? `: ${note}` : ""}`;
+    return `${actor.fullName} ${verb} ${what}${extra}${note ? `: ${note}` : ""}`;
   }
-}
 
-function iso(value: Date | string | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  return value instanceof Date
-    ? value.toISOString()
-    : new Date(value).toISOString();
+  /**
+   * The salary row in force on a date — the latest one starting on or
+   * before it, not in the trash — or null when nothing is on file yet.
+   */
+  private async onFileFor(
+    teamMemberId: string,
+    on: string,
+  ): Promise<{ id: string; amount: string; from: string } | null> {
+    const found = await this.db.client.execute(sql`
+      select id::text, gross_amount::text as amount,
+             effective_from::text as "from"
+        from compensation_history
+       where team_member_id = ${teamMemberId}::uuid
+         and deleted_at is null
+         and effective_from <= ${on}::date
+       order by effective_from desc
+       limit 1`);
+    return (
+      (found.rows[0] as { id: string; amount: string; from: string }) ?? null
+    );
+  }
 }

@@ -12,6 +12,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useCan } from "@/components/auth/session-provider";
 import { PayDrawer } from "@/components/hr-budget/hr-budget-drawers";
 import { DecisionDrawer } from "@/components/hr-requests/decision-drawer";
+import {
+  payChangeCase,
+  reachesNoMonth,
+} from "@/components/hr-requests/pay-change-case";
 import { useMoney } from "@/components/settings-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -552,6 +556,7 @@ export function HrRequestsScreen({
           decision={deciding.decision}
           summary={summaryOf(deciding.row)}
           onClose={() => setDeciding(null)}
+          onStale={() => void load()}
           onDone={(notice) => {
             const word = {
               approved: "Approved",
@@ -587,6 +592,71 @@ export function HrRequestsScreen({
   );
 }
 
+/**
+ * A pay change's figures beside the one asked for.
+ *
+ * Approved and applied, it is the figure in force the day before — and the
+ * history says what an approval replaced. Otherwise what the CFO needs is
+ * what is on file FOR that date and what is paid today: the HR portal
+ * re-sends an old revision whenever the two apps disagree (its Brief 7 §6),
+ * and without these a correction reads as a raise. Only while it waits is
+ * what approving would do said in words (`payChangeCase`): the same figure
+ * already on file from that date (the salary record is left as it is), the
+ * same figure from earlier (a record of its own, pay unchanged), a later
+ * change in the same month (the figure reaches no sheet), and a date before
+ * a later change, where the approved figure stops at that change.
+ */
+function payFigures(
+  row: HrRequestDto,
+  detail: HrRequestDetailDto | null,
+  money: (value: string | number) => string,
+): { label: string; value: ReactNode; block?: boolean }[] {
+  if (!detail) return [{ label: "Salary on file", value: "…" }];
+  if (row.state === "approved") {
+    return [
+      {
+        label: "In force the day before",
+        value: detail.previousAmount
+          ? money(detail.previousAmount)
+          : "None on record",
+      },
+    ];
+  }
+  const figures: { label: string; value: ReactNode; block?: boolean }[] = [
+    {
+      label: "On file for that date",
+      value: detail.onFileAmount
+        ? money(detail.onFileAmount)
+        : "None on record",
+    },
+  ];
+  /* Said whenever it differs — and when nothing is in force today, said so,
+     rather than left out and read as "the same as on file". */
+  if (detail.onFileAmount !== null && detail.currentAmount === null) {
+    figures.push({ label: "Paid today", value: "None on record" });
+  } else if (
+    detail.currentAmount !== null &&
+    Number(detail.currentAmount) !== Number(detail.onFileAmount)
+  ) {
+    figures.push({ label: "Paid today", value: money(detail.currentAmount) });
+  }
+  if (row.state !== "pending" && row.state !== "held") return figures;
+
+  const approving = payChangeCase(detail);
+  const note =
+    approving.kind === "same-date"
+      ? "The salary on file for that date is already this figure — approving it records the decision and leaves the salary record as it is."
+      : approving.kind === "same-figure"
+        ? `The salary on file for that date is already this figure, from ${formatDate(approving.from)}. Approving adds a record of its own from ${formatDate(detail.effectiveOn)} at the same figure, so pay does not change.`
+        : approving.kind === "no-month"
+          ? `Pay does not change: the later change on file from ${formatDate(approving.next)} starts in the same month, and a salary sheet takes the figure in force at the month's end, so this figure reaches no sheet. Approving still keeps it on the salary record from ${formatDate(detail.effectiveOn)}.`
+          : approving.kind === "until-next"
+            ? `There is a later change on file, from ${formatDate(approving.next)}. Approving sets this figure from ${formatDate(detail.effectiveOn)} until then; that change and any after it still apply, and months already paid do not change.`
+            : null;
+  if (note) figures.push({ label: "Note", value: note, block: true });
+  return figures;
+}
+
 /** The pop-up: what HR asked, where it lands, and what finance did. */
 function detailSections(
   row: HrRequestDto,
@@ -608,18 +678,7 @@ function detailSections(
       label: row.kind === "pay_change" ? "New salary" : "Amount",
       value: money(row.amount),
     },
-    ...(row.kind === "pay_change"
-      ? [
-          {
-            label: "Salary before",
-            value: detail
-              ? detail.previousAmount
-                ? money(detail.previousAmount)
-                : "None on record"
-              : "…",
-          },
-        ]
-      : []),
+    ...(row.kind === "pay_change" ? payFigures(row, detail, money) : []),
     { label: "Takes effect", value: takesEffect(row) },
     {
       label:
@@ -648,10 +707,12 @@ function detailSections(
 
   const lands: { label: string; value: ReactNode; block?: boolean }[] = [];
   if (detail && (row.kind === "pay_change" || row.kind === "one_off")) {
+    /* A pay change's list stops at the next change on file; empty because
+       that change starts in the same month is not "not built yet". */
     lands.push({
       label:
         row.kind === "pay_change"
-          ? "Salary sheets from then"
+          ? "Salary sheets it reaches"
           : "That month's sheet",
       value: detail.sheets.length
         ? detail.sheets
@@ -659,7 +720,11 @@ function detailSections(
               (sheet) => `${sheet.label} (${sheet.status.replace(/_/g, " ")})`,
             )
             .join(", ")
-        : "Not built yet",
+        : row.kind === "pay_change" &&
+            detail.nextChangeOn !== null &&
+            reachesNoMonth(detail)
+          ? `None — the change on file from ${formatDate(detail.nextChangeOn)} decides that month`
+          : "Not built yet",
       block: true,
     });
   }

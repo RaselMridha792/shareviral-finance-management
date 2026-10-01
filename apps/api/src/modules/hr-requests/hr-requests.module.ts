@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { HrWebhookModule } from "../hr-webhook/hr-webhook.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PayrollModule } from "../payroll/payroll.module";
 import { TeamMembersModule } from "../team-members/team-members.module";
@@ -12,7 +13,12 @@ import { HrRequestsService } from "./hr-requests.service";
  * for the bell.
  */
 @Module({
-  imports: [NotificationsModule, PayrollModule, TeamMembersModule],
+  imports: [
+    NotificationsModule,
+    PayrollModule,
+    TeamMembersModule,
+    HrWebhookModule,
+  ],
   controllers: [HrRequestsController],
   providers: [HrRequestsService],
 })

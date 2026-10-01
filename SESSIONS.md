@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — not pushed; deploy config 58574ff is its own commit; needs HR_WEBHOOK_SECRET on the server |
 | 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — not pushed |
 | 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
 | 125 | **HR Requests: money moves when finance says it moves** | **done** — deployed 1 Oct (one push; the deploy applies the SQL before the swap) |
@@ -105,6 +106,151 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 128. HR webhook: decisions reach the HR portal as they are made — 1 Oct 2026
+
+The HR portal's Brief 7: the owner asked for both a webhook and a poll. The
+HR portal built its door, `POST https://hrmapi.hellonizam.com/api/finance/
+webhook/decisions` with `x-finance-secret`, and polls our four status routes
+hourly. This is finance's sending half, and it is optional by design: with no
+secret it is off, and the poll carries everything.
+
+- **Deploy config (58574ff, its own commit):** `HR_WEBHOOK_URL` (defaults to
+  that door) and `HR_WEBHOOK_SECRET` (empty = off) are passed to the api
+  container. `deploy/.env.example` shows how to copy the secret from
+  `/opt/hrm/deploy/.env` (`FINANCE_WEBHOOK_SECRET`) without printing it.
+  `config/env.ts` declares both, so a local `.env` keeps them.
+- **`modules/hr-webhook`:** `HrWebhookService.notify(kind, externalIds)`.
+  - Fire and forget: it never throws and never slows or fails a decision
+    (5s timeout).
+  - No retries on anything. `written: 0` is ordinary (HR's §5), and the
+    hourly poll reconciles.
+  - It stays off, with the reason in the log, unless all of these hold:
+    - the address is https (plain http only to localhost);
+    - the address carries no user or password;
+    - the secret is 16+ printable characters, with no space or line break.
+  - Redirects are refused, so the secret cannot follow one to another host.
+  - The secret is never logged. Error text is cleaned of it before it is
+    shortened, and a database error keeps its cause code.
+  - At most 200 per call.
+  - "withdrawn" is not sent: it is HR's own act, and HR asked before any
+    fifth word.
+  - At start the API log says `On: decisions on HR's requests go to <host>`
+    or `Off: <why>`.
+- **The body is `readStatuses()`** (`hr-requests/request-rows.ts`, split out
+  of the service). It sends the same rows the status routes answer, so the
+  poll and the webhook cannot disagree.
+- **Called after commit from:**
+  - every `HrRequestsService.decide` (hold, reject, put back, approve);
+  - the #121 budget and spend decision routes;
+  - paying a spend (appliedAt);
+  - sheet builds that put an approved one-off on a line (`generateLines`,
+    `syncMembers`). `applyPendingOneOffs` now returns the ids it applied.
+
+  Nothing is sent when a request arrives, or on HR's withdraw.
+- **A correction is not read as a raise (Brief 7 §6).** HR re-sends an
+  old revision whenever the two apps disagree. A waiting pay change's pop-up
+  shows the salary on file FOR its date and what is paid today. The pop-up's
+  note and the Approve drawer's sentence say what approving will do, both
+  from `payChangeCase` (`components/hr-requests/pay-change-case.ts`):
+  - **Same figure, starting that date:** the decision is recorded and the
+    salary record is left as it is (a joining-salary row keeps following
+    HR's corrections).
+  - **Same figure from an earlier date:** a row of its own is written; pay
+    does not change.
+  - **A later change starting in the same month:** pay does not change. A
+    month's sheet takes the figure in force at its end, so this figure
+    reaches no sheet.
+  - **A date before a later change:** the figure holds until that change.
+  - **Anything else:** the usual sentence.
+
+  `approvePayChange` decides the same cases, and writes what the salary was
+  into the audit line ("was ৳X from D" / "replacing ৳X that was on
+  file from that date"). An approved request shows "In force the day
+  before".
+- **The approval's notice is `sheetNotice` (`hr-requests/sheet-notice.ts`).**
+  It covers each sheet the change reaches, up to the next change, and works
+  from what that sheet HOLDS for the person, not from the salary record: a
+  built line keeps the figure it was built with. Sheets already at this
+  figure are not mentioned. The rest:
+  - **draft** (the person on it at another figure, or not on it):
+    press Build list;
+  - **finalised, not marked paid:** reopen it while the money has not gone
+    to the bank;
+  - **paid:** anything more owed waits for a one-off, or it was overpaid,
+    and a one-off can only add pay.
+- **The drawer reads the request fresh before it approves.**
+  - Approve stays off until that read succeeds.
+  - It will not approve when, since the list was drawn, HR sent the request
+    again (any re-send moves `send_count`, including a change of person) or
+    somebody decided it. It says which of the two happened, and closing it
+    reloads the list.
+  - On the server, `setStatus` now also requires the `send_count` it read,
+    so a re-send landing mid-decision is refused (409), not decided unseen.
+- **Review.** Four rounds of adversarial review: 30 agents, then 9, 12 and 8.
+  - **Round 1:** 8 issues.
+  - **Round 2:** 3 regressions in those fixes.
+    - The same-figure skip also caught an EARLIER date. This was a real
+      payroll bug: the revision got no row, and a later edit to the earlier
+      row would silently have changed what it paid.
+    - The on-file read sat outside the rollback.
+    - The notice named sheets past the next change.
+  - **Round 3:**
+    - the notice's raise-only wording;
+    - the same-month case;
+    - the stale drawer;
+    - Approve left on after a failed read.
+  - **Round 4:**
+    - the notice called a finalised (unpaid) sheet "overpaid";
+    - it reasoned from the record instead of the sheet;
+    - the drawer blamed HR for a hold by another decider, and missed a
+      change of person.
+
+  All of these are fixed and measured. Round 4's fixes were measured, not
+  reviewed again.
+
+**Proved:**
+- `.hrwebhookqa.mjs` 44/44, against a local stand-in on :4099 with
+  apps/api/.env pointed at it (the harness header says how):
+  - every decision path sends the status route's exact row, with the secret
+    header;
+  - arrival and withdraw send nothing;
+  - written 0, 401 and 500 are one call each;
+  - a 4s-slow or down HR portal does not slow or fail a decision;
+  - every case above is checked in the pop-up, in the drawer, in the salary
+    record, in the audit line and in the notice, including a draft the
+    person is on, one they are not on, and a finalised sheet;
+  - a re-send while the drawer is open is caught, and the list reloads.
+- `sheet-notice.spec.ts` 9/9 (every state x figure, days worked, grouping).
+- `hr-webhook.service.spec.ts` 13/13.
+- `.hrrequestsqa` 62/62 (its March notice now names the 60,000 the sheet
+  holds), `.oneoffqa` 34/34, `.hrbudgetqa` 38/38, `.hrbellqa` 23/23.
+- The four CI steps are green: lint has only its 2 old warnings; tests are
+  124 + 342.
+
+`lib/hr-requests.ts` gained only the four new detail fields. It is used by
+HR Requests' own files and the rail's waiting badge.
+
+**For the owner:** copy the secret across on the server, then deploy (the
+deploy recreates the api container, which reads it). Until then the webhook
+is off, and the hourly poll carries everything.
+
+**Left open — the owner decides:**
+- **The payroll gate (`blocking.ts`, #125) blocks every month from a waiting
+  pay change's date onward**, even when a later change on file already
+  decides those months. A re-sent old revision ("60,000 from 1 Jan" while
+  75,000 from 1 Mar is on file) therefore holds up this month's sheet until
+  it is decided, though no decision could change this month's pay. Narrowing
+  the gate changes the owner's #125 rule.
+- **Pinning what the drawer showed.** The decision request does not carry
+  what the drawer showed, so a re-send in the seconds between the drawer's
+  read and pressing Approve is still approved (the server only guards its
+  own read). The fix: the decision body carries the `send_count` the drawer
+  showed, and the API answers 409 on a mismatch. It changes the decision
+  route's body and `lib/hr-requests.ts`, so it needs the owner's word. The
+  same guard covers one-offs, budgets and spends, which the drawer does not
+  read fresh.
+- `sheet-new.png` is modified in the working tree by someone else.
 
 ## 127. The rail's own switch, icons when hidden, and quick links — 1 Oct 2026
 

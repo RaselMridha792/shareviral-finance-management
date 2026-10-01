@@ -50,6 +50,14 @@ export type HrRequestDto = {
 
 export type HrRequestDetailDto = HrRequestDto & {
   previousAmount: string | null;
+  /**
+   * A pay change: the figure on file for its date and when that figure
+   * starts, the one in force today, and the next change after its date.
+   */
+  onFileAmount: string | null;
+  onFileFrom: string | null;
+  currentAmount: string | null;
+  nextChangeOn: string | null;
   sheets: { label: string; status: string }[];
   budget: {
     categoryName: string | null;

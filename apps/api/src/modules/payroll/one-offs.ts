@@ -45,14 +45,19 @@ export type SubmitOneOffInput = z.infer<typeof submitOneOffSchema>;
  * or changed the sheet's lines, before its totals are worked out again.
  *
  * Integer paisa throughout: the bonus is added in SQL, never in JavaScript.
+ *
+ * Answers with the HR portal's ids of the ones it put on a line, so the
+ * caller can tell the HR portal the money moved once the transaction has
+ * committed (#128).
  */
 export async function applyPendingOneOffs(
   tx: DbTransaction,
   run: { id: string; periodYear: number; periodMonth: number },
-): Promise<number> {
+): Promise<string[]> {
   const waiting = await tx
     .select({
       id: payrollOneOffs.id,
+      externalId: payrollOneOffs.externalId,
       amount: payrollOneOffs.amount,
       lineId: payrollLines.id,
     })
@@ -72,7 +77,7 @@ export async function applyPendingOneOffs(
         isNull(payrollOneOffs.payrollLineId),
       ),
     );
-  if (waiting.length === 0) return 0;
+  if (waiting.length === 0) return [];
 
   for (const one of waiting) {
     await tx
@@ -105,5 +110,5 @@ export async function applyPendingOneOffs(
     })
     .where(inArray(payrollLines.id, lineIds));
 
-  return waiting.length;
+  return waiting.map((one) => one.externalId);
 }

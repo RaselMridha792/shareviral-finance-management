@@ -15,6 +15,7 @@ import {
   teamMembers,
   users,
 } from "../../db/schema";
+import { HrWebhookService } from "../hr-webhook/hr-webhook.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { TransactionsService } from "../transactions/transactions.service";
 import type {
@@ -126,6 +127,7 @@ export class HrBudgetService {
     private readonly audit: AuditService,
     private readonly transactions: TransactionsService,
     private readonly notifications: NotificationsService,
+    private readonly webhook: HrWebhookService,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -487,6 +489,8 @@ export class HrBudgetService {
           .where(eq(hrBudgetPeriods.id, id));
       },
     });
+    /* The HR portal hears it now, not at its next poll (#128). */
+    this.webhook.notify("budget", [period.externalId]);
     return (await this.periodStates([period.externalId]))[0];
   }
 
@@ -539,6 +543,7 @@ export class HrBudgetService {
           .where(eq(hrBudgetSpends.id, id));
       },
     });
+    this.webhook.notify("spend", [spend.externalId]);
     return (await this.spendStates([spend.externalId]))[0];
   }
 
@@ -600,6 +605,8 @@ export class HrBudgetService {
           .where(eq(hrBudgetSpends.id, id));
       },
     });
+    /* Paid: the money moved, and the HR portal hears when (#128). */
+    this.webhook.notify("spend", [spend.externalId]);
     /* With the entry it became, so the page can file the invoice and the
        bank's slip on it (#122). */
     const [state] = await this.spendStates([spend.externalId]);

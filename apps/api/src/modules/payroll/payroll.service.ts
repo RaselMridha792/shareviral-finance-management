@@ -57,6 +57,7 @@ import { SettingsService } from "../settings/settings.service";
 import { TaxPolicyService } from "../tds/tax-policy.service";
 import { nextRefNos } from "../transactions/ref-no";
 import { assertNothingBlocks } from "../hr-requests/blocking";
+import { HrWebhookService } from "../hr-webhook/hr-webhook.service";
 import { applyPendingOneOffs } from "./one-offs";
 
 const MONTHS = [
@@ -96,6 +97,7 @@ export class PayrollService {
     private readonly audit: AuditService,
     private readonly settings: SettingsService,
     private readonly taxPolicy: TaxPolicyService,
+    private readonly webhook: HrWebhookService,
   ) {}
 
   /**
@@ -379,6 +381,8 @@ export class PayrollService {
 
     const salarySplit = await this.readSalarySplit();
 
+    /* The HR portal's ids of the one-offs this build puts on a line. */
+    let applied: string[] = [];
     const created = await this.audit.mutate({
       action: "update",
       entityTable: "payroll_runs",
@@ -419,11 +423,14 @@ export class PayrollService {
 
         /* One-offs HR sent for this month go into the new lines' bonus —
            the rebuild just took them off with the old lines (#121). */
-        await applyPendingOneOffs(tx, run);
+        applied = await applyPendingOneOffs(tx, run);
         await this.recalculate(tx, runId);
         return added;
       },
     });
+
+    /* Committed: the HR portal hears the money moved (#128). */
+    this.webhook.notify("one_off", applied);
 
     // Both are worth saying, and neither is an error: a sheet with somebody
     // missing is still a sheet, and one with the tax unset is still payable.
@@ -1570,6 +1577,7 @@ export class PayrollService {
     const skipped: string[] = [];
     let noTaxRule = false;
 
+    let applied: string[] = [];
     const result = await this.audit.mutate({
       action: "update",
       entityTable: "payroll_runs",
@@ -1622,11 +1630,12 @@ export class PayrollService {
 
         /* Somebody added who has a one-off waiting for this month gets it
            in their bonus (#121). */
-        await applyPendingOneOffs(tx, run);
+        applied = await applyPendingOneOffs(tx, run);
         await this.recalculate(tx, runId);
         return { added, removed: toRemove.length };
       },
     });
+    this.webhook.notify("one_off", applied);
 
     const notes = [
       skipped.length

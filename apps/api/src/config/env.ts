@@ -76,6 +76,19 @@ const envSchema = z.object({
    * to /data/uploads, which is `deploy/uploads` on the host.
    */
   UPLOAD_DIR: z.string().trim().default("./uploads"),
+
+  /**
+   * The HR portal's webhook door (#128): where finance says, the moment it
+   * happens, what it decided about one of HR's money requests. Both or
+   * nothing — without the secret the webhook is off, and the HR portal's
+   * hourly poll of the status routes still collects every decision. Declared
+   * here or a local .env would drop them (see SECRET_ENCRYPTION_KEY above).
+   */
+  /* Checked by the webhook itself, which turns itself off on a bad value:
+     a check here would stop the whole API from starting over an optional
+     webhook (hr-webhook.service.ts, `configured`). */
+  HR_WEBHOOK_URL: z.string().trim().optional(),
+  HR_WEBHOOK_SECRET: z.string().trim().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
