@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 131 | **Settings → Connections, and the Assistant through Google Cloud (Vertex AI)** | **done** — step 2 of the Google brief; the owner's Google Cloud setup is still to do
 | 130 | **Schema: Google Cloud for the Assistant — the provider, the sealed service-account key, the region** | **done** — pushed alone, step 1 of the Google brief |
 | 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — deployed 1 Oct |
 | 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — deployed 1 Oct (with 127 and the deploy config, one run); the secret is set on the server |
@@ -108,6 +109,105 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 131. Settings → Connections, and the Assistant through Google Cloud — 1 Oct 2026
+
+Step 2 of `docs/briefs/2026-10-01-google-connections.md`. The schema (#130)
+was already deployed, so this is code only. Nothing changes for anybody until
+a Super Admin pastes a Google key and picks Google Cloud: the row says
+`anthropic` and the Assistant behaves exactly as before.
+
+- **Settings → Connections**, a new tab under Integrations, Super Admin only
+  (`settings.write`, as the Anthropic key is):
+  - a "Google Cloud" card. The service-account JSON is pasted, or picked as
+    the downloaded .json file. It is checked for shape (`type:
+    service_account`, `project_id`, `client_email` that ends in
+    `.gserviceaccount.com`, and a `private_key` that actually parses), and
+    then **Google is asked for a token**. A key Google refuses is never stored.
+    It is stored sealed with secret-box and never sent back;
+  - once a key is stored, the card shows the client email (with Copy, "share
+    files with this address, as Viewer"), the project and the region;
+  - **Test** runs four lines: one-token Claude request on Vertex; the Sheets,
+    Docs and Drive APIs (Drive lists what has been shared; Sheets/Docs read a
+    shared file's title, or probe an id that cannot exist when nothing is
+    shared yet). Each line says which console step is missing;
+  - **Remove**, through the app's ConfirmDialog. If the Assistant was on
+    Google Cloud, it goes back to the Anthropic key in the same update;
+  - the six console steps from the brief, under the card.
+  - The rail shows On/Off beside Connections.
+- **Assistant settings**: a new "How it reaches Claude" card: *Reach Claude
+  through: Anthropic key / Google Cloud*. Google Cloud is disabled until a
+  Google key exists, and `PATCH /ai/settings` refuses it too. The Anthropic
+  card now says "Saved, not in use" while Google is chosen, and the data
+  warning names Google Cloud as the destination. The rail hint says "Anthropic
+  or Google Cloud".
+- **`AiIntakeService.anthropic()`** returns `AnthropicVertex` (project from
+  the key, region from `vertex_region`, credentials from the stored JSON,
+  never the machine's) when the provider is `vertex`. The type it returns is
+  `ClaudeClient` (`messages.create` + `.stream`), which is all
+  `think()` and `pdf-statement.ts` use.
+- **Errors in words** (`ai-intake/claude-errors.ts`). Anthropic's sentences
+  are unchanged. Google's: key refused (with Google's own reason, e.g.
+  `invalid_grant`); Vertex AI API switched off; no billing; missing "Vertex AI
+  User" role or model not enabled (403); model not enabled in Model Garden
+  for this region (404); quota (429); Google down (5xx). Logs carry the
+  status and message only.
+- **New dependencies** (API): `@anthropic-ai/vertex-sdk` ^0.20.2 (its peer
+  is `@anthropic-ai/sdk >=0.115.1 <1`, so it shares our 0.116) and
+  `google-auth-library` ^10.9.1 (the same copy vertex-sdk uses). npm deleted
+  38 `libc` fields from the lock, as the brief warned. They were put back,
+  so the lock diff is additions only (203 lines). `npm ls` shows one copy of
+  each.
+- **Shared code** (additions only, nothing existing changed meaning):
+  `packages/shared/src/ai.ts` gains `AI_PROVIDERS` and its labels,
+  `provider` on `updateAiSettingsSchema`, and optional `provider` /
+  `googleKeySet` on `AiAvailability`. New `connections.ts`. Read by the
+  Assistant settings panel, the Settings rail and the new panel. The Assistant
+  screen reads only `configured` / `reason`, as before.
+  `apps/web/src/lib/connections.ts` is new and used only by Connections.
+
+**Proved:**
+- `google.spec.ts`, 15 tests. Every malformed paste is refused by name. A
+  sealed key opens. With Google's token stubbed, the request goes to
+  `https://aiplatform.googleapis.com/v1/projects/<p>/locations/global/publishers/anthropic/models/claude-opus-5:rawPredict`
+  with `Bearer`, no `x-api-key`, no `model` in the body, and
+  `anthropic_version: vertex-2023-10-16`. A refused token becomes "Google
+  refused the service-account key (…)". Each Google status maps to its
+  sentence.
+- `.connectionsqa.mjs`, 40/40, run twice (the second time after the lint
+  fixes), against the real Google:
+  - A well-formed key Google never issued came back as *"Google refused this
+    key (invalid_grant: Invalid grant: account not found)"* and nothing was
+    stored.
+  - With a key sealed straight into the row: a real `/ai/turn` went to
+    Google and returned 503 in words, not 500. Test drew four lines. Remove
+    put `ai_provider` back to `anthropic`.
+  - `GET /settings` (Super Admin and CFO) and the audit rows carry no key and
+    no ciphertext.
+  - The CFO is refused all four routes and has no tab.
+  - 390px does not scroll sideways, and there are no page errors.
+  - The row is left as it was found.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 139,
+  shared 342) pass, each on its own exit code.
+
+**Not proved, because it needs the owner's real key:** a key being *saved*
+(the token check passes only for a key Google issued), and a real Claude
+answer through Vertex. Once the key is in, the Test button proves both.
+
+**What the owner does next:**
+1. Do the six Google Cloud console steps; they are on the Connections page.
+2. Paste the key in Settings → Connections.
+3. Press Test.
+4. Choose Settings → Assistant → *Reach Claude through: Google Cloud*.
+
+**Seen, not touched:** a Claude refusal while reading an attached **PDF**
+(`readPdf`, from the attachment upload) is not put into words on either
+provider and reaches the person as a 500. `turn()` maps it; the upload
+does not. A small fix, for its own session.
+
+**Next (step 3, its own session):** a pasted Google Sheet or Doc link, read
+with this key. The read-only scopes and `googleAuth()` are already in
+`connections/google.ts`.
 
 ## 130. Schema: Google Cloud for the Assistant — 1 Oct 2026
 
