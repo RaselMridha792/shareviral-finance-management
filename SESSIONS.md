@@ -34,8 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — not pushed; deploy config 58574ff is its own commit; needs HR_WEBHOOK_SECRET on the server |
-| 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — not pushed |
+| 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — deployed 1 Oct (with 127 and the deploy config, one run); the secret is set on the server |
+| 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — deployed 1 Oct |
 | 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
 | 125 | **HR Requests: money moves when finance says it moves** | **done** — deployed 1 Oct (one push; the deploy applies the SQL before the swap) |
 | 124 | **Settings → Appearance: the app's colours and type, for everybody** | **done** — deployed 30 Sep |
@@ -234,6 +234,22 @@ HR Requests' own files and the rail's waiting badge.
 **For the owner:** copy the secret across on the server, then deploy (the
 deploy recreates the api container, which reads it). Until then the webhook
 is off, and the hourly poll carries everything.
+
+**Deployed, 1 Oct.**
+- **The pushes.** 127, the deploy config and 128 were pushed seconds apart,
+  so GitHub cancelled the first two runs. All three went out in one run,
+  36820704969, which passed test, build and verify. `/api/health` reports
+  617d41b.
+- **The secret.** The owner copied it into `/opt/sfm/deploy/.env` before
+  that deploy finished (`grep -c` printed 1).
+- **How to tell it is on.** The API's start-up log says `On: decisions on
+  HR's requests go to hrmapi...`. After that, each decision logs `Told the
+  HR portal about ...`.
+- **Brief 7 §7.2 list, from the live database.**
+  - No pay changes were applied before approvals existed.
+  - One one-off was: `7e689377-540b-4fe9-95c5-71c6765df31f`, Rasel Mridha,
+    ৳10,000.00, September 2026.
+  - Both were sent to the HR session.
 
 **Left open — the owner decides:**
 - **The payroll gate (`blocking.ts`, #125) blocks every month from a waiting
