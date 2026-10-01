@@ -210,6 +210,27 @@ export const appSettings = pgTable(
     aiModel: text("ai_model").notNull().default("claude-opus-5"),
 
     /**
+     * How the assistant reaches Claude: "anthropic" with the key above, or
+     * "vertex" through Google Cloud with the service account below. The owner,
+     * 1 Oct 2026: Anthropic would not answer an account whose identity it could
+     * not verify, and Google's billing and checks are ones the company passes.
+     */
+    aiProvider: text("ai_provider").notNull().default("anthropic"),
+
+    /**
+     * A Google Cloud service account's JSON key, sealed the way the Anthropic
+     * key is. One key serves both Vertex (Claude) and the read-only Sheets and
+     * Docs look-ups. The project id and the client email are read out of it,
+     * so neither is a column of its own and the two cannot disagree.
+     */
+    googleServiceAccount: text("google_service_account"),
+    googleKeySetAt: timestamp("google_key_set_at", { withTimezone: true }),
+    googleKeySetBy: uuid("google_key_set_by"),
+
+    /** Where Vertex is asked. "global" is Google's own advice for Claude. */
+    vertexRegion: text("vertex_region").notNull().default("global"),
+
+    /**
      * Whether the assistant may read the books at all.
      *
      * "full" or "off", and it defaults to full. The middle setting that used
@@ -228,6 +249,10 @@ export const appSettings = pgTable(
   (t) => [
     // Enforces the singleton at the database level, not by convention.
     check("app_settings_single_row", sql`${t.id} = 1`),
+    check(
+      "app_settings_ai_provider_check",
+      sql`${t.aiProvider} in ('anthropic', 'vertex')`,
+    ),
   ],
 );
 

@@ -28,6 +28,11 @@ const SECRET_COLUMNS = [
   // carrying fields nobody consumes is a payload nobody audits.
   "anthropicKeySetAt",
   "anthropicKeySetBy",
+  // The Google service account's key, and its pair, for the same reasons.
+  // Settings -> Connections asks its own endpoint for the client email.
+  "googleServiceAccount",
+  "googleKeySetAt",
+  "googleKeySetBy",
   /*
    * The card password's hash, and the two columns beside it. The hash is the
    * obvious one; the other two are here for the same reason the Anthropic
