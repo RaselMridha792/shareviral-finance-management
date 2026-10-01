@@ -19,7 +19,9 @@ import { z } from "zod";
  *   - J, the value date, DD/MM/YYYY, today or later.
  *   - K, the beneficiary's name as the account holds it.
  *   - P, their bank: SCBLBDDXXXX for an SCB account, otherwise two zeros and
- *     the routing number (240100436 → 00240100436).
+ *     the routing number (240100436 → 00240100436). The zeros are the
+ *     file's, added wherever they are missing (`bankCodeOf`): the routing
+ *     number is typed as the bank gives it, whatever its length (#129).
  *   - T, their account number: digits only.
  *   - U, what it is for — it prints on their statement.
  *   - AL, AM: currency and amount. AR: an email, optional; the bank sends a
@@ -117,10 +119,11 @@ export const BANK_CODE_COLUMN = COL.bankCode;
 /* -------------------------------------------------------------------------- */
 
 /**
- * A bank code as the file wants it. SCB in any spelling that starts SCBL
- * becomes SCBLBDDXXXX; nine digits of routing number get their two zeros; a
- * code that already has them is left alone. Anything else is kept as typed,
- * for `lineProblems` to name.
+ * A bank code as it is stored. SCB in any spelling that starts SCBL becomes
+ * SCBLBDDXXXX; nine digits of routing number get their two zeros; anything
+ * else is kept as typed — a routing number of another length gets its
+ * zeros when it is read (`bankCodeOf`), and anything that is not digits is
+ * left for `lineProblems` to name.
  */
 export function cleanBankCode(input: string | null | undefined): string {
   const text = (input ?? "")
@@ -150,6 +153,24 @@ export function debitAccountNoOf(accountNumber: string | null | undefined) {
   const digits = (accountNumber ?? "").replace(/\D/g, "");
   if (!digits) return "";
   return digits.startsWith("00") ? digits : `00${digits}`;
+}
+
+/**
+ * A bank code as the file writes it, however it was stored (#129):
+ * SCBLBDDXXXX as it is, and a routing number with the file's two zeros in
+ * front unless it already starts with them — the same rule as column I's
+ * (`debitAccountNoOf`). The owner asked that the zeros be the file's
+ * business, never typed into anybody's record, and that a routing number's
+ * length not stop the file.
+ *
+ * Every way a bank code reaches the page or a file goes through this: a
+ * nine-digit number is stored with its zeros already (`cleanBankCode`), and
+ * any other length is stored as typed and gets them here.
+ */
+export function bankCodeOf(stored: string | null | undefined): string {
+  const code = stored ?? "";
+  if (!/^\d+$/.test(code)) return code;
+  return code.startsWith("00") ? code : `00${code}`;
 }
 
 /** Whether an account is at Standard Chartered, from what the record holds. */
@@ -193,9 +214,11 @@ export function lineProblems(line: LineForCheck): string[] {
     problems.push(
       "No bank code — SCBLBDDXXXX for an SCB account, or the routing number",
     );
-  } else if (line.bankCode !== SCB_CODE && !/^00\d{9}$/.test(line.bankCode)) {
+  } else if (line.bankCode !== SCB_CODE && !/^\d+$/.test(line.bankCode)) {
+    /* Digits, of any length: the owner's records hold routing numbers as
+       the bank gives them, and the length is the bank's to judge (#129). */
     problems.push(
-      "The bank code must be SCBLBDDXXXX or a 9-digit routing number",
+      "The bank code must be SCBLBDDXXXX, or a routing number in digits",
     );
   } else if (line.paymentType === "BT" && line.bankCode !== SCB_CODE) {
     problems.push("BT is SCB to SCB — this account is at another bank");

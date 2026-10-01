@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — not pushed |
 | 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — deployed 1 Oct (with 127 and the deploy config, one run); the secret is set on the server |
 | 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — deployed 1 Oct |
 | 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
@@ -106,6 +107,39 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 129. Bank Advice: a routing number of any length, the zeros the file's — 1 Oct 2026
+
+The owner, on the payment drawer's "The bank code must be SCBLBDDXXXX or a
+9-digit routing number": take that error away, and add the two zeros in the
+generated file, conditionally, so that nobody has to type them into a record.
+
+- **`bankCodeOf`** (`bank-format.ts`) reads a routing number with the file's
+  two zeros in front, unless it already starts with them. This is column I's
+  rule (`debitAccountNoOf`, #123).
+  - `get()` applies it, so the page, the CSV and the Excel all show one code:
+    857376 → 00857376.
+  - What is stored is unchanged: nine digits with their zeros
+    (`cleanBankCode`), any other length as typed. Nothing already saved
+    moves, and a code typed with its zeros does not get two more.
+- **`lineProblems`** no longer asks for nine digits. A bank code still has to
+  be SCBLBDDXXXX, or digits.
+- **The drawer** no longer says "Nine digits". It shows the routing number
+  without the file's zeros, and says what the file will write: "The file
+  writes 00857376", or "As the bank gives it — the file adds the two zeros".
+
+**Proved:**
+- `.bankcolqa.mjs` 74/74:
+  - 857376 is stored as typed, and read and written as 00857376: in the
+    CSV's column P, and as a text cell in the Excel;
+  - its row is Ready, and its drawer shows no warning;
+  - 00857376, typed with the zeros, is not doubled.
+- `.bankadviceqa.mjs` 59/59.
+- typecheck, lint (its 2 old warnings) and tests (124 + 342) pass.
+
+**For the owner:** BEFTN routing numbers are nine digits. The file now
+carries whatever the record holds, so a short one (Alamin Zaman's 857376)
+goes to the bank as it is, and the bank decides whether it is right.
 
 ## 128. HR webhook: decisions reach the HR portal as they are made — 1 Oct 2026
 

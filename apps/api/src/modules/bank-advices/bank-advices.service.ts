@@ -23,6 +23,7 @@ import {
   adviceProblems,
   buildCsv,
   cleanAccountNo,
+  bankCodeOf,
   cleanBankCode,
   debitAccountNoOf,
   isScb,
@@ -203,7 +204,16 @@ export class BankAdvicesService {
     return {
       ...row,
       debitAccountNo,
-      lines: lines.map((line) => ({ ...line, problems: lineProblems(line) })),
+      /* A routing number is read with its two zeros, whatever its length,
+         so its file and its page say the same (#129). */
+      lines: lines.map((line) => {
+        const bankCode = bankCodeOf(line.bankCode);
+        return {
+          ...line,
+          bankCode,
+          problems: lineProblems({ ...line, bankCode }),
+        };
+      }),
       problems: adviceProblems({
         ...row,
         debitAccountNo,

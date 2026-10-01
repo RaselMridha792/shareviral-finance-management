@@ -15,7 +15,8 @@
  *          fault), or saved that way before the fix
  *   J      DD/MM/YYYY, today or later
  *   K      the beneficiary's name
- *   P      SCBLBDDXXXX for SCB, else 00 + the 9-digit routing number
+ *   P      SCBLBDDXXXX for SCB, else 00 + the routing number as typed, of
+ *          any length (#129: 857376 → 00857376), and never twice
  *   T      digits only
  *   U      the payment details
  *   AL AM  BDT, and the amount as a number
@@ -87,13 +88,20 @@ const LINES = [
   { paymentType: "ACH", beneficiaryName: `${MARK} Yeasin Hossain`, bankCode: "070270602", accountNo: "1083451057575", paymentDetails: "Salary September 2026", amount: "12500.50", email: "" },
   { paymentType: "RTGS", beneficiaryName: `${MARK} Sagar Biswas`, bankCode: "00120157154", accountNo: "2102 8879 9851", paymentDetails: "Supplier Payment", amount: "600000", email: "" },
   { paymentType: "BT", beneficiaryName: `${MARK} Rasel Mridha`, bankCode: SCB, accountNo: "54869542568", paymentDetails: "Rent", amount: "10", email: "" },
+  /* #129: a routing number that is not nine digits, as a record holds it —
+     and the same one typed with the file's zeros already on. */
+  { paymentType: "ACH", beneficiaryName: `${MARK} Alamin Zaman`, bankCode: "857376", accountNo: "412894150", paymentDetails: "Salary October 2026", amount: "59584", email: "" },
+  { paymentType: "ACH", beneficiaryName: `${MARK} Typed Zeros`, bankCode: "00857376", accountNo: "412894151", paymentDetails: "Salary October 2026", amount: "100", email: "" },
 ];
 const WANT = [
   { B: "PAY", P: SCB, T: "18251682701", AM: "25000", AR: "amir@example.com" },
   { B: "ACH", P: "00070270602", T: "1083451057575", AM: "12500.5", AR: "" },
   { B: "RTGS", P: "00120157154", T: "210288799851", AM: "600000", AR: "" },
   { B: "BT", P: SCB, T: "54869542568", AM: "10", AR: "" },
+  { B: "ACH", P: "00857376", T: "412894150", AM: "59584", AR: "" },
+  { B: "ACH", P: "00857376", T: "412894151", AM: "100", AR: "" },
 ];
+const N = LINES.length;
 
 /* Column letters → index. */
 const idx = (letters) => [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
@@ -115,7 +123,10 @@ try {
     if (added.status >= 300) console.log("   line refused:", added.status, JSON.stringify(added.body));
   }
   const advice = (await call("GET", `/bank-advices/${adviceId}`)).body;
-  check("four payments, nothing flagged", advice?.lines?.length === 4 && advice.problems.length === 0 && advice.lines.every((l) => l.problems.length === 0), JSON.stringify(advice?.problems));
+  check(`${N} payments, nothing flagged — a routing number of six digits included`, advice?.lines?.length === N && advice.problems.length === 0 && advice.lines.every((l) => l.problems.length === 0), JSON.stringify([advice?.problems, advice?.lines?.map((l) => l.problems)]));
+  const [sixDigit] = await q(`select bank_code from bank_advice_lines where bank_advice_id = $1 and beneficiary_name = $2`, [adviceId, `${MARK} Alamin Zaman`]);
+  const shortLine = advice?.lines?.find((l) => l.beneficiaryName === `${MARK} Alamin Zaman`);
+  check("857376 is stored as typed and read with the file's zeros, 00857376", sixDigit?.bank_code === "857376" && shortLine?.bankCode === "00857376", `${sixDigit?.bank_code} ${shortLine?.bankCode}`);
 
   /* ------------------------------------------------------------------ */
   console.log("\nThe CSV, read as bytes");
@@ -127,11 +138,11 @@ try {
   const rows = text.split("\r\n");
   if (rows.at(-1) === "") rows.pop();
   const cells = rows.map((r) => r.split(","));
-  check("row 1 deleted: H first, then a P row per payment, T last", rows.length === 6 && cells[0][0] === "H" && cells[0][1] === "P" && cells.slice(1, 5).every((c) => c[0] === "P") && cells[5][0] === "T" && !text.includes("Record Type"), `${rows.length} rows`);
+  check("row 1 deleted: H first, then a P row per payment, T last", rows.length === N + 2 && cells[0][0] === "H" && cells[0][1] === "P" && cells.slice(1, N + 1).every((c) => c[0] === "P") && cells[N + 1][0] === "T" && !text.includes("Record Type"), `${rows.length} rows`);
   check("44 fields on every row, as Excel saves A to AR", cells.every((c) => c.length === 44), cells.map((c) => c.length).join(","));
-  check("the H and T rows: nothing past their own letters", cells[0].slice(2).every((v) => v === "") && cells[5].slice(1).every((v) => v === ""));
+  check("the H and T rows: nothing past their own letters", cells[0].slice(2).every((v) => v === "") && cells[N + 1].slice(1).every((v) => v === ""));
 
-  const payRows = cells.slice(1, 5);
+  const payRows = cells.slice(1, N + 1);
   payRows.forEach((c, n) => {
     const want = WANT[n];
     const who = LINES[n].beneficiaryName;
@@ -141,7 +152,7 @@ try {
     check(`${want.B}: I is the debit account with two zeros first (${THIRTEEN})`, got.I === THIRTEEN && /^00\d{11}$/.test(got.I), got.I);
     check(`${want.B}: J is DD/MM/YYYY, today (${bankToday})`, got.J === bankToday && /^\d{2}\/\d{2}\/\d{4}$/.test(got.J), got.J);
     check(`${want.B}: K is the name`, got.K === who, got.K);
-    check(`${want.B}: P is ${want.P === SCB ? "SCBLBDDXXXX" : "00 + the 9-digit routing number"}`, got.P === want.P && (got.P === SCB || /^00\d{9}$/.test(got.P)), got.P);
+    check(`${want.B}: P is ${want.P === SCB ? "SCBLBDDXXXX" : `00 + the routing number (${want.P})`}`, got.P === want.P && (got.P === SCB || /^00\d+$/.test(got.P)), got.P);
     check(`${want.B}: T is digits only`, got.T === want.T && /^\d+$/.test(got.T), got.T);
     check(`${want.B}: U, AL, AM, AR`, got.U === LINES[n].paymentDetails && got.AL === "BDT" && got.AM === want.AM && got.AR === want.AR, `${got.U} ${got.AL} ${got.AM} ${got.AR}`);
     check(`${want.B}: every other column empty`, c.every((v, i) => FILLED.has(i) || v === ""), c.map((v, i) => (!FILLED.has(i) && v !== "" ? i : null)).filter((i) => i !== null).join(","));
@@ -164,7 +175,7 @@ try {
     return { type, value: type === "s" ? shared[Number(v)] : v, quoted: /quotePrefix="1"/.test(xfs[style] ?? "") };
   };
   check("row 1 keeps the bank's column names; row 2 is H", cell("A1")?.value === "Record Type" && cell("A2")?.value === "H" && cell("B2")?.value === "P");
-  for (let r = 3; r <= 6; r++) {
+  for (let r = 3; r <= N + 2; r++) {
     const want = WANT[r - 3];
     const I = cell(`I${r}`), J = cell(`J${r}`), P = cell(`P${r}`), T = cell(`T${r}`), AM = cell(`AM${r}`);
     check(
@@ -177,7 +188,7 @@ try {
       JSON.stringify({ I, P, T, AM }),
     );
   }
-  check("row 7 is T", cell("A7")?.value === "T");
+  check(`row ${N + 3} is T`, cell(`A${N + 3}`)?.value === "T");
 
   /* ------------------------------------------------------------------ */
   console.log("\nSaved before the fix");
@@ -217,6 +228,25 @@ try {
   check("the note names Google Sheets and Excel, and says which file shows the zeros", /Google Sheets or Excel/.test(note) && /Open\s+this one to check the file/.test(note), note.slice(0, 120));
   const shown = await page.evaluate((n) => document.body.textContent.includes(n), THIRTEEN);
   check("the page shows the debit account as the file writes it", shown);
+
+  /* #129: the six-digit routing number, on the page and in its drawer. */
+  const row = await page.evaluate((name) => {
+    const tr = [...document.querySelectorAll("tr[data-row-id]")].find((r) => r.textContent.includes(name));
+    return tr ? { ok: tr.hasAttribute("data-line-ok"), text: tr.textContent } : null;
+  }, `${MARK} Alamin Zaman`);
+  check("its row is ready and shows 00857376", row?.ok === true && row.text.includes("00857376"), row?.text.slice(0, 160));
+  await page.evaluate((name) => [...document.querySelectorAll("tr[data-row-id]")].find((r) => r.textContent.includes(name)).children[2].click(), `${MARK} Alamin Zaman`);
+  await page.waitForSelector("[data-line-field='routing']", { timeout: 10000 });
+  const drawer = await page.evaluate(() => {
+    const input = document.querySelector("[data-line-field='routing']");
+    return {
+      value: input.value,
+      hint: input.closest("label, div").parentElement.textContent,
+      problems: Boolean(document.querySelector("[data-line-problems]")),
+    };
+  });
+  check("its drawer: the routing number as typed, 857376; the file writes 00857376; no warning", drawer.value === "857376" && drawer.hint.includes("The file writes 00857376") && !drawer.hint.includes("Nine digits") && !drawer.problems, JSON.stringify(drawer));
+  await page.keyboard.press("Escape");
   await page.click("[data-advice-edit]");
   await page.waitForSelector("[data-advice-field='debit']", { timeout: 10000 });
   const box = await page.$("[data-advice-field='debit']");

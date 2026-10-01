@@ -525,7 +525,8 @@ export function AdviceDetailsDrawer({
  * The bank is asked as the choice it is — Standard Chartered, or another bank
  * and its routing number — rather than as a code to type: the file's
  * SCBLBDDXXXX and the two zeros in front of a routing number are the file's
- * business, and the page shows what it will write.
+ * business, and the page shows what it will write. The routing number is
+ * typed as the bank gives it, of any length (#129).
  */
 export function LineDrawer({
   adviceId,
@@ -544,8 +545,10 @@ export function LineDrawer({
   const [bank, setBank] = useState<"scb" | "other">(
     startsScb ? "scb" : "other",
   );
+  /* The line arrives as the file writes it (`bankCodeOf`): a routing
+     number with the file's two zeros in front, which are taken off here. */
   const [routing, setRouting] = useState(
-    line && !startsScb ? line.bankCode.replace(/^00(?=\d{9}$)/, "") : "",
+    line && !startsScb ? line.bankCode.replace(/^00/, "") : "",
   );
   const [paymentType, setPaymentType] = useState<PaymentType>(
     line?.paymentType ?? "PAY",
@@ -558,6 +561,12 @@ export function LineDrawer({
       : routingDigits.length === 9
         ? `00${routingDigits}`
         : routingDigits;
+  /* What the file will hold: the two zeros in front unless they are there
+     already — the API's `cleanBankCode` and `bankCodeOf`, in one line. */
+  const fileCode =
+    routingDigits.length === 9 || !routingDigits.startsWith("00")
+      ? `00${routingDigits}`
+      : routingDigits;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -643,9 +652,9 @@ export function LineDrawer({
               required
               error={fieldErrors.bankCode}
               hint={
-                routingDigits.length === 9
-                  ? `The file writes ${code}`
-                  : "Nine digits"
+                routingDigits
+                  ? `The file writes ${fileCode}`
+                  : "As the bank gives it — the file adds the two zeros"
               }
             >
               <Input
