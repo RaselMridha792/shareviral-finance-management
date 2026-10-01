@@ -34,7 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — not pushed |
+| 129 | **Bank Advice: a routing number of any length; the file adds its two zeros** | **done** — deployed 1 Oct |
 | 128 | **HR webhook: finance tells the HR portal about decisions as they are made** | **done** — deployed 1 Oct (with 127 and the deploy config, one run); the secret is set on the server |
 | 127 | **The rail: its switch inside it, icons-only when hidden, ShareViral™; dashboard quick links** | **done** — deployed 1 Oct |
 | 126 | **HR Requests: HR can withdraw a request that still waits** | **done** — deployed 1 Oct |
