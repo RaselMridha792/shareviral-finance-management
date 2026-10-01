@@ -242,9 +242,9 @@ is off, and the hourly poll carries everything.
   617d41b.
 - **The secret.** The owner copied it into `/opt/sfm/deploy/.env` before
   that deploy finished (`grep -c` printed 1).
-- **How to tell it is on.** The API's start-up log says `On: decisions on
-  HR's requests go to hrmapi...`. After that, each decision logs `Told the
-  HR portal about ...`.
+- **It is on.** The live API's start-up log said `On: decisions on HR's
+  requests go to hrmapi.hellonizam.com as they are made` (1 Oct, 11:46:59).
+  After that, each decision logs `Told the HR portal about ...`.
 - **Brief 7 §7.2 list, from the live database.**
   - No pay changes were applied before approvals existed.
   - One one-off was: `7e689377-540b-4fe9-95c5-71c6765df31f`, Rasel Mridha,
