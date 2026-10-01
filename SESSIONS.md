@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 133 | **The Assistant: drafts checked in code, a transfer between our own accounts, and plain talk** | **built** — brief items 1–5; **the quality bar (item 6) still not run: no model key on the local database** |
 | 132 | **The Assistant on Gemini, through the Google Cloud connection** | **built, ON TRIAL** — pushed 2 Oct at the owner's word to test on the live site; **the quality bar has not been run** |
 | 131 | **Settings → Connections, and the Assistant through Google Cloud (Vertex AI)** | **done** — step 2 of the Google brief; the owner's Google Cloud setup is still to do
 | 130 | **Schema: Google Cloud for the Assistant — the provider, the sealed service-account key, the region** | **done** — pushed alone, step 1 of the Google brief |
@@ -110,6 +111,213 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 133. The Assistant: drafts checked in code, transfers, and plain talk — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-complete-drafts.md`, items 1 to 5. **Item 6,
+the quality bar on Gemini, is not done** — the local database holds neither a
+Google key nor an Anthropic one, so no real model could be asked. Everything
+below is proved with a stand-in for the model; how a real one now *talks* is
+not measured. That is the first thing the next session should know.
+
+**What the owner saw** (live, Gemini): asked to move a lakh from M/S. EXPROVIA
+to Md. Nizam Uddin, the Assistant asked for the USD rate, said "transfer
+record korechi", and showed a money-out draft with no category. Save answered
+`expected string, received undefined: Category`.
+
+**Four causes, and none of them was training:**
+
+- **The field list told the model the category was optional.**
+  `field-reference.ts` wrote `required: name === "accountName"` for the two
+  name fields, so `categoryName` read "optional" on a payment whose schema
+  requires `categoryId`. Claude asked anyway; Gemini obeyed the list. It is
+  now generated from the schema like every other field, and reads REQUIRED.
+- A transfer between two of our own accounts was not something it could draft.
+- Whether a draft was complete was the model's word (`missingFields`).
+- The closing sentence was the model's own.
+
+**What was built:**
+
+- **Every draft is put through the schema its Save uses**
+  (`ai-intake/draft-check.ts`, called from `settle()` in the service, for
+  every model). The draft is taken as the card will send it (text values),
+  its account and category names are looked up in the books, and it is parsed
+  with the endpoint's own create schema.
+  - What the schema refuses goes into `missingFields`, and the reply becomes
+    one question about the first: the model's own question when it has one,
+    otherwise one written in code ("Which category is this under?").
+  - A key the endpoint does not know (`vendorName`, `currencyCode`) is taken
+    off the draft. A value it will not take ("121,5" as a rate) is taken off
+    and asked for again, with the schema's own message.
+  - A draft is ready only when the schema accepts it. The page's Save follows
+    `missingFields`, as before, so it needed no change.
+- **A name is looked up, never taken as the first match.** `resolve()` used
+  `ilike '%name%' limit 1`: a name two accounts share went to whichever the
+  database returned first. Now the exact name wins; otherwise every account
+  containing it is found, and more than one is a question with the real names
+  listed ("\"Nizam\" could be A or B. Which one?"). The Save path refuses the
+  same way (400, in words) instead of picking one, and says "There is no
+  account called …" where it used to leave the id unset.
+  - Local "Office rent" exists as a heading **and** a sub-category. A leaf is
+    now preferred over a heading with the same name; before, it was whichever
+    came first.
+  - Two sub-categories may share a name under different headings (the
+    table's unique index is per parent). Those are written "Heading › Name"
+    in the list the model is given, in the question and on the card, and a
+    name written that way is read back as that heading's. Without it the
+    question was "Rent or Rent?".
+  - On a draft, a category is looked for among those the entry's direction
+    can take, and never among deleted ones (a deleted category keeps
+    `is_active`). Both read as ready before and were refused by the ledger.
+- **`transfer` is a target** (`packages/shared/src/ai.ts`): label, permission
+  `transactions.write`, endpoint `/transactions/transfer`, fields generated
+  from `transferSchema` (the brief calls it `createTransferSchema`; that name
+  does not exist). The draft carries `fromAccountName` and `toAccountName`.
+  - No category and no counterparty: the check drops them if a model adds
+    them.
+  - The description is not asked for; the code writes "Transfer from A to B"
+    once both accounts are known. It can be edited on the card.
+  - With a dollar account on either side the dollars are asked for, as the
+    Money Transfer form asks; between two taka accounts none are kept, as the
+    form sends none. All three local accounts are taka, so the first half is
+    proved in the unit test only.
+  - The same account on both sides is asked about.
+- **The line under a ready draft is the code's**: `AI_DRAFT_READY_LINE`,
+  "Draft ready — check every line, then press Save. Nothing is recorded yet."
+  Under a ready draft the model's own sentence is never shown. Under one that
+  is not ready, its question is shown; with no question, what it said is kept
+  ahead of the code's question (it may be an answer to something asked along
+  the way) unless it says the thing is done.
+  - A sentence that says the thing is recorded ("record korechi", "has been
+    saved", "সেভ হয়েছে") is replaced: by the code's question on a draft, and
+    by "Nothing has been recorded. I can only draft…" when the reply carries
+    no draft. An answer about the books ("3 ta transfer record kora hoyeche")
+    is left alone, unless a draft was on the table when it was asked. Beside
+    a batch or an import plan only the first person is held to, in the
+    sentence and in the card's note.
+  - These are regular expressions; they catch the wordings tested and will
+    miss others. The prompt forbids the claim as well.
+- **The prompt**: a section saying it drafts and a person saves, and never to
+  say recorded/saved/done in any language; answer in the way they wrote
+  (Bangla in Latin letters to that); say what was understood, then one
+  question; name the real choices when a name fits several; when a transfer
+  applies. Accounts are listed one a line with their kind ("  —  bank",
+  ", dollar account").
+
+**The USD rate — the brief's item 4 could not be done as written, and the
+owner should decide.** The brief says the rate "was asked for on a BDT move"
+and should be asked "only when the schema requires it". The schema requires
+it on every entry: `usdRate` is required in `createTransactionSchema` and in
+`transferSchema`, on the owner's own rule (*"puro application a joto dhoroner
+transaction a hok na keno manually prottekbar rate bosate hobe"*), and the
+Money Transfer form asks for it on a taka-to-taka move too. So the Assistant
+was right to ask. **Nothing about the rule was changed.** It still asks once;
+the code's question now says why ("Every entry that moves money carries
+one"), and it never writes a rate nobody gave. If a taka-only entry should
+need no rate, that is a change to the schema and to the forms that ask for
+it — its own session.
+
+**Shared code** (the brief named it; nothing existing changed meaning):
+`packages/shared/src/ai.ts` gains `transfer` in `AI_TARGETS` and its three
+maps, and `AI_DRAFT_READY_LINE`. Read by `assistant-screen.tsx`,
+`batch-card.tsx`, `lib/ai.ts`, `ai-intake.service.ts`,
+`ai-intake.controller.ts`, `field-reference.ts` and `corrections.ts`.
+`apps/web/src/lib/ai.ts` did not need to change: Save posts to
+`AI_TARGET_ENDPOINT[target]`, and `/ai/resolve` now turns the two transfer
+names into ids.
+
+**Proved:**
+
+- `draft-check.spec.ts`, 34 tests, no database: the owner's draft is not
+  ready and asks for the category; ready with one; the same request as a
+  transfer; rate, dollars, same-account; several and no matches; two
+  sub-categories of one name; unknown keys dropped; "1,00,000" read as 100000
+  and "121,5" refused; every required field of every target has a question
+  written for it; the claim patterns.
+- **A second read of the diff, by a separate agent, before the push.** It
+  found real faults in the first version, each now fixed and tested:
+  - "$100" in the amount was stripped to "100" and read as ready — a hundred
+    dollars filed as a hundred taka. A figure now loses only its own
+    currency's sign; "$100" in a taka box is refused and asked about.
+  - a money-in or a deleted category read as ready and was refused at Save;
+  - two sub-categories of one name could never be chosen between;
+  - a rate given with no foreign amount was asked for again for ever (it now
+    asks for the amount);
+  - "4500,50" as the amount took a good `billAmount` off the draft;
+  - "record hoye geche" got through when the model dropped the target;
+    "Recorded." got through anywhere; and য় typed as one character was not
+    matched;
+  - dollars on a taka-to-taka transfer were kept and would have been stored
+    as USD on both rows.
+- `.assistantdraftqa.mjs` (new), **57/57**. It starts the built API on :4011
+  against a stand-in for Anthropic's API that answers with replies written in
+  the script — the one Gemini gave the owner among them — and drives the real
+  page with the browser's `/api` calls sent to that API.
+  - The owner's draft: `missingFields` is `["categoryName"]`, the reply is
+    "Which category is this under?", "korechi" is in neither the reply nor
+    the saved conversation; the page shows "Still needed: Category" and Save
+    is disabled.
+  - A transfer: ready, the code's line under it, the card reads From / To /
+    USD rate; pressing Save answers "Saved — money moved between our own
+    accounts, TXN-2026-…", and the books hold the pair (out of one account,
+    into the other, no category, the rate on both).
+  - Names: "st" fits two local accounts, none is picked, both are listed, and
+    `/ai/resolve` refuses it; an account and a category that do not exist.
+  - What the model is sent: `transfer` in the target enum, its fields,
+    `categoryName REQUIRED`, the accounts.
+  - It puts back `app_settings` and deletes its chats and transfers; checked
+    afterwards by query.
+  - **Two runs out of about twenty failed, and neither cause was
+    established.** One showed 5 failures that were not captured (the output
+    was filtered). One showed `/ai/resolve` answering 500 where every other
+    run has 400. Neither came back: the last seven runs are 57/57. The
+    stand-in now holds its answer instead of queueing it, and the script now
+    prints the API's own log when anything fails, so the next one explains
+    itself. A dropped connection to Neon would produce both, but that is a
+    guess.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 190,
+  shared 352) pass, each on its own exit code.
+
+**Not proved:**
+
+- **Anything a real model says.** Whether Gemini now drafts the owner's
+  request as a transfer, answers in Latin-letter Bangla, and asks one
+  question, is the prompt's work and is unmeasured.
+- **The bar.** `.assistantbar.mjs` has the owner's messages as F1–F3 (the
+  balance; the transfer as a transfer with no rate made up and nothing
+  "recorded"; the transfer ready once the rate is given). Not run.
+  - The brief's "must not ask for a USD rate" is written there as "must not
+    write a rate nobody gave", for the reason above.
+- **A newer Gemini Pro in Model Garden**: needs the key too. Not checked.
+
+**To finish item 6:** paste the Google key into the LOCAL Settings →
+Connections, `npm run dev`, then `node .assistantbar.mjs gemini-2.5-pro`.
+
+**Seen, not touched:**
+
+- A transfer saved from the Assistant is stamped "Entered by hand":
+  `transferSchema` has no `createdVia` and the service writes `manual`.
+- A conversation saved before this change keeps its stored reply. Reopened,
+  the owner's old draft still offers Save, and Save still refuses it.
+- A batch's rows are not checked one by one; the table still shows each
+  row's refusal after saving.
+- An answer given with no target mid-draft drops the draft in progress (the
+  page sends back the last reply's draft). Old behaviour.
+- Under a draft that is ready, an answer the model gave along the way is not
+  shown: only the code's line is.
+- Two ACCOUNTS with exactly the same name cannot be told apart by the
+  question ("X or X"), and Save refuses the name. Categories were given
+  their heading for this; accounts were not.
+- An import plan whose account name fits several accounts now stages the
+  rows unmapped (the person maps the columns) where it used to take the
+  first account.
+- An archived account is still found by name, as before: the ledger takes
+  entries on one.
+- The local dev API on :4001 is an orphan from 02:57 running old code — its
+  `nest start --watch` died (`.dev.log`). Restart `npm run dev` before
+  trusting anything on :4001.
+
+**Next:** the bar on Gemini, then a pasted Google Sheet or Doc link.
 
 ## 132. The Assistant on Gemini, through the Google Cloud connection — 2 Oct 2026
 
