@@ -19,6 +19,8 @@ import {
   AI_TARGETS,
   aiFeedbackSchema,
   aiIntakeRequestSchema,
+  aiLinkSchema,
+  isDocAttachment,
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
@@ -26,6 +28,7 @@ import {
   type AiFeedbackInput,
   type AiImportPlan,
   type AiIntakeRequest,
+  type AiLinkInput,
   type AiTarget,
   type MakeAiRuleInput,
   type SetAiInstructionsInput,
@@ -149,6 +152,26 @@ export class AiIntakeController {
     );
   }
 
+  /**
+   * A Google Sheet, Doc or Drive file, by the link somebody pasted (A3).
+   *
+   * The chat sends the link here before the message, so the file is on the
+   * conversation by the time the model sees it. Read with the service account
+   * from Settings → Connections; what comes back is an attachment like any
+   * other, and belongs to whoever pasted the link.
+   */
+  @Post("attachments/link")
+  @HttpCode(200)
+  @RequirePermission("ai.use")
+  attachLink(
+    @ZodBody(aiLinkSchema) body: AiLinkInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.attachments.fromLink(body.url, actor, (buffer) =>
+      this.ai.readPdf(buffer),
+    );
+  }
+
   @Delete("attachments/:id")
   @HttpCode(204)
   @RequirePermission("ai.use")
@@ -176,6 +199,14 @@ export class AiIntakeController {
     @Body("plan") plan?: AiImportPlan | null,
   ) {
     const attachment = await this.attachments.get(id, actor);
+
+    // A Doc's paragraphs are not entries, and Import would stage each one as
+    // a row of money with no amount.
+    if (isDocAttachment(attachment.filename)) {
+      throw new BadRequestException(
+        "A document cannot be staged for Import. Ask the Assistant to draft the records in it instead.",
+      );
+    }
 
     if (attachment.importBatchId) {
       return { batchId: attachment.importBatchId, alreadyStaged: true };

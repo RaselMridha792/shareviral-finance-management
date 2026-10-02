@@ -291,7 +291,7 @@ export function Composer({
               onClick={() => picker.current?.click()}
               disabled={attaching}
               aria-label="Attach a spreadsheet"
-              title="Attach a CSV or Excel file for it to read"
+              title="Attach a CSV, Excel or PDF file for it to read. A Google Sheet, Doc or Drive file: paste its link in the message."
               className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {attaching ? (

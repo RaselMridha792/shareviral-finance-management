@@ -1,5 +1,6 @@
 import {
   aiFeedbackSchema,
+  aiLinkSchema,
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
@@ -15,7 +16,7 @@ export const ASSISTANT_MAP = [
     name: "AI Assistant",
     modules: ["ai-intake"],
     purpose:
-      "This conversation. It drafts a record for the person to check and save, answers questions about what is recorded, and reads a file somebody attaches. It saves nothing itself.",
+      "This conversation. It drafts a record for the person to check and save, answers questions about what is recorded, and reads a file somebody attaches, or a Google Sheet, Doc or Drive file whose link they paste. It saves nothing itself.",
     keeps: [
       "The conversations, each person's own.",
       "Its mistakes: what somebody corrected on a draft before saving, and answers somebody marked wrong, with why. Both are shown to it on later turns; the owner can make one a rule.",
@@ -51,6 +52,19 @@ export const ASSISTANT_MAP = [
         },
         onSave:
           "Reads the file into rows and totals, for the Assistant to answer from. Nothing enters the books.",
+      },
+      {
+        name: "Paste a Google link",
+        on: "/assistant",
+        opens:
+          "a Google Sheet, Doc or Drive file's link pasted into the message box, Send",
+        saves: ["POST /ai/attachments/link"],
+        schema: aiLinkSchema,
+        fields: {
+          url: "the link from the file's Share button; the chat finds it in the message",
+        },
+        onSave:
+          "Reads the file with the Google Cloud service account, before the message goes: a Sheet's tab as rows and totals, a Doc as its text, an Excel, CSV or PDF file in Drive as if it had been attached. A file not shared with the account's address is refused with that address to share it with. Nothing enters the books.",
       },
       {
         name: "Remove this file",

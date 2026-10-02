@@ -132,6 +132,17 @@ export const aiApi = {
     return response.json() as Promise<AiAttachment>;
   },
 
+  /**
+   * A Google Sheet, Doc or Drive file, read by its link (A3). The server
+   * reads it with the service account and keeps it as an attachment, the
+   * same shape an upload comes back as.
+   */
+  attachLink: (url: string) =>
+    apiFetch<AiAttachment>("/ai/attachments/link", {
+      method: "POST",
+      ...json({ url }),
+    }),
+
   detach: (id: string) =>
     apiFetch<void>(`/ai/attachments/${id}`, { method: "DELETE" }),
 

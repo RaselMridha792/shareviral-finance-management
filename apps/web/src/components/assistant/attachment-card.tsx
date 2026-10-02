@@ -4,6 +4,7 @@ import type { AiAttachment, AiImportPlan } from "@finance/shared";
 import {
   ArrowRight,
   FileSpreadsheet,
+  FileText,
   LoaderCircle,
   TableProperties,
   X,
@@ -37,6 +38,10 @@ export function AttachmentCard({
   onRemove?: () => void;
 }) {
   const truncated = attachment.storedRows < attachment.rowCount;
+
+  if (attachment.kind === "text") {
+    return <DocumentCard attachment={attachment} onRemove={onRemove} />;
+  }
 
   return (
     <div className="rounded-xl border border-border bg-surface">
@@ -162,6 +167,67 @@ export function AttachmentCard({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A Google Doc, read by its link (A3): how it begins, so the person can see it
+ * is the right document and that it was read at all. No Send to Import: a
+ * document's paragraphs are not entries, and the records in it come back as
+ * drafts to check.
+ */
+function DocumentCard({
+  attachment,
+  onRemove,
+}: {
+  attachment: AiAttachment;
+  onRemove?: () => void;
+}) {
+  const opening = attachment.sample
+    .slice(0, 4)
+    .map((row) => String(row.Text ?? ""));
+
+  return (
+    <div className="rounded-xl border border-border bg-surface">
+      <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+          <FileText className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold tracking-tight">
+            {attachment.name}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Google Doc · <span className="num">{attachment.rowCount}</span>{" "}
+            {attachment.rowCount === 1 ? "paragraph" : "paragraphs"}
+          </p>
+        </div>
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove this file"
+            className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="flex flex-col gap-1.5 p-4">
+        {opening.map((line, index) => (
+          <p
+            key={index}
+            className="line-clamp-2 text-sm leading-relaxed text-muted-foreground"
+          >
+            {line}
+          </p>
+        ))}
+        {attachment.rowCount > opening.length ? (
+          <p className="text-xs text-muted-foreground">…</p>
+        ) : null}
       </div>
     </div>
   );

@@ -164,6 +164,14 @@ code's finding, not the model's (2 Oct 2026): every draft is parsed with the
 schema its Save uses, its account and category names looked up in the books,
 before Save is offered — and the line under a ready draft is the app's own.
 
+It reads files: an uploaded CSV, Excel or PDF, and — since 2 Oct 2026 — a
+Google Sheet, Doc or Drive file whose link is pasted into the message. The
+chat reads the link before the message goes, with the read-only service
+account from Settings → Connections: a Sheet's tab as rows, a Doc as its
+paragraphs, a file in Drive as if it had been uploaded. A file not shared
+with the account is refused with the address to share it with. A folder or
+a picture is not read yet.
+
 Switched on from **Settings → Assistant**: a Super Admin pastes an Anthropic
 key and the screen becomes available, with no redeploy. The key is checked
 against Anthropic before it is saved, sealed with AES-256-GCM before it is

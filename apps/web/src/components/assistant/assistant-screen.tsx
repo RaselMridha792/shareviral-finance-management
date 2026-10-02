@@ -6,6 +6,7 @@ import {
   AI_TARGET_LABELS,
   AI_TARGET_SHOWS_ON,
   aiModelsFor,
+  findGoogleLinks,
   type AiAttachment,
   type AiAvailability,
   type AiChatSummary,
@@ -83,6 +84,8 @@ export function AssistantScreen({
   const [drawer, setDrawer] = useState(false);
   const [attachment, setAttachment] = useState<AiAttachment | null>(null);
   const [attaching, setAttaching] = useState(false);
+  /** A Google link in the message being read, before the message goes. */
+  const [reading, setReading] = useState(false);
   const [staging, setStaging] = useState(false);
   /** Rows the person struck out before saving, by index. */
   const [dropped, setDropped] = useState<Set<number>>(new Set());
@@ -126,7 +129,7 @@ export function AssistantScreen({
   useEffect(() => {
     const el = scroller.current;
     if (el && messages.length) el.scrollTop = el.scrollHeight;
-  }, [messages, reply, thinking]);
+  }, [messages, reply, thinking, reading]);
 
   if (!configured) {
     return (
@@ -244,22 +247,55 @@ export function AssistantScreen({
 
   async function send() {
     const text = input.trim();
-    if (!text || thinking) return;
+    if (!text || thinking || reading) return;
 
+    /*
+     * A Google link is read before the message goes (A3), so the file is on
+     * the conversation by the time the model sees it. The model cannot open
+     * a link, and must never be left to imagine what one holds. One link at a
+     * time: two links and one card would let somebody believe both were read.
+     */
+    const links = findGoogleLinks(text);
+    if (links.length > 1) {
+      setError(
+        "That message has more than one Google link. Send them one at a time: the Assistant reads one file per message.",
+      );
+      return;
+    }
+
+    const before = messages;
     const next: AiMessage[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
-    setThinking(true);
     setError(null);
     setSavedOn(null);
 
+    let file = attachment;
+    if (links.length) {
+      setReading(true);
+      try {
+        file = await aiApi.attachLink(links[0].url);
+        setAttachment(file);
+      } catch (caught) {
+        // Nothing was sent. The message goes back in the box, and the reason
+        // (most often "share it with …") shows above it.
+        setMessages(before);
+        setInput(text);
+        setError(explain(caught, "That link could not be read."));
+        return;
+      } finally {
+        setReading(false);
+      }
+    }
+
+    setThinking(true);
     try {
       const result = await aiApi.turn({
         messages: next,
         target: reply?.target ?? undefined,
         draft: reply?.draft,
         chatId: chatId ?? undefined,
-        attachmentId: attachment?.id,
+        attachmentId: file?.id,
       });
 
       setReply(result);
@@ -476,7 +512,7 @@ export function AssistantScreen({
                 message.role === "user" ? (
                   <p
                     key={index}
-                    className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-primary-foreground"
+                    className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-primary-foreground wrap-anywhere"
                   >
                     {message.content}
                   </p>
@@ -485,26 +521,26 @@ export function AssistantScreen({
                     <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
                       <Sparkles className="size-3.5" />
                     </span>
-                    <p className="min-w-0 pt-0.5 text-[15px] leading-relaxed whitespace-pre-wrap">
+                    <p className="min-w-0 pt-0.5 text-[15px] leading-relaxed whitespace-pre-wrap wrap-anywhere">
                       {message.content}
                     </p>
                   </div>
                 ),
               )}
 
-              {thinking ? (
+              {thinking || reading ? (
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
                     <LoaderCircle className="size-3.5 animate-spin" />
                   </span>
-                  Thinking…
+                  {reading ? "Reading the linked file…" : "Thinking…"}
                 </div>
               ) : null}
 
               {/* The way to the screen: where the thing asked about is done
                   when the assistant can only point to it, and where a record
                   just saved now shows. */}
-              {place && !thinking ? (
+              {place && !thinking && !reading ? (
                 <Link
                   href={place.href}
                   className="ml-10 inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
@@ -517,7 +553,7 @@ export function AssistantScreen({
               {/* Under the latest answer only: the one the conversation
                   holds whole on the server. Keyed on it, so a new answer
                   gets a fresh box. */}
-              {chatId && reply && !thinking ? (
+              {chatId && reply && !thinking && !reading ? (
                 <MarkWrong key={messages.length} chatId={chatId} />
               ) : null}
 
@@ -569,7 +605,7 @@ export function AssistantScreen({
           value={input}
           onChange={setInput}
           onSend={() => void send()}
-          thinking={thinking}
+          thinking={thinking || reading}
           model={model}
           models={aiModelsFor(availability.provider ?? "anthropic")}
           onModelChange={(next) => void changeModel(next)}

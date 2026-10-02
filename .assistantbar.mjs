@@ -28,6 +28,11 @@
  *      "how many people on the team" answered with the Team screen's count
  *      (docs/briefs/2026-10-02-assistant-powerful.md, A2); and, A2b, how a
  *      thing it cannot do is done: the screen and the form, nothing drafted
+ *   H. files and links, 2 Oct 2026 (A3)             — a CSV's totals exact; a
+ *      Google Doc's figures as written, no total made up, never an importPlan
+ *      or an account nobody named; a link the app did not read said to be
+ *      unread, never described; with LINK_SHEET / LINK_DOC set to files
+ *      shared with the stored service account, a real read by link
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -662,7 +667,111 @@ const CASES = [
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named the form and its fields", said };
     },
   },
+
+  /*
+   * A3, 2 Oct 2026: files and links. A CSV upload, as C1 is an Excel one. A
+   * Google Doc read by link, planted as the app keeps one (its paragraphs,
+   * under a `.gdoc` name), so what the model does with a document's text is
+   * held to without a real Doc. A link the app has not read: it must say so
+   * and never describe it. And, when LINK_SHEET / LINK_DOC name files really
+   * shared with the stored service account, a real read by link.
+   */
+  {
+    id: "H1", runs: LIGHT, name: "CSV: the totals, quoted exactly",
+    run: async () => {
+      const csv = ["Date,Description,Debit,Credit", ...LEDGER.map((row) => row.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(","))].join("\n");
+      const file = await attach("august-ledger.csv", Buffer.from(csv), "text/csv");
+      if (!file.attachment) return { error: file.problem };
+      const { reply, failed } = await talk(["Debit column er total koto, ar Credit column er?"], file.attachment.id);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const ok = says(said, LEDGER_DEBIT) && says(said, LEDGER_CREDIT);
+      return { pass: ok, note: ok ? "both exact" : `wanted ${LEDGER_DEBIT} and ${LEDGER_CREDIT}`, said };
+    },
+  },
+  {
+    id: "H2", runs: LIGHT, name: "a Google Doc: its figures as written, no total made up",
+    run: async () => {
+      const id = await plantDoc();
+      const { reply, failed } = await talk(["ei doc e kon kon payment ache? total koto?"], id);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const written = [4500, 1250, 3800];
+      // The count, a day or a month may be said; any other figure is one
+      // the document does not hold, unless it is the exact sum.
+      const invented = figuresIn(said).filter((n) => n > 31 && !written.includes(n) && n !== 9550);
+      const wrong = [
+        ...written.filter((n) => !says(said, n)).map((n) => `left out ${n}`),
+        invented.length ? `said figures the document does not hold: ${invented.join(", ")}` : null,
+        reply.target || reply.batch ? "drafted something" : null,
+        reply.importPlan ? "sent an importPlan for a document" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "every figure as written", said };
+    },
+  },
+  {
+    id: "H3", runs: LIGHT, name: "a Google Doc: 'entry koro', no account named - never an importPlan, never an account",
+    run: async () => {
+      const id = await plantDoc();
+      const { reply, failed } = await talk(["ei doc er payment gulo entry kore dao"], id);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const rows = reply.batch?.rows ?? (reply.target ? [reply.draft] : []);
+      const wrong = [
+        reply.importPlan ? "sent an importPlan for a document" : null,
+        rows.some(hasAccount) ? `filled in the account: ${rows.find(hasAccount).accountName ?? rows.find(hasAccount).accountId}` : null,
+        rows.some((row) => row.amount !== undefined && ![4500, 1250, 3800].some((n) => amountIs(row.amount, n))) ? "an amount the document does not hold" : null,
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : reply.batch ? `${rows.length} drafts, no account` : "asked", said };
+    },
+  },
+  ...[
+    ["H4", "a link the app has not read (Dropbox) - says so, describes nothing", "https://www.dropbox.com/scl/fi/ledger-august.xlsx"],
+    ["H5", "a Google link with no file read - says so, describes nothing", "https://docs.google.com/spreadsheets/d/1BarqaNotReadNotReadNotReadNotReadNot00/edit"],
+  ].map(([id, name, link]) => ({
+    id, runs: LIGHT, name,
+    run: async () => {
+      const { reply, failed } = await talk([`ei sheet ta dekho, total koto? ${link}`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const invented = figuresIn(said.replace(link, "")).filter((n) => n > 31);
+      const wrong = [
+        /attach|open|read|access|share|পড়|porte|khulte|dekhte/i.test(said) ? null : "did not say the link was not read",
+        invented.length ? `gave figures: ${invented.join(", ")}` : null,
+        reply.target || reply.batch || reply.importPlan ? "drafted something" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "said it was not read", said };
+    },
+  })),
+  ...[
+    ["H6", "a real Sheet by link (LINK_SHEET)", process.env.LINK_SHEET],
+    ["H7", "a real Doc by link (LINK_DOC)", process.env.LINK_DOC],
+  ].map(([id, name, link]) => ({
+    id, runs: 1, name,
+    run: async () => {
+      if (!link) return { pass: true, read: true, note: `not run: set ${id === "H6" ? "LINK_SHEET" : "LINK_DOC"} to a file shared with the stored service account` };
+      const res = await call("POST", "/ai/attachments/link", { url: link });
+      if (res.status !== 200) return { pass: false, note: `${res.status} ${res.body?.message}` };
+      made.attachments.add(res.body.id);
+      const { reply, failed } = await talk([`ei file e koyta ${res.body.kind === "text" ? "paragraph" : "row"} ache? ${link}`], res.body.id);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      return { pass: says(said, res.body.rowCount), note: `${res.body.name}: ${res.body.rowCount}`, said };
+    },
+  })),
 ];
+
+/** A Google Doc as the app keeps one read by link: its paragraphs, a `.gdoc` name. */
+const DOC_LINES = ["September payments, from Rahim", "Hostinger hosting renewal | 4,500", "Office tea and snacks | 1,250", "Printer toner | 3,800"];
+async function plantDoc() {
+  const [row] = await q(
+    `insert into ai_attachments (user_id, filename, headers, rows, total_rows) values ($1, 'Barqa September notes.gdoc', '["Text"]'::jsonb, $2::jsonb, $3) returning id`,
+    [user.id, JSON.stringify(DOC_LINES.map((Text) => ({ Text }))), DOC_LINES.length],
+  );
+  made.attachments.add(row.id);
+  return row.id;
+}
 
 /*
  * M. The owner's recorded mistakes, each run again (A2b). What was asked is

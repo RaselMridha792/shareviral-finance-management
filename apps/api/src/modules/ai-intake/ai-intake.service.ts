@@ -46,9 +46,9 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
 import {
-  AI_ATTACHMENT_TOOLS,
   AI_ATTACHMENT_TOOL_NAMES,
   AiAttachmentsService,
+  attachmentToolsFor,
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
@@ -681,7 +681,7 @@ export class AiIntakeService {
 
     const tools: ModelTool[] = [
       ...lookupTools,
-      ...(attachment ? AI_ATTACHMENT_TOOLS : []),
+      ...(attachment ? attachmentToolsFor(attachment) : []),
       {
         name: "answer",
         description:
@@ -699,7 +699,12 @@ export class AiIntakeService {
         corrections,
         input.target,
         this.carried(input.target, input.draft, plans),
-        attachment ? this.attachments.describe(attachment) : null,
+        attachment
+          ? {
+              described: this.attachments.describe(attachment),
+              kind: attachment.kind,
+            }
+          : null,
       ),
       messages: recent.length ? recent : input.messages.slice(-1),
       tools,
@@ -768,8 +773,14 @@ export class AiIntakeService {
           said,
         });
         // Which model answered goes on the conversation with the answer, so
-        // a mistake marked on it later says whose it was (A2b).
-        return { ...settled, model: modelId };
+        // a mistake marked on it later says whose it was (A2b). A plan for
+        // Import cannot be made of a Doc's paragraphs: it would put a button
+        // on the card that stages rows of text as money.
+        return {
+          ...settled,
+          ...(attachment?.kind === "text" ? { importPlan: null } : {}),
+          model: modelId,
+        };
       }
 
       if (!calls.length) {
@@ -1237,6 +1248,11 @@ at the point where it costs them work.
   void a transaction. Those are done on the screens.
 - You cannot see or record what anybody is paid now. There is no tool for it
   at any setting.
+- You cannot open a link. A Google Sheet, Doc or Drive file pasted into the
+  chat is read by the app before you see the message, and arrives below as
+  FILE ATTACHED or DOCUMENT ATTACHED. If a message holds a link and nothing
+  below says it was read, it was not: say so, and ask them to attach the file.
+  Never say what a link might hold.
 - You have no memory between conversations beyond what somebody corrected on a
   draft or marked wrong, and the owner's instructions above. A person who
   thinks an answer of yours was wrong can say so with "This was wrong" under
@@ -1473,7 +1489,7 @@ nextQuestion and summary out.`;
     corrections: string,
     target?: AiTarget,
     draft?: Record<string, unknown>,
-    attachment?: string | null,
+    attachment?: { described: string; kind: "table" | "text" } | null,
   ): string {
     // A draft this person could not save is not theirs to be offered.
     const barred = AI_TARGETS.filter(
@@ -1488,8 +1504,18 @@ ${barred.length ? `Their role cannot save: ${barred.join(", ")}. Do not draft th
 ${corrections}
 
 ${
-  attachment
-    ? `${attachment}
+  attachment?.kind === "text"
+    ? `${attachment.described}
+
+WORKING FROM A DOCUMENT
+Answer from the text above, and read_attachment for the rest of it. A
+document cannot go to Import, so never send an importPlan for it. If they
+want records made from it, draft them as usual: one record, or several of the
+same kind at once (MANY RECORDS AT ONCE). Every figure exactly as the document
+writes it; whatever it does not say, ask.
+`
+    : attachment
+      ? `${attachment.described}
 
 WORKING FROM A FILE
 Answer from the summary and the two file tools. The totals were computed from
@@ -1527,7 +1553,7 @@ with what it would become, the duplicates flagged, and can undo the whole batch
 afterwards.
 One row, or a handful they read out to you, is different — draft that as usual.
 `
-    : ""
+      : ""
 }
 ${target ? `They are recording: ${target}. Stay on it unless they clearly change subject.` : "Work out which one they mean. If it is genuinely ambiguous, set clarification and ask."}
 

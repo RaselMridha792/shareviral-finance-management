@@ -54,6 +54,38 @@ export async function readSpreadsheet(buffer: Buffer): Promise<{
 }
 
 /**
+ * A grid of cells, as Google Sheets hands a tab back (A3, 2 Oct 2026).
+ *
+ * The same rules as a workbook above: the first row is the headings, a
+ * column with no heading is left out, a row with nothing in it is skipped,
+ * and every cell arrives as text. A Sheet read by link then reaches the
+ * Assistant in exactly the shape an uploaded .xlsx does.
+ */
+export function readGrid(grid: unknown[][]): {
+  headers: string[];
+  rows: RawRow[];
+} {
+  const headers = (grid[0] ?? []).map((cell) => (cellText(cell) ?? "").trim());
+
+  const rows: RawRow[] = [];
+  for (const line of grid.slice(1)) {
+    const record: RawRow = {};
+    let hasValue = false;
+
+    headers.forEach((header, offset) => {
+      if (!header) return;
+      const text = cellText(line?.[offset]);
+      if (text && text.trim() !== "") hasValue = true;
+      record[header] = text === "" ? null : text;
+    });
+
+    if (hasValue) rows.push(record);
+  }
+
+  return { headers: headers.filter(Boolean), rows };
+}
+
+/**
  * One cell as plain text.
  *
  * exceljs hands back an object for anything but a plain value — a formula

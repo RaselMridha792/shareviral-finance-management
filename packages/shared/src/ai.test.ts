@@ -21,6 +21,8 @@ import {
   aiModelGoesWith,
   aiModelProviderProblem,
   aiModelsFor,
+  findGoogleLinks,
+  isDocAttachment,
   isGeminiModel,
   setAiInstructionsSchema,
   updateAiSettingsSchema,
@@ -203,7 +205,10 @@ describe("what the assistant can draft", () => {
       name: "AI tools and subscriptions",
       href: "/subscriptions",
     });
-    assert.equal(AI_TARGET_SHOWS_ON.subscription_payment?.href, "/subscriptions");
+    assert.equal(
+      AI_TARGET_SHOWS_ON.subscription_payment?.href,
+      "/subscriptions",
+    );
     // No screen lists vendors today.
     assert.equal(AI_TARGET_SHOWS_ON.vendor, null);
     assert.match(AI_FIRST_PAYMENT_NOTE, /First payment/);
@@ -255,5 +260,101 @@ describe("the owner's instructions for the assistant", () => {
       false,
     );
     assert.equal(setAiInstructionsSchema.safeParse({}).success, false);
+  });
+});
+
+describe("findGoogleLinks — a link pasted into the chat (A3)", () => {
+  const SHEET = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd";
+  const FILE = "1ZyXwVuTsRqPoNmLkJiHgFeDcBa98765";
+
+  it("reads a sheet, with the tab its link names", () => {
+    const [link] = findGoogleLinks(
+      `ei sheet ta dekho https://docs.google.com/spreadsheets/d/${SHEET}/edit?gid=0#gid=1834620192`,
+    );
+    assert.equal(link?.kind, "sheet");
+    assert.equal(link?.id, SHEET);
+    assert.equal(link?.gid, "1834620192");
+  });
+
+  it("reads a doc, and a sheet opened from a second Google account", () => {
+    const [doc] = findGoogleLinks(
+      `https://docs.google.com/document/d/${SHEET}/edit?tab=t.0`,
+    );
+    assert.deepEqual(
+      { kind: doc?.kind, id: doc?.id, gid: doc?.gid },
+      { kind: "doc", id: SHEET, gid: undefined },
+    );
+    const [other] = findGoogleLinks(
+      `https://docs.google.com/spreadsheets/u/1/d/${SHEET}/edit`,
+    );
+    assert.equal(other?.kind, "sheet");
+    assert.equal(other?.id, SHEET);
+  });
+
+  it("reads every form of a Drive file's link", () => {
+    for (const url of [
+      `https://drive.google.com/file/d/${FILE}/view?usp=sharing`,
+      `https://drive.google.com/file/u/0/d/${FILE}/view`,
+      `https://drive.google.com/open?id=${FILE}`,
+      `https://drive.google.com/uc?id=${FILE}&export=download`,
+      `https://docs.google.com/uc?id=${FILE}`,
+    ]) {
+      const [link] = findGoogleLinks(url);
+      assert.equal(link?.kind, "file", url);
+      assert.equal(link?.id, FILE, url);
+    }
+  });
+
+  it("names a folder, and what it cannot read, rather than ignoring them", () => {
+    const [folder] = findGoogleLinks(
+      `https://drive.google.com/drive/u/0/folders/${FILE}`,
+    );
+    assert.equal(folder?.kind, "folder");
+    assert.equal(folder?.id, FILE);
+    for (const url of [
+      `https://docs.google.com/presentation/d/${SHEET}/edit`,
+      `https://docs.google.com/forms/d/${SHEET}/viewform`,
+      // A published copy: its id is not the file's.
+      `https://docs.google.com/spreadsheets/d/e/2PACX-${SHEET}/pubhtml`,
+    ]) {
+      const [link] = findGoogleLinks(url);
+      assert.equal(link?.kind, "other", url);
+      assert.equal(link?.id, null, url);
+    }
+  });
+
+  it("leaves a sentence's own punctuation off the link", () => {
+    const [link] = findGoogleLinks(
+      `Read (https://drive.google.com/file/d/${FILE}/view). Thanks`,
+    );
+    assert.equal(link?.url, `https://drive.google.com/file/d/${FILE}/view`);
+  });
+
+  it("counts one file once, and two files twice", () => {
+    assert.equal(
+      findGoogleLinks(
+        `https://docs.google.com/spreadsheets/d/${SHEET}/edit and again https://docs.google.com/spreadsheets/d/${SHEET}/edit#gid=0`,
+      ).length,
+      1,
+    );
+    assert.equal(
+      findGoogleLinks(
+        `https://docs.google.com/spreadsheets/d/${SHEET}/edit https://drive.google.com/file/d/${FILE}/view`,
+      ).length,
+      2,
+    );
+  });
+
+  it("finds nothing in a message with no Google link", () => {
+    assert.deepEqual(
+      findGoogleLinks("netflix 1200 taka, https://example.com/a"),
+      [],
+    );
+    assert.deepEqual(findGoogleLinks("google.com/spreadsheets"), []);
+  });
+
+  it("tells a Doc from an uploaded file by its name", () => {
+    assert.equal(isDocAttachment("Board notes.gdoc"), true);
+    assert.equal(isDocAttachment("statement.csv"), false);
   });
 });

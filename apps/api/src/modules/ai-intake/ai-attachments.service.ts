@@ -2,18 +2,31 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   AI_ATTACHMENT_EXTENSIONS,
+  AI_ATTACHMENT_MAX_BYTES,
+  AI_DOC_SUFFIX,
   type AiAttachment,
   type AiAttachmentColumn,
+  findGoogleLinks,
+  isDocAttachment,
   isPdfAttachment,
 } from "@finance/shared";
 import { and, desc, eq } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
-import { aiAttachments } from "../../db/schema";
+import { aiAttachments, appSettings } from "../../db/schema";
+import { openServiceAccount } from "../connections/google";
+import {
+  GoogleFileProblem,
+  googleReadToken,
+  readGoogleFile,
+  whyNotRead,
+  type GoogleRead,
+} from "../connections/google-files";
 import type { RawRow } from "../imports/row-parser";
 import { readSpreadsheet } from "../imports/spreadsheet";
 
@@ -75,6 +88,22 @@ export const AI_ATTACHMENT_TOOLS = [
 
 export const AI_ATTACHMENT_TOOL_NAMES = AI_ATTACHMENT_TOOLS.map((t) => t.name);
 
+/**
+ * The tools for this attachment. A Doc has no columns to group or total, so
+ * it is offered the reading one alone rather than a tool that cannot work.
+ */
+export function attachmentToolsFor(attachment: AiAttachment) {
+  return attachment.kind === "text"
+    ? AI_ATTACHMENT_TOOLS.filter((tool) => tool.name === "read_attachment")
+    : AI_ATTACHMENT_TOOLS;
+}
+
+/**
+ * How much of a Doc's text goes into the prompt itself, about 3,000 tokens.
+ * The rest is a read_attachment away, a window at a time.
+ */
+const DOC_PROMPT_CHARACTERS = 12_000;
+
 @Injectable()
 export class AiAttachmentsService {
   constructor(private readonly db: DbService) {}
@@ -116,6 +145,91 @@ export class AiAttachmentsService {
       ? await readPdf!(file.buffer)
       : await readSpreadsheet(file.buffer);
 
+    return this.keep(file.originalname, headers, rows, actor);
+  }
+
+  /**
+   * A Google Sheet, Doc or Drive file, by the link somebody pasted (A3).
+   *
+   * Read with the service account from Settings → Connections, then kept
+   * exactly as an upload is: a Sheet's tab as rows, a file in Drive through
+   * `upload` itself, a Doc as its paragraphs. From here on nothing can tell a
+   * link from an upload except a Doc's name.
+   *
+   * Gated like an upload, on owning what is made. The account can read
+   * whatever was shared with it; this reads one file, by its id, and only
+   * because the person has the link to it.
+   */
+  async fromLink(
+    url: string,
+    actor: AuthenticatedUser,
+    readPdf?: (
+      buffer: Buffer,
+    ) => Promise<{ headers: string[]; rows: RawRow[] }>,
+  ): Promise<AiAttachment> {
+    const [link] = findGoogleLinks(url);
+    if (!link) {
+      throw new BadRequestException(
+        "That is not a link to a Google Sheet, Doc or Drive file.",
+      );
+    }
+    const why = whyNotRead(link);
+    if (why) throw new BadRequestException(why);
+
+    const [settings] = await this.db.client
+      .select({ sealed: appSettings.googleServiceAccount })
+      .from(appSettings)
+      .where(eq(appSettings.id, 1))
+      .limit(1);
+    const account = openServiceAccount(settings?.sealed);
+    if (!account) {
+      throw new BadRequestException(
+        "Reading a Google link needs the Google Cloud key, which a Super Admin adds under Settings → Connections. Until then, download the file and attach it.",
+      );
+    }
+
+    let read: GoogleRead;
+    try {
+      read = await readGoogleFile(
+        link,
+        {
+          token: await googleReadToken(account),
+          shareWith: account.client_email,
+        },
+        { maxBytes: AI_ATTACHMENT_MAX_BYTES, maxRows: MAX_ROWS },
+      );
+    } catch (error) {
+      if (!(error instanceof GoogleFileProblem)) throw error;
+      throw error.unavailable
+        ? new ServiceUnavailableException(error.message)
+        : new BadRequestException(error.message);
+    }
+
+    if (read.kind === "file") {
+      return this.upload(
+        { originalname: read.name, buffer: read.buffer },
+        actor,
+        readPdf,
+      );
+    }
+    if (read.kind === "text") {
+      return this.keep(
+        `${read.name}${AI_DOC_SUFFIX}`,
+        ["Text"],
+        read.paragraphs.map((paragraph) => ({ Text: paragraph })),
+        actor,
+      );
+    }
+    return this.keep(read.name, read.headers, read.rows, actor);
+  }
+
+  /** What was read, checked and kept: the same for a file and for a link. */
+  private async keep(
+    filename: string,
+    headers: string[],
+    rows: RawRow[],
+    actor: AuthenticatedUser,
+  ): Promise<AiAttachment> {
     if (!headers.length) {
       throw new BadRequestException(
         "The first row must be column headings — none were found.",
@@ -134,7 +248,7 @@ export class AiAttachmentsService {
       .insert(aiAttachments)
       .values({
         userId: actor.id,
-        filename: file.originalname,
+        filename,
         headers,
         rows,
         totalRows: rows.length,
@@ -217,6 +331,8 @@ export class AiAttachmentsService {
    * added up in code.
    */
   describe(attachment: AiAttachment): string {
+    if (attachment.kind === "text") return this.describeDoc(attachment);
+
     const lines = [
       `FILE ATTACHED: ${attachment.name}`,
       `${attachment.rowCount} rows` +
@@ -273,6 +389,33 @@ export class AiAttachmentsService {
   }
 
   /**
+   * A Doc, as its own words: the text itself, up to a few thousand tokens,
+   * and where to read on from. Nothing in it was added up by the app, and
+   * the model is told so, since a document's figures are only as right as
+   * whoever typed them.
+   */
+  private describeDoc(attachment: AiAttachment): string {
+    // A Doc's sample is its opening, as much as the prompt takes (`toDto`).
+    const shown = attachment.sample.map((row) => asText(row.Text));
+
+    return [
+      `DOCUMENT ATTACHED: ${attachment.name} (a Google Doc)`,
+      `${attachment.rowCount} paragraph${attachment.rowCount === 1 ? "" : "s"}. A table in it is one line a row, its cells parted by " | ".`,
+      "",
+      "TEXT",
+      ...shown,
+      ...(shown.length < attachment.rowCount
+        ? [
+            "",
+            `The text stops here, at paragraph ${shown.length} of ${attachment.rowCount}. Use read_attachment with offset ${shown.length} to read on before you answer about the rest.`,
+          ]
+        : []),
+      "",
+      "Nothing in this document was added up by the app. Quote a figure exactly as it is written. Do not add figures up yourself: if a total is wanted, say it is not in the document and list the figures it would be made of.",
+    ].join("\n");
+  }
+
+  /**
    * Runs one of the two attachment tools.
    *
    * The attachment is fetched with the actor, so a tool call naming somebody
@@ -291,6 +434,20 @@ export class AiAttachmentsService {
       const offset = Math.max(0, Number(input.offset ?? 0) || 0);
       const limit = Math.min(100, Math.max(1, Number(input.limit ?? 25) || 25));
       const slice = this.rows(row, offset, limit);
+
+      if (isDocAttachment(row.filename)) {
+        return slice.length
+          ? {
+              ok: true,
+              text:
+                `Paragraphs ${offset + 1}–${offset + slice.length} of ${row.rows.length}:\n` +
+                slice.map((record) => asText(record.Text)).join("\n"),
+            }
+          : {
+              ok: true,
+              text: `No paragraph at ${offset}. The document has ${row.rows.length}.`,
+            };
+      }
 
       if (!slice.length) {
         return {
@@ -314,6 +471,12 @@ export class AiAttachmentsService {
     }
 
     if (name === "group_attachment") {
+      if (isDocAttachment(row.filename)) {
+        return {
+          ok: false,
+          text: "A document has no columns to group. Read it with read_attachment.",
+        };
+      }
       const by = typeof input.by === "string" ? input.by : "";
       const sum = typeof input.sum === "string" ? input.sum : null;
 
@@ -397,9 +560,39 @@ function toDto(row: {
   totalRows: number;
   importBatchId: string | null;
 }): AiAttachment {
+  /*
+   * A Doc is its paragraphs under the one column "Text". Its sample is its
+   * opening, as much of it as the prompt takes, so the model is given the
+   * words themselves and the card can show how it begins. A column summary
+   * of paragraphs would say nothing, so it carries only the count.
+   */
+  if (isDocAttachment(row.filename)) {
+    const opening: RawRow[] = [];
+    let used = 0;
+    for (const paragraph of row.rows) {
+      const length = asText(paragraph.Text).length;
+      if (opening.length && used + length > DOC_PROMPT_CHARACTERS) break;
+      opening.push(paragraph);
+      used += length;
+    }
+    return {
+      id: row.id,
+      name: row.filename.slice(0, -AI_DOC_SUFFIX.length),
+      kind: "text",
+      rowCount: row.totalRows,
+      storedRows: row.rows.length,
+      columns: [
+        { name: "Text", filled: row.rows.length, kind: "text", examples: [] },
+      ],
+      sample: opening,
+      importBatchId: null,
+    };
+  }
+
   return {
     id: row.id,
     name: row.filename,
+    kind: "table",
     rowCount: row.totalRows,
     storedRows: row.rows.length,
     columns: row.headers.map((header) => summarise(header, row.rows)),

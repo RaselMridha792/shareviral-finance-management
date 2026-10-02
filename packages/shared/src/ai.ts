@@ -489,6 +489,125 @@ export function isPdfAttachment(filename: string): boolean {
   return filename.toLowerCase().endsWith(".pdf");
 }
 
+/**
+ * A Google Doc, kept as its paragraphs rather than as a table (A3, 2 Oct).
+ *
+ * `.gdoc` is what Google Drive itself names a Doc on a computer, and no file
+ * can be uploaded under it (it is not in AI_ATTACHMENT_EXTENSIONS), so the
+ * name alone says which kind of attachment a stored row is.
+ */
+export const AI_DOC_SUFFIX = ".gdoc";
+
+export function isDocAttachment(filename: string): boolean {
+  return filename.toLowerCase().endsWith(AI_DOC_SUFFIX);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  A Google link pasted into the chat (A3)                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A link to something in Google Drive, as the chat found it in a message.
+ *
+ * - `sheet` and `doc` are Google's own files, opened in Sheets or Docs.
+ * - `file` is anything kept in Drive: an .xlsx, a .csv, a PDF, or a Sheet or
+ *   Doc linked through Drive rather than opened.
+ * - `folder` is a Drive folder.
+ * - `other` is a Google link of a kind nothing here reads (Slides, Forms, a
+ *   published copy), named so it is refused in words rather than ignored.
+ *
+ * The browser finds the link and the server reads it, both with this one
+ * function, so the two can never disagree about what counts as one.
+ */
+export type GoogleLink = {
+  url: string;
+  kind: "sheet" | "doc" | "file" | "folder" | "other";
+  /** The file's id in Drive. Null when the link carries none. */
+  id: string | null;
+  /** A sheet's tab, from `gid=` in the link. */
+  gid?: string;
+};
+
+const GOOGLE_URL = /https?:\/\/(?:docs|drive)\.google\.com\/[^\s<>"'`)\]]+/gi;
+/** Drive ids are 25 to 44 characters; nothing shorter is one. */
+const DRIVE_ID = /^[A-Za-z0-9_-]{20,}$/;
+
+/** Every Google Drive link in the text, the first of each file only. */
+export function findGoogleLinks(text: string): GoogleLink[] {
+  const found: GoogleLink[] = [];
+  for (const match of text.matchAll(GOOGLE_URL)) {
+    // A sentence's own full stop or comma is not part of the link.
+    const link = readGoogleLink(match[0].replace(/[.,;:!?]+$/, ""));
+    if (!link) continue;
+    const seen = found.some((other) =>
+      link.id ? other.id === link.id : other.url === link.url,
+    );
+    if (!seen) found.push(link);
+  }
+  return found;
+}
+
+/**
+ * One link, taken apart by hand: this package builds for the browser and the
+ * server alike and has neither one's `URL` in its types.
+ */
+function readGoogleLink(url: string): GoogleLink | null {
+  const parts =
+    /^https?:\/\/(docs|drive)\.google\.com(\/[^?#]*)?(\?[^#]*)?(#.*)?$/i.exec(
+      url,
+    );
+  if (!parts) return null;
+  const host = parts[1].toLowerCase();
+  // `/u/1/` is which of somebody's Google accounts opened it, nothing more.
+  const path = (parts[2] ?? "/").replace(/\/u\/\d+(?=\/)/, "");
+  const search = parts[3] ?? "";
+  const hash = parts[4] ?? "";
+  const query = (name: string) =>
+    new RegExp(`[?&]${name}=([^&]*)`).exec(search)?.[1] ?? null;
+  const id = (value: string | null | undefined) =>
+    value && DRIVE_ID.test(value) ? value : null;
+
+  if (host === "docs") {
+    // `/d/e/…` is a published copy, whose id is not the file's.
+    const own = /^\/(spreadsheets|document)\/d\/(?!e\/)([^/]+)/.exec(path);
+    if (own) {
+      const gid =
+        /[#&]gid=(\d+)/.exec(hash)?.[1] ??
+        /^\d+$/.exec(query("gid") ?? "")?.[0] ??
+        undefined;
+      return {
+        url,
+        kind: own[1] === "spreadsheets" ? "sheet" : "doc",
+        id: id(own[2]),
+        ...(own[1] === "spreadsheets" && gid ? { gid } : {}),
+      };
+    }
+    // An older form of the download link lives on this host too.
+    if (/^\/uc\/?$/.test(path) && id(query("id"))) {
+      return { url, kind: "file", id: id(query("id")) };
+    }
+    return { url, kind: "other", id: null };
+  }
+
+  const file = /^\/file\/d\/([^/]+)/.exec(path);
+  if (file) return { url, kind: "file", id: id(file[1]) };
+
+  const folder = /^\/drive\/(?:[^/]+\/)*folders\/([^/]+)/.exec(path);
+  if (folder) return { url, kind: "folder", id: id(folder[1]) };
+
+  if (/^\/(open|uc)\/?$/.test(path) && id(query("id"))) {
+    return { url, kind: "file", id: id(query("id")) };
+  }
+
+  return { url, kind: "other", id: null };
+}
+
+/** The link the chat hands to `POST /ai/attachments/link`. */
+export const aiLinkSchema = z.strictObject({
+  url: z.string().trim().min(1).max(2_000),
+});
+export type AiLinkInput = z.infer<typeof aiLinkSchema>;
+
 export type AiAttachmentColumn = {
   name: string;
   /** How many rows have anything in this column. */
@@ -515,6 +634,13 @@ export type AiAttachmentColumn = {
 export type AiAttachment = {
   id: string;
   name: string;
+  /**
+   * `table` for a spreadsheet, a CSV, a PDF statement or a Google Sheet:
+   * columns and rows. `text` for a Google Doc: its paragraphs, in order, under
+   * the one column "Text". A text attachment has no totals and cannot go to
+   * Import.
+   */
+  kind: "table" | "text";
   /** Rows in the file. */
   rowCount: number;
   /** Rows kept for analysis — fewer than rowCount for a very large file. */
