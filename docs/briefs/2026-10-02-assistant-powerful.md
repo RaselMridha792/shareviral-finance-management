@@ -210,6 +210,18 @@ what each row and each image would become. The owner has to say what the data is
 (payments, income, people, vendors, invoices, past years), and whether books for past
 periods are closed.
 
+**What the owner has said so far (2 Oct):** the data is **everything mixed**, and **all
+of it is 2026**. That includes payments, income, people and vendors. So:
+- one sheet may hold several kinds of record, and the mapping is per kind of row, not per
+  file;
+- check which 2026 months are closed or already hold records
+  (`apps/api/test/integration/13-closed-books.mjs` shows the rule), and tell the owner
+  before anything is staged for a closed month;
+- much of 2026 is already in the books from daily use, so "already recorded" matching
+  matters more than it would for an empty year.
+
+Still to come from the owner: the samples, and a rough count of sheets, rows and images.
+
 **The rule over all of it still holds.** At this volume a wrong mapping is hundreds of
 wrong records at once. So the summary before Confirm is the control, and it must show
 totals a person can check against the sheet.
