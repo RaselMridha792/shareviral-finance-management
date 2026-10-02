@@ -64,6 +64,26 @@ are at the end of `2026-10-02-assistant-complete-drafts.md`.
 - Offer what never invents. If both pass, prefer the one that is not a preview.
 - Make it the default for Gemini.
 
+### A1b. Claude is reachable again (2 Oct, evening)
+
+Anthropic verified the owner's account, and credit can be bought. The owner was told to:
+buy credit, set a monthly spend limit in the Anthropic Console, make an API key, and paste
+it into the **live** Settings → Assistant (never into chat). Then choose "Anthropic key"
+and Claude Opus 5, and try the same messages as for Gemini.
+
+What this changes:
+- **Claude Opus 5 is the model the quality bar was set on**, which is why it was the only
+  model offered before Gemini. Once the owner has tried it, it is the expected default.
+  Gemini stays offered as the second route. Everything in Part A must work on both: the
+  adapters already share prompts, tools and checks.
+- **Claude Opus 5.5** (`claude-opus-5-5`) is newer and cheaper: $4 / $20 per million
+  tokens, against $5 / $25. But it returns a 400 on forced `tool_choice` (`any` / `tool`),
+  which the turn loop uses today, and thinking cannot be switched off on it.
+  - Moving to it is its own piece: `auto` plus `strict` tools, the instruction in the
+    prompt, and the bar run before it is offered.
+  - Read `shared/model-migration.md` in the claude-api skill first.
+  - Not before A2.
+
 ### A2. Knowledge — "training", which here means what it is told and what it can read
 
 A model cannot be trained by us. What it knows about this company is what the app puts in
