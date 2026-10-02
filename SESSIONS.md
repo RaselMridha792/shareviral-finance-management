@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 142 | **The Assistant: a Sheet link that names no tab reads every tab, a card each, each counted on its own** | **built** — piece A3b of the "made strong" brief; **the owner tries it on the live site: the list is in #142.** Next is A4b (the origin "Added by the assistant" on everything Confirm saves), then A5 |
 | 141 | **The Assistant: Confirm and save — the server checks the card again and saves it as the form does, the audit row marked "through the Assistant"** | **built** — piece A4 of the "made strong" brief; **the owner tries it on the live site: the list is in #141.** Next: a Sheet link with no tab reads every tab (A3's follow-up, on its own), then A5 |
 | 140 | **Permissions: the Assistant is the Super Admin's and the CFO's alone — `ai.use` off HR** | **done** — piece B1 of the "made strong" brief, pushed alone as the owner ordered (B1 before A4). **Next is A4** (confirm in chat, then it saves) |
 | 139 | **The Assistant reads a Google Sheet, Doc or Drive file by its link** | **built** — piece A3 of the "made strong" brief; **the owner tries it on the live site: the list is in #139.** Next is A4 (confirm in chat, then it saves) |
@@ -119,6 +120,161 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 142. The Assistant: a Sheet link that names no tab reads every tab — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A3b** (the first of
+"Next, after A4"). **Next is A4b:** "Added by the assistant" as the origin
+of everything Confirm saves (a transfer, a plan's payment, a challan's
+payment). Then A5.
+
+**What the owner now has:**
+
+- **A Sheet's link with no tab in it reads every tab.** That is the link
+  from the Share button, or one with no `#gid=`. All the tabs' cells come
+  back from one call to Google.
+  - Each tab is a file of its own. It is named with its place:
+    "Expenses 2026 — Feb (tab 2 of 3)". A hidden tab says so: "(tab 3 of 3,
+    hidden)". A chart's own tab has no cells and is not counted.
+  - Each tab gets its own card: its rows, its columns and its totals, and
+    its own Send to Import. Above the cards one line names the Sheet: "<the
+    Sheet> · 3 tabs, each read and counted on its own". With the Sheet named
+    there, each card is headed by its tab alone, so a phone shows which tab
+    it is.
+  - An empty tab is kept and shown as empty ("Empty: no rows under a heading
+    row, so nothing was read"), with no Send to Import. Leaving it out would
+    let a tab go missing without anyone saying so.
+  - The message box says "<the Sheet> · 3 tabs". Its cross removes them
+    all; a card's own cross removes that tab alone, and its rows.
+  - Reopened from History, the conversation shows the last Sheet's tabs, in
+    order.
+- **A link that names a tab (`#gid=`) still reads only that tab**, as
+  before. So does a Sheet of one tab (named by its title alone).
+- **Refused in words, and nothing kept:**
+  - a Sheet of more than 20 tabs ("paste that tab's own link");
+  - more than 10,000 rows across its tabs ("paste the links of its tabs one
+    at a time");
+  - no rows under a heading on any tab.
+- **What the model is told:**
+  - Each tab is described on its own, as FILE 1, FILE 2 and on, with its
+    own totals computed in code. A new section, WORKING FROM A SHEET'S TABS,
+    says: never add one tab's figures to another's (asked for a total, give
+    each tab's and say a figure for all of them is not in the Sheet); a tab
+    may hold a different kind of record from the next; an empty tab is
+    empty.
+  - The two file tools gain `file`, the tab's number, required when there
+    are several. A call without it is answered "Say which file, by its
+    number: 1 to N", and each answer begins with which file it read. With
+    one file the tools are exactly as they were.
+  - **No importPlan for several tabs.** One is dropped in code (as for a
+    Doc), and the model is told to point to Send to Import on that tab's
+    card instead. The Import screen then asks for the account and the
+    columns. A5's "whole file at once" is where a plan for every tab
+    belongs.
+  - The line under WHAT THIS APP CANNOT DO says a Sheet's link with no tab
+    arrives as every tab, numbered.
+- **The map's "Paste a Google link" form** says the same.
+
+**How it is built:**
+
+- **No schema change.** The tabs are kept as rows of `ai_attachments`, in
+  one statement, so they share one `created_at` to the microsecond. That is
+  how a reopened conversation knows them for one Sheet: `forChat` now
+  returns the attachments with the conversation's latest `created_at`, in
+  tab order, rather than all of them. The page only ever showed the newest
+  one.
+- `POST /ai/attachments/link` answers with a **list** (one file, or the
+  tabs).
+- `POST /ai/turn` takes **`attachmentIds`** (1 to 20). The one
+  `attachmentId` a page loaded before this deploy sends is still read. An id
+  that is not the asker's is left out.
+- `google-files.ts`: `sheet()` reads every tab with `values:batchGet` when
+  no gid is named. A Sheet linked through Drive goes the same way.
+
+**Shared code:** I asked no one, as #136–#141 did; the brief names this.
+Read by the `ai-intake` module and the Assistant's web files only (grepped).
+
+- `packages/shared/src/ai.ts`: `AI_MAX_ATTACHMENTS`, `attachmentIds` on the
+  turn, and two comments.
+- `apps/web/src/lib/ai.ts`: `attachLink` returns a list.
+
+**Proved:**
+
+- `.assistantlinkqa.mjs` **60/60** (was 38). Google's stand-in now answers
+  `values:batchGet` as Google does: in the order asked, and an empty tab
+  with no values. It also has a mixed book: payments on one tab, people on
+  the next, a chart and a hidden empty tab. New checks:
+  - the endpoint: every tab, in order, each counted on its own (Jan
+    ৳4,500, Feb ৳27,600.50); one call for the cells; one moment; the mixed
+    book's three tabs with their own columns, the chart left out, the empty
+    one kept;
+  - what the model is told: FILE 1 and FILE 2 with their own totals; the
+    tabs' section; the tools asking which file; read_attachment on FILE 2
+    reads Feb alone; group_attachment on FILE 1 totals Jan alone; no file
+    named is asked for one; the plan dropped; reopened, the tabs in order;
+    reopened after a second Sheet, that Sheet's three and not all five; the
+    empty tab told as empty; somebody else's id left out; the old single
+    `attachmentId` still read;
+  - on the page: a card a tab under the Sheet's line, each headed by its
+    tab; their own rows and totals (Payments ৳5,140, People ৳45,000); the
+    empty one said so with no Send to Import; the turn carried all three in
+    order; the box's "LINKQA Book 2026 · 3 tabs"; one card's cross removed
+    that tab and its rows alone; reopened from History; at 390px the three
+    cards fit with each tab's name whole.
+
+  It leaves nothing behind (it prints the count: 0).
+- `google-files.spec.ts`: 4 new tests (every tab; only the named tab; over
+  20 tabs refused before any is read; no rows, or too many). One old one
+  replaced, "the first tab when none is named". `ai-attachments.spec.ts`
+  (new, 2): the tools with one file and with several. Shared: 2 new tests
+  of `attachmentIds`.
+- The older harnesses, against the new turn, one at a time:
+  `.assistantdraftqa.mjs` 57/57, `.assistantmapqa.mjs` 102/102,
+  `.assistantlearnqa.mjs` 72/72, `.assistantconfirmqa.mjs` 60/60. Each
+  left nothing behind.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 343, up
+  from 338; shared 382, up from 380) pass, each on its own exit code.
+
+**Not proved:** what a real model does with several tabs. `.assistantbar.mjs`
+gains two cases, with a Sheet's two tabs planted as the app keeps them:
+
+- H8: "ei sheet e total koto taka?" Each tab's total, and never the two
+  added together.
+- H9: "Payments tab er entry gulo boi te tule dao". Nothing from the Income
+  tab, and no account made up.
+
+H6 (a real Sheet by `LINK_SHEET`) now counts each tab. None has run: no key
+locally.
+
+**For the owner — on the live site, after the deploy.** **Reload the
+Assistant page first.** A tab left open from before reads a link's answer the
+old way, and the page breaks on the first link until it is reloaded.
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Share a Google Sheet that has several tabs with the service account. Copy its link from the **Share** button and paste it with `ei sheet e ki ki ache? total koto?` | "Reading the linked file…", then a line "<Sheet> · N tabs, each read and counted on its own" and one card per tab: the tab's name and place, its rows, columns and totals |
+| 2 | Read the answer to 1 | Each tab's total, with the tab's name. **Not** one total for all the tabs together |
+| 3 | Ask `2 number tab e koyta row?` | The second tab's row count, as its card shows |
+| 4 | If a tab is empty (or hidden) | Its card says "Empty: no rows under a heading row…" (or "hidden" in its name), with no Send to Import |
+| 5 | Open the second tab in Google, copy the link from the address bar (it ends in `#gid=…`), paste it | Only that tab: one card, "(tab 2 of N)" |
+| 6 | Press the × on one tab's card | Only that card goes; the message box says one tab fewer |
+| 7 | Open the conversation again from History | The same tab cards, in order |
+| 8 | With the tabs attached: `<a tab's name> tab er entry gulo boi te tule dao` | No "Ready to stage" plan. It points to **Send to Import** on that tab's card, or asks for the account. Nothing from another tab is drafted |
+
+**What the owner has to decide:**
+
+1. **An Excel file still reads only its first sheet.** That holds for one
+   attached with the paperclip, for one kept in Drive and pasted by link,
+   and for an .xlsx opened in Sheets but never converted. Should an Excel
+   workbook read every sheet too, the same way? It would be a small piece
+   of its own, and the Import screen would stay as it is.
+
+**Seen, not touched:**
+
+- The prompt's WHAT THIS APP CANNOT DO still names "**Save** on the draft
+  card". A4 renamed the button "Confirm and save". It is one word, in A4's
+  part of the prompt; A4b, which works on the same save, is the place for
+  it.
 
 ## 141. The Assistant: Confirm and save — 3 Oct 2026
 
