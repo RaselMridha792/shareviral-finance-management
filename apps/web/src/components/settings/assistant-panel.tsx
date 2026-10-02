@@ -42,6 +42,8 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
 
+import { AssistantInstructions } from "./assistant-instructions";
+
 /**
  * Switching the assistant on, without a redeploy.
  *
@@ -418,6 +420,8 @@ export function AssistantPanel() {
           </Field>
         </CardBody>
       </Card>
+
+      <AssistantInstructions />
 
       <Card>
         <CardHeader

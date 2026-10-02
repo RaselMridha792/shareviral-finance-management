@@ -11,15 +11,20 @@ import {
   AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
+  AI_TARGET_PERMISSION,
+  BILLING_CYCLE_LABELS,
   aiModelFrom,
   aiModelProviderProblem,
   hasPermission,
   isGeminiModel,
+  payableUsd,
   todayInDhaka,
   type AiAvailability,
+  type BillingCycle,
   type AiBatch,
   type AiIntakeReply,
   type AiImportPlan,
+  type AiInstructions,
   type AiIntakeRequest,
   type AiDataAccess,
   type AiKeyResult,
@@ -27,9 +32,10 @@ import {
   type AiModel,
   type AiProvider,
   type AiTarget,
+  type SetAiInstructionsInput,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
-import { and, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
@@ -55,6 +61,7 @@ import {
   vertexClient,
   type ServiceAccount,
 } from "../connections/google";
+import { APP_PART_KEYS, partOf, renderAppMap, screenOf } from "./app-map";
 import {
   NAME_FIELDS,
   allFieldReferences,
@@ -71,11 +78,24 @@ import {
   knowsField,
   nameOf,
   namesIn,
+  planLabels,
+  plansNamed,
   tidyDraft,
   underHeading,
   type NameMatch,
   type NameMatches,
+  type PlanOnFile,
 } from "./draft-check";
+import {
+  areaOf,
+  claimOn,
+  planNamedIn,
+  refusalOf,
+  tableRefusalOf,
+  type Refusal,
+  type RouteContext,
+} from "./routing";
+import { renewalInMonth } from "../transactions/renewal-in-month";
 import {
   CORRECTION_PERMISSION,
   diffDraft,
@@ -96,9 +116,20 @@ import {
   aiCorrections,
   appSettings,
   categories,
+  subscriptions,
   users,
-  vendors,
 } from "../../db/schema";
+
+/** A plan, with what a renewal's draft is filled from. */
+type PlanRow = PlanOnFile & {
+  billingCycle: string;
+  costUsd: string;
+  chargeUsd: string | null;
+  usdRate: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  accountCurrency: string | null;
+};
 
 /** Used to check a key before the settings row is known to be readable. */
 const DEFAULT_MODEL: AiModel = "claude-opus-5";
@@ -178,6 +209,8 @@ export class AiIntakeService {
     provider: AiProvider;
     google: ServiceAccount | null;
     region: string;
+    /** The owner's own rules for the assistant. Empty when there are none. */
+    instructions: string;
   }> {
     const [row] = await this.db.client
       .select({
@@ -189,6 +222,7 @@ export class AiIntakeService {
         provider: appSettings.aiProvider,
         google: appSettings.googleServiceAccount,
         region: appSettings.vertexRegion,
+        instructions: appSettings.aiInstructions,
       })
       .from(appSettings)
       .leftJoin(users, eq(appSettings.anthropicKeySetBy, users.id))
@@ -205,6 +239,7 @@ export class AiIntakeService {
       provider,
       google: openServiceAccount(row?.google),
       region: row?.region || "global",
+      instructions: row?.instructions ?? "",
     };
 
     const fromSettings = open(row?.sealed);
@@ -295,6 +330,75 @@ export class AiIntakeService {
     });
 
     return this.availability();
+  }
+
+  /**
+   * The owner's instructions for the assistant, for the screen that edits
+   * them: the text, and when and by whom it was last saved.
+   */
+  async instructions(): Promise<AiInstructions> {
+    const [row] = await this.db.client
+      .select({
+        instructions: appSettings.aiInstructions,
+        setAt: appSettings.aiInstructionsSetAt,
+        setBy: users.fullName,
+      })
+      .from(appSettings)
+      .leftJoin(users, eq(appSettings.aiInstructionsSetBy, users.id))
+      .where(eq(appSettings.id, 1))
+      .limit(1);
+
+    return {
+      instructions: row?.instructions ?? "",
+      setAt: row?.setAt ? row.setAt.toISOString() : null,
+      setBy: row?.setBy ?? null,
+    };
+  }
+
+  /**
+   * Saves them. The whole text each time, and an empty one is a real answer:
+   * no rules.
+   *
+   * Through the audit log like every other change to Settings, with the text
+   * before and after — a rule changes what the assistant drafts for
+   * everybody, so who changed it and from what is worth being able to read
+   * back. The text is the owner's and holds no key or figure to redact.
+   */
+  async setInstructions(
+    input: SetAiInstructionsInput,
+    actor: AuthenticatedUser,
+  ): Promise<AiInstructions> {
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary: input.instructions
+        ? "Changed the instructions for the Assistant"
+        : "Cleared the instructions for the Assistant",
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({ instructions: appSettings.aiInstructions })
+          .from(appSettings)
+          .where(eq(appSettings.id, 1))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(appSettings)
+          .set({
+            aiInstructions: input.instructions,
+            aiInstructionsSetAt: new Date(),
+            aiInstructionsSetBy: actor.id,
+            updatedAt: new Date(),
+            updatedBy: actor.id,
+          })
+          .where(eq(appSettings.id, 1));
+      },
+    });
+
+    return this.instructions();
   }
 
   async availability(): Promise<AiAvailability> {
@@ -526,8 +630,9 @@ export class AiIntakeService {
     actor: AuthenticatedUser,
   ): Promise<AiIntakeReply> {
     const model = await this.model();
-    const { dataAccess } = await this.storedKey();
-    const context = await this.context();
+    const { dataAccess, instructions } = await this.storedKey();
+    const plans = await this.plans();
+    const context = await this.context(plans);
     // After the cache breakpoint, deliberately: a new correction landing must
     // not throw away a 6,000-token prefix that has not changed.
     const corrections = await this.recentCorrections(actor);
@@ -571,18 +676,37 @@ export class AiIntakeService {
     // The same turn for either model; how it is put to each is the adapter's
     // business — see model-turn.ts.
     const conversation = model.converse({
-      stablePrompt: this.stablePrompt(context, dataAccess),
+      stablePrompt: this.stablePrompt(context, dataAccess, instructions),
       turnPrompt: this.turnPrompt(
         actor,
         corrections,
         input.target,
-        input.draft,
+        this.carried(input.target, input.draft, plans),
         attachment ? this.attachments.describe(attachment) : null,
       ),
       messages: recent.length ? recent : input.messages.slice(-1),
       tools,
       maxTokens: MAX_ANSWER_TOKENS,
     });
+
+    // What the person typed last: a part of the map may claim a draft by it.
+    const said =
+      [...input.messages].reverse().find((m) => m.role === "user")?.content ??
+      "";
+    // A draft was on the table when this was asked.
+    const draftOpen = Boolean(
+      input.target || Object.keys(input.draft ?? {}).length,
+    );
+    const asked = {
+      role: actor.role,
+      said,
+      draftOpen,
+      lastAnswer:
+        [...input.messages].reverse().find((m) => m.role === "assistant")
+          ?.content ?? null,
+    };
+    /** Whether an answer has been sent back once already, as filed wrongly. */
+    let sentBack = false;
 
     for (let round = 0; round <= MAX_LOOKUPS; round++) {
       // On the last round it must stop looking and answer.
@@ -592,12 +716,40 @@ export class AiIntakeService {
       const answer = calls.find((c) => c.name === "answer");
 
       if (answer) {
-        return this.settle(
-          this.normalise(answer.input),
-          context.accounts.map((account) => account.name),
-          // A draft was on the table when this was asked.
-          Boolean(input.target || Object.keys(input.draft ?? {}).length),
-        );
+        const reply = this.normalise(answer.input);
+        const refusal = await this.refusal(reply, asked);
+
+        /*
+         * A draft filed in the wrong part of the app goes back to the model
+         * once, with the reason, so it can draft the right kind of record in
+         * this same turn. A second wrong answer is not argued with: `settle`
+         * drops the draft and tells the person where the thing belongs.
+         */
+        if (refusal && !sentBack && round < MAX_LOOKUPS) {
+          sentBack = true;
+          this.log.warn(
+            `A ${reply.target ?? reply.batch?.target ?? "draft"} was sent back: it belongs to ${refusal.part.key}.`,
+          );
+          conversation.tell(
+            calls.map((call) => ({
+              call,
+              text:
+                call === answer
+                  ? refusal.tell
+                  : "Not run: you had already answered.",
+              ok: false,
+            })),
+          );
+          continue;
+        }
+
+        return this.settle(reply, {
+          accountNames: context.accounts.map((account) => account.name),
+          draftOpen,
+          plans,
+          refusal,
+          said,
+        });
       }
 
       if (!calls.length) {
@@ -684,8 +836,8 @@ export class AiIntakeService {
    * fails validation for a reason the person cannot see. With it, it can only
    * choose something that exists.
    */
-  private async context() {
-    const [categoryRows, accountRows, vendorRows] = await Promise.all([
+  private async context(plans: PlanRow[]) {
+    const [categoryRows, accountRows] = await Promise.all([
       // Not a deleted one: it stays `is_active`, and the ledger refuses it.
       this.db.client
         .select({
@@ -707,13 +859,8 @@ export class AiIntakeService {
         .from(accounts)
         .where(and(eq(accounts.isActive, true), isNull(accounts.deletedAt)))
         .limit(50),
-
-      this.db.client
-        .select({ name: vendors.name })
-        .from(vendors)
-        .where(and(eq(vendors.isActive, true), isNull(vendors.deletedAt)))
-        .limit(200),
     ]);
+    const planNames = planLabels(plans);
 
     // Two sub-categories may share a name under different headings; those
     // are listed as "Heading › Name", which `named()` reads back.
@@ -755,8 +902,218 @@ export class AiIntakeService {
         name: a.name,
         line: `${a.name}  —  ${a.type.replace(/_/g, " ")}${a.currency === "USD" ? ", dollar account" : ""}`,
       })),
-      vendors: vendorRows.map((v) => v.name),
+      /**
+       * The plans under AI tools and subscriptions, one a line, after the
+       * same dash: the name to send back, then whether it is running and how
+       * often it renews. This list used to be the `vendors` table — a
+       * register no screen shows any more — which is how the model came to
+       * think a tool was a vendor.
+       */
+      plans: plans.map(
+        (plan) =>
+          `${planNames.get(plan.id) ?? plan.toolName}  —  ${plan.planName}, ${plan.status}, ${BILLING_CYCLE_LABELS[plan.billingCycle as BillingCycle]?.toLowerCase() ?? plan.billingCycle}`,
+      ),
     };
+  }
+
+  /**
+   * Every plan on file, with what a renewal's draft is filled from: its
+   * price, its rate and the account it is paid from.
+   *
+   * Read once a turn. A new plan is held against these, a renewal names one
+   * of them, and a plain payment that names one is pointed out.
+   */
+  private async plans(): Promise<PlanRow[]> {
+    const rows = await this.db.client
+      .select({
+        id: subscriptions.id,
+        toolName: subscriptions.toolName,
+        planName: subscriptions.planName,
+        status: subscriptions.status,
+        billingCycle: subscriptions.billingCycle,
+        costUsd: subscriptions.costUsd,
+        chargeUsd: subscriptions.chargeUsd,
+        usdRate: subscriptions.usdRate,
+        accountId: subscriptions.accountId,
+        accountName: accounts.name,
+        accountCurrency: accounts.currency,
+        boughtFor: subscriptions.boughtFor,
+        startDate: subscriptions.startDate,
+      })
+      .from(subscriptions)
+      .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
+      .where(isNull(subscriptions.deletedAt))
+      .orderBy(
+        asc(subscriptions.toolName),
+        asc(subscriptions.planName),
+        asc(subscriptions.startDate),
+      )
+      .limit(300);
+
+    // Two rows of one tool and one plan are told apart by who each was
+    // bought for, or failing that by the day it started.
+    return rows.map(({ boughtFor, startDate, ...plan }) => ({
+      ...plan,
+      hint: boughtFor?.trim() || `since ${startDate}`,
+    }));
+  }
+
+  /**
+   * Why this answer's draft is not offered — the person's role cannot save
+   * it, or it belongs to another part of the app — or null. See routing.ts.
+   */
+  private async refusal(
+    reply: AiIntakeReply,
+    asked: Omit<RouteContext, "categories">,
+  ): Promise<Refusal | null> {
+    // Each category name is looked up once, however many rows carry it.
+    const looked = new Map<string, RouteContext["categories"]>();
+    const contextFor = async (draft: Record<string, unknown>) => {
+      const name =
+        typeof draft.categoryName === "string"
+          ? bareName(draft.categoryName)
+          : undefined;
+      if (!name) return { ...asked, categories: [] };
+      if (!looked.has(name)) {
+        looked.set(name, await this.categoriesCalled(name));
+      }
+      return { ...asked, categories: looked.get(name) ?? [] };
+    };
+
+    if (reply.batch) {
+      const target = reply.batch.target;
+      // A plan, or its renewal, is never a row of a table.
+      const oneAtATime = tableRefusalOf(target);
+      if (oneAtATime) return oneAtATime;
+
+      // The rest are held to the same as a single draft, row by row.
+      for (const row of reply.batch.rows) {
+        const refused = refusalOf(
+          { area: reply.area, target, draft: row },
+          target === "transaction_out"
+            ? await contextFor(row)
+            : { ...asked, categories: [] },
+        );
+        if (refused) return refused;
+      }
+      return null;
+    }
+
+    /*
+     * A file about to be staged for Import becomes plain entries, row by
+     * row. The category the whole file is to be filed under is held to the
+     * map like a single payment's: a file of subscriptions staged as plain
+     * payments is the owner's complaint, two hundred times over.
+     */
+    if (reply.importPlan) {
+      const draft = {
+        categoryName: reply.importPlan.categoryName ?? undefined,
+      };
+      const claimed = claimOn(
+        "transaction_out",
+        draft,
+        await contextFor(draft),
+      );
+      return claimed?.part.claims
+        ? { ...claimed, say: claimed.part.claims.sayOfAFile }
+        : null;
+    }
+
+    return refusalOf(
+      reply,
+      reply.target === "transaction_out"
+        ? await contextFor(reply.draft)
+        : { ...asked, categories: [] },
+    );
+  }
+
+  /**
+   * The money-out categories a name could mean, each with the heading above
+   * it — found the way a draft's own category is (`named`): the one spelled
+   * exactly so, or else every one that contains it. A part of the map that
+   * claims a category has to see what the name will resolve to, not only
+   * what is spelled like it.
+   */
+  private async categoriesCalled(name: string) {
+    const { heading, leaf } = underHeading(name);
+    const parent = alias(categories, "parent");
+    const rows = await this.db.client
+      .select({ name: categories.name, heading: parent.name })
+      .from(categories)
+      .leftJoin(parent, eq(parent.id, categories.parentId))
+      .where(
+        and(
+          eq(categories.isActive, true),
+          isNull(categories.deletedAt),
+          inArray(categories.kind, ["out", "both"]),
+          ilike(categories.name, `%${leaf}%`),
+        ),
+      )
+      .limit(50);
+
+    const same = (a: string | null, b: string) =>
+      (a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+    const exact = rows.filter((row) => same(row.name, leaf));
+    return (exact.length ? exact : rows).filter(
+      (row) => !heading || same(row.heading, heading),
+    );
+  }
+
+  /**
+   * The draft so far, as the model is shown it — less what the app itself
+   * put there.
+   *
+   * A renewal's dollars and its account are filled in from the plan when
+   * nobody stated them (draft-check.ts). Shown back to the model as
+   * "already understood", they would outlive the plan they came from: "na,
+   * ChatGPT er" after a draft for Claude would keep Claude's price and
+   * Claude's card on a renewal of ChatGPT. So what equals the plan's own is
+   * taken off here, and the check fills it in again from whichever plan the
+   * answer names. A figure the person gave that happens to equal the plan's
+   * comes back the same.
+   */
+  private carried(
+    target: AiTarget | undefined,
+    draft: Record<string, unknown> | undefined,
+    plans: PlanRow[],
+  ): Record<string, unknown> | undefined {
+    if (target !== "subscription_payment" || !draft) return draft;
+    const named =
+      typeof draft.subscriptionName === "string"
+        ? plansNamed(plans, draft.subscriptionName)
+        : [];
+    if (named.length !== 1) return draft;
+
+    const plan = named[0];
+    const rest = { ...draft };
+    if (Number(rest.usdAmount) === Number(payableUsd(plan))) {
+      delete rest.usdAmount;
+    }
+    if (
+      typeof rest.accountName === "string" &&
+      plan.accountName &&
+      rest.accountName.trim().toLowerCase() ===
+        plan.accountName.trim().toLowerCase()
+    ) {
+      delete rest.accountName;
+    }
+    return rest;
+  }
+
+  /**
+   * The renewal this plan already has in the month of a date, in words — or
+   * null. A plan renews once a month, and the endpoint refuses a second; a
+   * draft that would be refused is not offered as ready.
+   */
+  private async alreadyRenewed(
+    planId: string,
+    txnDate: string,
+  ): Promise<string | null> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(txnDate)) return null;
+    const renewal = await renewalInMonth(this.db.client, planId, txnDate);
+    return renewal
+      ? `This plan was already renewed that month: ${renewal.refNo}, on ${renewal.txnDate}. A plan renews once a month. If this charge was for changing plan, that is an Upgrade, on the plan's row. Otherwise, what date was this one charged?`
+      : null;
   }
 
   /**
@@ -783,9 +1140,11 @@ export class AiIntakeService {
     context: {
       categories: string[];
       accounts: Array<{ name: string; line: string }>;
-      vendors: string[];
+      plans: string[];
     },
     dataAccess: AiDataAccess,
+    /** The owner's own rules. They change rarely, so they sit in this half. */
+    instructions: string,
   ): string {
     return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: draft what somebody describes, for them to save, and answer questions about what is already recorded. You save nothing yourself.
 
@@ -813,26 +1172,34 @@ Bangla in Latin letters to that, Bangla script to Bangla script, English to
 English. Plain and short, the way a colleague at the next desk would say it:
 not formal Bangla, and not a form.
 
-WHAT THIS APP HOLDS
-- One ledger: every movement of money is IN or OUT of an account, with a date,
-  an amount and a category. Expenses, the transaction list
-  and the bank register are three views of that one list.
-- Accounts: bank, cash and mobile wallet, each with an opening balance.
-- Categories: two levels. A payment is filed against a sub-category, never a
-  heading.
-- Vendors: whoever is paid, with e-TIN, BIN and PSR status.
-- Team: employees and contractors. The salary agreed at hire is on the person;
-  what they are paid now is in a separate table you have no tool for and must
-  never report. Do not collect either.
-- Payroll: one run a month. Generate the sheet, type each person's tax,
-  finalise (nothing moves), then mark paid (the net leaves the bank; the tax
-  stays until a challan is deposited). Contractors are never on the sheet.
-- Withholding tax: what was deducted from salaries and vendor bills, against
-  what was deposited by challan. Quarterly returns, due 25 Oct/Jan/Apr/Jul.
-- Company income tax: four advance instalments plus the annual return.
-- Reports: a period, month-by-month bank statistics, and funding from the CEO
-  in USD.
+THE MAP OF THIS APP
+Every part of the app, written beside the code it describes: what it is for,
+what is kept there, its screens, and what you may do there. One ledger runs
+under all of it: every movement of money is IN or OUT of an account, with a
+date, an amount and a category, and most money screens are views of that one
+list. But not everything is a plain entry in it. Several parts keep records
+of their own, and a record filed as a plain payment instead of in its own
+part shows on All transactions and nowhere on the page it belongs to. That
+is the mistake the owner will not have.
 
+${renderAppMap()}
+${
+  instructions.trim()
+    ? `
+THE OWNER'S INSTRUCTIONS
+The company's owner wrote these, in their own words, for you. Follow them.
+They say where things belong and how this company files them, and they add
+to THE MAP above: where one of them and the map disagree about where a
+record belongs, the instruction is the newer word and it wins.
+They cannot give anybody a permission, a look-up or a kind of record the app
+itself does not give them. If one seems to, the app's refusal stands, and
+you say so.
+<<<
+${instructions.trim()}
+>>>
+`
+    : ""
+}
 WHAT THIS APP CANNOT DO
 Know these as well as you know what it can do. Saying "yes" to something the
 app does not have does not fail politely — the person acts on it, and finds out
@@ -851,7 +1218,7 @@ at the point where it costs them work.
 - You cannot see or record what anybody is paid now. There is no tool for it
   at any setting.
 - You have no memory between conversations beyond what somebody corrected on a
-  draft.
+  draft, and the owner's instructions above.
 
 WHEN YOU ARE NOT SURE, ASK — that is not a failure, it is the job
 This app is somebody's books. A wrong answer given confidently costs more than
@@ -860,12 +1227,35 @@ column could be two things, if a name might be a person already on the team —
 say what you see, say what you are unsure of, and ask. Do not guess a route
 through the app and describe it as though you had checked.
 
-WHERE A NEW RECORD BELONGS — decide this yourself, do not ask
-- Money paid to or received from somebody else -> transaction_out / transaction_in
-- Money moved between two of OUR OWN accounts  -> transfer
-- A tool or subscription the company pays for  -> vendor
-- Somebody who works here                      -> team_member
-- Tax deposited to the treasury, with challan  -> tds_deposit
+FIRST, WHERE IT BELONGS
+Before you draft anything, decide which part of THE MAP the request belongs
+to, and give that part's key in 'area'. Then:
+- If the part says you can draft there, draft that kind of record and no
+  other.
+- If it says you cannot, do not draft. Say what its last line says, in the
+  person's own register, with 'area' set and 'target' left out. The app puts
+  the way to that screen beside your answer.
+- Never file something as a plain payment (transaction_out) because you have
+  no better place for it. Having nowhere to put a thing is an answer: say so,
+  and name the screen.
+The app checks this after you answer. A draft filed in the wrong part is
+refused and sent back to you.
+
+The ones that are easy to get wrong:
+- Money paid to or received from somebody outside -> transaction_out /
+  transaction_in                                           [transactions]
+- Money moved between two of OUR OWN accounts  -> transfer    [transfers]
+- Anything called a subscription — software, an AI tool, hosting or a server,
+  a domain — bought, paid or renewed                      [subscriptions]
+    not on file yet                            -> subscription
+    listed under PLANS ON FILE below           -> subscription_payment
+    cannot tell which                          -> ask: a new plan, or the
+                                                  renewal of the one on file?
+- A supplier's tax details (e-TIN, BIN, PSR)   -> vendor        [vendors]
+  Never a tool or a subscription.
+- Somebody who works here                      -> team_member      [team]
+- Tax deposited to the treasury, with challan  -> tds_deposit       [tds]
+- Salary, a bonus, anybody's pay               -> nothing        [payroll]
 A transfer is when BOTH ends are accounts listed under OUR ACCOUNTS below:
 "EXPROVIA theke Standard Chartered e 1 lakh". Nothing was spent and nobody was
 paid, so it has no category and no counterparty, and it is never
@@ -877,6 +1267,24 @@ somebody describes paying salaries, say so and point them at Payroll.
 Tax withheld belongs only on money going OUT. If a client deducted tax when
 paying us, that is an advance-tax credit and belongs under Income tax, not on
 the receipt.
+
+A NEW PLAN, AND A RENEWAL
+Both are records of AI tools and subscriptions, and both show on that page.
+- subscription: a plan that is not on file yet. toolName is the tool
+  ("Claude"), planName the plan of it that was bought ("Max"). Plans are
+  priced in dollars: costUsd is the price, and if they gave only taka, ask
+  what it costs in dollars. Saving the plan records its first payment too,
+  out of accountName, on startDate — so never draft a payment for it as well.
+- subscription_payment: this cycle's payment for a plan listed under PLANS ON
+  FILE. Give subscriptionName exactly as listed, and the date the card was
+  charged. Leave usdAmount and accountName out unless they said them: the app
+  puts the plan's own price and card on the card for them to check. The rate
+  is asked every time; it is not the same from one renewal to the next.
+- If the tool they name is under PLANS ON FILE, "kinlam", "bill dilam" and
+  "renew korlam" all most likely mean this month's payment for it. Ask which
+  it is rather than adding a second plan.
+- An upgrade, a pause, a cancellation, or who is on a plan: you cannot draft
+  these. Say they are done from the plan's row.
 
 The currency is BDT unless the person says otherwise.
 
@@ -974,6 +1382,9 @@ is refused without it.
 A transfer is the same: 'amount' is the taka. Only when one of the two accounts
 is marked "dollar account" do the dollars that moved go beside it, in
 'usdAmount' — ask for them, never work them out.
+A plan and its renewal are the two places a figure is dollars by its nature:
+costUsd, and a renewal's usdAmount. Their names say so. Never put taka in
+either, and never turn one currency into the other yourself.
 
 DATES
 "aaj" is today, "kal" is yesterday for a past payment. Never guess a date
@@ -1003,9 +1414,11 @@ The company's own accounts. As with a category, send back ONLY the name — the
 part before the dash. "M/S. EXPROVIA", never "M/S. EXPROVIA  —  bank".
 ${context.accounts.map((account) => account.line).join("\n") || "(none)"}
 
-TOOLS AND SUBSCRIPTIONS ON FILE: ${context.vendors.join(", ") || "(none)"}
-These are for recognising what somebody is talking about — never to fill in a
-field on a transaction. A payment records who it went to in its description.
+PLANS ON FILE
+The plans under AI tools and subscriptions. As with a category, send back
+ONLY the name — the part before the dash — as subscriptionName on a renewal.
+Never use one to fill in a field on a plain payment.
+${context.plans.join("\n") || "(none yet)"}
 
 HOW TO ASK
 Say in a few words what you understood, then ask for ONE missing thing, in a
@@ -1040,8 +1453,16 @@ nextQuestion and summary out.`;
     draft?: Record<string, unknown>,
     attachment?: string | null,
   ): string {
-    return `Today in Dhaka is ${todayInDhaka()}. The person asking is signed in as ${actor.fullName} (${actor.role}).
+    // A draft this person could not save is not theirs to be offered.
+    const barred = AI_TARGETS.filter(
+      (kind) =>
+        !AI_TARGET_PERMISSION[kind].every((permission) =>
+          hasPermission(actor.role, permission),
+        ),
+    );
 
+    return `Today in Dhaka is ${todayInDhaka()}. The person asking is signed in as ${actor.fullName} (${actor.role}).
+${barred.length ? `Their role cannot save: ${barred.join(", ")}. Do not draft those for them. Say in one line that their role cannot record it.\n` : ""}
 ${corrections}
 
 ${
@@ -1134,6 +1555,8 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     }
 
     return {
+      // Only a part the map has; anything else is read as not said.
+      area: partOf(typeof raw.area === "string" ? raw.area : null)?.key ?? null,
       target,
       draft,
       missingFields,
@@ -1171,13 +1594,60 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
    * - **The line under a ready draft.** `AI_DRAFT_READY_LINE`, always. The
    *   model's own sentence is shown only as a question or as an answer, and
    *   never when it says something has been recorded.
+   *
+   * And a fourth, the same day: **which part of the app it belongs to.** A
+   * draft the map gives to another part, or one this person's role could not
+   * save, is dropped here, and the person is told where the thing is kept —
+   * routing.ts. This is what stands between "buy an AI subscription" and a
+   * plain payment the subscriptions page never shows.
    */
   private async settle(
-    reply: AiIntakeReply,
-    accountNames: string[],
-    /** Whether the conversation had a draft on the table when asked. */
-    draftOpen: boolean,
+    answered: AiIntakeReply,
+    books: {
+      accountNames: string[];
+      /** Whether the conversation had a draft on the table when asked. */
+      draftOpen: boolean;
+      plans: PlanRow[];
+      /** Why the draft cannot be offered, when the model was already told. */
+      refusal: Refusal | null;
+      /** What the person typed last. */
+      said: string;
+    },
   ): Promise<AiIntakeReply> {
+    const { accountNames, draftOpen, plans, refusal } = books;
+
+    if (refusal) {
+      this.log.warn(
+        `A ${answered.target ?? answered.batch?.target ?? "draft"} was dropped: it belongs to ${refusal.part.key}.`,
+      );
+      const asks = refusal.say.trim().endsWith("?");
+      return {
+        ...answered,
+        area: refusal.part.key,
+        screen: screenOf(refusal.part),
+        target: null,
+        draft: {},
+        missingFields: [],
+        batch: null,
+        importPlan: null,
+        nextQuestion: asks ? refusal.say : null,
+        clarification: null,
+        summary: asks ? null : refusal.say,
+      };
+    }
+
+    // The part it belongs to, and — with nothing to save — the way to the
+    // screen where the person does it themselves.
+    const area = areaOf(answered);
+    const reply: AiIntakeReply = {
+      ...answered,
+      area,
+      screen:
+        answered.target || answered.batch || answered.importPlan
+          ? null
+          : screenOf(partOf(area)),
+    };
+
     const said = reply.nextQuestion ?? reply.clarification ?? reply.summary;
     const instead = (
       summary: string,
@@ -1232,9 +1702,56 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     const tidy = tidyDraft(reply.draft);
     const matches: NameMatches = {};
     for (const { field, said: name } of namesIn(target, tidy)) {
-      matches[field.name] = await this.named(field, name, way);
+      matches[field.name] = await this.named(field, name, way, plans);
     }
-    const checked = checkDraft(target, tidy, matches, accountNames);
+    const checked = checkDraft(target, tidy, matches, accountNames, plans);
+
+    /*
+     * A plan renews once a month, and its endpoint refuses a second renewal.
+     * Asked here, of the same rule, so the card does not offer a Save that
+     * can only answer with that refusal. It is put first: there is no point
+     * asking this renewal's rate when it is the date that is wrong.
+     */
+    const renewing =
+      target === "subscription_payment" &&
+      matches.subscriptionName?.length === 1
+        ? matches.subscriptionName[0]
+        : null;
+    const charged = checked.draft.txnDate;
+    if (
+      renewing &&
+      typeof charged === "string" &&
+      !checked.problems.some((problem) => problem.field === "txnDate")
+    ) {
+      const already = await this.alreadyRenewed(renewing.id, charged);
+      if (already) {
+        delete checked.draft.txnDate;
+        checked.problems.unshift({ field: "txnDate", question: already });
+      }
+    }
+
+    /*
+     * What the books hold that the person should hear with this draft: a
+     * plan of this name already on file, or — on a plain payment — a plan
+     * whose tool the payment names. Said, never enforced, and said once: on
+     * the turn the draft first appears, and again when it is ready to save.
+     */
+    const named =
+      target === "transaction_out"
+        ? planNamedIn(plans, [
+            books.said,
+            checked.draft.description,
+            checked.draft.notes,
+          ])
+        : null;
+    const notes = [
+      ...checked.notes,
+      ...(named
+        ? [
+            `${named} is on file under AI tools and subscriptions. If this is its payment, say so and I will draft the renewal instead of a plain payment.`,
+          ]
+        : []),
+    ];
 
     // What the model itself still wants answered — less anything this record
     // has no field for, which no answer could ever settle.
@@ -1253,7 +1770,7 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
         missingFields,
         nextQuestion: null,
         clarification: null,
-        summary: AI_DRAFT_READY_LINE,
+        summary: [...notes, AI_DRAFT_READY_LINE].join(" "),
       };
     }
 
@@ -1269,12 +1786,14 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       !own && reply.summary && !claimsItIsDone(reply.summary, true)
         ? `${reply.summary} `
         : "";
+    const heard = !draftOpen && notes.length ? `${notes.join(" ")} ` : "";
     return {
       ...reply,
       draft: checked.draft,
       missingFields,
-      nextQuestion:
-        own && !claimsItIsDone(own, true) ? own : `${aside}${coded}`,
+      nextQuestion: `${heard}${
+        own && !claimsItIsDone(own, true) ? own : `${aside}${coded}`
+      }`,
       clarification: null,
       summary: null,
     };
@@ -1549,7 +2068,30 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     name: string,
     /** For a category: the direction of the entry it is wanted for. */
     way?: "in" | "out",
+    /** For a plan: the plans on file, when the caller has read them already. */
+    plansRead?: PlanRow[],
   ): Promise<NameMatch[]> {
+    if (field.kind === "plan") {
+      const plans = plansRead ?? (await this.plans());
+      const labels = planLabels(plans);
+      return plansNamed(plans, name).map((plan) => ({
+        id: plan.id,
+        name: labels.get(plan.id) ?? plan.toolName,
+        plan: {
+          payableUsd: payableUsd(plan),
+          usdRate: plan.usdRate,
+          account:
+            plan.accountId && plan.accountName
+              ? {
+                  id: plan.accountId,
+                  name: plan.accountName,
+                  currency: plan.accountCurrency,
+                }
+              : null,
+        },
+      }));
+    }
+
     if (field.kind === "account") {
       const rows = await this.db.client
         .select({
@@ -1695,6 +2237,12 @@ function importPlanOf(value: unknown): AiImportPlan | null {
 const REPLY_SCHEMA = {
   type: "object" as const,
   properties: {
+    area: {
+      type: "string",
+      enum: [...APP_PART_KEYS],
+      description:
+        "Which part of THE MAP this belongs to — its key. Decide this first, and give it on every answer.",
+    },
     target: {
       type: "string",
       enum: [...AI_TARGETS],
@@ -1793,7 +2341,7 @@ const REPLY_SCHEMA = {
       required: ["accountName", "columnMap", "usdRate"],
     },
   },
-  required: ["draft", "missingFields"],
+  required: ["area", "draft", "missingFields"],
 };
 
 /**

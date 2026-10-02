@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { Permission } from "./permissions.ts";
+
 /**
  * The assistant that fills in a form.
  *
@@ -23,11 +25,22 @@ import { z } from "zod";
  * it, filed it as money going out, and produced a draft with no category that
  * could not be saved. A transfer has no category and nobody was paid; it is
  * the Money Transfer form's record, posted to that form's endpoint.
+ *
+ * `subscription` and `subscription_payment` (2 Oct 2026) are the two records
+ * of AI tools and subscriptions: a new plan, and a plan's renewal. They were
+ * missing too, and the owner found out the same way: told to buy an AI
+ * subscription, the assistant recorded a plain payment. All transactions
+ * showed it; the AI tools and subscriptions page showed nothing, because that
+ * page lists plans and a plain payment is not one. A plan is the Add
+ * subscription form's record, with its first payment taken as that form
+ * takes it; a renewal is the Renew drawer's.
  */
 export const AI_TARGETS = [
   "transaction_out",
   "transaction_in",
   "transfer",
+  "subscription",
+  "subscription_payment",
   "vendor",
   "team_member",
   "tds_deposit",
@@ -39,30 +52,75 @@ export const AI_TARGET_LABELS: Record<AiTarget, string> = {
   transaction_out: "Money going out",
   transaction_in: "Money coming in",
   transfer: "Money moved between our own accounts",
+  subscription: "A new plan under AI tools and subscriptions",
+  subscription_payment: "A plan's renewal, under AI tools and subscriptions",
   vendor: "A vendor",
   team_member: "Someone on the team",
   tds_deposit: "A TDS challan",
 };
 
-/** Which permission a target needs, so the app refuses before the model asks. */
-export const AI_TARGET_PERMISSION: Record<AiTarget, string> = {
-  transaction_out: "transactions.write",
-  transaction_in: "transactions.write",
-  transfer: "transactions.write",
-  vendor: "vendors.write",
-  team_member: "team.write",
-  tds_deposit: "tds.write",
+/**
+ * What a person must hold to save each kind of record: the permissions its
+ * own endpoints ask for. A draft is not offered to somebody whose role could
+ * not save it. A new plan needs two, because adding one takes its first
+ * payment out of the account, as the form does.
+ */
+export const AI_TARGET_PERMISSION: Record<AiTarget, readonly Permission[]> = {
+  transaction_out: ["transactions.write"],
+  transaction_in: ["transactions.write"],
+  transfer: ["transactions.write"],
+  subscription: ["vendors.write", "transactions.write"],
+  subscription_payment: ["transactions.write"],
+  vendor: ["vendors.write"],
+  team_member: ["team.write"],
+  tds_deposit: ["tds.write"],
 };
 
-/** Where a confirmed draft is posted. The same endpoint the form uses. */
+/**
+ * Where a confirmed draft is posted. The same endpoint the form uses. A
+ * renewal is posted to its plan, so `:id` there is the plan the draft named.
+ */
 export const AI_TARGET_ENDPOINT: Record<AiTarget, string> = {
   transaction_out: "/transactions",
   transaction_in: "/transactions",
   transfer: "/transactions/transfer",
+  subscription: "/subscriptions",
+  subscription_payment: "/subscriptions/:id/pay",
   vendor: "/vendors",
   team_member: "/team-members",
   tds_deposit: "/tds/deposits",
 };
+
+/**
+ * Where a saved record shows afterwards: the screen's own name, and its
+ * address. Said after a save, so the person knows where to look — the owner's
+ * complaint was a record that showed on one page and not on the page it
+ * belonged to. `null` is a record no screen lists.
+ */
+export const AI_TARGET_SHOWS_ON: Record<
+  AiTarget,
+  { name: string; href: string } | null
+> = {
+  transaction_out: { name: "All transactions", href: "/transactions" },
+  transaction_in: { name: "All transactions", href: "/transactions" },
+  transfer: { name: "Money Transfer", href: "/transfers" },
+  subscription: { name: "AI tools and subscriptions", href: "/subscriptions" },
+  subscription_payment: {
+    name: "AI tools and subscriptions",
+    href: "/subscriptions",
+  },
+  vendor: null,
+  team_member: { name: "Team", href: "/team" },
+  tds_deposit: { name: "TDS", href: "/tax/withholding" },
+};
+
+/**
+ * The note on a new plan's first payment. The Add subscription form writes
+ * the same words; a plan added through the assistant reads no differently in
+ * the ledger.
+ */
+export const AI_FIRST_PAYMENT_NOTE =
+  "First payment, recorded when the plan was added";
 
 /**
  * The line under a draft that is ready to save. Written here, not by the
@@ -307,6 +365,50 @@ export function aiModelProviderProblem(
     )}, not through ${AI_PROVIDER_LABELS[provider]}. Change the two together.`;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Instructions for the Assistant                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The owner's own rules for the assistant: plain text, one rule a line
+ * (2 Oct 2026).
+ *
+ * "Claude, ChatGPT, Gemini kena = AI tools & subscriptions." A model cannot be
+ * trained by us; what it knows about this company is what the app puts in
+ * front of it, and this is the part of that the owner writes. It is placed in
+ * the prompt after the map of the app. A rule here can say where something
+ * belongs or how it is filed. It cannot give anybody a permission: every
+ * look-up and every save still runs as the person asking.
+ *
+ * The limit is on purpose. This text is sent with every message of every
+ * conversation, and a page of rules nobody rereads is a page of rules that
+ * contradict each other.
+ */
+export const AI_INSTRUCTIONS_MAX = 4_000;
+
+export const setAiInstructionsSchema = z.strictObject({
+  instructions: z
+    .string()
+    // One line ending, whichever machine it was typed on.
+    .transform((text) => text.replace(/\r\n?/g, "\n").trim())
+    .pipe(
+      z
+        .string()
+        .max(
+          AI_INSTRUCTIONS_MAX,
+          `Keep the instructions under ${AI_INSTRUCTIONS_MAX.toLocaleString("en-US")} characters`,
+        ),
+    ),
+});
+export type SetAiInstructionsInput = z.infer<typeof setAiInstructionsSchema>;
+
+export type AiInstructions = {
+  instructions: string;
+  /** When it was last saved, and by whom. Null: nobody has saved one yet. */
+  setAt: string | null;
+  setBy: string | null;
+};
+
 export const updateAiSettingsSchema = z
   .strictObject({
     model: aiModelSchema.optional(),
@@ -527,6 +629,17 @@ export const AI_BATCH_MAX_ROWS = 100;
 export type AiIntakeReply = {
   /** The conversation this turn was filed under, new or continuing. */
   chatId?: string;
+  /**
+   * Which part of the app the request belongs to: a key of the app's map
+   * (the API's `app-map.ts`). Decided before anything is drafted, and the
+   * draft's kind has to be one that part keeps.
+   */
+  area?: string | null;
+  /**
+   * The screen to open, when this is something the assistant cannot draft
+   * and can only point to — or where a record of this kind is kept.
+   */
+  screen?: { name: string; href: string } | null;
   target: AiTarget | null;
   /** Understood so far, in the shape the real endpoint expects. */
   draft: Record<string, unknown>;

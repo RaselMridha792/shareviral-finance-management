@@ -3,8 +3,8 @@ import type { z } from "zod";
 
 import {
   NAME_FIELDS,
-  NOT_FOR_THE_MODEL,
   TARGET_SCHEMAS,
+  forTheModel,
   nameFieldsFor,
   type NameField,
 } from "./field-reference";
@@ -28,12 +28,37 @@ import {
  * handed in, so the rules can be tested as they are.
  */
 
-/** One account or category a name in the draft could mean. */
+/** One account, category or plan a name in the draft could mean. */
 export type NameMatch = {
   id: string;
   name: string;
   /** An account's own: "USD" marks the account kept for foreign spend. */
   currency?: string | null;
+  /**
+   * A plan's own: what one cycle costs in dollars (its price and the
+   * vendor's charge on top), the rate that price was struck at, and the
+   * account it is paid from. What the Renew drawer offers before anybody
+   * types; a renewal's draft is filled from the same.
+   */
+  plan?: {
+    payableUsd: string | null;
+    usdRate: string | null;
+    account: NameMatch | null;
+  };
+};
+
+/** A plan on file, as far as telling two apart needs. */
+export type PlanOnFile = {
+  id: string;
+  toolName: string;
+  planName: string;
+  status: string;
+  /**
+   * What tells two plans of one tool and one name apart: who it was bought
+   * for, or failing that the day it started. A seat each for two people is
+   * two rows that are otherwise the same.
+   */
+  hint?: string | null;
 };
 
 export type NameMatches = Partial<Record<NameField["name"], NameMatch[]>>;
@@ -50,6 +75,11 @@ export type CheckedDraft = {
   draft: Record<string, unknown>;
   /** Empty when the endpoint's schema accepts the draft as it stands. */
   problems: DraftProblem[];
+  /**
+   * Said beside a draft that can be saved: something the books hold that
+   * the person should know before they press Save. Never a refusal.
+   */
+  notes: string[];
 };
 
 /* -------------------------------------------------------------------------- */
@@ -57,12 +87,12 @@ export type CheckedDraft = {
 /* -------------------------------------------------------------------------- */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-const FIGURE_KEY = /^amount$|Amount$|[Rr]ate$|^chargeUsd$/;
+const FIGURE_KEY = /^amount$|Amount$|[Rr]ate$|^chargeUsd$|^cost(?:Usd|Bdt)$/;
 /** 4,500 and 1,250,000.50 — and 1,00,000, the way a lakh is written here. */
 const GROUPED = /^(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(?:\.\d+)?$/;
 
-/** The three figures that are dollars. Every other amount is taka. */
-const DOLLAR_KEY = /^usdAmount$|^chargeUsd$|^originalAmount$/;
+/** The figures that are dollars. Every other amount is taka. */
+const DOLLAR_KEY = /^usdAmount$|^chargeUsd$|^originalAmount$|^costUsd$/;
 
 /**
  * A figure with its dressing off: its own currency's sign, the spaces, and
@@ -227,6 +257,95 @@ export function categoryMatches(
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Which plan a name means                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Still being paid for: the plans a renewal or a new plan can be mistaken for. */
+const running = (plan: PlanOnFile) =>
+  plan.status === "active" || plan.status === "paused";
+
+/**
+ * How each plan is written, so that no two read the same: the tool; its
+ * plan as well where one tool has several — "ChatGPT › Plus" beside
+ * "ChatGPT › Team"; and, where two rows are the same tool and the same plan,
+ * what tells them apart — "ChatGPT › Plus (Rahim)".
+ */
+export function planLabels(rows: PlanOnFile[]): Map<string, string> {
+  return new Map(
+    rows.map((row) => {
+      const ofTool = rows.filter((other) =>
+        sameName(other.toolName, row.toolName),
+      );
+      if (ofTool.length < 2) return [row.id, row.toolName];
+
+      const written = `${row.toolName}${UNDER}${row.planName}`;
+      const twins = ofTool.filter((other) =>
+        sameName(other.planName, row.planName),
+      );
+      return [
+        row.id,
+        twins.length > 1 && row.hint ? `${written} (${row.hint})` : written,
+      ];
+    }),
+  );
+}
+
+/**
+ * The plans a name means: the ones called exactly that.
+ *
+ * As the list writes it, the tool's own name, or the tool and its plan
+ * together ("Claude Max"). Nothing looser. A renewal is money against a
+ * plan, and a name that merely resembles one — "Claude Code" beside a plan
+ * called Claude, "GitHub" beside one called Git — must be a question and
+ * never an answer: see `plansLike`. A plan still running wins over one that
+ * was cancelled or has expired. One is an answer, more is a question.
+ */
+export function plansNamed<T extends PlanOnFile>(rows: T[], said: string): T[] {
+  const labels = planLabels(rows);
+  const { heading: tool, leaf } = underHeading(said);
+
+  const exact = rows.filter(
+    (row) =>
+      sameName(labels.get(row.id) ?? "", said) ||
+      (tool
+        ? sameName(row.toolName, tool) && sameName(row.planName, leaf)
+        : sameName(row.toolName, said) ||
+          sameName(`${row.toolName} ${row.planName}`, said)),
+  );
+  const live = exact.filter(running);
+  return live.length ? live : exact;
+}
+
+/**
+ * The running plans a name might have meant, when none is called exactly
+ * that: the ones sharing the most whole words with it. "The Claude
+ * subscription" is probably Claude; and a word every plan shares — a
+ * company's name on all its tools — does not make them all likely. Offered
+ * in the question, never taken as the answer.
+ */
+export function plansLike<T extends PlanOnFile>(rows: T[], said: string): T[] {
+  const words = (text: string) =>
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length >= 3);
+  const heard = new Set(words(said));
+
+  const scored = rows.filter(running).map((row) => ({
+    row,
+    shared: new Set(
+      [...words(row.toolName), ...words(row.planName)].filter((word) =>
+        heard.has(word),
+      ),
+    ).size,
+  }));
+  const best = Math.max(0, ...scored.map((one) => one.shared));
+  return best
+    ? scored.filter((one) => one.shared === best).map((one) => one.row)
+    : [];
+}
+
+/* -------------------------------------------------------------------------- */
 /*  The check                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -236,20 +355,33 @@ export function checkDraft(
   matches: NameMatches,
   /** The accounts that exist, to offer when a name matched none of them. */
   accountNames: string[],
+  /** The plans on file: a new plan is held against them, a renewal offered them. */
+  plans: PlanOnFile[] = [],
 ): CheckedDraft {
   const schema = TARGET_SCHEMAS[target];
   const fields = nameFieldsFor(target);
   const draft: Record<string, string> = { ...tidy };
   const problems = new Map<string, string>();
+  const notes: string[] = [];
   const found: Partial<Record<NameField["name"], NameMatch>> = {};
   /** A transfer still short of an account: its description is not asked for. */
   let describedLater = false;
 
   // Set by the app itself, or an id only the books can supply.
-  for (const key of NOT_FOR_THE_MODEL) delete draft[key];
+  for (const key of Object.keys(draft)) {
+    if (!forTheModel(target, key)) delete draft[key];
+  }
   // A name this record has no place for — a category on a transfer.
   for (const field of NAME_FIELDS) {
     if (!fields.includes(field)) delete draft[field.name];
+  }
+  // One of a fixed list, written the form's way rather than the list's:
+  // "AI Tool" is `ai_tool`, "Monthly" is `monthly`.
+  for (const [key, value] of Object.entries(draft)) {
+    const choice = choicesOf(schema.shape[key])?.find(
+      (entry) => plain(entry) === plain(value),
+    );
+    if (choice) draft[key] = choice;
   }
 
   for (const field of fields) {
@@ -271,8 +403,148 @@ export function checkDraft(
         ? `"${said}" could be ${listed(candidates.map((c) => c.name))}. Which one?`
         : field.kind === "account"
           ? `There is no account called "${said}". ${askFor(field.name, target)}${offer(accountNames)}`
-          : `There is no ${categoryKind(target)}category called "${said}". ${askFor(field.name, target)}`,
+          : field.kind === "plan"
+            ? noSuchPlan(said, plans)
+            : `There is no ${categoryKind(target)}category called "${said}". ${askFor(field.name, target)}`,
     );
+  }
+
+  /** A figure that is there, and is nothing: the endpoints refuse a zero. */
+  const moreThanZero = (field: string, what: string) => {
+    const value = draft[field];
+    if (value === undefined || problems.has(field)) return;
+    const figure = Number(value);
+    if (!Number.isFinite(figure) || figure > 0) return;
+    delete draft[field];
+    problems.set(
+      field,
+      `${labelOf(field)} "${value}" cannot be saved: ${what} has to be more than zero. ${askFor(field, target)}`,
+    );
+  };
+
+  if (target === "subscription") {
+    /*
+     * The Add subscription form's own rules, which its schema leaves open.
+     * An active plan takes its first payment out of an account when it is
+     * saved, so the form will not save one without the account; and that
+     * payment is refused with no rate to read the dollars at. A taka price
+     * beside the dollar one is a rate, said another way.
+     */
+    if (!draft.accountName && !problems.has("accountName")) {
+      problems.set("accountName", askFor("accountName", target));
+    }
+    // A plan priced at nothing saves, and its first payment is then refused.
+    moreThanZero("costUsd", "a plan's price");
+    moreThanZero("usdRate", "the rate");
+    if (!draft.usdRate && !draft.costBdt && !problems.has("usdRate")) {
+      problems.set("usdRate", askFor("usdRate", target));
+    }
+
+    /*
+     * A tool that is on file already. "Claude subscription kinlam" is far
+     * more often this month's renewal of the Claude plan than a second one —
+     * and a second plan added for a renewal is the plan charged twice on the
+     * page. So it is said, not decided: with no plan named yet it is the
+     * question; with one named, the draft stays and the line above it says
+     * what is on file, whether the name is the same or another. Two plans of
+     * one tool are a real thing (a seat each for two people), so this never
+     * refuses.
+     */
+    const sameTool = plans.filter(
+      (plan) =>
+        running(plan) &&
+        draft.toolName &&
+        sameName(plan.toolName, draft.toolName),
+    );
+    if (sameTool.length) {
+      const labels = planLabels(plans);
+      const onFile = listed(
+        sameTool.map((plan) => `${plan.toolName}${UNDER}${plan.planName}`),
+      );
+      const twin = sameTool.find(
+        (plan) => draft.planName && sameName(plan.planName, draft.planName),
+      );
+      if (!draft.planName) {
+        problems.set(
+          "planName",
+          `${draft.toolName} is on file already: ${onFile}. Is this a renewal, or a new plan? If it is new, which plan is it?`,
+        );
+      } else if (twin) {
+        notes.push(
+          `${labels.get(twin.id) ?? twin.toolName} is already on file. If this is its renewal, say so and I will draft that instead of a second plan.`,
+        );
+      } else {
+        notes.push(
+          `${sameTool[0].toolName} is on file already: ${onFile}. If this is its renewal, say so. If that plan was changed to this one, that is an Upgrade, on the plan's row. Otherwise this is added as a second plan.`,
+        );
+      }
+    }
+  }
+
+  if (target === "subscription_payment") {
+    const plan = found.subscriptionName?.plan;
+
+    // The endpoint refuses a rate or an amount of nothing; and dollars of
+    // nothing are passed over there, the plan's own price charged instead.
+    moreThanZero("usdRate", "the rate");
+    moreThanZero("usdAmount", "what the card was billed");
+    moreThanZero("amount", "the amount");
+
+    /*
+     * What the Renew drawer offers before anybody types: the plan's own
+     * price, and the account the plan is paid from. From the books, on the
+     * card, for the person to check — not a figure anybody made up.
+     *
+     * The dollars go on the card even when the taka was given. The endpoint
+     * writes the plan's own price as the entry's dollars whenever none are
+     * stated, and a dollar account's balance moves by exactly them — so they
+     * are shown, where they can be corrected, rather than written unseen.
+     */
+    if (plan) {
+      if (
+        !draft.usdAmount &&
+        !problems.has("usdAmount") &&
+        plan.payableUsd &&
+        Number(plan.payableUsd) > 0
+      ) {
+        draft.usdAmount = plan.payableUsd;
+      }
+      if (!draft.accountName && !problems.has("accountName") && plan.account) {
+        draft.accountName = plan.account.name;
+        found.accountName = plan.account;
+      }
+    }
+
+    // With neither, the endpoint refuses: it has no figure to charge, or no
+    // account to charge it to.
+    if (found.subscriptionName) {
+      if (!draft.usdAmount && !draft.amount && !problems.has("usdAmount")) {
+        problems.set(
+          "usdAmount",
+          `The plan has no price on it. ${askFor("usdAmount", target)}`,
+        );
+      }
+      if (!draft.accountName && !problems.has("accountName")) {
+        problems.set(
+          "accountName",
+          `The plan has no card or account on it. ${askFor("accountName", target)}`,
+        );
+      }
+    }
+
+    /*
+     * The rate is asked every time, with the plan's own offered and never
+     * taken: the owner's reason for the box on the drawer was "prottek
+     * renewal a rate soman thakena".
+     */
+    if (!draft.usdRate && !problems.has("usdRate")) {
+      problems.set(
+        "usdRate",
+        plan?.usdRate && Number(plan.usdRate) > 0
+          ? `${askFor("usdRate", target)} The plan's own is ${Number(plan.usdRate)}.`
+          : askFor("usdRate", target),
+      );
+    }
   }
 
   /*
@@ -348,6 +620,8 @@ export function checkDraft(
       sent.direction = target === "transaction_in" ? "in" : "out";
       sent.createdVia = "ai_intake";
     }
+    // As the Renew drawer sends it, unless somebody unticks the box.
+    if (target === "subscription_payment") sent.advanceRenewal = true;
     return sent;
   };
 
@@ -418,6 +692,7 @@ export function checkDraft(
     problems: [...problems.entries()]
       .map(([field, question]) => ({ field, question }))
       .sort((a, b) => askOrder(a.field) - askOrder(b.field)),
+    notes,
   };
 }
 
@@ -426,6 +701,27 @@ function unrecognised(issues: z.core.$ZodIssue[]): string[] {
     issue.code === "unrecognized_keys" ? issue.keys : [],
   );
 }
+
+type ChoiceDef = {
+  type?: string;
+  innerType?: z.ZodType;
+  entries?: Record<string, string>;
+};
+
+/** The allowed values, for a field that takes one of a fixed list. */
+function choicesOf(field: unknown): string[] | null {
+  let current = field as { def?: ChoiceDef } | undefined;
+  for (let depth = 0; depth < 6 && current?.def; depth += 1) {
+    if (current.def.type === "enum" && current.def.entries) {
+      return Object.keys(current.def.entries);
+    }
+    current = current.def.innerType;
+  }
+  return null;
+}
+
+/** A value with its dress off: "AI Tool", "ai-tool" and "ai_tool" are one. */
+const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** The draft's key for a schema's: `categoryId` is asked as `categoryName`. */
 export function nameOf(key: string): string {
@@ -450,13 +746,19 @@ export function knowsField(target: AiTarget, field: string): boolean {
  * conversation.
  */
 const ASK_FIRST = [
+  "subscriptionName",
+  "toolName",
+  "planName",
   "fromAccountName",
   "toAccountName",
   "accountName",
   "amount",
+  "costUsd",
   "usdAmount",
+  "category",
   "categoryName",
   "txnDate",
+  "startDate",
   "description",
   "usdRate",
 ];
@@ -494,19 +796,47 @@ const QUESTIONS: Record<string, string> = {
   depositDate: "When was it deposited?",
   periodYear: "Which year is the challan for?",
   periodMonth: "Which month is the challan for?",
+  subscriptionName: "Which plan is being renewed?",
+  toolName: "Which tool or service is it?",
+  planName: "Which plan of it was bought?",
+  category:
+    "What kind of tool is it: AI tool, development, marketing, design, HR, productivity, management, eSIM, server support or finance?",
+  costUsd: "What is the plan's price, in dollars?",
+  costBdt: "What is the price in taka?",
+  startDate: "What date was it bought?",
 };
 
 const ACCOUNT_QUESTION: Partial<Record<AiTarget, string>> = {
   transaction_out: "Which account was it paid from?",
   transaction_in: "Which account did it come into?",
   tds_deposit: "Which account was it paid from?",
+  subscription:
+    "Which card or account is it paid from? The price comes out of it when the plan is saved.",
+  subscription_payment: "Which card or account was it paid from?",
+};
+
+/** Where one kind of record asks for a field in words of its own. */
+const QUESTIONS_ON: Partial<Record<AiTarget, Record<string, string>>> = {
+  subscription: {
+    usdRate:
+      "What USD rate is the price read at? The first payment is recorded in taka at it.",
+  },
+  subscription_payment: {
+    txnDate: "What date was the card charged?",
+    usdAmount: "How many dollars was the card billed?",
+    usdRate: "What rate was this renewal charged at?",
+  },
 };
 
 export function askFor(field: string, target: AiTarget): string {
   if (field === "accountName") {
     return ACCOUNT_QUESTION[target] ?? "Which account is it?";
   }
-  return QUESTIONS[field] ?? `What is the ${labelOf(field).toLowerCase()}?`;
+  return (
+    QUESTIONS_ON[target]?.[field] ??
+    QUESTIONS[field] ??
+    `What is the ${labelOf(field).toLowerCase()}?`
+  );
 }
 
 /** "money-out " before "category", where the record goes one way. */
@@ -537,6 +867,12 @@ const LABELS: Record<string, string> = {
   chargeUsd: "Bank charge in dollars",
   etin: "e-TIN",
   bin: "BIN",
+  subscriptionName: "Plan",
+  toolName: "Tool",
+  planName: "Plan",
+  costUsd: "Price in dollars",
+  costBdt: "Price in taka",
+  startDate: "Start date",
 };
 
 function labelOf(field: string): string {
@@ -559,6 +895,34 @@ function listed(names: string[]): string {
 function offer(accountNames: string[]): string {
   if (!accountNames.length || accountNames.length > 12) return "";
   return ` The accounts are ${listed(accountNames)}.`;
+}
+
+/** The running plans to choose from, when there are few enough to say. */
+function offerPlans(plans: PlanOnFile[]): string {
+  const labels = planLabels(plans);
+  const names = plans
+    .filter(running)
+    .map((plan) => labels.get(plan.id) ?? plan.toolName);
+  if (!names.length || names.length > 12) return "";
+  return ` On file: ${listed(names)}.`;
+}
+
+/**
+ * What is asked when a renewal names no plan on file: the ones it might
+ * have meant, if any share a word with it; otherwise the ones there are.
+ * A near match is offered here and never taken — a renewal is money against
+ * a plan, and "Claude Code" is not the plan called Claude until somebody
+ * says so.
+ */
+function noSuchPlan(said: string, plans: PlanOnFile[]): string {
+  const labels = planLabels(plans);
+  const close = plansLike(plans, said).map(
+    (plan) => labels.get(plan.id) ?? plan.toolName,
+  );
+  const opening = `There is no plan called "${said}" under AI tools and subscriptions.`;
+  return close.length && close.length <= 6
+    ? `${opening} Did you mean ${listed(close)}? If it is a new plan, say so.`
+    : `${opening} Is it a new plan, or which one on file is it?${offerPlans(plans)}`;
 }
 
 /** A schema's message, ended as a sentence. */

@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -17,11 +18,13 @@ import {
   AI_ATTACHMENT_MAX_BYTES,
   AI_TARGETS,
   aiIntakeRequestSchema,
+  setAiInstructionsSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
   type AiImportPlan,
   type AiIntakeRequest,
   type AiTarget,
+  type SetAiInstructionsInput,
   type SetAiKeyInput,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
@@ -269,5 +272,28 @@ export class AiIntakeController {
   @RequirePermission("settings.write")
   clearKey(@CurrentUser() actor: AuthenticatedUser) {
     return this.ai.clearKey(actor);
+  }
+
+  /**
+   * The owner's instructions for the assistant: read, and saved.
+   *
+   * Super Admin alone, both ways. A rule here changes what the assistant
+   * drafts for everybody who uses it, so it sits with the other decisions
+   * only they can make; and reading is theirs too until the owner says who
+   * else may (the brief leaves what the CFO sees to them).
+   */
+  @Get("instructions")
+  @RequirePermission("settings.write")
+  instructions() {
+    return this.ai.instructions();
+  }
+
+  @Put("instructions")
+  @RequirePermission("settings.write")
+  setInstructions(
+    @ZodBody(setAiInstructionsSchema) body: SetAiInstructionsInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.ai.setInstructions(body, actor);
   }
 }

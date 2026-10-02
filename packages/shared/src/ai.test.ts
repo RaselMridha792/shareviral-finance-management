@@ -10,17 +10,23 @@ import {
   AI_MODEL_PROVIDERS,
   AI_MODEL_RETIRING,
   AI_PROVIDERS,
+  AI_FIRST_PAYMENT_NOTE,
+  AI_INSTRUCTIONS_MAX,
   AI_TARGETS,
   AI_TARGET_ENDPOINT,
+  AI_TARGET_LABELS,
   AI_TARGET_PERMISSION,
+  AI_TARGET_SHOWS_ON,
   aiModelFrom,
   aiModelGoesWith,
   aiModelProviderProblem,
   aiModelsFor,
   isGeminiModel,
+  setAiInstructionsSchema,
   updateAiSettingsSchema,
   type AiModel,
 } from "./ai.ts";
+import { PERMISSIONS } from "./permissions.ts";
 
 describe("which model goes which way", () => {
   it("offers every model through at least one provider", () => {
@@ -156,11 +162,98 @@ describe("what the assistant can draft", () => {
     assert.ok(AI_TARGETS.includes("transfer"));
     assert.equal(AI_TARGET_ENDPOINT.transfer, "/transactions/transfer");
     // The same permission the Money Transfer form's endpoint asks for.
-    assert.equal(AI_TARGET_PERMISSION.transfer, "transactions.write");
+    assert.deepEqual(AI_TARGET_PERMISSION.transfer, ["transactions.write"]);
+  });
+
+  it("drafts a plan and its renewal, for the subscriptions form's own endpoints", () => {
+    assert.ok(AI_TARGETS.includes("subscription"));
+    assert.ok(AI_TARGETS.includes("subscription_payment"));
+    assert.equal(AI_TARGET_ENDPOINT.subscription, "/subscriptions");
+    assert.equal(
+      AI_TARGET_ENDPOINT.subscription_payment,
+      "/subscriptions/:id/pay",
+    );
+    // A new plan takes its first payment, so it needs both; a renewal is a
+    // ledger entry, as the Renew drawer's endpoint has it.
+    assert.deepEqual(AI_TARGET_PERMISSION.subscription, [
+      "vendors.write",
+      "transactions.write",
+    ]);
+    assert.deepEqual(AI_TARGET_PERMISSION.subscription_payment, [
+      "transactions.write",
+    ]);
+  });
+
+  it("names every kind in each table, and only permissions that exist", () => {
+    for (const target of AI_TARGETS) {
+      assert.ok(AI_TARGET_LABELS[target], target);
+      assert.ok(AI_TARGET_ENDPOINT[target].startsWith("/"), target);
+      assert.ok(AI_TARGET_PERMISSION[target].length > 0, target);
+      for (const permission of AI_TARGET_PERMISSION[target]) {
+        assert.ok(PERMISSIONS.includes(permission), `${target}: ${permission}`);
+      }
+      assert.ok(target in AI_TARGET_SHOWS_ON, target);
+      // Stored on a correction as varchar(32).
+      assert.ok(target.length <= 32, target);
+    }
+  });
+
+  it("says where a saved plan shows: the page the owner looked for it on", () => {
+    assert.deepEqual(AI_TARGET_SHOWS_ON.subscription, {
+      name: "AI tools and subscriptions",
+      href: "/subscriptions",
+    });
+    assert.equal(AI_TARGET_SHOWS_ON.subscription_payment?.href, "/subscriptions");
+    // No screen lists vendors today.
+    assert.equal(AI_TARGET_SHOWS_ON.vendor, null);
+    assert.match(AI_FIRST_PAYMENT_NOTE, /First payment/);
   });
 
   it("says under a ready draft that nothing is recorded yet", () => {
     assert.match(AI_DRAFT_READY_LINE, /press Save/);
     assert.match(AI_DRAFT_READY_LINE, /Nothing is recorded yet/);
+  });
+});
+
+describe("the owner's instructions for the assistant", () => {
+  it("takes plain text, one line ending whichever machine typed it", () => {
+    const parsed = setAiInstructionsSchema.parse({
+      instructions:
+        "  Claude kena = AI tools\r\nHosting = subscription\rDomain = subscription  ",
+    });
+    assert.equal(
+      parsed.instructions,
+      "Claude kena = AI tools\nHosting = subscription\nDomain = subscription",
+    );
+  });
+
+  it("takes an empty text: no rules is a real answer", () => {
+    assert.equal(
+      setAiInstructionsSchema.parse({ instructions: "   " }).instructions,
+      "",
+    );
+  });
+
+  it("refuses a text over the limit, and says the limit", () => {
+    const over = setAiInstructionsSchema.safeParse({
+      instructions: "a".repeat(AI_INSTRUCTIONS_MAX + 1),
+    });
+    assert.equal(over.success, false);
+    assert.match(over.error?.issues[0]?.message ?? "", /4,000 characters/);
+    assert.equal(
+      setAiInstructionsSchema.safeParse({
+        instructions: "a".repeat(AI_INSTRUCTIONS_MAX),
+      }).success,
+      true,
+    );
+  });
+
+  it("refuses anything but the text", () => {
+    assert.equal(
+      setAiInstructionsSchema.safeParse({ instructions: "x", model: "y" })
+        .success,
+      false,
+    );
+    assert.equal(setAiInstructionsSchema.safeParse({}).success, false);
   });
 });

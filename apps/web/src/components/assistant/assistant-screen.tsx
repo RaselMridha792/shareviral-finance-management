@@ -4,6 +4,7 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import {
   AI_TARGET_LABELS,
+  AI_TARGET_SHOWS_ON,
   aiModelsFor,
   type AiAttachment,
   type AiAvailability,
@@ -86,6 +87,10 @@ export function AssistantScreen({
   const [dropped, setDropped] = useState<Set<number>>(new Set());
   const [batchResults, setBatchResults] = useState<RowResult[] | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  /** Where the record just saved now shows, for the link under "Saved". */
+  const [savedOn, setSavedOn] = useState<{ name: string; href: string } | null>(
+    null,
+  );
   const [model, setModel] = useState<AiModel>(
     availability.model ?? "claude-opus-5",
   );
@@ -167,11 +172,13 @@ export function AssistantScreen({
     setAttachment(null);
     setDropped(new Set());
     setBatchResults(null);
+    setSavedOn(null);
   }
 
   async function open(id: string) {
     setDrawer(false);
     setError(null);
+    setSavedOn(null);
     try {
       const chat = await aiApi.chat(id);
       setChatId(chat.id);
@@ -243,6 +250,7 @@ export function AssistantScreen({
     setInput("");
     setThinking(true);
     setError(null);
+    setSavedOn(null);
 
     try {
       const result = await aiApi.turn({
@@ -347,16 +355,22 @@ export function AssistantScreen({
        */
       if (chatId) void aiApi.learn(chatId, reply.target, edited);
 
+      // What was saved, and the page it now shows on: the owner's complaint
+      // was a record that showed on one page and not on its own.
       const label = AI_TARGET_LABELS[reply.target];
+      const shows = AI_TARGET_SHOWS_ON[reply.target];
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
           content: `Saved — ${label.toLowerCase()}${
             created.refNo ? `, ${created.refNo}` : ""
-          }.`,
+          }.${shows ? ` It shows under ${shows.name}.` : ""}${
+            created.warning ? ` ${created.warning}` : ""
+          }`,
         },
       ]);
+      setSavedOn(shows);
       setReply(null);
       router.refresh();
     } catch (caught) {
@@ -376,6 +390,14 @@ export function AssistantScreen({
       setError("Could not change the model.");
     }
   }
+
+  // A draft has its own card; a link beside it would be a second thing to
+  // press before the first has been read.
+  const place = reply
+    ? reply.target || reply.batch || reply.importPlan
+      ? null
+      : (reply.screen ?? null)
+    : savedOn;
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0">
@@ -476,6 +498,19 @@ export function AssistantScreen({
                   </span>
                   Thinking…
                 </div>
+              ) : null}
+
+              {/* The way to the screen: where the thing asked about is done
+                  when the assistant can only point to it, and where a record
+                  just saved now shows. */}
+              {place && !thinking ? (
+                <Link
+                  href={place.href}
+                  className="ml-10 inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
+                >
+                  Open {place.name}
+                  <ArrowRightIcon weight="bold" size={15} />
+                </Link>
               ) : null}
 
               {/* A batch and a single draft are never both on offer: the

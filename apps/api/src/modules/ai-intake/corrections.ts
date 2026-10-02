@@ -34,6 +34,10 @@ export const CORRECTION_PERMISSION: Record<AiTarget, Permission> = {
   transaction_in: "transactions.read",
   transaction_out: "transactions.read",
   transfer: "transactions.read",
+  // A plan is read with the permission its register asks for; its renewal
+  // is a ledger entry.
+  subscription: "vendors.read",
+  subscription_payment: "transactions.read",
   vendor: "vendors.read",
   team_member: "team.read",
   tds_deposit: "tds.read",

@@ -62,6 +62,7 @@ import {
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
 import { nextRefNo } from "./ref-no";
+import { renewalInMonth } from "./renewal-in-month";
 
 /**
  * The dedupe fingerprint. Computed here rather than by Postgres because a
@@ -1684,34 +1685,14 @@ export class TransactionsService {
 
   /**
    * The renewal this plan already has in the month of `txnDate`, or null.
-   *
-   * A renewal is any live payment on the plan — not voided, not in the trash,
-   * not a bank-charge row — that no upgrade names as its own. Raw SQL for the
-   * `not exists` against `subscription_upgrades`, with every column written
-   * against an alias so nothing resolves to the wrong table.
+   * The rule itself is in renewal-in-month.ts, where the assistant reads it
+   * too: a renewal it drafts is held to the same before Save is offered.
    */
-  private async renewalInMonth(
+  private renewalInMonth(
     subscriptionId: string,
     txnDate: string,
   ): Promise<{ refNo: string; txnDate: string } | null> {
-    const result = await this.db.client.execute(sql`
-      select t.ref_no, t.txn_date::text as txn_date
-        from transactions t
-       where t.subscription_id = ${subscriptionId}::uuid
-         and t.voided_at is null
-         and t.deleted_at is null
-         and t.charge_for_id is null
-         and date_trunc('month', t.txn_date) = date_trunc('month', ${txnDate}::date)
-         and not exists (
-           select 1 from subscription_upgrades u where u.transaction_id = t.id
-         )
-       order by t.txn_date
-       limit 1
-    `);
-    const row = (
-      result.rows as unknown as { ref_no: string; txn_date: string }[]
-    )[0];
-    return row ? { refNo: row.ref_no, txnDate: row.txn_date } : null;
+    return renewalInMonth(this.db.client, subscriptionId, txnDate);
   }
 
   /**

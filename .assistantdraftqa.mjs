@@ -91,7 +91,16 @@ const taka = accounts.filter((a) => a.currency !== "USD").sort((a, b) => Number(
 const FROM = taka[0];
 const TO = taka[1];
 if (!FROM || !TO || Number(FROM.balance) < 100) throw new Error("The local books need two taka accounts, one of them holding 100 taka.");
-const [CATEGORY] = await q(`select name from categories where is_active and parent_id is not null and kind <> 'in' order by name limit 1`);
+// A money-out sub-category that is a plain expense. Not one the map gives to
+// AI tools and subscriptions (#136): a payment filed under "AI tools" is now
+// refused as a plain payment, which is .assistantmapqa.mjs's to measure.
+const [CATEGORY] = await q(
+  `select c.name from categories c join categories p on p.id = c.parent_id
+    where c.is_active and c.deleted_at is null and c.kind <> 'in'
+      and c.name !~* 'ai ?tool|subscription|software|hosting|server|domain'
+      and p.name !~* 'ai ?tool|subscription|software|hosting|server|domain'
+    order by c.name limit 1`,
+);
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
 // A piece of a name that more than one account carries, and one none does.
 const shared = (() => {

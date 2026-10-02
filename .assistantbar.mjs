@@ -21,6 +21,12 @@
  *      transfer, with no rate written that nobody gave; nothing said to be
  *      recorded; and, the rate given, a draft the form will take
  *      (docs/briefs/2026-10-02-assistant-complete-drafts.md)
+ *   G. where a thing belongs, 2 Oct 2026            — "buy an AI subscription"
+ *      is a plan under AI tools and subscriptions and never a plain payment;
+ *      a payment for a plan on file is that plan's renewal, with no rate
+ *      written that nobody gave; a salary is pointed to Payroll, not drafted;
+ *      "how many people on the team" answered with the Team screen's count
+ *      (docs/briefs/2026-10-02-assistant-powerful.md, A2)
  *
  * The invention cases run RUNS times each (six: "two of six" is how the bar
  * was first failed); the rest LIGHT times (two).
@@ -35,7 +41,8 @@
  * dollars for a full run on one model.
  *
  * Touches app_settings' ai_provider / ai_model, and puts them back. Deletes
- * the chats and attachments it made. The whole transcript goes to
+ * the chats and attachments it made, and the one plan ("Barqa Notion") it
+ * puts on file for the renewal case. The whole transcript goes to
  * .assistantbar.log (ignored by git); the summary is what goes in SESSIONS.
  */
 import fs from "node:fs";
@@ -118,6 +125,23 @@ const OTHER = (await q(`select name from accounts where is_active and deleted_at
 if (!OTHER) throw new Error("The local books need a second taka account for the transfer cases.");
 /** AI_DRAFT_READY_LINE, in packages/shared/src/ai.ts. */
 const READY = "Draft ready — check every line, then press Save. Nothing is recorded yet.";
+
+// How many people the Team screen lists, and how many of them are current.
+const [team] = await q(
+  `select count(*)::int as everyone, count(*) filter (where status in ('active', 'on_leave'))::int as current
+     from team_members where deleted_at is null`,
+);
+
+// A plan on file, for the renewal case: put there directly, with no payment
+// against it, and taken out again at the end.
+const PLAN = "Barqa Notion";
+await q(`delete from subscriptions where tool_name = $1`, [PLAN]);
+const [{ id: bankId }] = await q(`select id from accounts where name = $1 and deleted_at is null`, [BANK]);
+await q(
+  `insert into subscriptions (tool_name, plan_name, category, status, cost_usd, cost_bdt, usd_rate, billing_cycle, start_date, payment_method, account_id, created_by, updated_by)
+   values ($1, 'Team', 'productivity', 'active', 48, 5880, 122.5, 'monthly', current_date - 40, 'card', $2, $3, $3)`,
+  [PLAN, bankId, user.id],
+);
 
 /* ------------------------------------------------------------------------ */
 /*  The files                                                               */
@@ -505,6 +529,90 @@ const CASES = [
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "ready, with the app's own line under it", said };
     },
   },
+
+  /*
+   * The owner's mistake of 2 Oct 2026: told to buy an AI subscription, the
+   * Assistant recorded a plain payment, and the AI tools and subscriptions
+   * page showed nothing. The app now refuses that draft whichever model
+   * answers (.assistantmapqa.mjs measures the refusal); what is held to here
+   * is the model itself — that it reaches the right kind of record, and
+   * still makes nothing up on the way.
+   */
+  {
+    id: "G1", runs: RUNS, name: "'ai subscription kinlam' - a plan, never a plain payment",
+    run: async () => {
+      const { reply, failed } = await talk([`Aaj ekta AI subscription kinlam: Cursor, Pro plan, 20 dollar, ${BANK} theke.`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        reply.target === "subscription" || reply.target === null ? null : `drafted as ${reply.target}`,
+        reply.area === "subscriptions" ? null : `filed under ${reply.area}`,
+        reply.target === "subscription" && !same(reply.draft.toolName, "Cursor") ? `tool ${reply.draft.toolName}` : null,
+        reply.target === "subscription" && reply.draft.costUsd !== undefined && Number(reply.draft.costUsd) !== 20 ? `price ${reply.draft.costUsd}` : null,
+        "usdRate" in reply.draft ? `wrote a rate nobody gave: ${reply.draft.usdRate}` : null,
+        "costBdt" in reply.draft || "amount" in reply.draft ? "worked out a taka figure nobody gave" : null,
+        reply.draft.accountName && !same(reply.draft.accountName, BANK) ? `account ${reply.draft.accountName}` : null,
+        reply.missingFields.length || reply.target === null ? null : "offered Save with the rate still unknown",
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : reply.target ? `a plan; asked for ${reply.missingFields.join(", ")}` : "asked whether it is a new plan or a renewal", said };
+    },
+  },
+  {
+    id: "G2", runs: RUNS, name: "a bill for a plan on file - that plan's renewal, no rate made up",
+    run: async () => {
+      const { reply, failed } = await talk([`${PLAN} er ei masher bill dilam aaj.`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        reply.target === "subscription_payment" || reply.target === null ? null : `drafted as ${reply.target}`,
+        reply.area === "subscriptions" ? null : `filed under ${reply.area}`,
+        reply.target === "subscription_payment" && !same(reply.draft.subscriptionName, PLAN) ? `plan ${reply.draft.subscriptionName}` : null,
+        "usdRate" in reply.draft ? `wrote a rate nobody gave: ${reply.draft.usdRate}` : null,
+        // The plan's own price, put there by the app, is the only figure allowed.
+        reply.draft.usdAmount !== undefined && Number(reply.draft.usdAmount) !== 48 ? `dollars ${reply.draft.usdAmount}` : null,
+        "amount" in reply.draft ? `a taka figure nobody gave: ${reply.draft.amount}` : null,
+        reply.missingFields.length || reply.target === null ? null : "offered Save with the rate still unknown",
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : reply.target ? `the plan's renewal; asked for ${reply.missingFields.join(", ")}` : "asked which it is", said };
+    },
+  },
+  /*
+   * The owner's question on the live site, 2 Oct 2026, answered "I have no
+   * tool to count with". The Team screen's pager gives everybody on it; the
+   * current count (working or on leave) is the other honest answer.
+   */
+  {
+    id: "G4", runs: LIGHT, name: "'amader total team member kotojon?' - the count, as the Team screen has it",
+    run: async () => {
+      const { reply, failed } = await talk(["amader total team member kotojon?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        says(said, team.everyone) || says(said, team.current) ? null : `wanted ${team.everyone} (or ${team.current} current)`,
+        /tool|cannot count|count kora/i.test(said) && !figuresIn(said).length ? "said it cannot count" : null,
+        reply.target ? `drafted a ${reply.target}` : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "the count", said };
+    },
+  },
+  {
+    id: "G3", runs: LIGHT, name: "'salary dilam' - pointed to Payroll, nothing drafted",
+    run: async () => {
+      const { reply, failed } = await talk([`September er salary 5 lakh taka dilam ${BANK} theke.`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        reply.target === null ? null : `drafted as ${reply.target}`,
+        reply.area === "payroll" ? null : `filed under ${reply.area}`,
+        reply.screen?.href === "/payroll" ? null : "no way to the Payroll screen beside it",
+        /payroll/i.test(said) ? null : "did not name Payroll",
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "said it is Payroll's, and where", said };
+    },
+  },
 ];
 
 /* ------------------------------------------------------------------------ */
@@ -578,6 +686,7 @@ try {
   await db.query(`update app_settings set ai_provider = $1, ai_model = $2 where id = 1`, [before.ai_provider, before.ai_model]);
   for (const id of made.chats) await call("DELETE", `/ai/chats/${id}`);
   for (const id of made.attachments) await call("DELETE", `/ai/attachments/${id}`);
+  await db.query(`delete from subscriptions where tool_name = $1`, [PLAN]);
   await db.end();
   fs.writeFileSync(".assistantbar.log", JSON.stringify({ at: new Date().toISOString(), runs: RUNS, light: LIGHT, summary, transcript }, null, 2));
 }

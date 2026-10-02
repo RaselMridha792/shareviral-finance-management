@@ -1,6 +1,10 @@
 "use client";
 
-import { formatMoney, type AiIntakeReply } from "@finance/shared";
+import {
+  formatMoney,
+  type AiIntakeReply,
+  type AiTarget,
+} from "@finance/shared";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import type { FormEvent } from "react";
 
@@ -71,6 +75,44 @@ export const FIELD_LABELS: Record<string, string> = {
   contactName: "Contact",
   address: "Address",
   notes: "Notes",
+
+  // A plan under AI tools and subscriptions, in the Add subscription form's
+  // own words.
+  toolName: "Tool",
+  planName: "Plan",
+  category: "Category",
+  costUsd: "Price (USD)",
+  costBdt: "Price (BDT)",
+  billingCycle: "Billing cycle",
+  startDate: "Start date",
+  renewalNote: "Renewal note",
+  boughtFor: "Bought for",
+  loginEmail: "Login email",
+  websiteUrl: "Website",
+  invoiceNo: "Invoice no.",
+  reference: "Reference",
+  // A renewal: the plan it is for, and the Renew drawer's note.
+  subscriptionName: "Plan",
+  note: "Note",
+};
+
+/**
+ * Where one kind of record calls a field something else.
+ *
+ * `chargeUsd` is the bank's charge on a payment and the vendor's on a plan;
+ * `amount` on a renewal is the taka beside the dollars. One label for both
+ * would name the wrong thing on one of the two cards.
+ */
+const FIELD_LABELS_ON: Partial<Record<AiTarget, Record<string, string>>> = {
+  subscription: {
+    chargeUsd: "Vendor's charge (USD)",
+    accountName: "Paid from",
+  },
+  subscription_payment: {
+    txnDate: "Date it was charged",
+    amount: "Amount (BDT)",
+    accountName: "Paid from",
+  },
 };
 
 /**
@@ -83,8 +125,9 @@ export const FIELD_LABELS: Record<string, string> = {
  * as good as a chosen word, which is why the map still wins, but it is a great
  * deal better than the raw key and it cannot fall behind a new field.
  */
-export function labelFor(key: string): string {
-  const named = FIELD_LABELS[key];
+export function labelFor(key: string, target?: AiTarget | null): string {
+  const named =
+    (target ? FIELD_LABELS_ON[target]?.[key] : undefined) ?? FIELD_LABELS[key];
   if (named) return named;
   const words = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -102,14 +145,33 @@ export function labelFor(key: string): string {
  * reality: showing the raw string is a fine outcome, throwing inside a render
  * and blanking the screen is not.
  */
-function safeMoney(raw: string): string {
+function safeMoney(raw: string, currency: "BDT" | "USD" = "BDT"): string {
   const cleaned = raw.replace(/[,\s৳$]/g, "");
   if (!/^-?\d+(\.\d{1,2})?$/.test(cleaned)) return raw;
   try {
-    return formatMoney(cleaned);
+    return formatMoney(cleaned, { currency });
   } catch {
     return raw;
   }
+}
+
+/**
+ * The figure to read back before saving: the taka on an entry, and on a
+ * plan or its renewal the dollars — the figure that is actually billed.
+ */
+function figureOf(
+  draft: Record<string, unknown>,
+): { what: string; shown: string } | null {
+  if (typeof draft.amount === "string") {
+    return { what: "amount", shown: safeMoney(draft.amount) };
+  }
+  if (typeof draft.costUsd === "string") {
+    return { what: "price", shown: safeMoney(draft.costUsd, "USD") };
+  }
+  if (typeof draft.usdAmount === "string") {
+    return { what: "amount", shown: safeMoney(draft.usdAmount, "USD") };
+  }
+  return null;
 }
 
 /**
@@ -134,6 +196,7 @@ export function DraftCard({
   const entries = Object.entries(reply.draft).filter(
     ([, value]) => value !== null && value !== undefined && value !== "",
   );
+  const figure = figureOf(reply.draft);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -159,7 +222,9 @@ export function DraftCard({
               // read "Still needed: vendorName" — the database talking, in the
               // one line asking a person for help. Same words as the labels on
               // the boxes below, which is where they will go to answer it.
-              `Still needed: ${reply.missingFields.map(labelFor).join(", ")}`}
+              `Still needed: ${reply.missingFields
+                .map((field) => labelFor(field, reply.target))
+                .join(", ")}`}
         </p>
       </div>
 
@@ -168,7 +233,7 @@ export function DraftCard({
           {entries.map(([key, value]) => (
             <Field
               key={key}
-              label={labelFor(key)}
+              label={labelFor(key, reply.target)}
               className={
                 String(value).length > 60 ? "sm:col-span-2" : undefined
               }
@@ -188,15 +253,13 @@ export function DraftCard({
           ))}
         </div>
 
-        {typeof reply.draft.amount === "string" ? (
+        {figure ? (
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              Read the amount back before saving:{" "}
-              <strong className="num">
-                {safeMoney(String(reply.draft.amount))}
-              </strong>
-              . A misheard figure looks exactly like a correct one.
+              Read the {figure.what} back before saving:{" "}
+              <strong className="num">{figure.shown}</strong>. A misheard
+              figure looks exactly like a correct one.
             </span>
           </p>
         ) : null}

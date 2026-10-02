@@ -1,10 +1,12 @@
 import {
+  AI_FIRST_PAYMENT_NOTE,
   AI_TARGET_ENDPOINT,
   type AiAttachment,
   type AiAvailability,
   type AiChat,
   type AiChatSummary,
   type AiImportPlan,
+  type AiInstructions,
   type AiKeyResult,
   type UpdateAiSettingsInput,
   type AiIntakeReply,
@@ -36,6 +38,19 @@ export const aiApi = {
     apiFetch<AiAvailability>("/ai/settings", {
       method: "PATCH",
       ...json(input),
+    }),
+
+  /**
+   * The owner's instructions for the assistant: plain text, one rule a
+   * line. Super Admin's to read and to save; the API refuses anybody else.
+   */
+  instructions: () =>
+    apiFetch<AiInstructions>("/ai/instructions", { cache: "no-store" }),
+
+  setInstructions: (instructions: string) =>
+    apiFetch<AiInstructions>("/ai/instructions", {
+      method: "PUT",
+      ...json({ instructions }),
     }),
 
   turn: (request: AiIntakeRequest) =>
@@ -130,7 +145,12 @@ export const aiApi = {
     for (const [index, row] of rows.entries()) {
       try {
         const created = await aiApi.save(target, row);
-        results.push({ ok: true, refNo: created.refNo });
+        // A plan whose first payment was refused is saved, and is not done.
+        results.push(
+          created.warning
+            ? { ok: false, error: created.warning }
+            : { ok: true, refNo: created.refNo },
+        );
       } catch (caught) {
         results.push({
           ok: false,
@@ -177,7 +197,10 @@ export const aiApi = {
    * same Zod schema, the same audit row. `created_via` marks where it came
    * from so the provenance is visible afterwards.
    */
-  save: async (target: AiTarget, draft: Record<string, unknown>) => {
+  save: async (
+    target: AiTarget,
+    draft: Record<string, unknown>,
+  ): Promise<{ refNo?: string; id: string; warning?: string }> => {
     const resolved = await apiFetch<Record<string, unknown>>("/ai/resolve", {
       method: "POST",
       ...json({ draft }),
@@ -189,12 +212,65 @@ export const aiApi = {
       body.createdVia = "ai_intake";
     }
 
-    return apiFetch<{ refNo?: string; id: string }>(
+    /*
+     * A renewal is posted to its plan: the Renew drawer's own request. The
+     * plan the draft named is the address, not part of the body, and the
+     * renewal date moves on as it does from the drawer.
+     */
+    if (target === "subscription_payment") {
+      const { subscriptionId, ...payment } = body;
+      if (typeof subscriptionId !== "string") {
+        throw new ApiError("Say which plan this renewal is for.", 400);
+      }
+      return apiFetch<{ refNo?: string; id: string }>(
+        AI_TARGET_ENDPOINT[target].replace(":id", subscriptionId),
+        { method: "POST", ...json({ ...payment, advanceRenewal: true }) },
+      );
+    }
+
+    const created = await apiFetch<{ refNo?: string; id: string }>(
       AI_TARGET_ENDPOINT[target],
       {
         method: "POST",
         ...json(body),
       },
     );
+
+    /*
+     * A new plan takes its first payment out of its account, as the Add
+     * subscription form does: the same second request, with the same note.
+     * Without it the plan would be on the page and the money nowhere — the
+     * owner's first complaint about that form, the other way round.
+     *
+     * The plan is saved by now. If the payment is refused — a locked month,
+     * an account that does not hold it — that is said, with the form's own
+     * way out, and the plan is not reported as lost.
+     */
+    if (target === "subscription") {
+      try {
+        const paid = await apiFetch<{ refNo?: string; id: string }>(
+          `/subscriptions/${created.id}/pay`,
+          {
+            method: "POST",
+            ...json({
+              txnDate: body.startDate,
+              note: AI_FIRST_PAYMENT_NOTE,
+              // The renewal date is already the first one after today.
+              advanceRenewal: false,
+            }),
+          },
+        );
+        return { id: created.id, refNo: paid.refNo };
+      } catch (caught) {
+        return {
+          id: created.id,
+          warning: `The plan is saved, but its first payment did not go through: ${
+            caught instanceof ApiError ? caught.message : "try it again"
+          } Use Renew on its row to take the money out.`,
+        };
+      }
+    }
+
+    return created;
   },
 };
