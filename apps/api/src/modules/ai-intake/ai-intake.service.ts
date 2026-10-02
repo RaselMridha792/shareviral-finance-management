@@ -1932,7 +1932,14 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
         corrected: aiCorrections.corrected,
       })
       .from(aiCorrections)
-      .where(inArray(aiCorrections.target, allowed))
+      // A field changed before Save. A reply marked wrong (A2b) has no field
+      // and is written out differently.
+      .where(
+        and(
+          eq(aiCorrections.kind, "field"),
+          inArray(aiCorrections.target, allowed),
+        ),
+      )
       .orderBy(desc(aiCorrections.createdAt))
       .limit(60)
       .catch((error: unknown) => {
@@ -1943,18 +1950,20 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
         );
         return [] as Array<{
           said: string;
-          field: string;
+          field: string | null;
           drafted: string | null;
           corrected: string | null;
         }>;
       });
 
     const seen = new Set<string>();
-    const distinct = rows.filter((row) => {
+    const distinct = rows.flatMap((row) => {
+      // Every field row names its field; this is for the type.
+      if (!row.field) return [];
       const key = `${row.field}|${row.drafted ?? ""}|${row.corrected ?? ""}`;
-      if (seen.has(key)) return false;
+      if (seen.has(key)) return [];
       seen.add(key);
-      return true;
+      return [{ ...row, field: row.field }];
     });
 
     return renderCorrections(distinct.slice(0, 12));

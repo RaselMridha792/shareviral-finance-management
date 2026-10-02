@@ -39,26 +39,70 @@ import { users } from "./users";
  * `said` has its digits masked for the same reason, and reading is gated on the
  * permission for the record type — belt and braces, because this is the one
  * table whose whole purpose is to be shown to somebody else.
+ *
+ * TWO KINDS OF MISTAKE (2 Oct 2026, piece A2b of the "made strong" brief)
+ *
+ * A field changed before Save is one. A reply the person marks "this was
+ * wrong", and says why, is the other: a count that was off, a request filed
+ * under the wrong part of the app. Either way the row is what was asked
+ * (`said`), what the Assistant gave (`drafted`) and what was right
+ * (`corrected`). Made by `deploy/sql/2026-10-02-assistant-learning.sql`.
  */
 export const aiCorrections = pgTable(
   "ai_corrections",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    /** Which kind of record was being drafted. */
-    target: varchar("target", { length: 32 }).notNull(),
+    /**
+     * `field`: a draft's field changed before Save — every row before A2b.
+     * `reply`: a reply marked wrong.
+     */
+    kind: varchar("kind", { length: 16 })
+      .$type<"field" | "reply">()
+      .notNull()
+      .default("field"),
+
+    /**
+     * Which kind of record was being drafted. Null on a reply marked wrong
+     * that drafted nothing — a count, or "that is Payroll's".
+     */
+    target: varchar("target", { length: 32 }),
+
+    /**
+     * The part of the app's map the reply was in (`ai-intake/app-map.ts`).
+     * Null on the rows from before A2b; their `target` says it.
+     */
+    area: varchar("area", { length: 32 }),
 
     /** What the person had said, with every run of digits replaced. */
     said: text("said").notNull(),
 
-    /** The field they changed. Always one of LEARNABLE_FIELDS. */
-    field: varchar("field", { length: 64 }).notNull(),
+    /**
+     * The field they changed. Always one of LEARNABLE_FIELDS. Null on a reply
+     * marked wrong, which is about the whole answer.
+     */
+    field: varchar("field", { length: 64 }),
 
-    /** What the assistant had put there. Null when it left it empty. */
+    /**
+     * What the assistant had put there. Null when it left it empty. On a
+     * reply marked wrong: what the reply said or drafted.
+     */
     drafted: text("drafted"),
 
-    /** What they made it. Null when they cleared it. */
+    /**
+     * What they made it. Null when they cleared it. On a reply marked wrong:
+     * what was right, in the person's words.
+     */
     corrected: text("corrected"),
+
+    /** Which model gave it, so the owner can see which one errs. */
+    model: varchar("model", { length: 64 }),
+
+    /**
+     * When the owner made it one of their rules: a line written into
+     * `app_settings.ai_instructions`. Null: not a rule.
+     */
+    ruledAt: timestamp("ruled_at", { withTimezone: true }),
 
     /**
      * Who corrected it — for removing one lesson later, not for showing.
