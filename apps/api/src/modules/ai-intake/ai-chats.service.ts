@@ -5,8 +5,9 @@ import {
   type AiChatSummary,
   type AiIntakeReply,
   type AiMessage,
+  type AiSaved,
 } from "@finance/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -111,6 +112,45 @@ export class AiChatsService {
       .returning({ id: aiChats.id });
 
     return created.id;
+  }
+
+  /**
+   * What Confirm and save has just saved (A4), kept on the conversation.
+   *
+   * One statement each, merged into the stored reply in the database rather
+   * than read, changed and written back: two rows of a table confirmed at
+   * the same moment must not write over each other's mark. A draft card's
+   * sentence joins the conversation as the answer to it; a table's rows are
+   * said once, by the page, when the table is done.
+   */
+  async markSaved(
+    id: string,
+    actor: AuthenticatedUser,
+    saved: AiSaved,
+    where: { row: number } | { said: string },
+  ): Promise<void> {
+    const mark = JSON.stringify(saved);
+    const mine = and(eq(aiChats.id, id), eq(aiChats.userId, actor.id));
+
+    if ("row" in where) {
+      await this.db.client
+        .update(aiChats)
+        .set({
+          reply: sql`jsonb_set(${aiChats.reply}, '{batch,saved}', coalesce(${aiChats.reply} -> 'batch' -> 'saved', '{}'::jsonb) || jsonb_build_object(${String(where.row)}::text, ${mark}::jsonb))`,
+          updatedAt: new Date(),
+        })
+        .where(mine);
+      return;
+    }
+
+    await this.db.client
+      .update(aiChats)
+      .set({
+        reply: sql`${aiChats.reply} || jsonb_build_object('saved', ${mark}::jsonb)`,
+        messages: sql`${aiChats.messages} || jsonb_build_array(jsonb_build_object('role', 'assistant', 'content', ${where.said}::text))`,
+        updatedAt: new Date(),
+      })
+      .where(mine);
   }
 
   /**

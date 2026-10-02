@@ -425,7 +425,7 @@ export function Composer({
           <span className="hidden sm:inline">
             Enter sends · Shift + Enter for a new line ·{" "}
           </span>
-          Nothing reaches the books until you press Save
+          Nothing reaches the books until you press Confirm and save
         </p>
       </form>
     </div>

@@ -5,16 +5,17 @@ import type { Permission } from "./permissions.ts";
 /**
  * The assistant that fills in a form.
  *
- * It is deliberately not an agent. It holds no tools, touches no database, and
- * cannot save anything. Each turn it reads what has been said so far and
- * returns the same shape: which kind of record this is, the fields it has
- * understood, what is still missing, and the single next question to ask.
+ * It is deliberately not an agent. It holds no write tool and cannot save
+ * anything. Each turn it reads what has been said so far and returns the same
+ * shape: which kind of record this is, the fields it has understood, what is
+ * still missing, and the single next question to ask.
  *
  * When nothing is missing the app renders an ordinary, editable form filled in
- * with those values. Pressing Save calls the same endpoint the manual form
- * calls, so permissions, validation and the audit trail all apply exactly as
- * they would have. There is no path by which talking to the assistant achieves
- * something typing could not.
+ * with those values. Pressing Confirm and save (A4, 3 Oct 2026) asks the
+ * server to check the card once more and save it through the same service,
+ * schema and permission as the form's own endpoint, as the person who
+ * pressed it; the audit row says it came through the Assistant. There is no
+ * path by which talking to the assistant achieves something typing could not.
  */
 
 /**
@@ -111,7 +112,12 @@ export const AI_TARGET_SHOWS_ON: Record<
   },
   vendor: null,
   team_member: { name: "Team", href: "/team" },
-  tds_deposit: { name: "TDS", href: "/tax/withholding" },
+  /*
+   * Not TDS: that screen lists no challans (#138 found it said so anyway). A
+   * challan drafted here always names its account, so its payment is a
+   * ledger row, and that row is where it shows.
+   */
+  tds_deposit: { name: "All transactions", href: "/transactions" },
 };
 
 /**
@@ -128,7 +134,7 @@ export const AI_FIRST_PAYMENT_NOTE =
  * korechi" about a draft nobody had saved.
  */
 export const AI_DRAFT_READY_LINE =
-  "Draft ready — check every line, then press Save. Nothing is recorded yet.";
+  "Draft ready — check every line, then press Confirm and save. Nothing is recorded yet.";
 
 /* -------------------------------------------------------------------------- */
 /*  What the assistant may see, and which model answers                        */
@@ -735,10 +741,10 @@ export type AiImportPlan = {
  * The rows are ordinary drafts, the same shape the single draft has and
  * validated by the same rules. What is deliberately NOT here is a save: the
  * batch is reviewed as a table, any row can be dropped, and confirming it
- * posts each row to the record's own endpoint one at a time. Seventeen
- * ordinary creates, seventeen permission checks, seventeen audit rows — no
- * bulk path into the database, because a bulk path is a second way in that has
- * to be secured all over again.
+ * saves each row the way a single draft is saved (A4), one at a time.
+ * Seventeen ordinary creates, seventeen permission checks, seventeen audit
+ * rows — no bulk path into the database, because a bulk path is a second way
+ * in that has to be secured all over again.
  */
 export type AiBatch = {
   target: AiTarget;
@@ -746,6 +752,12 @@ export type AiBatch = {
   rows: Array<Record<string, unknown>>;
   /** One line naming what this is, for the heading above the table. */
   note: string | null;
+  /**
+   * The rows already saved, by their number in `rows` (A4). Kept on the
+   * conversation, so a row is never saved twice and a table reopened later
+   * says which ones are in the books.
+   */
+  saved?: Record<string, AiSaved>;
 };
 
 /** More than this in one go belongs on the import screen, not in a chat. */
@@ -794,6 +806,61 @@ export type AiIntakeReply = {
    * says which model made it (A2b).
    */
   model?: string;
+  /**
+   * Set once its draft has been saved by Confirm and save (A4). The card is
+   * not offered again: the same draft confirmed twice would be two records.
+   */
+  saved?: AiSaved | null;
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Confirm in chat, then it saves (3 Oct 2026, piece A4)                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Confirm and save, on a draft card or on a row of a table of drafts.
+ *
+ * Only the conversation travels, with the card's boxes as the person left
+ * them, or the row's number. Which kind of record it is, and a row's values,
+ * are read from the conversation on the server: a caller cannot turn a
+ * drafted payment into something else, or save a row nobody was shown.
+ */
+export const aiConfirmSchema = z
+  .strictObject({
+    chatId: z.string().uuid(),
+    /** The card's boxes, every value as text, as the form sends them. */
+    draft: z
+      .record(z.string().max(64), z.string().max(4_000))
+      .refine((draft) => Object.keys(draft).length <= 60, "Too many fields")
+      .optional(),
+    /** A row of the table, counted from 0. */
+    row: z.number().int().min(0).max(AI_BATCH_MAX_ROWS - 1).optional(),
+  })
+  .refine((input) => (input.draft === undefined) !== (input.row === undefined), {
+    message: "Send either the card's values or the row to save, not both",
+  });
+export type AiConfirmInput = z.infer<typeof aiConfirmSchema>;
+
+/** A record saved from the chat: what the books know it by, and when. */
+export type AiSaved = {
+  id: string;
+  /** TXN-2026-000412 for anything that moved money; null for a person or a vendor. */
+  refNo: string | null;
+  at: string;
+};
+
+/** What Confirm and save answers. */
+export type AiConfirmResult = AiSaved & {
+  target: AiTarget;
+  /** What was saved and where it now shows, in a sentence, for the chat. */
+  said: string;
+  /** The screen it shows on, for the link under the sentence. */
+  showsOn: { name: string; href: string } | null;
+  /**
+   * Saved, and not finished: a plan whose first payment was refused. Said
+   * with the way round it, and part of `said` already.
+   */
+  warning: string | null;
 };
 
 /* -------------------------------------------------------------------------- */

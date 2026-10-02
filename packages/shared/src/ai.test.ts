@@ -17,6 +17,7 @@ import {
   AI_TARGET_LABELS,
   AI_TARGET_PERMISSION,
   AI_TARGET_SHOWS_ON,
+  aiConfirmSchema,
   aiModelFrom,
   aiModelGoesWith,
   aiModelProviderProblem,
@@ -211,12 +212,63 @@ describe("what the assistant can draft", () => {
     );
     // No screen lists vendors today.
     assert.equal(AI_TARGET_SHOWS_ON.vendor, null);
+    // The TDS screen lists no challans; a challan's payment is a ledger row.
+    assert.equal(AI_TARGET_SHOWS_ON.tds_deposit?.href, "/transactions");
     assert.match(AI_FIRST_PAYMENT_NOTE, /First payment/);
   });
 
   it("says under a ready draft that nothing is recorded yet", () => {
-    assert.match(AI_DRAFT_READY_LINE, /press Save/);
+    // The button's own words (A4).
+    assert.match(AI_DRAFT_READY_LINE, /press Confirm and save/);
     assert.match(AI_DRAFT_READY_LINE, /Nothing is recorded yet/);
+  });
+});
+
+describe("Confirm and save (A4)", () => {
+  const chatId = "7d3f9a52-1c4b-4e8a-9f0d-2b6c8e1a4f30";
+
+  it("takes the card's values, every one as text", () => {
+    const parsed = aiConfirmSchema.parse({
+      chatId,
+      draft: { amount: "4500", accountName: "City Bank" },
+    });
+    assert.deepEqual(parsed.draft, { amount: "4500", accountName: "City Bank" });
+  });
+
+  it("takes a row of the table by its number", () => {
+    assert.equal(aiConfirmSchema.parse({ chatId, row: 0 }).row, 0);
+    assert.equal(aiConfirmSchema.parse({ chatId, row: 99 }).row, 99);
+  });
+
+  it("refuses both at once, neither, and a row past the table's limit", () => {
+    assert.equal(
+      aiConfirmSchema.safeParse({ chatId, row: 0, draft: {} }).success,
+      false,
+    );
+    assert.equal(aiConfirmSchema.safeParse({ chatId }).success, false);
+    assert.equal(aiConfirmSchema.safeParse({ chatId, row: 100 }).success, false);
+    assert.equal(aiConfirmSchema.safeParse({ chatId, row: -1 }).success, false);
+  });
+
+  it("never takes the kind of record from the caller", () => {
+    // Read from the conversation on the server: an extra key is refused.
+    assert.equal(
+      aiConfirmSchema.safeParse({ chatId, draft: {}, target: "vendor" })
+        .success,
+      false,
+    );
+    // Nor a value that is not text, as a number the card never sends.
+    assert.equal(
+      aiConfirmSchema.safeParse({ chatId, draft: { amount: 4500 } }).success,
+      false,
+    );
+  });
+
+  it("refuses a conversation that is not an id", () => {
+    assert.equal(
+      aiConfirmSchema.safeParse({ chatId: "chat-1", row: 0 }).success,
+      false,
+    );
   });
 });
 

@@ -80,6 +80,13 @@ export type CheckedDraft = {
    * the person should know before they press Save. Never a refusal.
    */
   notes: string[];
+  /**
+   * What Save sends, as the record's endpoint takes it: ids for the names,
+   * and the keys the app adds itself. Only worth sending when `problems` is
+   * empty — Confirm and save (A4) sends exactly this to the record's own
+   * service, after its own schema has parsed it once more.
+   */
+  body: Record<string, unknown>;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -693,6 +700,7 @@ export function checkDraft(
       .map(([field, question]) => ({ field, question }))
       .sort((a, b) => askOrder(a.field) - askOrder(b.field)),
     notes,
+    body: body(),
   };
 }
 

@@ -1,10 +1,9 @@
 import {
-  AI_FIRST_PAYMENT_NOTE,
-  AI_TARGET_ENDPOINT,
   type AiAttachment,
   type AiAvailability,
   type AiChat,
   type AiChatSummary,
+  type AiConfirmResult,
   type AiImportPlan,
   type AiInstructions,
   type AiKeyResult,
@@ -13,7 +12,6 @@ import {
   type UpdateAiSettingsInput,
   type AiIntakeReply,
   type AiIntakeRequest,
-  type AiTarget,
 } from "@finance/shared";
 
 import { API_BASE_URL, ApiError, apiFetch } from "./api-client";
@@ -161,157 +159,26 @@ export const aiApi = {
     ),
 
   /**
-   * A batch, saved one record at a time through `save` above.
+   * Confirm and save (A4): the draft card's boxes as the person left them.
    *
-   * Deliberately a loop over the ordinary create, not a bulk endpoint. Every
-   * row gets the same permission check, the same Zod schema and its own audit
-   * row, and there is no second way into the database that would have to be
-   * secured all over again. It costs seventeen requests, which nobody notices.
-   *
-   * It does not stop at the first failure. One row with a malformed email
-   * should not strand the sixteen behind it — each result comes back on its
-   * own, and the table says which row said what.
+   * The server reads which kind of record it is from the conversation,
+   * checks it again and saves it through the record's own service, as this
+   * person; what comes back says what was saved and where it shows. What
+   * was changed on the card is kept as a lesson there too.
    */
-  saveMany: async (
-    target: AiTarget,
-    rows: Array<Record<string, unknown>>,
-    onProgress?: (done: number) => void,
-  ): Promise<
-    Array<{ ok: true; refNo?: string } | { ok: false; error: string }>
-  > => {
-    const results: Array<
-      { ok: true; refNo?: string } | { ok: false; error: string }
-    > = [];
-
-    for (const [index, row] of rows.entries()) {
-      try {
-        const created = await aiApi.save(target, row);
-        // A plan whose first payment was refused is saved, and is not done.
-        results.push(
-          created.warning
-            ? { ok: false, error: created.warning }
-            : { ok: true, refNo: created.refNo },
-        );
-      } catch (caught) {
-        results.push({
-          ok: false,
-          error:
-            caught instanceof ApiError
-              ? [
-                  caught.message,
-                  ...Object.entries(caught.fieldErrors ?? {}).map(
-                    ([field, messages]) => `${field}: ${messages[0]}`,
-                  ),
-                ].join(" — ")
-              : "Could not save that one.",
-        });
-      }
-      onProgress?.(index + 1);
-    }
-
-    return results;
-  },
+  confirm: (chatId: string, draft: Record<string, string>) =>
+    apiFetch<AiConfirmResult>("/ai/confirm", {
+      method: "POST",
+      ...json({ chatId, draft }),
+    }),
 
   /**
-   * Tells the server what was changed before saving, so it reads better next
-   * time.
-   *
-   * Deliberately fire-and-forget: the save has already succeeded by the time
-   * this is called, and nothing about it should be able to fail, block, or
-   * appear to fail because a lesson could not be filed.
+   * One row of a table of drafts, by its number. Its values are read from
+   * the conversation, not sent: the row saved is the row that was shown.
    */
-  learn: (
-    chatId: string,
-    target: AiTarget,
-    confirmed: Record<string, unknown>,
-  ) =>
-    apiFetch<{ recorded: number }>("/ai/learn", {
+  confirmRow: (chatId: string, row: number) =>
+    apiFetch<AiConfirmResult>("/ai/confirm", {
       method: "POST",
-      ...json({ chatId, target, confirmed }),
-    }).catch(() => ({ recorded: 0 })),
-
-  /**
-   * Saving goes to the record's own endpoint, not to anything AI-specific.
-   *
-   * That is the whole safety argument: the assistant produced some values, and
-   * from here on this is an ordinary create. The same permission check, the
-   * same Zod schema, the same audit row. `created_via` marks where it came
-   * from so the provenance is visible afterwards.
-   */
-  save: async (
-    target: AiTarget,
-    draft: Record<string, unknown>,
-  ): Promise<{ refNo?: string; id: string; warning?: string }> => {
-    const resolved = await apiFetch<Record<string, unknown>>("/ai/resolve", {
-      method: "POST",
-      ...json({ draft }),
-    });
-
-    const body: Record<string, unknown> = { ...resolved };
-    if (target === "transaction_in" || target === "transaction_out") {
-      body.direction = target === "transaction_in" ? "in" : "out";
-      body.createdVia = "ai_intake";
-    }
-
-    /*
-     * A renewal is posted to its plan: the Renew drawer's own request. The
-     * plan the draft named is the address, not part of the body, and the
-     * renewal date moves on as it does from the drawer.
-     */
-    if (target === "subscription_payment") {
-      const { subscriptionId, ...payment } = body;
-      if (typeof subscriptionId !== "string") {
-        throw new ApiError("Say which plan this renewal is for.", 400);
-      }
-      return apiFetch<{ refNo?: string; id: string }>(
-        AI_TARGET_ENDPOINT[target].replace(":id", subscriptionId),
-        { method: "POST", ...json({ ...payment, advanceRenewal: true }) },
-      );
-    }
-
-    const created = await apiFetch<{ refNo?: string; id: string }>(
-      AI_TARGET_ENDPOINT[target],
-      {
-        method: "POST",
-        ...json(body),
-      },
-    );
-
-    /*
-     * A new plan takes its first payment out of its account, as the Add
-     * subscription form does: the same second request, with the same note.
-     * Without it the plan would be on the page and the money nowhere — the
-     * owner's first complaint about that form, the other way round.
-     *
-     * The plan is saved by now. If the payment is refused — a locked month,
-     * an account that does not hold it — that is said, with the form's own
-     * way out, and the plan is not reported as lost.
-     */
-    if (target === "subscription") {
-      try {
-        const paid = await apiFetch<{ refNo?: string; id: string }>(
-          `/subscriptions/${created.id}/pay`,
-          {
-            method: "POST",
-            ...json({
-              txnDate: body.startDate,
-              note: AI_FIRST_PAYMENT_NOTE,
-              // The renewal date is already the first one after today.
-              advanceRenewal: false,
-            }),
-          },
-        );
-        return { id: created.id, refNo: paid.refNo };
-      } catch (caught) {
-        return {
-          id: created.id,
-          warning: `The plan is saved, but its first payment did not go through: ${
-            caught instanceof ApiError ? caught.message : "try it again"
-          } Use Renew on its row to take the money out.`,
-        };
-      }
-    }
-
-    return created;
-  },
+      ...json({ chatId, row }),
+    }),
 };

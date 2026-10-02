@@ -33,7 +33,12 @@ export class AuditService {
       action: entry.action,
       entityTable: entry.entityTable,
       entityId: entry.entityId ?? null,
-      summary: entry.summary,
+      // Who saved it is the actor above; that it was confirmed in the
+      // Assistant's chat rather than typed into the form is said here (A4).
+      summary:
+        context?.via === "assistant"
+          ? `${entry.summary} — through the Assistant`
+          : entry.summary,
       before: entry.before === undefined ? null : redact(entry.before),
       after: entry.after === undefined ? null : redact(entry.after),
       changedFields: diffFields(entry.before, entry.after) ?? null,

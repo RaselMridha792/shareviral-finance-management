@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 141 | **The Assistant: Confirm and save — the server checks the card again and saves it as the form does, the audit row marked "through the Assistant"** | **built** — piece A4 of the "made strong" brief; **the owner tries it on the live site: the list is in #141.** Next: a Sheet link with no tab reads every tab (A3's follow-up, on its own), then A5 |
 | 140 | **Permissions: the Assistant is the Super Admin's and the CFO's alone — `ai.use` off HR** | **done** — piece B1 of the "made strong" brief, pushed alone as the owner ordered (B1 before A4). **Next is A4** (confirm in chat, then it saves) |
 | 139 | **The Assistant reads a Google Sheet, Doc or Drive file by its link** | **built** — piece A3 of the "made strong" brief; **the owner tries it on the live site: the list is in #139.** Next is A4 (confirm in chat, then it saves) |
 | 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138, not fixed |
@@ -118,6 +119,172 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 141. The Assistant: Confirm and save — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A4** (confirm in
+chat, then it saves). **Next:** A3's follow-up — a Sheet link that names no
+tab reads every tab, each counted on its own. It was left out of this piece
+to keep the diff to one thing; do it on its own, before A5.
+
+**What the owner now has:**
+
+- **Confirm and save** on the draft card (it said "Save it"). Pressing it
+  asks the server to save the card; the browser no longer posts the record
+  itself.
+- **The server checks the card again**, because the boxes can be edited after
+  the draft was checked (`POST /ai/confirm`, `ai.use`). In order:
+  - which kind of record it is comes from the conversation, never from the
+    request;
+  - the person's role must hold the record's own permissions (else 403);
+  - the map's routing: a payment edited onto the "Ai Tools and
+    Subscriptions" heading is refused with the subscriptions part's own
+    sentence;
+  - the record's own schema, every name looked up in the books (an account
+    two accounts share, or none has, is refused in words).
+
+  Anything refused answers "Not saved. …" with why, and nothing is written.
+- **Then it is saved the way the form saves it.** The record's body is
+  parsed with the schema its endpoint validates with, as `ZodBody` would.
+  It is then handed to the service method that endpoint's controller calls,
+  as the person who pressed the button. A new plan is two calls, as the Add
+  subscription form makes them: the plan, then its first payment.
+- **The audit row says who saved it and that it came through the
+  Assistant:** "Paid ৳1,250.00 — courier bill — through the Assistant", under
+  the person's name. It shows on Settings → What changed.
+- **The chat then names what was saved and where it shows**, with an Open
+  link: "Saved — money going out, TXN-2026-000412: ৳1,250.00 from Master
+  card, under Courier. It shows under All transactions." The sentence is kept
+  in the conversation.
+- **Never twice.** The conversation keeps what was saved (`reply.saved`, or
+  `batch.saved` per row; jsonb, no schema change). A second press is
+  refused (409). So is a press while the first is still saving (an
+  in-memory guard; the API is one process). A conversation reopened from
+  the history shows the sentence and the link, and no card.
+- **A table of drafts:** the count and the total before anything is saved,
+  added in paisa ("4 to save · total ৳1,349.50"). A row whose amount
+  cannot be read is counted apart and left out of the total. Each row has
+  its own **Confirm**, and **Confirm and save all N** sits under the
+  summary. Each row is checked and saved on the server by its number (its
+  values are read from the conversation) with its own audit row.
+  - A refused row says why on a line under it and keeps its Confirm, so it
+    can be tried again.
+  - The status column moved to the left: on a wide file the right-hand
+    columns are out of view.
+- **What was changed on the card is still kept as a lesson** (A2b), now by
+  the server after the save.
+- **Only creating.** The eight kinds of draft are all creates. Deleting,
+  voiding, payroll, settings and sign-ins have no draft; the map points to
+  their screens. A test now holds that.
+- **Two small corrections that are this piece's:**
+  - a saved challan said "shows under TDS", which lists no challans (#138
+    found it). It now says its payment shows under All transactions.
+  - the label in the sentence keeps "AI" in capitals ("a new plan under AI
+    tools and subscriptions", not "ai tools").
+
+**Removed:** `POST /ai/resolve` and `POST /ai/learn`. They were the two
+steps of the browser's own save, and nothing calls them now. An old tab
+open before the deploy will fail on Save until it is reloaded.
+
+**Shared code:** I asked no one, as #136 and #138 did; the brief names this.
+
+- `packages/shared/src/ai.ts`: `aiConfirmSchema`, `AiSaved`,
+  `AiConfirmResult`, `saved` on the reply and the batch, the ready line, and
+  where a challan shows. It is read by the `ai-intake` module and the
+  Assistant's web files only.
+- `apps/web/src/lib/ai.ts`: `save`, `saveMany` and `learn` are gone;
+  `confirm` and `confirmRow` are new. Read by the Assistant's screen only.
+- **`common/audit/audit.service.ts` and `common/context/request-context.ts`,
+  read by every audited write.**
+  - `throughTheAssistant()` sets `via` on the request's context for the
+    length of the save, and the audit writer adds " — through the
+    Assistant" to the summary when it is set. Only `/ai/confirm` sets it.
+  - Measured both ways: every create the harness made through the chat is
+    marked (0 unmarked), and an entry typed into the form right after, on
+    the same API, is not.
+
+**Proved:**
+
+- `.assistantconfirmqa.mjs` (new), **60/60**. Its own built API on :4016,
+  a stand-in for the model, and the real page. It covers:
+  - a card edited and confirmed: the edited figure in the books, the
+    person, `created_via`, the marked audit row, the sentence, the mark on
+    the conversation, the lesson, a second press 409;
+  - what the server will not take: two presses at once (one record), the
+    kind chosen by the caller, an account id, a direction or an origin
+    slipped onto the card (ignored), a value the record refuses (then put
+    right and saved), a payment edited onto the tooling heading, somebody
+    else's conversation (404), HR (403), nothing to save;
+  - the CFO saving as the CFO;
+  - a table row by row: never twice, a refused row, the marks kept per row;
+  - money in, a transfer, a vendor, a person, a challan, a plan with its
+    first payment, each with its audit row marked;
+  - on the page: the sentence and the link; reopened with no card; a
+    table's count and total, one row alone, then all, the refused ones
+    saying why; 390px.
+
+  It leaves nothing behind (it prints the count: 0).
+- `ai-confirm.spec.ts` (32 tests) holds each kind of draft to its form's
+  endpoint by reading the controllers: the route is
+  `AI_TARGET_ENDPOINT`'s, the permissions are exactly
+  `AI_TARGET_PERMISSION`'s, and the body schema the controller's
+  `@ZodBody` names is the one the save parses with. It also holds the
+  sentences. One more test: no draft creates anything but a new record.
+- The older harnesses, moved to Confirm and save:
+  - `.assistantdraftqa.mjs` 57/57: the transfer is saved through
+    `/ai/confirm`; the refusals of "st" and "Zylofone Bank" are
+    Confirm's.
+  - `.assistantmapqa.mjs` 102/102: the plan and the renewal are saved from
+    the page; the API-only resolve check is gone, and the page's ledger
+    read covers it.
+  - `.assistantlearnqa.mjs` 72/72: a lesson is now kept only when a card is
+    saved, so section C confirms a real renewal and a real plan (LEARNQA
+    fixtures, swept).
+  - `.assistantlinkqa.mjs` 38/38.
+  - `.narrowqa.mjs`: /assistant, /assistant/knowledge and Settings →
+    Assistant are 390px at 390px.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 338, up
+  from 306; shared 380, up from 375) pass, each on its own exit code.
+
+**Not proved:** what a real model says around a save. `.assistantbar.mjs`
+gains I1 ("save kore dao" of a ready draft: never "saved", the draft kept)
+and I2 (after "Saved — TXN-…" in the chat: says it is saved, with the
+number, drafts nothing again). Neither has run: no key locally.
+
+**For the owner — on the live site, after the deploy.** Reload the
+Assistant page first (an open tab still has the old Save).
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | `Aaj courier bill 640 taka dilam <your account> theke, <a category> e, rate 122.5` | A draft card with **Confirm and save** |
+| 2 | Change the amount on the card to 650, press **Confirm and save** | "Saved — money going out, TXN-…: ৳650.00 from <account>, under <category>. It shows under All transactions." and an **Open All transactions** link. The card is gone. The entry is on All transactions at 650 |
+| 3 | Settings → What changed | That entry's row: "Paid ৳650.00 — … — through the Assistant", with your name |
+| 4 | Open the same conversation again from the history | The Saved line and the link; no card to press again |
+| 5 | Ask for another draft, change its account to a name that does not exist, press Confirm and save | A red line: "Not saved. There is no account called …". Nothing on All transactions |
+| 6 | Attach a sheet of 3–4 payments: `ei gulo entry koro <account> theke, rate 122.5` | A table, and under it "N to save · total ৳…". **Check the total against the sheet.** Press Confirm on one row: its TXN number appears. Then **Confirm and save all** |
+| 7 | After a draft: `thik ache, save kore dao` | It does not say it saved; the card is still there to press |
+| 8 | After a save: `ager ta ki save hoyeche? number ta bolo` | Yes, with the TXN number; no new draft |
+| 9 | As the CFO, rows 1–2 | The same, under the CFO's name |
+
+**What the owner has to decide:**
+
+1. **The ledger's own "origin" column.** A payment saved this way says
+   "AI intake" there, as before. A transfer, a plan's payment and a
+   challan's payment still say "Entered by hand" (or "Tax payment"). Their
+   services write it themselves, and changing that is the transactions
+   module, not this piece. The audit row says "through the Assistant" for
+   all of them. Should the origin column too? It is a small session of its
+   own.
+2. Nothing else. The brief's "not offered" list (delete, void, payroll,
+   settings, users) is how it already was; this piece only holds it with a
+   test.
+
+**Seen, not touched:**
+
+- The Assistant's table is not checked row by row when it is drafted, only
+  when each row is confirmed. So a row that cannot be saved shows that
+  only after Confirm. A5's summary ("the rows it could not place, each
+  with its question") is where that belongs.
 
 ## 140. Permissions: the Assistant is the Super Admin's and the CFO's alone — 3 Oct 2026
 

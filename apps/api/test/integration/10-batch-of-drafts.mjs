@@ -68,7 +68,12 @@ const GOOD = 6, BAD = 3;
 // Tag every row so cleanup can find exactly these and nothing else.
 for (const row of rows) row.notes = `Created by the batch test ${TAG}`;
 
-/** What `aiApi.saveMany` does in the browser, against the same endpoint. */
+/**
+ * A row at a time against the record's own endpoint. Since A4 (3 Oct 2026)
+ * the Assistant's "Confirm and save all" does the same on the server, row by
+ * row through the same service (ai-confirm.service.ts); .assistantconfirmqa.mjs
+ * measures that path.
+ */
 const saveMany = async (target, list, role = "SUPER_ADMIN") => {
   const results = [];
   for (const row of list) {

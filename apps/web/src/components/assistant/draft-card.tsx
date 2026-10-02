@@ -180,8 +180,9 @@ function figureOf(
  *
  * Every value is a real input, not a read-only summary: the person is the one
  * who signs off on the figure, and a value they cannot change is one they
- * cannot correct. Nothing is written until Save is pressed, and pressing it
- * calls the same endpoint the manual form calls.
+ * cannot correct. Nothing is written until Confirm and save is pressed (A4);
+ * the server then checks the boxes again and saves them the way the record's
+ * own form does, as this person.
  */
 export function DraftCard({
   reply,
@@ -190,7 +191,7 @@ export function DraftCard({
 }: {
   reply: AiIntakeReply;
   saving: boolean;
-  onConfirm: (draft: Record<string, unknown>) => void;
+  onConfirm: (draft: Record<string, string>) => void;
 }) {
   const ready = reply.missingFields.length === 0;
   const entries = Object.entries(reply.draft).filter(
@@ -201,7 +202,7 @@ export function DraftCard({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const draft: Record<string, unknown> = {};
+    const draft: Record<string, string> = {};
     for (const [key, value] of data.entries()) {
       const text = String(value).trim();
       if (text) draft[key] = text;
@@ -217,7 +218,7 @@ export function DraftCard({
         <h2 className="text-sm font-semibold tracking-tight">The draft</h2>
         <p className="text-xs text-muted-foreground">
           {ready
-            ? "Check every line, then save."
+            ? "Check every line, then confirm."
             : // The model names what it still needs by the schema key, so this
               // read "Still needed: vendorName" — the database talking, in the
               // one line asking a person for help. Same words as the labels on
@@ -272,7 +273,7 @@ export function DraftCard({
             title={ready ? undefined : "Something is still missing"}
           >
             {saving ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            Save it
+            Confirm and save
           </Button>
           {ready ? null : (
             <span className="text-xs text-muted-foreground">

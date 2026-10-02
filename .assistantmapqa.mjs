@@ -51,7 +51,7 @@ const API = `http://localhost:${PORT}/api`;
 const STUB_PORT = 4598;
 const SHOTS = process.env.SHOT_DIR || null;
 /** AI_DRAFT_READY_LINE, in packages/shared/src/ai.ts. */
-const READY = "Draft ready — check every line, then press Save. Nothing is recorded yet.";
+const READY = "Draft ready — check every line, then press Confirm and save. Nothing is recorded yet.";
 /** The subscriptions part's own sentence, in subscriptions/app-map.ts. */
 const BELONGS =
   "A subscription is recorded as a plan under AI tools and subscriptions, not as a plain payment. Is this a new plan, or the renewal of one already on file?";
@@ -377,13 +377,13 @@ try {
 
   const near = await turn("mapqa claude code renew", { area: "subscriptions", target: "subscription_payment", draft: { subscriptionName: "MAPQA Claude Code", txnDate: today, usdRate: "122" }, missingFields: [] });
   check("a name that only resembles a plan is asked about, never taken", near.body?.missingFields?.[0] === "subscriptionName" && near.body?.nextQuestion === 'There is no plan called "MAPQA Claude Code" under AI tools and subscriptions. Did you mean MAPQA Claude? If it is a new plan, say so.' && !("usdAmount" in near.body.draft), shown(near.body));
-  const renewResolved = await call("POST", "/ai/resolve", { draft: renewReady.body?.draft });
-  check("Save names the plan itself, and the account, by id", renewResolved.status === 200 && renewResolved.body?.subscriptionId === CLAUDE && renewResolved.body?.accountId === CARD.id && !("subscriptionName" in (renewResolved.body ?? {})), `${renewResolved.status} ${JSON.stringify(renewResolved.body)}`);
+  // That Confirm and save posts it against the plan itself and its card, by
+  // id, is measured on the page below (G): its ledger row is read back.
 
   const whichOne = await turn("mapqa chat renew", { area: "subscriptions", target: "subscription_payment", draft: { subscriptionName: "MAPQA Chat", txnDate: today, usdRate: "122" }, missingFields: [] });
   check("a tool with two plans is asked about, with both named", whichOne.body?.missingFields?.[0] === "subscriptionName" && whichOne.body?.nextQuestion === '"MAPQA Chat" could be MAPQA Chat › Plus or MAPQA Chat › Team. Which one?', shown(whichOne.body));
-  const refusedSave = await call("POST", "/ai/resolve", { draft: { subscriptionName: "MAPQA Chat", txnDate: today } });
-  check("and Save refuses the same name rather than taking the first", refusedSave.status === 400 && /MAPQA Chat › Plus/.test(refusedSave.body?.message ?? "") && /MAPQA Chat › Team/.test(refusedSave.body?.message ?? ""), `${refusedSave.status} ${refusedSave.body?.message}`);
+  const refusedSave = await call("POST", "/ai/confirm", { chatId: whichOne.body?.chatId, draft: { subscriptionName: "MAPQA Chat", txnDate: today, usdRate: "122" } });
+  check("and Confirm and save refuses the same name rather than taking the first", refusedSave.status === 400 && /MAPQA Chat › Plus/.test(refusedSave.body?.message ?? "") && /MAPQA Chat › Team/.test(refusedSave.body?.message ?? ""), `${refusedSave.status} ${refusedSave.body?.message}`);
 
   const noPlan = await turn("Record this month's payment for the Zylofone Pro subscription - the usual amount, from the usual account.", { area: "subscriptions", target: "subscription_payment", draft: { subscriptionName: "Zylofone Pro", txnDate: today }, missingFields: [] });
   check("a plan that is not on file gets no amount and no account: it is asked about", noPlan.body?.missingFields?.[0] === "subscriptionName" && /^There is no plan called "Zylofone Pro" under AI tools and subscriptions/.test(noPlan.body?.nextQuestion ?? "") && !("usdAmount" in noPlan.body.draft) && !("accountName" in noPlan.body.draft) && !("amount" in noPlan.body.draft), `${shown(noPlan.body)} ${JSON.stringify(noPlan.body?.draft)}`);
@@ -526,7 +526,7 @@ try {
     page.evaluate(() => {
       const heading = [...document.querySelectorAll("h2")].find((h) => h.textContent.trim() === "The draft");
       const box = heading?.closest("div.rounded-xl");
-      const save = [...(box?.querySelectorAll("button") ?? [])].find((b) => /Save it/.test(b.textContent));
+      const save = [...(box?.querySelectorAll("button") ?? [])].find((b) => /Confirm and save/.test(b.textContent));
       return box
         ? {
             head: heading.parentElement.innerText,
@@ -540,7 +540,7 @@ try {
   const transcript = () => page.evaluate(() => document.querySelector("main")?.innerText ?? document.body.innerText);
   const links = () => page.evaluate(() => [...document.querySelectorAll("main a")].map((a) => ({ text: a.innerText.trim(), href: a.getAttribute("href") })));
   const pressSave = async () => {
-    await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Save it/.test(b.textContent))?.click());
+    await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Confirm and save/.test(b.textContent))?.click());
     await page.waitForFunction(() => /Saved — /.test(document.body.innerText) || document.querySelector('[role="alert"]'), { timeout: 60000 });
     await new Promise((resolve) => setTimeout(resolve, 300));
   };
@@ -562,14 +562,14 @@ try {
   check("a new plan: the card is the form's — Tool, Plan, Price, Paid from", ["Tool", "Plan", "Category", "Price (USD)", "USD rate", "Start date", "Paid from"].every((l) => drawn?.labels.includes(l)), JSON.stringify(drawn?.labels));
   check("with what was said in it", drawn?.values.toolName === "MAPQA Cursor" && drawn?.values.costUsd === "20" && drawn?.values.accountName === CARD.name, JSON.stringify(drawn?.values));
   check("the price is read back in dollars", /Read the price back before saving: \$20\.00/.test(drawn?.text ?? ""), (drawn?.text ?? "").slice(-200).replace(/\n/g, " | "));
-  check("the line under it is the code's, and Save is offered", text.includes(READY) && drawn?.saveDisabled === false && !/korechi/i.test(text), String(drawn?.saveDisabled));
+  check("the line under it is the code's, and Confirm and save is offered", text.includes(READY) && drawn?.saveDisabled === false && !/korechi/i.test(text), String(drawn?.saveDisabled));
 
   const balanceBefore = Number((await q(`select (a.opening_balance + coalesce(sum(t.signed_amount) filter (where t.voided_at is null), 0))::text as b from accounts a left join transactions t on t.account_id = a.id where a.id = $1 group by a.id`, [CARD.id]))[0].b);
   await pressSave();
   text = await transcript();
   await shot("plan-saved");
   const planLine = text.match(/Saved — [^\n]*/)?.[0] ?? "";
-  check("pressing Save records it, and the page says what and where", /^Saved — a new plan under ai tools and subscriptions, TXN-[\w-]+\. It shows under AI tools and subscriptions\.$/.test(planLine), planLine || text.slice(-300).replace(/\n/g, " | "));
+  check("pressing Confirm and save records it, and the page says what and where", /^Saved — a new plan under AI tools and subscriptions: MAPQA Cursor, Pro, \$20\.00, its first payment TXN-[\w-]+\. It shows under AI tools and subscriptions\.$/.test(planLine), planLine || text.slice(-300).replace(/\n/g, " | "));
   check("with the way to that page", (await links()).some((a) => a.text === "Open AI tools and subscriptions" && a.href === "/subscriptions"), JSON.stringify(await links()));
   const [savedPlan] = await q(`select id, plan_name, category, status, cost_usd::text, cost_bdt::text, usd_rate::text, account_id, next_renewal_on::text from subscriptions where tool_name = 'MAPQA Cursor' and deleted_at is null`);
   check("the plan is in the register, as the form would have written it", savedPlan?.plan_name === "Pro" && savedPlan?.category === "ai_tool" && savedPlan?.status === "active" && savedPlan?.cost_usd === "20.00" && savedPlan?.cost_bdt === "2450.00" && Number(savedPlan?.usd_rate) === 122.5 && savedPlan?.account_id === CARD.id, JSON.stringify(savedPlan));
@@ -596,7 +596,7 @@ try {
   text = await transcript();
   await shot("renewal-saved");
   const renewalLine = text.match(/Saved — [^\n]*/)?.[0] ?? "";
-  check("Save records the renewal, and says where it shows", /^Saved — a plan's renewal, under ai tools and subscriptions, TXN-[\w-]+\. It shows under AI tools and subscriptions\.$/.test(renewalLine), renewalLine || text.slice(-300).replace(/\n/g, " | "));
+  check("Confirm and save records the renewal, and says where it shows", /^Saved — a plan's renewal, under AI tools and subscriptions, TXN-[\w-]+: MAPQA Claude, \$100\.00\. It shows under AI tools and subscriptions\.$/.test(renewalLine), renewalLine || text.slice(-300).replace(/\n/g, " | "));
   const renewals = await q(`select direction, amount::text, original_amount::text, usd_rate::text, category_id, account_id, description from transactions where subscription_id = $1 and voided_at is null`, [CLAUDE]);
   check("the ledger holds it against the plan: 100 dollars at 121.75", renewals.length === 1 && renewals[0].direction === "out" && renewals[0].amount === "12175.00" && renewals[0].original_amount === "100.00" && Number(renewals[0].usd_rate) === 121.75 && renewals[0].category_id === TOOLING.id && renewals[0].account_id === CARD.id, JSON.stringify(renewals));
   const [moved] = await q(`select next_renewal_on::text from subscriptions where id = $1`, [CLAUDE]);

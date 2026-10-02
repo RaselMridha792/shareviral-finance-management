@@ -91,10 +91,6 @@ export const NOT_A_SCREEN: Record<string, string> = {
  * exists for one of these.
  */
 export const NOT_A_FORM: Record<string, string> = {
-  "POST /ai/learn":
-    "Sent after a draft card's Save, by itself: what the person changed on the card is kept as a lesson.",
-  "POST /ai/resolve":
-    "The first step of a draft card's Save: account and category names become the ids the record's own endpoint takes.",
   "DELETE /ai/chats":
     "Deletes every conversation of the person asking. No screen offers it; the history list deletes one at a time.",
 

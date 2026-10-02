@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -566,8 +567,8 @@ export class AiIntakeService {
    *
    * The loop is bounded and every lookup runs as the person who asked — see
    * ai-tools.ts. The model is never given a write tool of any kind; the only
-   * way anything reaches the books is a person pressing Save on a filled-in
-   * form afterwards.
+   * way anything reaches the books is a person pressing Confirm and save on a
+   * filled-in card afterwards (ai-confirm.service.ts).
    */
   async turn(
     input: AiIntakeRequest,
@@ -1180,8 +1181,8 @@ export class AiIntakeService {
     return `You work inside ShareViral Finance Management, a Bangladesh company's internal books. You do two things: draft what somebody describes, for them to save, and answer questions about what is already recorded. You save nothing yourself.
 
 YOU DRAFT. A PERSON SAVES.
-Nothing you produce is in the books until somebody presses Save on the draft
-card. So never say, in any language, that something is recorded, saved,
+Nothing you produce is in the books until somebody presses Confirm and save
+on the draft card. So never say, in any language, that something is recorded, saved,
 transferred, added, entered or done — no "recorded", no "record korechi", no
 "save hoye geche", no "done". It is not true, and they will believe it.
 When a draft is complete, say nothing about it. The app checks it against what
@@ -1899,8 +1900,8 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
   /**
    * Records what somebody changed on a draft before saving it.
    *
-   * Called after the save, never before, and its failure is swallowed by the
-   * caller: a lesson not learnt is a shame, a save undone because the lesson
+   * Called after the save, never before, by Confirm and save, which
+   * swallows its failure: a lesson not learnt is a shame, a save undone because the lesson
    * could not be filed would be indefensible.
    *
    * The two halves come from different places on purpose. The confirmed values
@@ -2410,6 +2411,86 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     }
 
     return out;
+  }
+
+  /**
+   * A draft somebody pressed Confirm and save on, held once more to all a
+   * turn holds it to (A4), and turned into what its endpoint takes.
+   *
+   * The card's boxes can be edited, and a table's rows were never checked
+   * one by one, so what is about to be saved is not what was checked when it
+   * was drafted. Checked again, in the same order: the person's role, the
+   * part of the map it belongs to, then the record's own schema with every
+   * name looked up in the books. Anything refused is said in words, and
+   * nothing is saved.
+   *
+   * `area` is the part the answer was given in. What was typed is not read
+   * again: a draft on the table is not taken away by its own conversation.
+   */
+  async readyToSave(
+    target: AiTarget,
+    values: Record<string, unknown>,
+    area: string | null,
+    actor: AuthenticatedUser,
+  ): Promise<{
+    /** What the record's endpoint takes: ids for names, the app's own keys. */
+    body: Record<string, unknown>;
+    /** The same, as the card shows it: names as the books spell them. */
+    draft: Record<string, unknown>;
+  }> {
+    const lacking = AI_TARGET_PERMISSION[target].filter(
+      (permission) => !hasPermission(actor.role, permission),
+    );
+    if (lacking.length) {
+      throw new ForbiddenException(
+        `Your role cannot save ${AI_TARGET_LABELS[target].toLowerCase()}.`,
+      );
+    }
+
+    const tidy = tidyDraft(values);
+    const categoryName = bareName(tidy.categoryName);
+    const refused = refusalOf(
+      { area, target, draft: tidy },
+      {
+        role: actor.role,
+        said: "",
+        draftOpen: true,
+        lastAnswer: null,
+        categories:
+          target === "transaction_out" && categoryName
+            ? await this.categoriesCalled(categoryName)
+            : [],
+      },
+    );
+    if (refused) throw new BadRequestException(refused.say);
+
+    const way =
+      target === "transaction_in"
+        ? "in"
+        : target === "transaction_out"
+          ? "out"
+          : undefined;
+    const plans = await this.plans();
+    const matches: NameMatches = {};
+    for (const { field, said } of namesIn(target, tidy)) {
+      matches[field.name] = await this.named(field, said, way, plans);
+    }
+    const accountNames = (
+      await this.db.client
+        .select({ name: accounts.name })
+        .from(accounts)
+        .where(and(eq(accounts.isActive, true), isNull(accounts.deletedAt)))
+        .limit(50)
+    ).map((account) => account.name);
+
+    const checked = checkDraft(target, tidy, matches, accountNames, plans);
+    if (checked.problems.length) {
+      throw new BadRequestException(
+        `Not saved. ${checked.problems.map((problem) => problem.question).join(" ")}`,
+      );
+    }
+
+    return { body: checked.body, draft: checked.draft };
   }
 
   /**

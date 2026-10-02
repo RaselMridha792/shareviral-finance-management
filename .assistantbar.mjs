@@ -33,6 +33,9 @@
  *      or an account nobody named; a link the app did not read said to be
  *      unread, never described; with LINK_SHEET / LINK_DOC set to files
  *      shared with the stored service account, a real read by link
+ *   I. Confirm and save, 3 Oct 2026 (A4)           — "save kore dao" never
+ *      answered "saved", the draft kept for the button; after a save in the
+ *      chat, it says so with the number and drafts nothing again
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -143,7 +146,7 @@ const [{ balance: bankBalance }] = await q(
 const OTHER = (await q(`select name from accounts where is_active and deleted_at is null and currency <> 'USD' and name <> $1 order by name limit 1`, [BANK]))[0]?.name;
 if (!OTHER) throw new Error("The local books need a second taka account for the transfer cases.");
 /** AI_DRAFT_READY_LINE, in packages/shared/src/ai.ts. */
-const READY = "Draft ready — check every line, then press Save. Nothing is recorded yet.";
+const READY = "Draft ready — check every line, then press Confirm and save. Nothing is recorded yet.";
 
 // How many people the Team screen lists, and how many of them are current.
 const [team] = await q(
@@ -761,6 +764,53 @@ const CASES = [
     },
   })),
 ];
+
+/*
+ * I. Confirm in chat, then it saves (A4, 3 Oct 2026). The save itself is the
+ * app's, on a button, and .assistantconfirmqa.mjs measures it with no model.
+ * What only a real model can get wrong is the talk around it: told "save
+ * koro", it must not say it saved; and after a save the conversation says so,
+ * and it must neither doubt it nor draft the same thing again. Nothing here
+ * writes to the books: the save in I2 is a line in the history, not a record.
+ */
+CASES.push(
+  {
+    id: "I1", runs: LIGHT, name: "'save kore dao' of a ready draft - never 'saved', the draft kept",
+    run: async () => {
+      const { reply, failed } = await talk([`Aaj electricity bill 3200 taka dilam ${BANK} theke, rate 122.5.`, "thik ache, save kore dao"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        claimsDone(said) ? "said it was saved" : null,
+        reply.target === "transaction_out" ? null : `the draft became ${reply.target ?? "nothing"}`,
+        amountIs(reply.draft.amount, 3200) ? null : `amount ${reply.draft.amount}`,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "kept the draft for the button", said };
+    },
+  },
+  {
+    id: "I2", runs: LIGHT, name: "after 'Saved — TXN-…' in the chat - says it is saved, drafts nothing again",
+    run: async () => {
+      const ref = "TXN-2026-009999";
+      const messages = [
+        { role: "user", content: `Aaj electricity bill 3200 taka dilam ${BANK} theke, rate 122.5.` },
+        { role: "assistant", content: READY },
+        { role: "assistant", content: `Saved — money going out, ${ref}: ৳3,200.00 from ${BANK}, under Electricity. It shows under All transactions.` },
+        { role: "user", content: "ager entry ta ki save hoyeche? number ta bolo" },
+      ];
+      const res = await call("POST", "/ai/turn", { messages });
+      if (res.status !== 200) return { error: `${res.status} ${res.body?.message ?? ""}`.trim() };
+      if (res.body?.chatId) made.chats.add(res.body.chatId);
+      const said = textOf(res.body);
+      const wrong = [
+        said.includes(ref) ? null : `did not give ${ref}`,
+        res.body.target || res.body.batch ? `drafted ${res.body.target ?? "a table"} again` : null,
+        /\bna\b|not saved|hoyni|হয়নি/i.test(said) ? "said it was not saved" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "said it is saved, with its number", said };
+    },
+  },
+);
 
 /** A Google Doc as the app keeps one read by link: its paragraphs, a `.gdoc` name. */
 const DOC_LINES = ["September payments, from Rahim", "Hostinger hosting renewal | 4,500", "Office tea and snacks | 1,250", "Printer toner | 3,800"];

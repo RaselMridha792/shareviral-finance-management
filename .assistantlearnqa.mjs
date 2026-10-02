@@ -85,6 +85,18 @@ const call = callAs(tokenFor(admin));
 const callHr = callAs(tokenFor(hr));
 const callCfo = callAs(tokenFor(cfo));
 
+// What a lesson is kept from since A4 (3 Oct 2026): a draft confirmed and
+// saved. The richest taka account pays for the plan and the renewal below.
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
+const CARD = (
+  await q(
+    `select a.id, a.name, (a.opening_balance + coalesce(sum(t.signed_amount) filter (where t.voided_at is null and t.deleted_at is null), 0))::numeric as balance
+       from accounts a left join transactions t on t.account_id = a.id
+      where a.is_active and a.deleted_at is null and a.currency <> 'USD' group by a.id order by balance desc limit 1`,
+  )
+)[0];
+if (!CARD || Number(CARD.balance) < 20000) throw new Error("The local books need a taka account holding 20,000.");
+
 const results = [];
 const check = (name, pass, detail) => {
   results.push(Boolean(pass));
@@ -158,7 +170,12 @@ let apiLog = "";
 api.stdout.on("data", (chunk) => (apiLog += chunk));
 api.stderr.on("data", (chunk) => (apiLog += chunk));
 
-const sweep = () => db.query(`delete from ai_corrections where said like '%LEARNQA%' or corrected like '%LEARNQA%' or drafted like '%LEARNQA%'`);
+const sweep = async () => {
+  await db.query(`delete from ai_corrections where said like '%LEARNQA%' or corrected like '%LEARNQA%' or drafted like '%LEARNQA%'`);
+  // The plans section C confirms and saves, and their payments.
+  await db.query(`delete from transactions where subscription_id in (select id from subscriptions where tool_name like 'LEARNQA %')`);
+  await db.query(`delete from subscriptions where tool_name like 'LEARNQA %'`);
+};
 /** A mistake, straight into the table: the kinds only another role makes. */
 const plant = async (row) =>
   (
@@ -226,38 +243,46 @@ try {
   );
 
   /* ------------------------------------------------------------------ */
-  console.log("\nC. A field changed on a draft before Save");
+  console.log("\nC. A field changed on a draft before Confirm and save");
+  // A plan on file to renew, put there directly: no payment this month yet.
+  await q(
+    `insert into subscriptions (tool_name, plan_name, category, status, cost_usd, cost_bdt, usd_rate, billing_cycle, start_date, next_renewal_on, payment_method, account_id, created_by, updated_by)
+     values ('LEARNQA Claude', 'Max', 'ai_tool', 'active', 100, 12200, 122, 'monthly', $1, $1, 'card', $2, $3, $3)`,
+    [`${today.slice(0, 7)}-01`, CARD.id, admin.id],
+  );
   const renewal = await turn("LEARNQA Claude Code er ei masher bill dilam", {
     area: "subscriptions",
     target: "subscription_payment",
-    draft: { subscriptionName: "LEARNQA Claude Code", txnDate: "2026-10-02" },
+    draft: { subscriptionName: "LEARNQA Claude Code", txnDate: today },
     missingFields: ["usdRate"],
     nextQuestion: "LEARNQA rate koto?",
   });
-  const learnt = await call("POST", "/ai/learn", {
+  // Since A4 the lesson is kept when the card is confirmed and saved, not by
+  // a call of its own: the boxes as the person left them are the lesson.
+  const learnt = await call("POST", "/ai/confirm", {
     chatId: renewal.body.chatId,
-    target: "subscription_payment",
-    confirmed: { subscriptionName: "LEARNQA Claude", txnDate: "2026-10-02", usdRate: "125", description: "LEARNQA bill 4999" },
+    draft: { subscriptionName: "LEARNQA Claude", txnDate: today, usdRate: "125", description: "LEARNQA bill 4999" },
   });
+  check("the corrected renewal is confirmed and saved", learnt.status === 200 && /^TXN-/.test(learnt.body?.refNo ?? ""), `${learnt.status} ${JSON.stringify(learnt.body?.message ?? learnt.body?.refNo)}`);
   const fieldRows = await q(`select * from ai_corrections where kind = 'field' and said like 'LEARNQA Claude Code%' order by field`);
   const planRow = fieldRows.find((row) => row.field === "subscriptionName");
   // "LEARNQA Claude Code" is no plan on file, so the app took it off the
   // draft and asked: the lesson is the plan they then named.
-  check("which plan a name means is kept now", learnt.body?.recorded >= 1 && planRow?.drafted === null && planRow?.corrected === "LEARNQA Claude", JSON.stringify(planRow));
+  check("which plan a name means is kept now", planRow?.drafted === null && planRow?.corrected === "LEARNQA Claude", JSON.stringify(planRow));
   check("with the model and the part it was in", planRow?.model === "claude-opus-5" && planRow?.area === "subscriptions", `${planRow?.model} ${planRow?.area}`);
   check("never the rate", !fieldRows.some((row) => row.field === "usdRate"), fieldRows.map((row) => row.field).join(","));
   const plan = await turn("LEARNQA notun plan: Cursr Pro", {
     area: "subscriptions",
     target: "subscription",
-    draft: { toolName: "LEARNQA Cursr", planName: "LEARNQA Pro", billingCycle: "monthly" },
+    draft: { toolName: "LEARNQA Cursr", planName: "LEARNQA Pro", billingCycle: "monthly", category: "ai_tool", startDate: today, accountName: CARD.name },
     missingFields: ["costUsd"],
     nextQuestion: "LEARNQA dam koto?",
   });
-  await call("POST", "/ai/learn", {
+  const planSaved = await call("POST", "/ai/confirm", {
     chatId: plan.body.chatId,
-    target: "subscription",
-    confirmed: { toolName: "LEARNQA Cursor", planName: "LEARNQA Pro Team", billingCycle: "yearly", costUsd: "20", usdRate: "122.5" },
+    draft: { toolName: "LEARNQA Cursor", planName: "LEARNQA Pro Team", billingCycle: "yearly", category: "ai_tool", startDate: today, accountName: CARD.name, costUsd: "20", usdRate: "122.5" },
   });
+  check("the corrected plan is confirmed and saved, with its first payment", planSaved.status === 200 && /^TXN-/.test(planSaved.body?.refNo ?? ""), `${planSaved.status} ${JSON.stringify(planSaved.body?.message ?? planSaved.body?.said)}`);
   const planFields = await q(`select field, drafted, corrected from ai_corrections where kind = 'field' and said like 'LEARNQA notun plan%' order by field`);
   check(
     "a new plan's tool, plan and cycle are kept as they were corrected",
@@ -507,6 +532,7 @@ try {
   const [left] = await q(
     `select (select count(*) from ai_corrections where said like '%LEARNQA%' or corrected like '%LEARNQA%')::int as mistakes,
             (select count(*) from ai_chats where title like 'LEARNQA%')::int as chats,
+            (select count(*) from subscriptions where tool_name like 'LEARNQA %')::int as plans,
             (select ai_instructions = $1 from app_settings where id = 1) as instructions_back`,
     [before.ai_instructions],
   );

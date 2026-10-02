@@ -3,12 +3,12 @@
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import {
-  AI_TARGET_LABELS,
   AI_TARGET_SHOWS_ON,
   aiModelsFor,
   findGoogleLinks,
   type AiAttachment,
   type AiAvailability,
+  type AiBatch,
   type AiChatSummary,
   type AiDataAccess,
   type AiIntakeReply,
@@ -56,6 +56,21 @@ function explain(caught: unknown, fallback: string): string {
   return `${caught.message}: ${detail}`;
 }
 
+/** The rows of a table already saved, as the conversation keeps them (A4). */
+function savedRows(
+  batch: AiBatch | null | undefined,
+): Record<number, RowResult> {
+  const results: Record<number, RowResult> = {};
+  for (const [row, saved] of Object.entries(batch?.saved ?? {})) {
+    results[Number(row)] = { ok: true, refNo: saved.refNo };
+  }
+  return results;
+}
+
+/** Said when a conversation was never kept, so nothing on it can be confirmed. */
+const NOT_KEPT =
+  "This conversation was not kept, so it cannot be saved from here. Ask again, or use the ordinary form.";
+
 /**
  * The assistant, as a room rather than a page.
  *
@@ -89,7 +104,12 @@ export function AssistantScreen({
   const [staging, setStaging] = useState(false);
   /** Rows the person struck out before saving, by index. */
   const [dropped, setDropped] = useState<Set<number>>(new Set());
-  const [batchResults, setBatchResults] = useState<RowResult[] | null>(null);
+  /** Each row's outcome: saved (now, or on an earlier visit) or refused. */
+  const [batchResults, setBatchResults] = useState<Record<number, RowResult>>(
+    {},
+  );
+  /** The row being confirmed on its own. */
+  const [savingRow, setSavingRow] = useState<number | null>(null);
   const [savedCount, setSavedCount] = useState(0);
   /** Where the record just saved now shows, for the link under "Saved". */
   const [savedOn, setSavedOn] = useState<{ name: string; href: string } | null>(
@@ -175,19 +195,24 @@ export function AssistantScreen({
     setDrawer(false);
     setAttachment(null);
     setDropped(new Set());
-    setBatchResults(null);
+    setBatchResults({});
     setSavedOn(null);
   }
 
   async function open(id: string) {
     setDrawer(false);
     setError(null);
-    setSavedOn(null);
     try {
       const chat = await aiApi.chat(id);
       setChatId(chat.id);
       setMessages(chat.messages);
-      setReply(chat.reply);
+      // A draft already saved is not offered again (A4): its card would be a
+      // second record. Its sentence is in the conversation; the link is here.
+      const saved = chat.reply?.saved ? chat.reply.target : null;
+      setReply(saved ? null : chat.reply);
+      setSavedOn(saved ? AI_TARGET_SHOWS_ON[saved] : null);
+      setDropped(new Set());
+      setBatchResults(savedRows(chat.reply?.batch));
       setAttachment(chat.attachments[0] ?? null);
     } catch {
       setError("That conversation could not be opened.");
@@ -303,7 +328,7 @@ export function AssistantScreen({
       // struck-out lines or its results onto it would strike out whichever
       // rows happened to share those positions.
       setDropped(new Set());
-      setBatchResults(null);
+      setBatchResults(savedRows(result.batch));
       const said =
         result.nextQuestion ?? result.clarification ?? result.summary;
       if (said) setMessages([...next, { role: "assistant", content: said }]);
@@ -323,91 +348,97 @@ export function AssistantScreen({
   }
 
   /**
-   * Saves the batch, one row at a time, and leaves the outcome on screen.
+   * One row of the table, confirmed on its own (A4). Its values are read
+   * from the conversation on the server; only its number is sent. The
+   * outcome stays on the row: a refusal says why, beside the button that
+   * tries it again.
+   */
+  async function saveRow(index: number): Promise<RowResult> {
+    if (!chatId) return { ok: false, error: NOT_KEPT };
+    try {
+      const saved = await aiApi.confirmRow(chatId, index);
+      return { ok: true, refNo: saved.refNo };
+    } catch (caught) {
+      return { ok: false, error: explain(caught, "Could not save that one.") };
+    }
+  }
+
+  async function confirmRow(index: number) {
+    setSavingRow(index);
+    setError(null);
+    const result = await saveRow(index);
+    setBatchResults((current) => ({ ...current, [index]: result }));
+    setSavingRow(null);
+    if (result.ok) router.refresh();
+  }
+
+  /**
+   * Confirm and save all, after the count and the total: one row at a time,
+   * each checked and saved on its own, with its own audit row.
    *
    * The table is not cleared when it finishes. With seventeen records the
    * interesting part is usually the two that were refused, and a card that
-   * congratulates itself and vanishes takes that with it.
+   * congratulates itself and vanishes takes that with it. It does not stop
+   * at the first refusal either: one row with a malformed email should not
+   * strand the sixteen behind it.
    */
   async function confirmBatch() {
     const batch = reply?.batch;
     if (!batch) return;
 
-    const keeping = batch.rows.filter((_, index) => !dropped.has(index));
-    if (!keeping.length) return;
+    const waiting = batch.rows
+      .map((_, index) => index)
+      .filter((index) => !dropped.has(index) && !batchResults[index]?.ok);
+    if (!waiting.length) return;
 
     setSaving(true);
     setSavedCount(0);
     setError(null);
 
-    try {
-      const outcomes = await aiApi.saveMany(
-        batch.target,
-        keeping,
-        setSavedCount,
-      );
-
-      // Back onto the full-length row list, so a dropped row keeps its place
-      // in the table rather than shifting every result up by one.
-      const byRow: RowResult[] = [];
-      let taken = 0;
-      batch.rows.forEach((_, index) => {
-        byRow[index] = dropped.has(index)
-          ? { ok: false, error: "Left out" }
-          : outcomes[taken++];
-      });
-
-      setBatchResults(byRow);
-      const saved = outcomes.filter((o) => o.ok).length;
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content: `Saved ${saved} of ${keeping.length}${
-            saved === keeping.length ? "." : " — the rest are marked above."
-          }`,
-        },
-      ]);
-      router.refresh();
-    } catch (caught) {
-      setError(explain(caught, "Those could not be saved."));
-    } finally {
-      setSaving(false);
+    let saved = 0;
+    for (const [done, index] of waiting.entries()) {
+      const result = await saveRow(index);
+      if (result.ok) saved += 1;
+      setBatchResults((current) => ({ ...current, [index]: result }));
+      setSavedCount(done + 1);
     }
+
+    setMessages((current) => [
+      ...current,
+      {
+        role: "assistant",
+        content: `Saved ${saved} of ${waiting.length}${
+          saved === waiting.length ? "." : " — the rest say why on their rows."
+        }`,
+      },
+    ]);
+    setSaving(false);
+    router.refresh();
   }
 
-  async function confirm(edited: Record<string, unknown>) {
+  /**
+   * Confirm and save on the draft card (A4). The server checks the boxes
+   * again and saves them the way the record's own form does, as this
+   * person, and answers with what was saved and where it now shows.
+   */
+  async function confirm(edited: Record<string, string>) {
     if (!reply?.target) return;
+    if (!chatId) {
+      setError(NOT_KEPT);
+      return;
+    }
     setSaving(true);
     setError(null);
 
     try {
-      const created = await aiApi.save(reply.target, edited);
-
-      /**
-       * After the save, never before, and never awaited in a way that could
-       * hold up the confirmation. What they corrected on the card is the only
-       * honest signal of how this company actually files things, and it was
-       * being thrown away every time.
-       */
-      if (chatId) void aiApi.learn(chatId, reply.target, edited);
-
+      const saved = await aiApi.confirm(chatId, edited);
       // What was saved, and the page it now shows on: the owner's complaint
       // was a record that showed on one page and not on its own.
-      const label = AI_TARGET_LABELS[reply.target];
-      const shows = AI_TARGET_SHOWS_ON[reply.target];
       setMessages((current) => [
         ...current,
-        {
-          role: "assistant",
-          content: `Saved — ${label.toLowerCase()}${
-            created.refNo ? `, ${created.refNo}` : ""
-          }.${shows ? ` It shows under ${shows.name}.` : ""}${
-            created.warning ? ` ${created.warning}` : ""
-          }`,
-        },
+        { role: "assistant", content: saved.said },
       ]);
-      setSavedOn(shows);
+      setSavedOn(saved.showsOn);
       setReply(null);
       router.refresh();
     } catch (caught) {
@@ -566,6 +597,7 @@ export function AssistantScreen({
                   batch={reply.batch}
                   results={batchResults}
                   saving={saving}
+                  savingRow={savingRow}
                   savedCount={savedCount}
                   dropped={dropped}
                   onDrop={(index) =>
@@ -576,7 +608,8 @@ export function AssistantScreen({
                       return next;
                     })
                   }
-                  onConfirm={() => void confirmBatch()}
+                  onConfirmRow={(index) => void confirmRow(index)}
+                  onConfirmAll={() => void confirmBatch()}
                 />
               ) : reply?.target ? (
                 <DraftCard

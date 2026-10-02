@@ -16,7 +16,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
   AI_ATTACHMENT_MAX_BYTES,
-  AI_TARGETS,
+  aiConfirmSchema,
   aiFeedbackSchema,
   aiIntakeRequestSchema,
   aiLinkSchema,
@@ -25,11 +25,11 @@ import {
   setAiInstructionsSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
+  type AiConfirmInput,
   type AiFeedbackInput,
   type AiImportPlan,
   type AiIntakeRequest,
   type AiLinkInput,
-  type AiTarget,
   type MakeAiRuleInput,
   type SetAiInstructionsInput,
   type SetAiKeyInput,
@@ -45,14 +45,17 @@ import { ZodBody } from "../../common/pipes/zod-validation.pipe";
 import { ImportsService } from "../imports/imports.service";
 import { AiAttachmentsService } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
+import { AiConfirmService } from "./ai-confirm.service";
 import { AiIntakeService } from "./ai-intake.service";
 
 /**
- * Nothing here writes to the books.
+ * Nothing here writes to the books but Confirm and save.
  *
- * The assistant produces values; saving them is an ordinary create against the
- * record's own endpoint, so permissions, validation and the audit trail apply
- * exactly as they would have if somebody typed it.
+ * The assistant produces values. Saving them is the person's act, on a
+ * button: `confirm` checks the draft again and hands it to the record's own
+ * service, through its own schema and with the person's permissions, so the
+ * audit trail reads as it would have if somebody typed it — and says it came
+ * through the Assistant (A4).
  *
  * The key endpoints are Super Admin only, and the key travels one way: in. No
  * response from this API ever contains it — only whether one is set and its
@@ -65,6 +68,7 @@ export class AiIntakeController {
     private readonly chats: AiChatsService,
     private readonly attachments: AiAttachmentsService,
     private readonly imports: ImportsService,
+    private readonly confirmer: AiConfirmService,
   ) {}
 
   @Get("availability")
@@ -248,34 +252,20 @@ export class AiIntakeController {
   }
 
   /**
-   * What somebody changed before saving, kept as an example for next time.
+   * Confirm and save (A4): a draft card's, or one row of a table's.
    *
-   * Called after the save has succeeded, and its own failure is not the
-   * caller's problem — the browser sends this and ignores the answer. A save
-   * that went through must never be undone, or reported as failed, because a
-   * lesson could not be filed.
+   * `ai.use` is only the door. Inside, the draft is held to the permission
+   * of the record's own endpoint, to the map and to its schema, and saved by
+   * that endpoint's own service as this person — see ai-confirm.service.ts.
    */
-  @Post("learn")
+  @Post("confirm")
   @HttpCode(200)
   @RequirePermission("ai.use")
-  learn(
-    @Body("chatId", ParseUUIDPipe) chatId: string,
-    @Body("target") target: AiTarget,
-    @Body("confirmed") confirmed: Record<string, unknown>,
+  confirm(
+    @ZodBody(aiConfirmSchema) body: AiConfirmInput,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    if (!(AI_TARGETS as readonly string[]).includes(target)) {
-      throw new BadRequestException("Not a kind of record this app keeps.");
-    }
-    return this.ai.learn(chatId, target, confirmed ?? {}, actor);
-  }
-
-  /** Category and account names to ids, checked against what exists. */
-  @Post("resolve")
-  @HttpCode(200)
-  @RequirePermission("ai.use")
-  resolve(@Body("draft") draft: Record<string, unknown>) {
-    return this.ai.resolve(draft ?? {});
+    return this.confirmer.confirm(body, actor);
   }
 
   /**

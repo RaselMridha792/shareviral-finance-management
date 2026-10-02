@@ -9,9 +9,11 @@
  *   A. the owner's draft (money out, no category, "record korechi"): not
  *      ready, the category asked for, the false sentence never shown;
  *   B. a transfer between two of our accounts: ready, the line under it from
- *      the code, saved through the Money Transfer endpoint as a linked pair;
+ *      the code, confirmed and saved as the Money Transfer form saves it, as a
+ *      linked pair (A4);
  *   C. a name that fits several accounts, or none: asked about with the real
- *      ones listed; and Save refuses the same rather than picking one;
+ *      ones listed; and Confirm and save refuses the same rather than picking
+ *      one;
  *   D. the model's own question kept when it has one — unless it says the
  *      thing is done; a "recorded" with no draft at all replaced;
  *   E. what the model is told: the transfer target, its fields, our accounts;
@@ -43,7 +45,7 @@ const API = `http://localhost:${PORT}/api`;
 const STUB_PORT = 4599;
 const SHOTS = process.env.SHOT_DIR || null;
 /** AI_DRAFT_READY_LINE, in packages/shared/src/ai.ts. */
-const READY = "Draft ready — check every line, then press Save. Nothing is recorded yet.";
+const READY = "Draft ready — check every line, then press Confirm and save. Nothing is recorded yet.";
 
 const env = Object.fromEntries(
   fs
@@ -250,11 +252,10 @@ try {
   check("no category and no counterparty on it", !("categoryName" in (transfer.body?.draft ?? {})) && !("counterparty" in (transfer.body?.draft ?? {})), Object.keys(transfer.body?.draft ?? {}).join(", "));
   check("the description is the two accounts", transfer.body?.draft?.description === `Transfer from ${FROM.name} to ${TO.name}`, String(transfer.body?.draft?.description));
 
-  // Saved the way the page saves it: names to ids, then the form's endpoint.
-  const resolved = await call("POST", "/ai/resolve", { draft: transfer.body?.draft });
-  const saved = await call("POST", "/transactions/transfer", resolved.body);
+  // Saved the way the page saves it: Confirm and save, with the card's boxes.
+  const saved = await call("POST", "/ai/confirm", { chatId: transfer.body?.chatId, draft: transfer.body?.draft });
   if (saved.body?.id) made.transfers.push(saved.body.id);
-  check("Save goes through the Money Transfer endpoint", saved.status === 201, `${saved.status} ${JSON.stringify(saved.body?.fieldErrors ?? saved.body?.message ?? "")}`);
+  check("Confirm and save saves it as the Money Transfer form does", saved.status === 200 && /^TXN-/.test(saved.body?.refNo ?? ""), `${saved.status} ${JSON.stringify(saved.body?.errors ?? saved.body?.message ?? "")}`);
   const pair = saved.body?.id
     ? await q(
         `select t.direction, a.name, t.amount::text, t.usd_rate::text, t.category_id from transactions t join accounts a on a.id = t.account_id
@@ -294,16 +295,16 @@ try {
       JSON.stringify(several.body?.draft),
     );
     check("the question lists the real ones", shared.fits.every((a) => (several.body?.nextQuestion ?? "").includes(a.name)), shown(several.body));
-    const refused = await call("POST", "/ai/resolve", { draft: { ...payment, accountName: shared.piece } });
-    check("Save refuses the same name rather than taking the first", refused.status === 400 && shared.fits.every((a) => refused.body?.message?.includes(a.name)), `${refused.status} ${refused.body?.message}`);
+    const refused = await call("POST", "/ai/confirm", { chatId: several.body?.chatId, draft: { ...payment, accountName: shared.piece } });
+    check("Confirm and save refuses the same name rather than taking the first", refused.status === 400 && shared.fits.every((a) => refused.body?.message?.includes(a.name)), `${refused.status} ${refused.body?.message}`);
   } else {
     console.log("  (no two local accounts share a piece of a name; skipped)");
   }
   const nobody = await turn("courier 500", { target: "transaction_out", draft: { ...payment, accountName: "Zylofone Bank" }, missingFields: [] });
   check("an account that does not exist is asked about", nobody.body?.missingFields?.[0] === "accountName" && /There is no account called "Zylofone Bank"/.test(nobody.body?.nextQuestion ?? ""), shown(nobody.body));
   check("with the accounts there are", accounts.length > 12 || accounts.every((a) => (nobody.body?.nextQuestion ?? "").includes(a.name)), shown(nobody.body));
-  const noSuch = await call("POST", "/ai/resolve", { draft: { ...payment, accountName: "Zylofone Bank" } });
-  check("Save says there is no such account, in words", noSuch.status === 400 && /There is no account called "Zylofone Bank"/.test(noSuch.body?.message ?? ""), `${noSuch.status} ${noSuch.body?.message}`);
+  const noSuch = await call("POST", "/ai/confirm", { chatId: nobody.body?.chatId, draft: { ...payment, accountName: "Zylofone Bank" } });
+  check("Confirm and save says there is no such account, in words, and saves nothing", noSuch.status === 400 && /There is no account called "Zylofone Bank"/.test(noSuch.body?.message ?? ""), `${noSuch.status} ${noSuch.body?.message}`);
   const noCategory = await turn("drone rental", { target: "transaction_out", draft: { ...payment, accountName: FROM.name, categoryName: "Zylofone rental" }, missingFields: [] });
   check("a category that does not exist is asked about, not saved", noCategory.body?.missingFields?.[0] === "categoryName" && /There is no money-out category called "Zylofone rental"/.test(noCategory.body?.nextQuestion ?? ""), shown(noCategory.body));
   const [moneyIn] = await q(`select name from categories c where is_active and deleted_at is null and parent_id is not null and kind = 'in' and not exists (select 1 from categories o where o.id <> c.id and lower(o.name) = lower(c.name)) order by name limit 1`);
@@ -407,7 +408,7 @@ try {
     page.evaluate(() => {
       const heading = [...document.querySelectorAll("h2")].find((h) => h.textContent.trim() === "The draft");
       const box = heading?.closest("div.rounded-xl");
-      const save = [...(box?.querySelectorAll("button") ?? [])].find((b) => /Save it/.test(b.textContent));
+      const save = [...(box?.querySelectorAll("button") ?? [])].find((b) => /Confirm and save/.test(b.textContent));
       return box
         ? {
             head: heading.parentElement.innerText,
@@ -432,7 +433,7 @@ try {
   check("the owner's draft: the page asks for the category", text.includes("Which category is this under?"), text.slice(-300).replace(/\n/g, " | "));
   check("\"record korechi\" is nowhere on the page", !/record korechi/i.test(text));
   check("the card says what is still needed, in the form's word", /Still needed: Category/.test(drawn?.head ?? ""), drawn?.head);
-  check("and offers no Save", drawn?.saveDisabled === true, String(drawn?.saveDisabled));
+  check("and offers no Confirm and save", drawn?.saveDisabled === true, String(drawn?.saveDisabled));
 
   await page.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });
   await say(`100 taka transfer koro ${FROM.name} theke ${TO.name} e, rate 121.5`, {
@@ -447,15 +448,15 @@ try {
   check("the transfer: the line under the draft is the code's", text.includes(READY) && !/record korechi/i.test(text), text.slice(-300).replace(/\n/g, " | "));
   check("the card is the transfer form's: From, To, USD rate", ["From", "To", "USD rate", "Amount"].every((l) => drawn?.labels.includes(l)), JSON.stringify(drawn?.labels));
   check("with the two accounts in it", drawn?.values.fromAccountName === FROM.name && drawn?.values.toAccountName === TO.name, JSON.stringify(drawn?.values));
-  check("and Save is offered", drawn?.saveDisabled === false, String(drawn?.saveDisabled));
+  check("and Confirm and save is offered", drawn?.saveDisabled === false, String(drawn?.saveDisabled));
 
   const transfersBefore = (await q(`select count(*)::int as n from transactions where transfer_group_id is not null`))[0].n;
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Save it/.test(b.textContent))?.click());
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /Confirm and save/.test(b.textContent))?.click());
   await page.waitForFunction(() => /Saved — /.test(document.body.innerText) || document.querySelector('[role="alert"]'), { timeout: 60000 });
   text = await transcript();
   await shot("transfer-saved");
   const savedLine = text.match(/Saved — [^\n]*/)?.[0] ?? "";
-  check("pressing Save records it, and the page says so with its number", /Saved — money moved between our own accounts, TXN-/.test(savedLine), savedLine || text.slice(-300).replace(/\n/g, " | "));
+  check("pressing Confirm and save records it, and the page says so with its number", new RegExp(`^Saved — money moved between our own accounts, TXN-[\\w-]+: ৳100\\.00 from ${FROM.name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")} to `).test(savedLine), savedLine || text.slice(-300).replace(/\n/g, " | "));
   const madeOnPage = await q(`select id, direction from transactions where transfer_group_id is not null and created_at > now() - interval '2 minutes' and description = $1 and amount = 100 order by created_at desc limit 4`, [`Transfer from ${FROM.name} to ${TO.name}`]);
   made.transfers.push(...madeOnPage.map((r) => r.id));
   const transfersAfter = (await q(`select count(*)::int as n from transactions where transfer_group_id is not null`))[0].n;

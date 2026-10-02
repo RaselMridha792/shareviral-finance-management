@@ -1,4 +1,5 @@
 import {
+  aiConfirmSchema,
   aiFeedbackSchema,
   aiLinkSchema,
   makeAiRuleSchema,
@@ -16,7 +17,7 @@ export const ASSISTANT_MAP = [
     name: "AI Assistant",
     modules: ["ai-intake"],
     purpose:
-      "This conversation. It drafts a record for the person to check and save, answers questions about what is recorded, and reads a file somebody attaches, or a Google Sheet, Doc or Drive file whose link they paste. It saves nothing itself.",
+      "This conversation. It drafts a record for the person to check and save, answers questions about what is recorded, and reads a file somebody attaches, or a Google Sheet, Doc or Drive file whose link they paste. It saves nothing itself: a draft is saved when the person presses Confirm and save on its card.",
     keeps: [
       "The conversations, each person's own.",
       "Its mistakes: what somebody corrected on a draft before saving, and answers somebody marked wrong, with why. Both are shown to it on later turns; the owner can make one a rule.",
@@ -41,6 +42,22 @@ export const ASSISTANT_MAP = [
         saves: ["POST /ai/turn"],
         onSave:
           "Sends the conversation to the model and shows its answer: a question, a reply, or a draft card. The exchange is kept in the person's history. Nothing is recorded in the books.",
+      },
+      {
+        name: "Confirm and save",
+        on: "/assistant",
+        opens:
+          "the button on a draft card; on a table of drafts, Confirm on a row, or Confirm and save all under the table's count and total",
+        saves: ["POST /ai/confirm"],
+        schema: aiConfirmSchema,
+        fields: {
+          chatId: "the conversation; the chat sends it, nobody types it",
+          draft:
+            "the card's boxes as the person left them; which kind of record it is, is read from the conversation",
+          row: "which row of the table; its values are read from the conversation",
+        },
+        onSave:
+          "Checks the draft again, against the person's role, the map and the record's own form, then saves it the way that form's Save does, as the person, with their permissions. Its audit row says it came through the Assistant. The chat then says what was saved and where it shows, with a link, and the card is not offered again. Only new records: nothing is deleted, voided, finalised or paid, and nothing under Settings or anybody's sign-in is changed.",
       },
       {
         name: "Attach a spreadsheet",
