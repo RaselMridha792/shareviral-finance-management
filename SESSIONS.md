@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138, not fixed |
 | 137 | **Schema: the Assistant keeps its mistakes — a reply marked wrong, which model gave it, and whether it became a rule** | **done** — pushed alone, the schema half of A2b; the rest of A2b is the next session |
 | 136 | **The Assistant knows the app: a map of every part, routing before drafting, a plan and its renewal, the owner's instructions, seven more look-ups and counting** | **built** — piece A2 of the "made strong" brief (A2b still to do); **the owner tests it on the live site: the list is in #136** |
 | 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone and deployed; read from #136 on |
@@ -115,6 +116,178 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 138. The Assistant gets better with use — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **the rest of piece A2b**,
+on the columns #137 added. A2b is now done. **The next piece is A3** (files
+and links); A1b's move to Opus 5.5 may come any time after A2.
+
+**What the owner now has:**
+
+- **"This was wrong"** under the Assistant's latest answer. The person
+  says why in one line. The server reads what was asked and what was
+  answered from the conversation itself, not from the browser. It keeps
+  them as a mistake (`kind 'reply'`), with the kind of record, the part of
+  the map and the model. Digits are masked in all three texts
+  (`POST /ai/feedback`, `ai.use`, own conversation only).
+- **Which model answered** is now kept on every answer (`reply.model`, so
+  on `ai_chats.reply`). A mistake, and a field changed before Save, copy it.
+- **The mistakes go back into the prompt.** Answers marked wrong get their
+  own block ("ANSWERS SOMEBODY HERE MARKED WRONG"), beside the drafts fixed
+  before Save. Each is shown only to roles that may read its part: the
+  record's permission, or else the map part's own. A mistake placed in no
+  part reaches nobody's prompt. One made a rule leaves the prompt: its rule
+  is there in the owner's words.
+- **Its recent mistakes**, the list, on Settings → Assistant and on the new
+  page (Super Admin, `GET /ai/mistakes`). Each mistake has two buttons:
+  - **Make this a rule.** It offers one line to edit. The line is added to
+    the owner's instructions, within 4,000 characters, and never twice.
+    The mistake is marked as a rule. The audit row has the instructions
+    before and after.
+  - **Remove.** The mistake goes, and the audit row keeps what it said.
+  - The card also has **Download as test cases**.
+- **What the Assistant knows** (`/assistant/knowledge`). It is linked at
+  the foot of the chat history and from Settings → Assistant. It shows the
+  map it is given, with a search box: 21 parts, 113 forms and buttons,
+  each with its fields. A Super Admin also sees the rules and the mistakes.
+  The CFO and HR see the map only (`GET /ai/knowledge`, `ai.use`).
+- **Learnt from a draft, wider:** which plan a name means
+  (`subscriptionName`), a plan's tool, its name and its cycle. Never a price
+  or a rate. A description changed before Save now has its figures masked
+  too.
+
+**Pages and forms on the map.** `common/app-map.ts` gains `AppForm`, and
+every part lists every form and button that changes something. Each one
+says where it is, how it is opened and what Save does. Its fields are
+**generated from the schema its endpoint validates with**, so they cannot
+drift from the app. `app-map.spec.ts` now fails when any of these happen:
+
+- a page has no entry (`NOT_A_SCREEN` holds three old redirects and
+  /no-access, each with the reason);
+- an endpoint that changes something is named by no form;
+- a form names an endpoint that does not exist;
+- a form explains a field its schema lacks;
+- a kind of draft has no form.
+
+`NOT_A_FORM` lists 24 endpoints, each with the reason:
+
+- 3 belong to the Assistant itself: the two steps inside a draft card's
+  Save, and a clear-all for chats that no screen offers;
+- 8 are sent by the HR portal;
+- 13 are left over from retired screens or have no caller: HR Budget's old
+  decisions, the challan panel, income tax, the exchange rate, the email
+  key's Remove, vendor edit, and a plan's DELETE.
+
+The forms were written by six agents, each reading its module's
+controller, the web form and the service. I read the whole rendered map
+afterwards.
+
+- **The prompt is bigger:** the map grew from about 5,000 tokens to about
+  16,800. It sits in the cached half. A form the Assistant drafts points to
+  its own list under EVERY FIELD rather than repeating it. Other forms list
+  the fields Save needs, the ones the map explains, and how many others
+  there are. The page shows every field.
+- **One fix in the field generator** (`field-reference.ts`, `describe`).
+  It stopped at a `.transform()` and called the field required: a bank
+  payment's email showed as needed. **The existing draft prompt is byte for
+  byte the same.** I measured it before and after; only the map's forms
+  changed.
+
+**Every mistake becomes a test.** `.assistantbar.mjs` has a new section M.
+It reads `.assistantbar.mistakes.json` (empty for now). The mistakes are
+marked on the live site and the bar runs from a checkout, so **Download as
+test cases** is the bridge. The owner sends the file. A session adds the
+entries and writes each one's `expect`: area, target, notTarget, says,
+notSays, draft. A case with no `expect` still runs and is printed to be
+read. There are also G5 and G6: how a password is reset, and what a bank
+payment needs. Neither has run: no key locally.
+
+**Shared code:** I asked no one. The brief names these, and the readers
+are the Assistant's own.
+
+- `packages/shared/src/ai.ts` gains the feedback, rule and knowledge
+  shapes, and `model` on the reply. It is read by the `ai-intake` module and
+  the Assistant's web files only.
+- `apps/web/src/lib/ai.ts` gains five calls.
+- Nothing under `components/ui`, `components/money` or the layout changed.
+  The page is under /assistant, which is full-window, so it brings its own
+  scroll and padding rather than touching `main-region.tsx`.
+
+**Proved:**
+
+- `.assistantlearnqa.mjs` (new), **71/71**. It starts its own built API on
+  :4014 with a stand-in model and drives the real page as the Super Admin,
+  the CFO and at 390px. It covers:
+  - the model kept on the answer;
+  - "This was wrong" kept from the conversation and masked, and refused for
+    another person's conversation or no reason;
+  - the plan fields learnt, and never the price;
+  - the prompt gated by role: HR is told the Team one, not the payment or
+    the Accounts one;
+  - the list being Super Admin only;
+  - a rule added, audited, not twice, over-limit refused, and then in the
+    prompt while its mistake leaves it;
+  - Remove, audited, gone from the prompt;
+  - the knowledge page for both roles; Settings → Assistant; 390px.
+  
+  It leaves nothing behind (it prints the count: 0).
+- `.assistantmapqa.mjs` 107/107, `.assistantdraftqa.mjs` 57/57, and
+  `.narrowqa.mjs`: Settings → Assistant, /assistant and /assistant/knowledge
+  are 390px in a 390px window.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 289, up
+  from 274; shared 366) pass, each on its own exit code.
+
+**Not proved:** what a real model does with the bigger map and the
+mistakes block. No key locally (the owner's decision); G5, G6 and M wait
+for one.
+
+**For the owner — on the live site, after the deploy:**
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | In a new chat, ask anything. Under the answer press **This was wrong**, write why (e.g. `eta subscription, AI tools e jabe`), Send | "Kept as a mistake, with why." |
+| 2 | At the foot of the chat history, open **What the Assistant knows** | Your rules, then Its recent mistakes with yours on top, then the map |
+| 3 | On your mistake press **Make this a rule**, change the line if you like, **Add the rule** | It shows "A rule since …", and the line is in Your rules and in Settings → Assistant |
+| 4 | In a new chat, ask the same thing again | The answer follows the rule |
+| 5 | Ask `kono user er password kivabe reset korbo?` | Settings → People who can sign in → Set a new password. No draft |
+| 6 | Ask `bank advice e notun ekta payment kivabe add korbo?` | Add payment on the advice, and what it asks (beneficiary, account, bank code, amount). No draft |
+| 7 | After a few mistakes, press **Download as test cases** and give the file to a session | The next session adds them to the bar |
+
+**What the owner has to decide (found while reading every form; none of it
+touched here):**
+
+1. **Data loss: editing a card clears its stored number and CVC.** The
+   Edit account popup says "Leave blank to keep the stored one". But
+   `account-form.tsx` always sends `cardNumber: ""` and `cardCvc: ""` for a
+   card, the schema turns "" into null, and null clears it. So renaming a
+   card, or changing its expiry, erases the number. I checked the code
+   myself; it is not run. It needs a session of its own (the Accounts page).
+2. After a challan is saved, the Assistant says it "shows under TDS"
+   (`AI_TARGET_SHOWS_ON.tds_deposit`). The TDS screen lists no challans.
+   Only its ledger entry shows, on All transactions, and only when an
+   account was given.
+3. Team → Change status says "On leave keeps them off new salary sheets".
+   The sheet never reads status, only the last day. The map says what the
+   code does.
+4. "Show the number" on a card shows for `accounts.read`, but its endpoint
+   needs `accounts.write`, so a reader is refused.
+5. From reading only: trashing or restoring an entry in a closed period
+   does not seem to check the lock (`trash.service.ts`). Worth a test.
+6. Settings → Your sign-in still says "Sign-in does not ask for the code
+   yet". It does, once a person is enrolled.
+
+**Also:**
+
+- **#137's deploy run is red, and the site is fine.** Its verify step got
+  no answer from api.hellonizam.com for 33 minutes and gave up. Now the API
+  answers on c243caf (#137) and the app on 200. So the SQL ran and the
+  containers swapped, later than the check waited. #134's run did the same.
+  Why the API did not answer for that long cannot be seen from here
+  (`journalctl -u sfm-deploy.service` on the server would say).
+- The local database's instructions were the harness's own leftovers
+  ("MAPQA rule…"), which made one check of `.assistantmapqa.mjs` fail.
+  I put back the owner's first set, as #135 wrote it.
 
 ## 137. Schema: the Assistant keeps its mistakes — 2 Oct 2026
 
