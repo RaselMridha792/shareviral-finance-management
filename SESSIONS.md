@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 134 | **The Assistant's model: Gemini 3.8 Flash and 3.1 Pro Preview offered, before 2.5 Pro is retired** | **built** — piece A1 of the "made strong" brief; **neither model has answered a request of ours yet: the owner tries them on the live site** |
 | 133 | **The Assistant: drafts checked in code, a transfer between our own accounts, and plain talk** | **built** — brief items 1–5; **the quality bar (item 6) still not run: no model key on the local database** |
 | 132 | **The Assistant on Gemini, through the Google Cloud connection** | **built, ON TRIAL** — pushed 2 Oct at the owner's word to test on the live site; **the quality bar has not been run** |
 | 131 | **Settings → Connections, and the Assistant through Google Cloud (Vertex AI)** | **done** — step 2 of the Google brief; the owner's Google Cloud setup is still to do
@@ -111,6 +112,166 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 134. The Assistant's model: two Gemini 3 models offered — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A1**. The next
+unfinished piece is **A2** (knowledge: the map of the application, routing
+before drafting, the owner's instruction set).
+
+**Why now:** Google retires `gemini-2.5-pro` on Vertex AI between 16 and 20
+October 2026. It was the only Gemini in the list, and Google gives this
+project no quota for Claude, so on that day the Assistant would have stopped.
+
+**The first thing the next session should know:** neither new model has
+answered one request of ours. The owner decided (2 Oct, in the brief) that
+the real model is tried on the live site and no Google key goes into the
+local app. So what follows is proved as far as the request that leaves this
+app, and the page. What the models *say* is the owner's test, below. The
+"paste the Google key into the LOCAL Settings" instructions in #132 and #133
+are overtaken by that decision.
+
+**Nothing changes for anybody until a Super Admin picks a model.** The live
+row still names whatever it named. No schema change: `ai_model` is plain
+text.
+
+**What was built:**
+
+- **Two models added** (`packages/shared/src/ai.ts`), both through Google
+  Cloud only, both marked "On trial" under the picker:
+  - `gemini-3.8-flash` — generally available. Offered first among the
+    Geminis (`AI_GEMINI_DEFAULT`), because it is the one that is not a
+    preview.
+  - `gemini-3.1-pro-preview` — the picker says "A preview: Google can change
+    it or withdraw it at short notice."
+  - `gemini-2.5-pro` stays, last, and now says "Google retires this model
+    between 16 and 20 October 2026, and it stops answering then. Choose
+    Gemini 3.8 Flash before that."
+- **When 2.5 Pro is gone**, a turn on it answers 404, and the sentence the
+  person sees now ends "Google retires it between 16 and 20 October 2026. If
+  that is why, a Super Admin can choose Gemini 3.8 Flash under Settings →
+  Assistant." (`AI_MODEL_RETIRING`, read by `gemini-errors.ts`.)
+- **A stored Gemini that is no longer in the list is read as the Gemini
+  offered first, not as Claude** (`aiModelFrom`). Before, any unknown model
+  was read as Claude. With no quota for Claude, taking 2.5 Pro out of the
+  list later would have switched the live Assistant to a model that cannot
+  answer.
+- **Gemini 3 is asked to think at "high"** (`gemini.ts`, `thinkingFor`).
+  Checked against Google's own pages for the two models, read 2 Oct:
+  - Gemini 3 takes a thinking *level* (low, medium, high), where 2.5 took a
+    budget in tokens. It cannot be switched off. Left alone, 3.8 Flash thinks
+    at medium and 3.1 Pro at high.
+  - Both are sent `thinkingLevel: HIGH`, on the brief's rule that wrong is
+    worse than slow. For 3.1 Pro that is its default written down; for 3.8
+    Flash it is one step up. 2.5 Pro is sent nothing, as before.
+  - Thinking is still paid out of `maxOutputTokens`, so the reply's room is
+    still doubled (16,000 for a turn, 64,000 for a PDF).
+  - Function calling: Gemini 3 refuses a call sent back without its thought
+    signature, and wants each result to carry its call's id and name. The
+    adapter already returned Gemini's own content whole and any id it was
+    given; a test now pins both for two calls in one round. Google asks that
+    no temperature be sent to Gemini 3; none is.
+  - 3.1 Pro Preview answers in the "global" region only. `vertex_region` is
+    "global" and nothing in the app changes it.
+- **Every Gemini request writes one line to the API log**: the model, the
+  time it took, and the tokens Google counted (in, cached, out, thinking),
+  with the finish reason. No content. With no local run this is the only
+  measure of what one model costs against the other. It looks like
+  `[Gemini] gemini-3.8-flash, round 1: 2.4s, 5210 in (4800 cached), 320 out,
+  1104 thinking, finish STOP`. Piece B3 replaces it with a table.
+
+**Shared code** (the brief named the change; nothing existing changed
+meaning): `packages/shared/src/ai.ts` gains the two entries in `AI_MODELS`
+and its four maps, `AI_GEMINI_DEFAULT`, `AI_MODEL_RETIRING` and
+`aiModelFrom`. Read by `assistant-panel.tsx`, `composer.tsx`,
+`assistant-screen.tsx`, `ai-intake.service.ts`, `gemini-errors.ts` and
+`connections.service.ts`. The two pickers needed no change: they list what
+`aiModelsFor` returns.
+
+**Proved:**
+
+- `gemini.spec.ts`, 26 tests (it was 17), Google's token and `fetch` stubbed.
+  For each new model: the URL carries its own name; the body carries
+  `thinkingConfig: { thinkingLevel: "HIGH" }` and no temperature or budget;
+  two calls in one round go back as Gemini made them, signature included,
+  each result under its own id; a PDF is read the same way. 2.5 Pro's body is
+  unchanged. The 404 sentence, with and without a successor. The log line.
+- `packages/shared/src/ai.test.ts`: the order offered; what each picker line
+  says; a successor that is offered and not itself retiring; what a stored
+  model is read as, each way.
+- `.connectionsqa.mjs`, **64/64** (it was 56), against the local app:
+  - each of the three Geminis can be chosen on Google Cloud, and none with
+    the Anthropic key;
+  - a row naming `gemini-1.5-pro` is read as `gemini-3.8-flash`;
+  - on Settings → Assistant, the picker offers Opus 5 and the three Geminis;
+    2.5 Pro and 3.1 Pro, chosen on the screen itself, show their sentences;
+  - the Assistant's own picker offers the same four;
+  - the row is left as it was found.
+- `.assistantdraftqa.mjs`, 57/57, unchanged: the drafts of #133 still hold.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 199,
+  shared 359) pass, each on its own exit code.
+
+**Not proved:**
+
+- **Any answer from either model**, and whether Google takes
+  `thinkingLevel` and the tool schemas as sent. If it does not, the turn says
+  "Google Cloud would not take the request (…). That is a fault in this app",
+  and the log has Google's reason.
+- **Whether 16,000 tokens is room enough at "high".** If a turn comes back
+  "did not answer in the expected shape", look for `finish MAX_TOKENS` in the
+  new log line. The fix is `THINKING_ROOM` in `gemini.ts`.
+- **The bar.** `.assistantbar.mjs` now knows the two models. Not run.
+
+**For the owner — the test on the live site, after the deploy.** In Settings
+→ Assistant, choose **Gemini 3.8 Flash** under "Which model answers". Type
+each message in a new chat. Then choose **Gemini 3.1 Pro Preview** and type
+them again.
+
+| # | Type this | What should come back | What must not appear |
+|---|---|---|---|
+| 1 | `ms/exprovia account a koto taka ache akhon?` | The balance the Accounts page shows, in Bangla written in Latin letters | A different figure; "record korechi" |
+| 2 | `aaj electricity bill 3200 taka dilam` | A draft with amount 3200 and **no account**; one question about something still missing (the account, the category or the rate) | Any account filled in |
+| 3 | `Record this month's payment for the Zylofone Pro subscription - the usual amount, from the usual account.` | A question. No amount and no account on the draft | Any amount or account |
+| 4 | `How much have we paid Zylofone Ltd so far this year?` | It says it finds no such vendor or payment | Any figure |
+| 5 | `1 lakh taka transfer koro ms/exprovia theke Md. Nizam Uddin accounts a, aaj` | A card "Money moved between our own accounts": From M/S. EXPROVIA, To Md. Nizam Uddin, 100000. One question, for the USD rate. Save is not offered | A category; a rate already filled in; "record korechi" |
+| 6 | then, in the same chat: `aajker rate 121.5` | The same card with the rate, and under it "Draft ready — check every line, then press Save. Nothing is recorded yet." | Any sentence saying it is saved |
+
+Do not press Save on 6 unless the transfer is wanted. Buying an AI
+subscription is **not** in this list: it still goes wrong until piece A2.
+
+**What the owner has to decide, after that test:** which Gemini stays. The
+rule in the brief is to offer only what never invents, and to prefer 3.8
+Flash if both pass.
+
+- **Cost**, from Google's own Gemini API price page, per million tokens (the
+  Vertex AI price page would not load, so check the bill):
+  - 3.8 Flash: $0.75 in, $3.75 out until 31 Dec 2026; $1.50 and $7.50 from
+    1 Jan 2027.
+  - 3.1 Pro Preview: $2.00 in, $12.00 out.
+  - 2.5 Pro, for comparison: $1.25 in, $10.00 out.
+  - Thinking is billed as output, and 3.8 Flash now thinks at "high".
+- **Speed**: not measured. The log line gives it per request once the owner
+  has typed the messages above.
+
+**Seen, not touched:**
+
+- Connections → Test asks one Gemini: the stored one, or else 3.8 Flash. It
+  does not say whether the other two answer.
+- The setup steps under Connections still say "Gemini needs no enabling".
+  Not checked for a preview model.
+- The composer's short names are "Gemini 3.8", "Gemini 3.1" and "Gemini
+  2.5"; the full name is in the option's tooltip only.
+- `gemini-2.5-pro` has to come out of `AI_MODELS` after it is retired, and
+  the model that fails the owner's test with it.
+- The local API on :4001 was the orphan #133 described, running old code. It
+  was stopped and `npm run dev:api` started from this session in its place.
+  If :4001 is down, run `npm run dev` again.
+
+**Also in this push:** the four brief commits (25a0072, 3cb40d8, bb8e9e4,
+23d4330), which were committed and not pushed.
+
+**Next:** A2. Its instruction set needs a table, and that schema change goes
+out alone first.
 
 ## 133. The Assistant: drafts checked in code, transfers, and plain talk — 2 Oct 2026
 
