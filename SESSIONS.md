@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 143 | **The Assistant: everything Confirm saves is "Added by the assistant", and All transactions filters by origin** | **built** — piece A4b of the "made strong" brief; **the owner tries it on the live site: the list is in #143.** Next is A3c (an Excel file reads every sheet), then A5 |
 | 142 | **The Assistant: a Sheet link that names no tab reads every tab, a card each, each counted on its own** | **built** — piece A3b of the "made strong" brief; **the owner tries it on the live site: the list is in #142.** Next is A4b (the origin "Added by the assistant" on everything Confirm saves), then A5 |
 | 141 | **The Assistant: Confirm and save — the server checks the card again and saves it as the form does, the audit row marked "through the Assistant"** | **built** — piece A4 of the "made strong" brief; **the owner tries it on the live site: the list is in #141.** Next: a Sheet link with no tab reads every tab (A3's follow-up, on its own), then A5 |
 | 140 | **Permissions: the Assistant is the Super Admin's and the CFO's alone — `ai.use` off HR** | **done** — piece B1 of the "made strong" brief, pushed alone as the owner ordered (B1 before A4). **Next is A4** (confirm in chat, then it saves) |
@@ -120,6 +121,140 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 143. The Assistant: everything it saves is "Added by the assistant" — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A4b** (the second of
+"Next, after A4"). **Next is A3c:** an Excel file reads every sheet, as a
+Google Sheet's tabs do. Then A5.
+
+**What the owner now has:**
+
+- **Every ledger row Confirm and save writes has the origin "Added by the
+  assistant"**, of every kind. Before this, only a plain payment had it:
+  - a transfer's two halves said "Entered by hand";
+  - a plan's renewal, and a new plan's first payment, said "Entered by
+    hand";
+  - a challan's payment said "From a tax payment".
+- **A bank charge takes its entry's origin** when the same save writes it,
+  on a payment or a transfer. A charge added later on the edit form is typed
+  by hand and stays "Entered by hand".
+- **The forms are unchanged.** The same kinds typed into their own forms are
+  "Entered by hand", and a challan on the TDS screen is still "From a tax
+  payment". The challan saved through the Assistant still links to its
+  payment.
+- **All transactions has an Origin filter**, the last control in the filter
+  row: "Any origin" until chosen, then each origin by the name the record's
+  popup uses ("Added by the assistant", "Entered by hand", "Imported from
+  Excel", …). The totals and "N entries in this view" follow it, and Clear
+  resets it. The API already took `createdVia`; the page never sent it.
+  - **The owner chose the full names** (asked, 3 Oct) over shortened ones and
+    over a link-only chip. The select is 202px wide, so with the sidebar open
+    the row is one line from a 1490px window. Below that, Origin goes to a
+    second line on its own: at 1280, 1366 and 1440px. Nothing scrolls
+    sideways; 390px is fine.
+- **The prompt names the button as it is now**: "**Confirm and save** on the
+  draft card (on a table of drafts, **Confirm** on a row, or **Confirm and
+  save all**)". It said "**Save**" (found in #142).
+- **The map's All transactions** says it filters by origin, and that "Added
+  by the assistant" finds what was saved through Confirm.
+
+**How it is built:** no schema change. `TXN_ORIGINS` already had `ai_intake`.
+
+- `transactions.service.ts`:
+  - `transfer()` and `payForSubscription()` take `{ createdVia }` as an option
+    (`ClaimedOrigin`: "manual" or "ai_intake" only, the same two the public
+    schema lets an entry claim);
+  - `writeBankCharge()` gives a new charge its entry's origin.
+- `tds.service.ts`: `createDeposit()` takes `{ createdVia: "ai_intake" }`;
+  otherwise "tax_payment", as before.
+- `ai-confirm.service.ts`: `ORIGIN` is passed to every save, and put on a
+  payment's body too, so no path can leave it out.
+- No controller passes the option, so no request can claim it. The bodies'
+  schemas are unchanged.
+
+**Shared code:** none touched. The page's filter uses `TXN_ORIGINS` and
+`TXN_ORIGIN_LABELS` as they were, and `ledgerApi.list` already took
+`createdVia`.
+
+**Proved:**
+
+- `.assistantoriginqa.mjs` (new), **31/31**. It runs its own built API on :4017
+  with a stand-in model, and the real page.
+  - **Through Confirm:** a payment with a charge, money in, a transfer with a
+    charge, a renewal, a new plan, a challan and a table row. All 10 rows are
+    `ai_intake`, and the challan still links to its payment.
+  - **Through the forms, right after:** a payment with a charge, a transfer
+    with a charge and a renewal are `manual` (6 rows); the challan is
+    `tax_payment`.
+  - **The API:** `createdVia=ai_intake` lists exactly those 10 and nothing
+    typed, and `manual` exactly the 6. The totals follow the filter
+    (৳5,300 in, ৳5,251 out, 10 entries).
+  - **The prompt** says Confirm and save, and no bare Save.
+  - **On the page:** the select and its seven options; picking "Added by the
+    assistant" sends `createdVia=ai_intake` and draws those 10 rows, both
+    halves and both charges among them. "Entered by hand" draws the 6.
+    "Clear 2" resets it. The row is two lines at 1280px, one line at 1490px,
+    and 390px does not scroll sideways.
+  - It leaves nothing behind (it prints the count: 0).
+- `ai-confirm.spec.ts`: 5 new tests. Each save (a payment whose body says
+  "manual", a transfer, a renewal, a new plan's first payment, a challan)
+  hands its service `ai_intake`. They fail on the code before this.
+- The older harnesses, one at a time: `.assistantconfirmqa.mjs` 60/60,
+  `.assistantdraftqa.mjs` 57/57, `.assistantmapqa.mjs` 102/102,
+  `.assistantlearnqa.mjs` 72/72, `.assistantlinkqa.mjs` 60/60. Each left
+  nothing behind.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 348, up
+  from 343; shared 382) pass, each on its own exit code.
+
+**Not proved:** what a real model says. `.assistantbar.mjs` gains two cases.
+Neither has run, because there is no key locally:
+
+- J1: "tumi assistant diye ja ja entry korecho segulo ek sathe kothay dekhbo?"
+  should name All transactions and "Added by the assistant", and draft
+  nothing.
+- J2: after a draft, "save korar button ta kothay?" should name Confirm and
+  save, never a bare Save.
+
+**For the owner — on the live site, after the deploy.** Reload the Assistant
+page and All transactions first. These are real entries in the books: void
+them afterwards. Step 5 lists them all in one place.
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | In the Assistant: `<account A> theke <account B> te 500 taka transfer korlam, rate 122.5`, then **Confirm and save** | "Saved — money moved between our own accounts…" |
+| 2 | `<a plan on AI tools and subscriptions> renew korlam aaj, rate 122.5`, then **Confirm and save** (a plan not yet renewed this month) | "Saved — a plan's renewal, under AI tools and subscriptions…" |
+| 3 | All transactions → **Origin** (the last select) → **Added by the assistant** | Both halves of the transfer, the renewal, and anything else saved through the Assistant since this deploy. "N entries in this view" counts them |
+| 4 | Click the transfer's row | The popup's **Recorded** line says "Added by the assistant" |
+| 5 | Origin → **Entered by hand** | Only what was typed into the forms. The test entries are not there |
+| 6 | Void the test entries from step 3's list | They are struck through, out of every total |
+| 7 | Ask the Assistant: `tumi assistant diye ja ja entry korecho segulo ek sathe kothay dekhbo?` | All transactions, the Origin filter, "Added by the assistant". No draft |
+| 8 | After a draft: `save korar button ta kothay?` | "Confirm and save" on the card. Never just "Save" |
+
+**What the owner has to decide:**
+
+1. **Entries saved through the Assistant before this deploy.** A transfer, a
+   plan's payment or a challan's payment confirmed between A4's deploy and
+   this one still say "Entered by hand" or "From a tax payment".
+   - Their audit rows say "— through the Assistant", so they can be found
+     and set to "Added by the assistant" with one SQL statement on the server.
+   - This is probably only the owner's own test entries from #141. Say if
+     you want it done; it is a change to live data, and it would be done
+     alone.
+
+**Seen, not touched:**
+
+- A bank charge's popup names the entry the charge belongs to. For a
+  challan's payment it read "Tax payment" because the origin was
+  `tax_payment` (`entryKindOf` in `ledger/transaction-details.tsx`).
+  - A challan saved through the Assistant now reads "Expense — TDS deposit"
+    there.
+  - It only shows when someone later adds a bank charge, by hand, to a
+    challan's payment, which the TDS screen does not offer. It is left
+    alone; telling a challan's payment apart would need the ledger rows to
+    carry their challan.
+- The All transactions table's Reference column is cut off at 1280px
+  (`REFERENC…`), as it was before this piece.
 
 ## 142. The Assistant: a Sheet link that names no tab reads every tab — 3 Oct 2026
 
