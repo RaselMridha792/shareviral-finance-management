@@ -129,40 +129,82 @@ export const AI_DATA_ACCESS_DETAIL: Record<AiDataAccess, string> = {
  * That is the one failure the code cannot catch, so the cheaper models are not
  * offered. A picker whose wrong option quietly misfiles money is not a saving.
  *
- * Gemini (2 Oct 2026) is here ON TRIAL, and has not cleared that bar. Google
- * gave the project no quota for Claude, Gemini answers on the same key, and
- * the owner chose to try it on the live site before the test conversations
- * had been run against it: the local database holds no Google key to run them
- * with. `.assistantbar.mjs` at the repository root is those conversations.
- * Run it, write the result in SESSIONS, and if Gemini fills in an account
- * nobody named, take it out of this list.
+ * Gemini (2 Oct 2026) is here ON TRIAL, and none of the three has cleared
+ * that bar. Google gave the project no quota for Claude, and Gemini answers on
+ * the same key. The owner decided the real model is tried on the live site
+ * and not locally, so no key is ever put in the local database to run the
+ * test conversations with (docs/briefs/2026-10-02-assistant-powerful.md).
+ * `.assistantbar.mjs` at the repository root is those conversations, kept as
+ * code. If a Gemini fills in an account nobody named, take it out of this
+ * list.
+ *
+ * The order is the order they are offered in. Of the two Google lists as its
+ * latest, 3.8 Flash comes first because it is the one that is not a preview.
+ * 2.5 Pro is last because Google is retiring it — see AI_MODEL_RETIRING.
  */
-export const AI_MODELS = ["claude-opus-5", "gemini-2.5-pro"] as const;
+export const AI_MODELS = [
+  "claude-opus-5",
+  "gemini-3.8-flash",
+  "gemini-3.1-pro-preview",
+  "gemini-2.5-pro",
+] as const;
 export const aiModelSchema = z.enum(AI_MODELS);
 export type AiModel = z.infer<typeof aiModelSchema>;
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
   "claude-opus-5": "Opus 5",
+  "gemini-3.8-flash": "Gemini 3.8 Flash",
+  "gemini-3.1-pro-preview": "Gemini 3.1 Pro Preview",
   "gemini-2.5-pro": "Gemini 2.5 Pro",
 };
 
 /** For the composer, where there is room for a name and no more. */
 export const AI_MODEL_SHORT: Record<AiModel, string> = {
   "claude-opus-5": "Opus 5",
+  "gemini-3.8-flash": "Gemini 3.8",
+  "gemini-3.1-pro-preview": "Gemini 3.1",
   "gemini-2.5-pro": "Gemini 2.5",
 };
+
+const ON_TRIAL =
+  "On trial: it has not yet been run against the test conversations that decided between the Claude models, so check the account and the amount on every draft before saving it.";
 
 export const AI_MODEL_DETAIL: Record<AiModel, string> = {
   "claude-opus-5":
     "On the same test conversations the cheaper Claude models invented an account nobody had named; this one asked instead.",
-  "gemini-2.5-pro":
-    "Google's model, through Google Cloud only. On trial: it has not yet been run against the test conversations that decided between the Claude models, so check the account and the amount on every draft before saving it.",
+  "gemini-3.8-flash": `Google's model, through Google Cloud only. ${ON_TRIAL}`,
+  "gemini-3.1-pro-preview": `Google's model, through Google Cloud only. A preview: Google can change it or withdraw it at short notice. ${ON_TRIAL}`,
+  "gemini-2.5-pro": `Google retires this model between 16 and 20 October 2026, and it stops answering then. Choose Gemini 3.8 Flash before that. ${ON_TRIAL}`,
 };
 
 /** A Gemini model is asked in Google's own way, and only through Google Cloud. */
 export function isGeminiModel(model: string): boolean {
   return model.startsWith("gemini-");
 }
+
+/**
+ * The Gemini offered first, and what a stored Gemini that is no longer in
+ * the list is read as (2 Oct 2026).
+ */
+export const AI_GEMINI_DEFAULT: AiModel = "gemini-3.8-flash";
+
+/**
+ * Models Google is taking away, and what to choose instead.
+ *
+ * Google's own pages give 2.5 Pro "no earlier than 16 October 2026" and 20
+ * October 2026. After that a request for it is a 404, and the sentence the
+ * person sees names the successor (gemini-errors.ts). Once it is gone, take
+ * the model out of AI_MODELS: a row that still names it is then read as the
+ * successor's kind — see `aiModelFrom`.
+ */
+export const AI_MODEL_RETIRING: Partial<
+  Record<AiModel, { when: string; successor: AiModel }>
+> = {
+  "gemini-2.5-pro": {
+    when: "between 16 and 20 October 2026",
+    successor: AI_GEMINI_DEFAULT,
+  },
+};
 
 /**
  * How the assistant reaches its model: an Anthropic key, or Google Cloud.
@@ -203,6 +245,8 @@ export const AI_PROVIDER_DETAIL: Record<AiProvider, string> = {
  */
 export const AI_MODEL_PROVIDERS: Record<AiModel, readonly AiProvider[]> = {
   "claude-opus-5": ["anthropic", "vertex"],
+  "gemini-3.8-flash": ["vertex"],
+  "gemini-3.1-pro-preview": ["vertex"],
   "gemini-2.5-pro": ["vertex"],
 };
 
@@ -213,6 +257,32 @@ export function aiModelGoesWith(model: AiModel, provider: AiProvider): boolean {
 /** The models a provider can offer, in the order they are listed. */
 export function aiModelsFor(provider: AiProvider): AiModel[] {
   return AI_MODELS.filter((model) => aiModelGoesWith(model, provider));
+}
+
+/**
+ * What a stored model is read as, reached this way.
+ *
+ * The column has no check of its own, and the list above changes: a model
+ * comes out when Google retires it, or when it invents. A stored Gemini that
+ * is no longer listed is read as the Gemini offered first, and not as Claude.
+ * Google gave this project no quota for Claude, so falling back to Claude
+ * there would be an assistant that cannot answer at all.
+ */
+export function aiModelFrom(
+  stored: string | null | undefined,
+  provider: AiProvider,
+): AiModel {
+  const offered = AI_MODELS.find((model) => model === stored);
+  if (offered && aiModelGoesWith(offered, provider)) return offered;
+  if (
+    stored &&
+    !offered &&
+    isGeminiModel(stored) &&
+    aiModelGoesWith(AI_GEMINI_DEFAULT, provider)
+  ) {
+    return AI_GEMINI_DEFAULT;
+  }
+  return aiModelsFor(provider)[0];
 }
 
 /**

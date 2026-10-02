@@ -26,7 +26,7 @@
  * was first failed); the rest LIGHT times (two).
  *
  *     node .assistantbar.mjs                    every model the stored keys reach
- *     node .assistantbar.mjs gemini-2.5-pro     one model
+ *     node .assistantbar.mjs gemini-3.8-flash   one model
  *     RUNS=3 LIGHT=1 node .assistantbar.mjs     a cheaper pass
  *
  * Needs `npm run dev` (api :4001) and a key in the LOCAL Settings: the Google
@@ -52,6 +52,8 @@ const POOL = Number(process.env.POOL || 3);
 /** Which way each model can be reached — AI_MODEL_PROVIDERS, in ai.ts. */
 const MODELS = {
   "claude-opus-5": ["anthropic", "vertex"],
+  "gemini-3.8-flash": ["vertex"],
+  "gemini-3.1-pro-preview": ["vertex"],
   "gemini-2.5-pro": ["vertex"],
 };
 

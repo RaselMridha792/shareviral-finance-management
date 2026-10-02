@@ -1,3 +1,8 @@
+import {
+  AI_MODEL_LABELS,
+  AI_MODEL_RETIRING,
+  type AiModel,
+} from "@finance/shared";
 import { ApiError } from "@google/genai";
 
 /**
@@ -98,7 +103,13 @@ export function explainGeminiError(
     return `Google Cloud refused: either the service account is missing the "Vertex AI User" role, or ${context.model} is not available to this project.`;
   }
   if (error.status === 404) {
-    return `${context.model} is not available to this Google Cloud project in the "${context.region}" region. Check it in Vertex AI → Model Garden, then try again.`;
+    const missing = `${context.model} is not available to this Google Cloud project in the "${context.region}" region.`;
+    // A model Google has taken away answers 404 too, and Model Garden will
+    // not bring it back: the way out is the model that replaced it.
+    const retiring = AI_MODEL_RETIRING[context.model as AiModel];
+    return retiring
+      ? `${missing} Google retires it ${retiring.when}. If that is why, a Super Admin can choose ${AI_MODEL_LABELS[retiring.successor]} under Settings → Assistant.`
+      : `${missing} Check it in Vertex AI → Model Garden, then try again.`;
   }
   if (error.status === 429) {
     return "The Google Cloud project's quota for Gemini is used up for now. Wait a minute, or ask Google for more under IAM & Admin → Quotas.";

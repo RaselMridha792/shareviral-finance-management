@@ -10,6 +10,7 @@
  */
 import { generateKeyPairSync } from "node:crypto";
 
+import { Logger } from "@nestjs/common";
 import { JWT } from "google-auth-library";
 
 import { geminiClient, readServiceAccount } from "../connections/google";
@@ -35,8 +36,11 @@ const KEY = {
 };
 
 const MODEL = "gemini-2.5-pro";
-const BASE =
-  "https://aiplatform.googleapis.com/v1beta1/projects/sfm-assistant/locations/global/publishers/google/models/gemini-2.5-pro";
+/** The two Google lists as its latest (2 Oct 2026), asked the Gemini 3 way. */
+const GEMINI_3 = ["gemini-3.8-flash", "gemini-3.1-pro-preview"];
+const MODELS =
+  "https://aiplatform.googleapis.com/v1beta1/projects/sfm-assistant/locations/global/publishers/google/models";
+const BASE = `${MODELS}/gemini-2.5-pro`;
 
 const TOOLS: ModelTool[] = [
   {
@@ -60,10 +64,10 @@ const TOOLS: ModelTool[] = [
 
 type Sent = { url: string; headers: Headers; body: Record<string, unknown> };
 
-function model() {
+function model(id = MODEL) {
   const account = readServiceAccount(JSON.stringify(KEY));
   if (!("account" in account)) throw new Error(account.problem);
-  return geminiModel(geminiClient(account.account, "global"), MODEL);
+  return geminiModel(geminiClient(account.account, "global"), id);
 }
 
 /** Google's token, stubbed; then each reply in turn, and what was sent. */
@@ -97,8 +101,8 @@ const calling = (...parts: unknown[]) =>
     candidates: [{ content: { role: "model", parts }, finishReason: "STOP" }],
   });
 
-const turn = () =>
-  model().converse({
+const turn = (id = MODEL) =>
+  model(id).converse({
     stablePrompt: "STABLE",
     turnPrompt: "TURN",
     messages: [
@@ -244,6 +248,104 @@ describe("geminiModel: a turn", () => {
     });
   });
 
+  it.each(GEMINI_3)(
+    "asks %s by its own name, and to think at high",
+    async (id) => {
+      const sent = google(
+        calling({ functionCall: { name: "answer", args: { draft: {} } } }),
+      );
+      await turn(id).ask();
+
+      expect(sent[0].url).toBe(`${MODELS}/${id}:generateContent`);
+      expect(sent[0].body.generationConfig).toEqual({
+        maxOutputTokens: 16_000,
+        thinkingConfig: { thinkingLevel: "HIGH" },
+      });
+      // Gemini 3 is asked to leave these alone, and a budget is 2.5's word.
+      expect(JSON.stringify(sent[0].body)).not.toMatch(
+        /temperature|topP|topK|thinkingBudget/,
+      );
+    },
+  );
+
+  it("sends 2.5 Pro no thinking setting, as it never did", async () => {
+    const sent = google(
+      calling({ functionCall: { name: "answer", args: { draft: {} } } }),
+    );
+    await turn().ask();
+
+    expect(sent[0].body.generationConfig).toEqual({ maxOutputTokens: 16_000 });
+  });
+
+  it.each(GEMINI_3)(
+    "returns %s's two calls as it made them, each result under its own id, in one turn",
+    async (id) => {
+      // What Gemini 3 refuses a turn for: a call sent back without its
+      // thought signature, or a result that does not say which call it is.
+      const asked = [
+        {
+          functionCall: { id: "fc_1", name: "account_balances", args: {} },
+          thoughtSignature: "c2lnbmF0dXJl",
+        },
+        { functionCall: { id: "fc_2", name: "account_balances", args: {} } },
+      ];
+      const sent = google(
+        calling(...asked),
+        calling({ functionCall: { name: "answer", args: {} } }),
+      );
+      const conversation = turn(id);
+
+      const calls = await conversation.ask();
+      conversation.tell(
+        calls.map((call) => ({ call, text: "Bank: 12,000.00", ok: true })),
+      );
+      await conversation.ask();
+
+      expect((sent[1].body.contents as unknown[]).slice(-2)).toEqual([
+        { role: "model", parts: asked },
+        {
+          role: "user",
+          parts: ["fc_1", "fc_2"].map((callId) => ({
+            functionResponse: {
+              id: callId,
+              name: "account_balances",
+              response: { output: "Bank: 12,000.00" },
+            },
+          })),
+        },
+      ]);
+    },
+  );
+
+  it("writes what the request took to the log: the tokens Google counted, and nothing said", async () => {
+    const logged = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    google(
+      json({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [{ functionCall: { name: "answer", args: {} } }],
+            },
+            finishReason: "STOP",
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 5210,
+          cachedContentTokenCount: 4800,
+          candidatesTokenCount: 320,
+          thoughtsTokenCount: 1104,
+        },
+      }),
+    );
+    await turn("gemini-3.8-flash").ask();
+
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(logged.mock.calls[0][0]).toMatch(
+      /^gemini-3\.8-flash, round 1: \d+\.\ds, 5210 in \(4800 cached\), 320 out, 1104 thinking, finish STOP$/,
+    );
+  });
+
   it("returns no calls, and no history, when Gemini called nothing", async () => {
     const sent = google(
       json({ candidates: [{ finishReason: "MALFORMED_FUNCTION_CALL" }] }),
@@ -274,8 +376,8 @@ describe("geminiModel: a PDF", () => {
       { status: 200, headers: { "content-type": "text/event-stream" } },
     );
 
-  const read = () =>
-    model().readDocument({
+  const read = (id = MODEL) =>
+    model(id).readDocument({
       pdf: Buffer.from("%PDF-1.4 test"),
       instruction: "Transcribe.",
       tool: TOOL,
@@ -329,6 +431,17 @@ describe("geminiModel: a PDF", () => {
         mode: "ANY",
         allowedFunctionNames: ["statement_rows"],
       },
+    });
+  });
+
+  it.each(GEMINI_3)("reads it with %s thinking at high", async (id) => {
+    const sent = google(stream({ candidates: [{ finishReason: "STOP" }] }));
+    await read(id);
+
+    expect(sent[0].url).toBe(`${MODELS}/${id}:streamGenerateContent?alt=sse`);
+    expect(sent[0].body.generationConfig).toEqual({
+      maxOutputTokens: 64_000,
+      thinkingConfig: { thinkingLevel: "HIGH" },
     });
   });
 
@@ -391,9 +504,22 @@ describe("Gemini's refusals, in words", () => {
     expect(
       explainGeminiError(
         await failure(refused(404, "Publisher Model was not found")),
+        { model: "gemini-3.8-flash", region: "global" },
+      ),
+    ).toBe(
+      'gemini-3.8-flash is not available to this Google Cloud project in the "global" region. Check it in Vertex AI → Model Garden, then try again.',
+    );
+  });
+
+  it("names the model to choose instead, when the one that is gone is being retired", async () => {
+    expect(
+      explainGeminiError(
+        await failure(refused(404, "Publisher Model was not found")),
         context,
       ),
-    ).toMatch(/gemini-2.5-pro is not available .* "global" region/);
+    ).toBe(
+      'gemini-2.5-pro is not available to this Google Cloud project in the "global" region. Google retires it between 16 and 20 October 2026. If that is why, a Super Admin can choose Gemini 3.8 Flash under Settings → Assistant.',
+    );
   });
 
   it("owns up to a bad request, in Google's words", async () => {

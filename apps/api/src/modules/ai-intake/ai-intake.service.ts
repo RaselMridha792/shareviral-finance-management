@@ -8,11 +8,10 @@ import {
 import {
   AI_BATCH_MAX_ROWS,
   AI_DRAFT_READY_LINE,
-  AI_MODELS,
   AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
-  aiModelGoesWith,
+  aiModelFrom,
   aiModelProviderProblem,
   hasPermission,
   isGeminiModel,
@@ -200,10 +199,8 @@ export class AiIntakeService {
     const provider: AiProvider =
       row?.provider === "vertex" ? "vertex" : "anthropic";
     // A model this app does not offer, or one that cannot be reached this way
-    // (the column has no check of its own), is read as the default.
-    const offered = AI_MODELS.find((known) => known === row?.model);
-    const model =
-      offered && aiModelGoesWith(offered, provider) ? offered : DEFAULT_MODEL;
+    // (the column has no check of its own), is read as one that can answer.
+    const model = aiModelFrom(row?.model, provider);
     const route = {
       provider,
       google: openServiceAccount(row?.google),

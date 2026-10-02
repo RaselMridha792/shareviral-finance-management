@@ -36,8 +36,9 @@ import puppeteer from "puppeteer-core";
 const WEB = "http://localhost:3000";
 const API = "http://localhost:4001/api";
 const SHOTS = process.env.SHOT_DIR || null;
-/** The Gemini model this app offers — AI_MODELS, in packages/shared/src/ai.ts. */
-const GEMINI = "gemini-2.5-pro";
+/** The Gemini offered first, and every model Google Cloud reaches — AI_MODELS, in packages/shared/src/ai.ts. */
+const GEMINI = "gemini-3.8-flash";
+const THROUGH_GOOGLE = ["claude-opus-5", GEMINI, "gemini-3.1-pro-preview", "gemini-2.5-pro"].join();
 const env = Object.fromEntries(
   fs
     .readFileSync("apps/api/.env", "utf8")
@@ -222,6 +223,17 @@ try {
   const logged = fs.existsSync(".dev.log") && Date.now() - fs.statSync(".dev.log").mtimeMs < 60_000 ? fs.readFileSync(".dev.log", "utf8") : null;
   check("…and Google's own words are in the log, without the key", logged === null || (/Google Cloud refused a Gemini turn/.test(logged) && !logged.includes(SECRET_MARK)), logged === null ? "no live .dev.log to read" : undefined);
 
+  // The other two Geminis (2 Oct 2026), and a row naming one that has since been taken off the list.
+  for (const other of ["gemini-3.1-pro-preview", "gemini-2.5-pro"]) {
+    const set = await admin("PATCH", "/ai/settings", { model: other });
+    check(`${other} can be chosen too`, set.status === 200 && set.body?.model === other && (await stored()).ai_model === other, `${set.status} ${set.body?.message ?? set.body?.model}`);
+  }
+  await q(`update app_settings set ai_model = 'gemini-1.5-pro' where id = 1`);
+  const unlisted = await admin("GET", "/ai/availability");
+  check("a stored Gemini that is no longer offered is read as the Gemini offered first, not as Claude", unlisted.status === 200 && unlisted.body?.model === GEMINI, `${unlisted.status} ${unlisted.body?.model}`);
+  const again = await admin("PATCH", "/ai/settings", { model: GEMINI });
+  check("…and the first Gemini is chosen again", again.status === 200 && (await stored()).ai_model === GEMINI, `${again.status}`);
+
   const backAlone = await admin("PATCH", "/ai/settings", { provider: "anthropic" });
   check("back to the Anthropic key while on Gemini, alone: 400 in words", backAlone.status === 400 && /is reached through Google Cloud, not through Anthropic key/.test(backAlone.body?.message ?? ""), `${backAlone.status} ${backAlone.body?.message}`);
   check("…and the row has not moved", (await stored()).ai_provider === "vertex" && (await stored()).ai_model === GEMINI);
@@ -262,8 +274,25 @@ try {
         return s ? { value: s.value, options: [...s.options].map((o) => o.value) } : { text: label?.parentElement?.innerText ?? null };
       });
     const offered = await modelOf();
-    check("…and through Google Cloud both models are offered, Gemini chosen", offered.value === GEMINI && offered.options?.join() === `claude-opus-5,${GEMINI}`, JSON.stringify(offered));
+    check("…and through Google Cloud Claude and the three Geminis are offered, Gemini chosen", offered.value === GEMINI && offered.options?.join() === THROUGH_GOOGLE, JSON.stringify(offered));
     await shot(page, "assistant-vertex");
+
+    // What the screen says under each Gemini, chosen on the screen itself.
+    const pick = async (value, words) => {
+      await page.evaluate((v) => {
+        const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Which model answers"));
+        const s = label.querySelector("select");
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, v);
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+      const shown = await page.waitForFunction((w) => document.body.innerText.includes(w), { timeout: 30000 }, words).then(() => true, () => false);
+      return shown && (await stored()).ai_model === value;
+    };
+    check("…under the first Gemini it says On trial", /On trial: it has not yet been run against the test conversations/.test(said));
+    check("…2.5 Pro, chosen on the screen, says when Google retires it and what to choose", await pick("gemini-2.5-pro", "Google retires this model between 16 and 20 October 2026, and it stops answering then. Choose Gemini 3.8 Flash before that."));
+    check("…3.1 Pro, chosen on the screen, says it is a preview", await pick("gemini-3.1-pro-preview", "A preview: Google can change it or withdraw it at short notice."));
+    await shot(page, "assistant-vertex-preview");
+    check("…and the first Gemini is chosen again, with no error on the screen", (await pick(GEMINI, "Google's model, through Google Cloud only. On trial")) && !(await page.evaluate(() => Boolean(document.querySelector('[role="alert"]')))));
 
     // Back to the Anthropic key from the screen: the model goes with it.
     await page.evaluate(() => {
@@ -289,7 +318,7 @@ try {
       const s = document.querySelector("#assistant-model");
       return s ? { value: s.value, options: [...s.options].map((o) => o.value) } : null;
     });
-    check("the Assistant's own picker offers both, Gemini chosen", picker?.value === GEMINI && picker.options.join() === `claude-opus-5,${GEMINI}`, JSON.stringify(picker));
+    check("the Assistant's own picker offers the same four, Gemini chosen", picker?.value === GEMINI && picker.options.join() === THROUGH_GOOGLE, JSON.stringify(picker));
     await shot(page, "assistant-picker");
     await context.close();
   }

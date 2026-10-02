@@ -3,17 +3,23 @@ import { describe, it } from "node:test";
 
 import {
   AI_DRAFT_READY_LINE,
+  AI_GEMINI_DEFAULT,
   AI_MODELS,
+  AI_MODEL_DETAIL,
+  AI_MODEL_LABELS,
   AI_MODEL_PROVIDERS,
+  AI_MODEL_RETIRING,
   AI_PROVIDERS,
   AI_TARGETS,
   AI_TARGET_ENDPOINT,
   AI_TARGET_PERMISSION,
+  aiModelFrom,
   aiModelGoesWith,
   aiModelProviderProblem,
   aiModelsFor,
   isGeminiModel,
   updateAiSettingsSchema,
+  type AiModel,
 } from "./ai.ts";
 
 describe("which model goes which way", () => {
@@ -51,6 +57,69 @@ describe("which model goes which way", () => {
         /is reached through Google Cloud, not through Anthropic key/,
       );
     }
+  });
+});
+
+describe("which Gemini is offered", () => {
+  it("offers the two Google lists as its latest, the one that is not a preview first", () => {
+    assert.deepEqual(aiModelsFor("vertex").filter(isGeminiModel), [
+      "gemini-3.8-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-2.5-pro",
+    ]);
+    assert.equal(AI_GEMINI_DEFAULT, AI_MODELS.filter(isGeminiModel)[0]);
+    assert.doesNotMatch(AI_GEMINI_DEFAULT, /preview/);
+  });
+
+  it("says on the picker which one is a preview and which one is going", () => {
+    assert.match(AI_MODEL_DETAIL["gemini-3.1-pro-preview"], /A preview/);
+    assert.match(
+      AI_MODEL_DETAIL["gemini-2.5-pro"],
+      /retires this model between 16 and 20 October 2026/,
+    );
+    for (const model of AI_MODELS.filter(isGeminiModel)) {
+      assert.match(AI_MODEL_DETAIL[model], /On trial/, model);
+    }
+  });
+
+  it("names a successor that is offered and is not going itself", () => {
+    for (const [model, { successor }] of Object.entries(AI_MODEL_RETIRING)) {
+      assert.ok(AI_MODELS.includes(successor), model);
+      assert.equal(successor in AI_MODEL_RETIRING, false, model);
+      assert.match(AI_MODEL_DETAIL[model as AiModel], /Choose /, model);
+      assert.ok(
+        AI_MODEL_DETAIL[model as AiModel].includes(AI_MODEL_LABELS[successor]),
+        model,
+      );
+    }
+  });
+});
+
+describe("what a stored model is read as", () => {
+  it("is itself, when it is offered and can be reached that way", () => {
+    for (const provider of AI_PROVIDERS) {
+      for (const model of aiModelsFor(provider)) {
+        assert.equal(aiModelFrom(model, provider), model);
+      }
+    }
+  });
+
+  it("is Claude when the row is empty, or names nothing known", () => {
+    for (const provider of AI_PROVIDERS) {
+      assert.equal(aiModelFrom(null, provider), "claude-opus-5");
+      assert.equal(aiModelFrom(undefined, provider), "claude-opus-5");
+      assert.equal(aiModelFrom("claude-haiku-4-5", provider), "claude-opus-5");
+    }
+  });
+
+  it("is Claude for a Gemini on the Anthropic key, listed or not", () => {
+    assert.equal(aiModelFrom("gemini-2.5-pro", "anthropic"), "claude-opus-5");
+    assert.equal(aiModelFrom("gemini-1.5-pro", "anthropic"), "claude-opus-5");
+  });
+
+  it("is the Gemini offered first for a Gemini taken off the list, not Claude", () => {
+    // What the live row will hold once 2.5 Pro is taken out of AI_MODELS.
+    assert.equal(aiModelFrom("gemini-1.5-pro", "vertex"), AI_GEMINI_DEFAULT);
   });
 });
 
