@@ -34,7 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone, the first step of piece A2; nothing reads them yet |
+| 136 | **The Assistant knows the app: a map of every part, routing before drafting, a plan and its renewal, the owner's instructions, seven more look-ups and counting** | **built** — piece A2 of the "made strong" brief (A2b still to do); **the owner tests it on the live site: the list is in #136** |
+| 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone and deployed; read from #136 on |
 | 134 | **The Assistant's model: Gemini 3.8 Flash and 3.1 Pro Preview offered, before 2.5 Pro is retired** | **built** — piece A1 of the "made strong" brief; **neither model has answered a request of ours yet: the owner tries them on the live site** |
 | 133 | **The Assistant: drafts checked in code, a transfer between our own accounts, and plain talk** | **built** — brief items 1–5; **the quality bar (item 6) still not run: no model key on the local database** |
 | 132 | **The Assistant on Gemini, through the Google Cloud connection** | **built, ON TRIAL** — pushed 2 Oct at the owner's word to test on the live site; **the quality bar has not been run** |
@@ -114,6 +115,215 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 136. The Assistant knows the app — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A2** (the map,
+routing before drafting, the owner's instruction set, reading more). Its
+schema went out alone as #135 and is live. **A2b is not done** (pages and
+forms in the map, corrections widened, "make this a rule", "What the
+Assistant knows", mistakes as tests): that is the next session.
+
+**The owner's case, and what now happens to it.** Told "buy an AI
+subscription", the Assistant drafted a plain payment: All transactions
+showed it, AI tools and subscriptions did not. A plain payment was the only
+record it could make for it. Now:
+
+- **A plan, and its renewal, are things it can draft** (`packages/shared/src/ai.ts`):
+  - `subscription` — the Add subscription form's record. Save posts the plan
+    to `POST /subscriptions`, then its first payment to
+    `POST /subscriptions/:id/pay`, with the form's own note, exactly as the
+    form does. If the payment is refused the plan is kept and the reply says
+    "Use Renew on its row", as the form says.
+  - `subscription_payment` — the Renew drawer's record, posted to
+    `POST /subscriptions/:id/pay` with the renewal date moved on, as the
+    drawer does.
+- **How a plan's charges are tied to it** (the brief asked): a payment made
+  through either endpoint carries `transactions.subscription_id`, is filed by
+  the endpoint under the tooling heading, and is what Expense overview
+  counts as tooling. A plain payment carries none. That is why nothing
+  showed. Checked on the page: a plan saved from the chat is on AI tools and
+  subscriptions, its first payment is in the ledger against it, and the
+  account is 2,450 lighter.
+- **Routing, in code, whichever model answers** (`ai-intake/routing.ts`).
+  A draft is refused when:
+  1. the person's role could not save it;
+  2. another part of the map claims it. AI tools and subscriptions claims a
+     plain payment whose category (or the heading above it) reads as AI
+     tools, subscriptions, software, hosting/servers or domains; or whose
+     words say subscription (only on a new request: "na, eta subscription
+     na" said of a draft does not take the draft away); and a vendor of type
+     AI tool, subscription or hosting;
+  3. the model itself named a part where nothing can be drafted (Payroll,
+     Settings…) or one that claims the draft, and drafted it anyway.
+
+  A refused answer goes back to the model once, with the reason, so it can
+  draft the plan in the same turn. A second wrong answer is dropped, and the
+  person is told where the thing belongs, with an "Open AI tools and
+  subscriptions" link under the answer. Asked the same again, it says plainly
+  what it can do and that the ordinary form is the way round.
+- **Plans and renewals are never a table of rows.** A table's rows are saved
+  without the draft's check, and here the check is what finds the plan a
+  name means and asks this renewal's rate. A file to be staged for Import
+  under the tooling heading is refused the same way ("Import takes plain
+  entries only").
+
+**The map** (`apps/api/src/modules/*/app-map.ts`, one beside each module,
+gathered in `ai-intake/app-map.ts`). 21 parts: what each is for, what is
+kept there, its screens, what records it, and what the Assistant may do
+there (draft, look up, or only point to the screen, in a sentence of its
+own). Written by reading each module. It is in the cached half of the
+prompt, about 5,000 tokens. `app-map.spec.ts` fails when a module folder has
+no entry (four are listed as plumbing, with the reason), when an entry names
+a screen the web app does not have or an endpoint no controller declares,
+and when a kind of draft or a look-up tool belongs to no part. The answer
+now carries `area` (the part) and, when nothing is drafted, `screen`.
+
+**The checks a plan and a renewal get** (`draft-check.ts`):
+
+- **A new plan** is ready only as the form would take it. It needs the
+  account (the price comes out of it on save) and the rate (or a taka price
+  beside the dollars). "AI Tool" is read as `ai_tool`. Status and seats are
+  the screen's. A price or rate of 0 is asked again. A tool already on file
+  is asked about first ("is this a renewal, or a new plan?"), or said beside
+  the draft, with Upgrade named.
+- **A renewal** is filled from the plan, on the card where it can be
+  checked: the plan's price in dollars and its card. The dollars are filled
+  even when only taka was given, because the endpoint writes them anyway.
+  The rate is asked every time, with the plan's own offered and not taken.
+  A second renewal in the same month is asked about before Save is offered
+  (the endpoint's own rule, now in `transactions/renewal-in-month.ts` and
+  read by both).
+- **Which plan a name means: exactly, never by resemblance.** "Claude Code"
+  is not the plan called Claude, so the reply is "Did you mean Claude?".
+  Several plans of one name are asked about by name; two rows of the same
+  tool and plan are told apart by who each is for. The plan's own price and
+  card are not shown back to the model as things it was told, so switching
+  plans mid-conversation brings the new plan's figures.
+- A plain payment that names a running plan is offered, with "X is on file
+  under AI tools and subscriptions. If this is its payment, say so…".
+
+**The owner's instructions** (`GET/PUT /ai/instructions`, Super Admin only,
+both ways): a card on Settings → Assistant, one rule a line, 4,000
+characters, every change in the audit log with the text before and after.
+They sit in the prompt after the map, under "THE OWNER'S INSTRUCTIONS". A
+rule can move a record to another part; it cannot give a permission. The
+first set is the owner's rule, written by #135.
+
+**Counting and listing** — added to the brief while this was being built
+(the owner asked the live Assistant "amader total team member kotojon?" and
+was told it had no tool):
+
+- `team_members` — the Team screen's own total (everybody not deleted),
+  current (working or on leave) and past, employees and contractors, by
+  department, then the people. Filters by status, engagement, department,
+  name and joining date. Counted in SQL over the whole team, never over the
+  hundred listed. No pay. HR may use it (`team.read`).
+- `list_vendors` — how many vendors, and which, with e-TIN, BIN and PSR;
+  "missing e-TIN" and the like.
+- `find_subscriptions`, `hr_requests` and `payroll_status` now open with
+  their counts (by status, by kind), made over everything asked for, not
+  over what is listed.
+
+**Seven more look-ups in all** (`ai-tools.ts`), each gated as its own screen is:
+
+- `find_subscriptions` — plans, and what was paid against each. Payments
+  are shown only to a role that may read the ledger; HR gets the plans.
+- `find_invoices` — needs `transactions.write`, as Invoice Builder does.
+- `hr_requests` — never a pay figure. A pay change or a one-off is listed
+  without its amount and without HR's reason, which can carry the figure.
+- `hr_budget` — budgets and their spends.
+- `bank_advices` — each file's count and total, never a line. No total is
+  given for a file of one payment.
+
+**Also changed:** the prompt's "a tool or subscription → vendor" line is
+gone (the vendors screen is), and PLANS ON FILE replaces the vendors list.
+`payroll_status` no longer lists a trashed sheet. The renewal endpoint's
+body schema moved, unchanged, into `transactions/pay-subscription.schema.ts`.
+
+**Shared code** (named by the brief): `packages/shared/src/ai.ts` gains the
+two kinds and their maps, `AI_TARGET_SHOWS_ON`, `AI_FIRST_PAYMENT_NOTE`, the
+instructions' schema and `area`/`screen` on the reply. `AI_TARGET_PERMISSION`
+is now a list of `Permission`s. It is read by `assistant-screen.tsx`,
+`batch-card.tsx`, `draft-card.tsx`, `assistant-instructions.tsx`,
+`apps/web/src/lib/ai.ts` and the `ai-intake` module, and nothing else.
+`apps/web/src/lib/ai.ts` is read by the Assistant page, its screen, the
+settings nav and the two Assistant settings cards.
+
+**Proved:**
+
+- `.assistantmapqa.mjs` (new), **107/107**: its own built API on :4012, a
+  stand-in for the model, the real page. It covers the owner's case refused,
+  sent back once and then right; a plan saved from the card and shown on the
+  page, with its payment, heading and balance; a renewal saved against its
+  plan; a second renewal in the month not offered; the look-ups, by role,
+  with the team's and the vendors' counts checked against the books; and
+  the instructions read, saved, refused over 4,000 characters,
+  audited, and in the next prompt. Everything it made is deleted (it prints
+  what is left: nothing).
+- A read of the diff by a separate agent found ten kinds of fault. Every
+  one that could put a wrong figure in the books, offer a Save that would be
+  refused, or take a draft away is fixed and in the tests above. Among them:
+  renewals as a table skipped every check; "Claude Code" was taken as
+  Claude; a taka-only renewal wrote dollars nobody saw; "eta subscription
+  na" took a finished draft away; a pay change's reason could carry the
+  figure. Two small ones are left, under "Seen, not touched".
+- `.assistantdraftqa.mjs` 57/57 (its category was "AI tools", now refused,
+  so it picks a plain one); `.connectionsqa.mjs` 64/64; `.narrowqa.mjs`
+  (new): Settings → Assistant and the Assistant page do not scroll sideways
+  at 390px.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 274,
+  shared 366) pass, each on its own exit code.
+
+**Not proved:** what a real model does with the map. `.assistantbar.mjs`
+has four new cases (G1–G4, the list below); not run, no key locally.
+
+**For the owner — on the live site, after the deploy.** A new chat for each.
+Use a real plan's name where it says *your plan*.
+
+| # | Type this | What should come back | What must not appear |
+|---|---|---|---|
+| 1 | `Aaj ekta AI subscription kinlam: Cursor, Pro plan, 20 dollar, Master card theke.` (your card's name) | A card "A new plan under AI tools and subscriptions": Tool Cursor, Plan Pro, Price (USD) 20, Paid from your card. One question: the USD rate (or the category) | A "Money going out" card; a rate filled in; "record korechi" |
+| 2 | then `rate 122.5, AI tool` | "Draft ready — …". **Save only if you want the plan.** After Save: "It shows under AI tools and subscriptions" and an Open link. The plan is on that page; its first payment is on All transactions | — |
+| 3 | `<your plan> er ei masher bill dilam aaj` | A renewal card with your plan's price and card already on it, and one question: the rate, with the plan's own named | A plain payment; a rate filled in |
+| 4 | `September er salary 5 lakh taka dilam` | It says it cannot record salary, Payroll does, with an "Open Payroll" link | Any draft |
+| 5 | `HR er kono request pending ache?` | How many are waiting, by kind, then each by person | Any pay figure |
+| 5b | `amader total team member kotojon?` | The number the Team screen's pager shows (or the current count, with it) | "no tool to count" |
+| 6 | Settings → Assistant → Instructions: add `Namecheap domain = Ai Tools and Subscriptions`, save; then in a new chat `Namecheap e domain renew korlam 15 dollar` | A plan or a renewal, not a plain payment | "Money going out" |
+
+If case 1 comes back as a plain payment first, that is the model; the app
+sends it back once. If it still ends as the sentence "A subscription is
+recorded as a plan…", the model would not draft a plan, and that is worth
+telling the next session.
+
+**What the owner has to decide:**
+
+- **The two Technology sub-categories** ("Software & subscriptions", "AI
+  tools") that duplicate "Ai Tools and Subscriptions" were not touched.
+  Re-filing their payments and trashing them is work on the live database,
+  and none can be seen from here. One thing first: a plan's payment is
+  filed under the category with slug `ai-tools`, if there is one, before
+  anything named like it (`subscriptionCategoryId`). On this local database
+  that slug is Technology › AI tools — one of the two to be trashed. Check
+  which category it is on the live site before trashing it.
+- **A taka-priced subscription** (a newspaper, a local domain) cannot be a
+  plan: a plan needs a price in dollars. The Assistant says so and points to
+  the ordinary form.
+
+**Seen, not touched:**
+
+- A plan added from the chat is stamped like the form's (no "came through
+  the Assistant" on the audit row). That is A4.
+- `find_transactions` and `period_summary` still pass a date from the model
+  straight to Postgres; a non-date is a 500. The new tool checks its dates.
+- `find_subscriptions` lists everybody ever on a plan, whatever their seat's
+  status. `find_invoices` writes every total in taka, as All Invoices does.
+- A renewal of a cancelled plan is drafted when it is the only one of that
+  name, as the Renew button allows.
+- The local API on :4001 was an orphan running `dist/main` from 15:57. It was
+  stopped and `npm run dev:api` started, detached, writing `.dev-api.log`.
+
+**Next:** A2b.
+
 ## 135. Schema: "Instructions for the Assistant" — 2 Oct 2026
 
 `docs/briefs/2026-10-02-assistant-powerful.md`, **piece A2, its schema
@@ -151,8 +361,11 @@ The size limit will be the API's, not a CHECK.
 
 - Applied to the local database twice with `node .apply1.mjs`: three columns,
   the text written once, no error on the second run.
-- The local API on :4001, restarted by its watcher: `GET /settings` answers
-  200 with 43 keys and none of the three.
+- ~~The local API on :4001, restarted by its watcher: `GET /settings`
+  answers 200 with 43 keys and none of the three.~~ **Corrected in #136:**
+  that API was an orphan running code from before the change (no watcher),
+  so this proved nothing. `.assistantmapqa.mjs` (#136) proves it on the new
+  build: the CFO's `GET /settings` carries none of the three.
 - build:shared, typecheck, lint (its 2 old warnings) and tests (API 199)
   pass, each on its own exit code.
 
