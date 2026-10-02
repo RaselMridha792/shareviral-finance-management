@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 140 | **Permissions: the Assistant is the Super Admin's and the CFO's alone — `ai.use` off HR** | **done** — piece B1 of the "made strong" brief, pushed alone as the owner ordered (B1 before A4). **Next is A4** (confirm in chat, then it saves) |
 | 139 | **The Assistant reads a Google Sheet, Doc or Drive file by its link** | **built** — piece A3 of the "made strong" brief; **the owner tries it on the live site: the list is in #139.** Next is A4 (confirm in chat, then it saves) |
 | 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138, not fixed |
 | 137 | **Schema: the Assistant keeps its mistakes — a reply marked wrong, which model gave it, and whether it became a rule** | **done** — pushed alone, the schema half of A2b; the rest of A2b is the next session |
@@ -117,6 +118,98 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 140. Permissions: the Assistant is the Super Admin's and the CFO's alone — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B1**, taken before A4
+as "The order now" says. It is a permissions change and went out alone, in a
+push of its own. **The next piece is A4** (confirm in chat, then it saves),
+and with it, or on its own before A5, a Sheet link with no tab reading every
+tab.
+
+**Why now:** since #139 the Assistant reads any Google file shared with the
+service account, by its link. Whoever may use the Assistant could read a
+finance file they cannot open in Google themselves. HR still held `ai.use`.
+
+**What changed:** one line. `ai.use` is off HR's row in
+`packages/shared/src/permissions.ts`. The CEO never held it. Super Admin
+holds everything, and the CFO holds it through `OPERATIONAL_FULL`. Nothing
+else needed to change, because all three doors already read that one
+permission:
+
+- **the rail entry** (`nav-items.ts`, `permission: "ai.use"`);
+- **the page**, `/assistant` and `/assistant/knowledge` beneath it
+  (`proxy.ts`, which sends anybody else to /no-access);
+- **every `/ai` endpoint** a user can reach (`@RequirePermission("ai.use")`;
+  the settings ones are `settings.write`, the Super Admin's alone).
+
+The role comes off the JWT and the permissions come off the matrix in code, so
+an HR user already signed in loses it at the deploy, without signing out.
+Settings → Assistant was never HR's: it opens only with `settings.write`.
+
+**Shared code, and who reads it:** `ROLE_PERMISSIONS` is read by the sidebar,
+the proxy and every API guard. The brief is the owner's own order for exactly
+this line (B1: "`ai.use` comes off every other role"), so I did not ask again.
+`.rolematrix.mjs` walked every gated route for all four roles afterwards, and
+`.rolesweep.mjs` walked every rail.
+
+**Also changed:** three comments that said HR holds `ai.use`
+(`corrections.ts`, `ai-corrections.ts`, the `to-import` handler). The schema
+file's change is a comment only; no column moves.
+
+**Proved:**
+
+- `permissions.test.ts`: a new test, `ai.use` held by `["super_admin", "cfo"]`
+  and nobody else.
+- `.rolecheck.mjs` (local, git-ignored) gained five Assistant doors with
+  their expected answer, and exits 1 on a wrong one. HR and the CEO get
+  **403** at all five: availability, chats, knowledge, a turn, a Google
+  link. The CFO and the Super Admin get 200, or 400 for an empty POST. As
+  before, it leaves its `rolecheck-<role>@demo.sharevirals.test` users on
+  the local database; each run replaces them.
+- `.rolematrix.mjs`: all 13 routes × 4 roles match the matrix; `/assistant`
+  is "out" for HR and the CEO.
+- `.rolesweep.mjs`: HR's rail is Dashboard, AI tools and subscriptions,
+  Team, Payroll, Bank Advice, Settings, with no AI Assistant. "AI Assistant"
+  is now on its list of what HR's rail must not carry.
+- `.assistantmapqa.mjs` 103/103 and `.assistantlearnqa.mjs` 70/70.
+  - HR's turns used to be the measure of the gates inside a turn: a payment
+    HR could not save, the look-ups it could not run, the mistakes it was
+    not shown. They are now each "HR is refused (403), and nothing reaches
+    the model".
+  - The CFO takes the counting and "told to nobody any more" checks.
+- `.assistantdraftqa.mjs` 57/57 and `.assistantlinkqa.mjs` 38/38, as
+  before; neither signs in as HR.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 306;
+  shared 375, up one) pass, each on its own exit code.
+
+**Lost by it, said plainly:** the gates inside the Assistant are still
+there: a draft the role cannot save, a look-up the role cannot run, a
+mistake about a part the role cannot read. But no real role reaches them
+now, because the two roles left read and save everything. `routing.spec.ts`
+still tests the role gate on a draft as unit tests. The look-up and
+corrections filters have no test until a role without full reads is given
+the Assistant again.
+
+**Found, not fixed (not this piece):** `.rolesweep.mjs` prints "reachable"
+for every screen HR is refused (Accounts, TDS, Reports, the Assistant…). Its
+`denied` test looks for words the /no-access page no longer says. Its
+assertions read the rail and are right, and `.rolematrix.mjs` measures the
+refusals properly. Only that printed column is wrong. One line to fix
+(check `page.url()` for `/no-access`), in a session of its own.
+
+**For the owner — on the live site, after the deploy:**
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Sign in as an HR user | No "AI Assistant" in the rail |
+| 2 | As HR, type `app.hellonizam.com/assistant` in the address bar | The No access page, not the chat |
+| 3 | As the CFO | "AI Assistant" is in the rail, and the chat opens and answers |
+| 4 | As the Super Admin | As before: the chat, and Settings → Assistant |
+
+**What the owner has to decide:** nothing for B1. HR's past conversations,
+if any were held on live, stay in the database untouched; HR can no longer
+open them, and nobody else could before.
 
 ## 139. The Assistant reads a Google Sheet, Doc or Drive file by its link — 2 Oct 2026
 
