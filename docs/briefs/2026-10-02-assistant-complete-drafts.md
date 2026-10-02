@@ -115,3 +115,15 @@ as Save, that is a separate decision for them, with its own session.
   - Run `.assistantbar.mjs` on the new model.
   - Check its thinking and function-calling settings against Google's own page for that
     model; do not assume they match 2.5's.
+
+**What the owner's Agent Studio lists under "Latest" (2 Oct):**
+- `gemini-3.8-flash`: no Preview tag; "our most intelligent Flash model … autonomous
+  agents and complex enterprise workflows".
+- `gemini-3.1-pro-preview`: tagged Preview; "best quality on complex, agentic workloads".
+- `gemini-3.5-flash-lite`: built for speed and cost. Not a candidate for drafting money.
+
+Run the bar on **both** `gemini-3.8-flash` and `gemini-3.1-pro-preview`. Offer only what
+never invents an account, a category or a figure. If both pass, prefer the one that is
+not a preview, and tell the owner the difference in cost and speed. A preview model can
+be changed or withdrawn at short notice; say so in the picker's detail text if it is
+offered.
