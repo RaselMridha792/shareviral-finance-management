@@ -133,10 +133,11 @@ export const aiApi = {
   /**
    * A Google Sheet, Doc or Drive file, read by its link (A3). The server
    * reads it with the service account and keeps it as an attachment, the
-   * same shape an upload comes back as.
+   * same shape an upload comes back as. A Sheet whose link names no tab
+   * comes back as every tab, an attachment each, in its order (A3b).
    */
   attachLink: (url: string) =>
-    apiFetch<AiAttachment>("/ai/attachments/link", {
+    apiFetch<AiAttachment[]>("/ai/attachments/link", {
       method: "POST",
       ...json({ url }),
     }),

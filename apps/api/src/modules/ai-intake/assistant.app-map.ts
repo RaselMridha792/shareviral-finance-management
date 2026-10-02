@@ -81,7 +81,7 @@ export const ASSISTANT_MAP = [
           url: "the link from the file's Share button; the chat finds it in the message",
         },
         onSave:
-          "Reads the file with the Google Cloud service account, before the message goes: a Sheet's tab as rows and totals, a Doc as its text, an Excel, CSV or PDF file in Drive as if it had been attached. A file not shared with the account's address is refused with that address to share it with. Nothing enters the books.",
+          "Reads the file with the Google Cloud service account, before the message goes: a Sheet's tab as rows and totals (the tab the link names, or else every tab, each counted on its own with a card of its own), a Doc as its text, an Excel, CSV or PDF file in Drive as if it had been attached. A file not shared with the account's address is refused with that address to share it with. Nothing enters the books.",
       },
       {
         name: "Remove this file",

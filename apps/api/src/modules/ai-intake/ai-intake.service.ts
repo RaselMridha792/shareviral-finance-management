@@ -22,6 +22,7 @@ import {
   isGeminiModel,
   payableUsd,
   todayInDhaka,
+  type AiAttachment,
   type AiAvailability,
   type BillingCycle,
   type AiBatch,
@@ -634,10 +635,12 @@ export class AiIntakeService {
 
     // The file was attached before the conversation existed, so this is the
     // first moment the two can be tied together.
-    if (chatId && input.attachmentId) {
-      await this.attachments
-        .attachToChat(input.attachmentId, chatId, actor)
-        .catch(() => undefined);
+    if (chatId) {
+      for (const id of attachmentIdsOf(input)) {
+        await this.attachments
+          .attachToChat(id, chatId, actor)
+          .catch(() => undefined);
+      }
     }
 
     return { ...reply, chatId };
@@ -662,11 +665,16 @@ export class AiIntakeService {
      * A file the person attached is theirs and they chose to send it, so
      * reading it does not wait on the data-access setting — that setting is
      * about the company's books, which this is not. It still has to belong to
-     * them: fetching it fails otherwise, and the tool says so.
+     * them: one that is not is left out, and the tools never see its id.
+     *
+     * Several are a Sheet's tabs (A3b), in the Sheet's order.
      */
-    const attachment = input.attachmentId
-      ? await this.attachments.dto(input.attachmentId, actor).catch(() => null)
-      : null;
+    const attachments: AiAttachment[] = [];
+    for (const id of attachmentIdsOf(input)) {
+      const found = await this.attachments.dto(id, actor).catch(() => null);
+      if (found) attachments.push(found);
+    }
+    const attachmentIds = attachments.map((attachment) => attachment.id);
 
     /**
      * The recent part of the conversation, oldest dropped rather than refused.
@@ -682,7 +690,7 @@ export class AiIntakeService {
 
     const tools: ModelTool[] = [
       ...lookupTools,
-      ...(attachment ? attachmentToolsFor(attachment) : []),
+      ...(attachments.length ? attachmentToolsFor(attachments) : []),
       {
         name: "answer",
         description:
@@ -700,12 +708,22 @@ export class AiIntakeService {
         corrections,
         input.target,
         this.carried(input.target, input.draft, plans),
-        attachment
+        attachments.length === 1
           ? {
-              described: this.attachments.describe(attachment),
-              kind: attachment.kind,
+              described: this.attachments.describe(attachments[0]),
+              kind: attachments[0].kind,
             }
-          : null,
+          : attachments.length
+            ? {
+                described: attachments
+                  .map((attachment, at) =>
+                    this.attachments.describe(attachment, at + 1),
+                  )
+                  .join("\n\n"),
+                kind: "tabs",
+                count: attachments.length,
+              }
+            : null,
       ),
       messages: recent.length ? recent : input.messages.slice(-1),
       tools,
@@ -777,9 +795,13 @@ export class AiIntakeService {
         // a mistake marked on it later says whose it was (A2b). A plan for
         // Import cannot be made of a Doc's paragraphs: it would put a button
         // on the card that stages rows of text as money.
+        // Nor of several tabs at once: a plan is for one file, and its card
+        // would not say which.
         return {
           ...settled,
-          ...(attachment?.kind === "text" ? { importPlan: null } : {}),
+          ...(attachments.length > 1 || attachments[0]?.kind === "text"
+            ? { importPlan: null }
+            : {}),
           model: modelId,
         };
       }
@@ -796,11 +818,11 @@ export class AiIntakeService {
         // AI_ATTACHMENT_TOOLS. One reads the books under this person's
         // permissions; the other reads a file under their ownership.
         const result =
-          AI_ATTACHMENT_TOOL_NAMES.includes(call.name) && input.attachmentId
+          AI_ATTACHMENT_TOOL_NAMES.includes(call.name) && attachmentIds.length
             ? await this.attachments.runTool(
                 call.name,
                 call.input,
-                input.attachmentId,
+                attachmentIds,
                 actor,
               )
             : await this.tools.run(call.name, call.input, actor);
@@ -1253,7 +1275,8 @@ at the point where it costs them work.
   chat is read by the app before you see the message, and arrives below as
   FILE ATTACHED or DOCUMENT ATTACHED. If a message holds a link and nothing
   below says it was read, it was not: say so, and ask them to attach the file.
-  Never say what a link might hold.
+  Never say what a link might hold. A Sheet's link that names no tab arrives
+  as every tab, numbered FILE 1, FILE 2 and on.
 - You have no memory between conversations beyond what somebody corrected on a
   draft or marked wrong, and the owner's instructions above. A person who
   thinks an answer of yours was wrong can say so with "This was wrong" under
@@ -1490,7 +1513,10 @@ nextQuestion and summary out.`;
     corrections: string,
     target?: AiTarget,
     draft?: Record<string, unknown>,
-    attachment?: { described: string; kind: "table" | "text" } | null,
+    attachment?:
+      | { described: string; kind: "table" | "text" }
+      | { described: string; kind: "tabs"; count: number }
+      | null,
   ): string {
     // A draft this person could not save is not theirs to be offered.
     const barred = AI_TARGETS.filter(
@@ -1515,8 +1541,35 @@ want records made from it, draft them as usual: one record, or several of the
 same kind at once (MANY RECORDS AT ONCE). Every figure exactly as the document
 writes it; whatever it does not say, ask.
 `
-    : attachment
+    : attachment?.kind === "tabs"
       ? `${attachment.described}
+
+The totals above were computed from the file, not by you.
+
+WORKING FROM A SHEET'S TABS
+The link named no tab, so every tab of the Sheet was read: ${attachment.count} tabs,
+FILE 1 to FILE ${attachment.count}, in the Sheet's order. Each was read and counted on its own.
+
+  * Every total above is its own tab's, computed in code. Quote it as it is and
+    say which tab it is from. Never add one tab's figures to another's: if a
+    total across the tabs is wanted, give each tab's own total and say that
+    the Sheet was counted tab by tab, so a figure for all of them together is
+    not in it.
+  * A tab may hold a different kind of record from the next: payments on one,
+    people or income on another. Decide what each tab holds from its own
+    columns, and never assume a tab is like the one before it.
+  * The two file tools take file, the tab's number above: read_attachment to
+    see its rows, group_attachment to break its figures down.
+  * An empty tab is empty. Say so if asked; never describe what it holds.
+  * There is no importPlan for several tabs at once, so never send one. Each
+    tab has its own Send to Import on its card. For a tab's rows to go into the
+    books, tell them to press it on that tab's card: the import screen asks for
+    the account and the columns, and shows every row before anything is
+    written. A handful of rows they point to can be drafted as usual (MANY
+    RECORDS AT ONCE), one kind of record to a batch.
+`
+      : attachment
+        ? `${attachment.described}
 
 WORKING FROM A FILE
 Answer from the summary and the two file tools. The totals were computed from
@@ -1554,7 +1607,7 @@ with what it would become, the duplicates flagged, and can undo the whole batch
 afterwards.
 One row, or a handful they read out to you, is different — draft that as usual.
 `
-      : ""
+        : ""
 }
 ${target ? `They are recording: ${target}. Stay on it unless they clearly change subject.` : "Work out which one they mean. If it is genuinely ambiguous, set clarification and ask."}
 
@@ -2580,6 +2633,18 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The turn's files: `attachmentIds`, or the one `attachmentId` a page
+ * loaded before A3b still sends. The first of each id only.
+ */
+function attachmentIdsOf(input: AiIntakeRequest): string[] {
+  return [
+    ...new Set(
+      input.attachmentIds ?? (input.attachmentId ? [input.attachmentId] : []),
+    ),
+  ];
+}
 
 function takeString(
   source: Record<string, unknown>,

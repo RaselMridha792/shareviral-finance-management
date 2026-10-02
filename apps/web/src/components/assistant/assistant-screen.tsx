@@ -67,6 +67,28 @@ function savedRows(
   return results;
 }
 
+/**
+ * The Sheet several tabs were read from (A3b), from the names they share:
+ * "Expenses 2026 — Jan (tab 1 of 3)" and "Expenses 2026 — Feb (tab 2 of 3)"
+ * are of "Expenses 2026".
+ */
+function sheetOf(attachments: AiAttachment[]): string | null {
+  let shared = attachments[0]?.name ?? "";
+  for (const { name } of attachments.slice(1)) {
+    let at = 0;
+    while (at < shared.length && shared[at] === name[at]) at += 1;
+    shared = shared.slice(0, at);
+  }
+  const cut = shared.lastIndexOf(" — ");
+  return cut > 0 ? shared.slice(0, cut) : null;
+}
+
+/** What the message box says is attached: the file, or a Sheet's tabs. */
+function attachedLabel(attachments: AiAttachment[]): string | null {
+  if (attachments.length < 2) return attachments[0]?.name ?? null;
+  return `${sheetOf(attachments) ?? "A Google Sheet"} · ${attachments.length} tabs`;
+}
+
 /** Said when a conversation was never kept, so nothing on it can be confirmed. */
 const NOT_KEPT =
   "This conversation was not kept, so it cannot be saved from here. Ask again, or use the ordinary form.";
@@ -97,11 +119,13 @@ export function AssistantScreen({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
-  const [attachment, setAttachment] = useState<AiAttachment | null>(null);
+  /** One upload, or every tab of a Sheet read by its link (A3b). */
+  const [attachments, setAttachments] = useState<AiAttachment[]>([]);
   const [attaching, setAttaching] = useState(false);
   /** A Google link in the message being read, before the message goes. */
   const [reading, setReading] = useState(false);
-  const [staging, setStaging] = useState(false);
+  /** The file being sent to Import. */
+  const [staging, setStaging] = useState<string | null>(null);
   /** Rows the person struck out before saving, by index. */
   const [dropped, setDropped] = useState<Set<number>>(new Set());
   /** Each row's outcome: saved (now, or on an earlier visit) or refused. */
@@ -193,7 +217,7 @@ export function AssistantScreen({
     setInput("");
     setError(null);
     setDrawer(false);
-    setAttachment(null);
+    setAttachments([]);
     setDropped(new Set());
     setBatchResults({});
     setSavedOn(null);
@@ -213,7 +237,7 @@ export function AssistantScreen({
       setSavedOn(saved ? AI_TARGET_SHOWS_ON[saved] : null);
       setDropped(new Set());
       setBatchResults(savedRows(chat.reply?.batch));
-      setAttachment(chat.attachments[0] ?? null);
+      setAttachments(chat.attachments);
     } catch {
       setError("That conversation could not be opened.");
     }
@@ -223,7 +247,7 @@ export function AssistantScreen({
     setAttaching(true);
     setError(null);
     try {
-      setAttachment(await aiApi.attach(file));
+      setAttachments([await aiApi.attach(file)]);
     } catch (caught) {
       setError(explain(caught, "That file could not be read."));
     } finally {
@@ -231,32 +255,43 @@ export function AssistantScreen({
     }
   }
 
-  async function detach() {
-    if (!attachment) return;
-    const id = attachment.id;
-    setAttachment(null);
-    // The row goes too — a spreadsheet of real figures should not linger
+  /** One file by its card's cross, or every one by the message box's. */
+  async function detach(id?: string) {
+    const going = attachments.filter((file) => !id || file.id === id);
+    if (!going.length) return;
+    setAttachments((current) =>
+      current.filter((file) => !going.some((gone) => gone.id === file.id)),
+    );
+    // The rows go too — a spreadsheet of real figures should not linger
     // because somebody changed their mind about asking.
-    await aiApi.detach(id).catch(() => undefined);
+    for (const file of going) {
+      await aiApi.detach(file.id).catch(() => undefined);
+    }
   }
 
-  async function sendToImport() {
-    if (!attachment) return;
-    setStaging(true);
+  async function sendToImport(attachment: AiAttachment) {
+    setStaging(attachment.id);
     setError(null);
     try {
       // The plan the assistant proposed, if it got as far as one. Without it
-      // the person maps the columns themselves, exactly as before.
+      // the person maps the columns themselves, exactly as before. A plan is
+      // for one file: several tabs never have one.
       const { batchId } = await aiApi.sendToImport(
         attachment.id,
-        reply?.importPlan ?? null,
+        attachments.length === 1 ? (reply?.importPlan ?? null) : null,
       );
-      setAttachment({ ...attachment, importBatchId: batchId });
+      setAttachments((current) =>
+        current.map((file) =>
+          file.id === attachment.id
+            ? { ...file, importBatchId: batchId }
+            : file,
+        ),
+      );
       router.push(`/data?batch=${batchId}`);
     } catch (caught) {
       setError(explain(caught, "Those rows could not be staged for import."));
     } finally {
-      setStaging(false);
+      setStaging(null);
     }
   }
 
@@ -295,12 +330,12 @@ export function AssistantScreen({
     setError(null);
     setSavedOn(null);
 
-    let file = attachment;
+    let files = attachments;
     if (links.length) {
       setReading(true);
       try {
-        file = await aiApi.attachLink(links[0].url);
-        setAttachment(file);
+        files = await aiApi.attachLink(links[0].url);
+        setAttachments(files);
       } catch (caught) {
         // Nothing was sent. The message goes back in the box, and the reason
         // (most often "share it with …") shows above it.
@@ -320,7 +355,7 @@ export function AssistantScreen({
         target: reply?.target ?? undefined,
         draft: reply?.draft,
         chatId: chatId ?? undefined,
-        attachmentId: file?.id,
+        attachmentIds: files.length ? files.map((file) => file.id) : undefined,
       });
 
       setReply(result);
@@ -459,6 +494,9 @@ export function AssistantScreen({
     }
   }
 
+  /** The Sheet, when the files are its tabs: named once, above their cards. */
+  const sheet = attachments.length > 1 ? sheetOf(attachments) : null;
+
   // A draft has its own card; a link beside it would be a second thing to
   // press before the first has been read.
   const place = reply
@@ -521,7 +559,7 @@ export function AssistantScreen({
         </div>
 
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {messages.length === 0 && !reply && !attachment ? (
+          {messages.length === 0 && !reply && !attachments.length ? (
             <Welcome
               fullName={user.fullName}
               dataAccess={dataAccess}
@@ -529,14 +567,37 @@ export function AssistantScreen({
             />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
-              {attachment ? (
-                <AttachmentCard
-                  plan={reply?.importPlan ?? null}
-                  attachment={attachment}
-                  staging={staging}
-                  onSendToImport={() => void sendToImport()}
-                  onRemove={() => void detach()}
-                />
+              {/* A Sheet read whole (A3b): a card a tab, each with its own
+                  rows, columns and totals, never one card for the lot. */}
+              {attachments.length ? (
+                <div className="flex flex-col gap-3">
+                  {sheet ? (
+                    <p className="text-xs text-muted-foreground">
+                      {sheet} ·{" "}
+                      <span className="num">{attachments.length}</span> tabs,
+                      each read and counted on its own
+                    </p>
+                  ) : null}
+                  {attachments.map((attachment) => (
+                    <AttachmentCard
+                      key={attachment.id}
+                      label={
+                        sheet
+                          ? attachment.name.slice(sheet.length + 3)
+                          : undefined
+                      }
+                      plan={
+                        attachments.length === 1
+                          ? (reply?.importPlan ?? null)
+                          : null
+                      }
+                      attachment={attachment}
+                      staging={staging === attachment.id}
+                      onSendToImport={() => void sendToImport(attachment)}
+                      onRemove={() => void detach(attachment.id)}
+                    />
+                  ))}
+                </div>
               ) : null}
 
               {messages.map((message, index) =>
@@ -646,7 +707,7 @@ export function AssistantScreen({
           dataAccess={dataAccess}
           onAttach={(file) => void attach(file)}
           attaching={attaching}
-          attachedName={attachment?.name ?? null}
+          attachedName={attachedLabel(attachments)}
           onDetach={() => void detach()}
         />
       </div>

@@ -265,8 +265,12 @@ async function attach(name, buffer, type) {
   return { status: 200, attachment: json };
 }
 
-/** A conversation, sent the way the screen sends it. */
-async function talk(lines, attachmentId) {
+/**
+ * A conversation, sent the way the screen sends it. `files` is one
+ * attachment's id, or a Sheet's tabs' ids in order (A3b).
+ */
+async function talk(lines, files) {
+  const attachmentIds = [files ?? []].flat();
   const messages = [];
   let reply = null;
   let chatId;
@@ -277,7 +281,7 @@ async function talk(lines, attachmentId) {
       ...(reply?.target ? { target: reply.target } : {}),
       ...(reply?.draft ? { draft: reply.draft } : {}),
       ...(chatId ? { chatId } : {}),
-      ...(attachmentId ? { attachmentId } : {}),
+      ...(attachmentIds.length ? { attachmentIds } : {}),
     });
     if (res.status !== 200) return { failed: `${res.status} ${res.body?.message ?? ""}`.trim(), messages };
     reply = res.body;
@@ -756,11 +760,14 @@ const CASES = [
       if (!link) return { pass: true, read: true, note: `not run: set ${id === "H6" ? "LINK_SHEET" : "LINK_DOC"} to a file shared with the stored service account` };
       const res = await call("POST", "/ai/attachments/link", { url: link });
       if (res.status !== 200) return { pass: false, note: `${res.status} ${res.body?.message}` };
-      made.attachments.add(res.body.id);
-      const { reply, failed } = await talk([`ei file e koyta ${res.body.kind === "text" ? "paragraph" : "row"} ache? ${link}`], res.body.id);
+      // One file, or every tab of a Sheet whose link names none (A3b).
+      const files = res.body;
+      for (const file of files) made.attachments.add(file.id);
+      const { reply, failed } = await talk([`ei file e koyta ${files[0].kind === "text" ? "paragraph" : "row"} ache? ${link}`], files.map((file) => file.id));
       if (failed) return { error: failed };
       const said = textOf(reply);
-      return { pass: says(said, res.body.rowCount), note: `${res.body.name}: ${res.body.rowCount}`, said };
+      const missed = files.filter((file) => file.rowCount && !says(said, file.rowCount));
+      return { pass: !missed.length, note: missed.length ? `left out ${missed.map((file) => `${file.name}: ${file.rowCount}`).join("; ")}` : files.map((file) => `${file.name}: ${file.rowCount}`).join("; "), said };
     },
   })),
 ];
@@ -822,6 +829,74 @@ async function plantDoc() {
   made.attachments.add(row.id);
   return row.id;
 }
+
+/*
+ * A3b, 3 Oct 2026: a Sheet whose link names no tab arrives as every tab, each
+ * a file of its own. Planted as the app keeps them (one statement, so one
+ * moment; each tab's place in its name), so the model's part is held to
+ * without a real Sheet: each tab's total quoted as that tab's and never added
+ * to the next, and a tab of income never drafted as money going out.
+ */
+const TAB_ROWS = {
+  payments: [
+    { Date: "03/09/2026", "Paid to": "Hostinger", Amount: "4500" },
+    { Date: "09/09/2026", "Paid to": "Courier", Amount: "640" },
+  ],
+  income: [
+    { Date: "05/09/2026", "Received from": "Client A", Received: "120000" },
+    { Date: "20/09/2026", "Received from": "Client B", Received: "35000" },
+  ],
+};
+async function plantTabs() {
+  const rows = await q(
+    `insert into ai_attachments (user_id, filename, headers, rows, total_rows) values
+       ($1, 'Barqa Book 2026 — Payments (tab 1 of 2)', '["Date","Paid to","Amount"]'::jsonb, $2::jsonb, 2),
+       ($1, 'Barqa Book 2026 — Income (tab 2 of 2)', '["Date","Received from","Received"]'::jsonb, $3::jsonb, 2)
+     returning id, filename`,
+    [user.id, JSON.stringify(TAB_ROWS.payments), JSON.stringify(TAB_ROWS.income)],
+  );
+  for (const row of rows) made.attachments.add(row.id);
+  return ["Payments", "Income"].map((tab) => rows.find((row) => row.filename.includes(`— ${tab} (`)).id);
+}
+CASES.push(
+  {
+    id: "H8", runs: LIGHT, name: "a Sheet's two tabs: each tab's total as its own, never the two added together",
+    run: async () => {
+      const ids = await plantTabs();
+      const { reply, failed } = await talk(["ei sheet e total koto taka?"], ids);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const held = [5140, 155000, 4500, 640, 120000, 35000, 2026];
+      const invented = figuresIn(said).filter((n) => n > 31 && !held.includes(n) && n !== 160140);
+      const wrong = [
+        says(said, 5140) ? null : "left out the Payments tab's 5,140",
+        says(said, 155000) ? null : "left out the Income tab's 1,55,000",
+        says(said, 160140) ? "added the two tabs together (1,60,140)" : null,
+        invented.length ? `said figures the Sheet does not hold: ${invented.join(", ")}` : null,
+        reply.target || reply.batch || reply.importPlan ? "drafted something" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "each tab's own total", said };
+    },
+  },
+  {
+    id: "H9", runs: LIGHT, name: "a Sheet's two tabs: 'Payments tab boi te tolo' - nothing from Income, no account made up",
+    run: async () => {
+      const ids = await plantTabs();
+      const { reply, failed } = await talk(["Payments tab er entry gulo boi te tule dao"], ids);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const rows = reply.batch?.rows ?? (reply.target ? [reply.draft] : []);
+      const wrong = [
+        rows.some((row) => row.amount !== undefined && [120000, 35000].some((n) => amountIs(row.amount, n))) ? "drafted the Income tab's money" : null,
+        rows.some((row) => row.amount !== undefined && ![4500, 640].some((n) => amountIs(row.amount, n))) ? "an amount the Payments tab does not hold" : null,
+        rows.some(hasAccount) ? `filled in the account: ${rows.find(hasAccount).accountName ?? rows.find(hasAccount).accountId}` : null,
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      const how = reply.batch ? `${rows.length} drafts, no account` : /send to import/i.test(said) ? "pointed to Send to Import" : "asked";
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : how, said };
+    },
+  },
+);
 
 /*
  * M. The owner's recorded mistakes, each run again (A2b). What was asked is

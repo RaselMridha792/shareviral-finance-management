@@ -13,17 +13,21 @@
  *   - the model: a stand-in for Anthropic's API, as in .assistantlearnqa.mjs.
  *
  * What is measured:
- *   A. the endpoint: no key, then a Sheet's tab (named, and the first when
- *      none is named), a Doc, a CSV in Drive, and each refusal in words:
- *      not shared (with the address), a folder, a picture, not a Google
- *      link; a role without the Assistant is refused; a Doc cannot go to
- *      Import;
+ *   A. the endpoint: no key, then a Sheet's tab (the one named; every tab,
+ *      each on its own, when none is named — A3b), a Doc, a CSV in Drive,
+ *      and each refusal in words: not shared (with the address), a folder,
+ *      a picture, not a Google link; a role without the Assistant is
+ *      refused; a Doc cannot go to Import;
  *   B. what the model is told: a Sheet as FILE ATTACHED with both file
  *      tools, a Doc as its own text with read_attachment alone, a plan for
- *      Import dropped for a Doc, that it cannot open a link;
+ *      Import dropped for a Doc, that it cannot open a link; a Sheet's tabs
+ *      as FILE 1, FILE 2 with tools that ask which, never a plan, and the
+ *      tabs back in order when the conversation is reopened;
  *   C. the page: a link pasted and sent is read first and goes with the
  *      message; one not shared puts the message back with the reason and
- *      sends nothing; two links are refused; a Doc's card; a phone's width.
+ *      sends nothing; two links are refused; a Doc's card; a Sheet's tabs as
+ *      a card each, an empty one said to be empty, one removed alone, the
+ *      tabs back on reopening; a phone's width.
  *
  *     npm run build --workspace @finance/api     (this runs the BUILT api)
  *     node .assistantlinkqa.mjs                  (needs the web on :3000)
@@ -99,6 +103,8 @@ const IMAGE_ID = "1LinkqaImageLinkqaImageLinkq00004";
 const UNSHARED_ID = "1LinkqaNotSharedNotSharedNotSh0005";
 const FOLDER_ID = "1LinkqaFolderLinkqaFolderLinkq0006";
 const FEB_GID = "1834620192";
+const BOOK_ID = "1LinkqaBookLinkqaBookLinkqaBookLinkqa0000007";
+const BOOK_URL = `https://docs.google.com/spreadsheets/d/${BOOK_ID}/edit?usp=sharing`;
 
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=${FEB_GID}#gid=${FEB_GID}`;
 const SHEET_FIRST_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
@@ -117,6 +123,13 @@ const TABS = {
     [],
     ["19/02/2026", "LINKQA Claude Max", 24000],
   ],
+};
+// A mixed book, as the owner's boss keeps them (A3b): money on one tab,
+// people on the next, a chart, and an empty tab somebody hid.
+const BOOK_TABS = {
+  Payments: [["Date", "Paid to", "Amount"], ["03/09/2026", "LINKQA Hostinger", 4500], ["09/09/2026", "LINKQA Courier", 640]],
+  People: [["Name", "Joined", "Salary"], ["LINKQA Rahim", "01/06/2026", 45000]],
+  Notes: [],
 };
 const paragraph = (text, bullet = false) => ({ paragraph: { elements: [{ textRun: { content: text } }], ...(bullet ? { bullet: { listId: "a" } } : {}) } });
 const cell = (text) => ({ content: [paragraph(`${text}\n`)] });
@@ -160,6 +173,26 @@ const google = http.createServer((req, res) => {
   }
   const values = new RegExp(`^/sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/'(.+)'$`).exec(p);
   if (values && TABS[values[1]]) return send(200, { range: values[1], majorDimension: "ROWS", values: TABS[values[1]] });
+  if (p === `/sheets.googleapis.com/v4/spreadsheets/${BOOK_ID}`) {
+    return send(200, {
+      properties: { title: "LINKQA Book 2026" },
+      sheets: [
+        { properties: { sheetId: 0, title: "Payments", index: 0, sheetType: "GRID" } },
+        { properties: { sheetId: 11, title: "People", index: 1, sheetType: "GRID" } },
+        { properties: { sheetId: 12, title: "Chart", index: 2, sheetType: "OBJECT" } },
+        { properties: { sheetId: 13, title: "Notes", index: 3, sheetType: "GRID", hidden: true } },
+      ],
+    });
+  }
+  // Every tab at once, answered in the order asked, as Google does. An
+  // empty tab comes back with no values at all.
+  const batch = new RegExp(`^/sheets.googleapis.com/v4/spreadsheets/(${SHEET_ID}|${BOOK_ID})/values:batchGet$`).exec(p);
+  if (batch) {
+    const book = batch[1] === SHEET_ID ? TABS : BOOK_TABS;
+    const ranges = url.searchParams.getAll("ranges").map((range) => range.replace(/^'|'$/g, ""));
+    if (!ranges.length || ranges.some((range) => !book[range])) return send(400, { error: { code: 400, message: "Unable to parse range" } });
+    return send(200, { spreadsheetId: batch[1], valueRanges: ranges.map((range) => ({ range, majorDimension: "ROWS", ...(book[range].length ? { values: book[range] } : {}) })) });
+  }
   if (p === `/docs.googleapis.com/v1/documents/${DOC_ID}`) return send(200, DOC);
 
   const drive = /^\/www.googleapis.com\/drive\/v3\/files\/([^/]+)$/.exec(p);
@@ -292,9 +325,11 @@ try {
 
   await q(`update app_settings set google_service_account = $1, google_key_set_at = now(), google_key_set_by = $2 where id = 1`, [seal(JSON.stringify(KEY)), admin.id]);
 
-  const sheet = await call("POST", "/ai/attachments/link", { url: SHEET_URL });
+  // The endpoint answers with a list: one file, or a Sheet's every tab (A3b).
+  const one = (res) => ({ ...res, body: Array.isArray(res.body) ? (res.body.length === 1 ? res.body[0] : { message: `${res.body.length} files` }) : res.body });
+  const sheet = one(await call("POST", "/ai/attachments/link", { url: SHEET_URL }));
   check(
-    "a Sheet's link: the tab it names, named with its place among the tabs",
+    "a Sheet's link: the tab it names, alone, named with its place among the tabs",
     sheet.status === 200 && sheet.body?.kind === "table" && sheet.body?.name === "LINKQA Expenses — Feb (tab 2 of 2)",
     `${sheet.status} ${sheet.body?.kind} ${sheet.body?.name ?? sheet.body?.message}`,
   );
@@ -311,15 +346,48 @@ try {
   const [kept] = await q(`select user_id, filename, total_rows from ai_attachments where id = $1`, [sheet.body?.id]);
   check("kept as the asker's own attachment", kept?.user_id === admin.id && kept?.total_rows === 3, JSON.stringify(kept));
 
-  const first = await call("POST", "/ai/attachments/link", { url: SHEET_FIRST_URL });
-  check("a Sheet's link naming no tab: the first", first.status === 200 && first.body?.name === "LINKQA Expenses — Jan (tab 1 of 2)", first.body?.name ?? first.body?.message);
+  /* A3b: a link that names no tab reads every tab, each on its own. */
+  const asksBeforeTabs = googleAsked.length;
+  const tabs = await call("POST", "/ai/attachments/link", { url: SHEET_FIRST_URL });
+  const tabTotal = (file, column) => file?.columns?.find((c) => c.name === column)?.total;
+  check(
+    "a Sheet's link naming no tab: every tab, each a file of its own, in the Sheet's order",
+    tabs.status === 200 && Array.isArray(tabs.body) && tabs.body.map((f) => f.name).join(" | ") === "LINKQA Expenses — Jan (tab 1 of 2) | LINKQA Expenses — Feb (tab 2 of 2)",
+    `${tabs.status} ${Array.isArray(tabs.body) ? tabs.body.map((f) => f.name).join(" | ") : tabs.body?.message}`,
+  );
+  check(
+    "…each counted on its own: Jan 1 row, ৳4,500; Feb 3 rows, ৳27,600.50",
+    tabs.body?.[0]?.rowCount === 1 && tabTotal(tabs.body?.[0], "Amount") === "4500.00" && tabs.body?.[1]?.rowCount === 3 && tabTotal(tabs.body?.[1], "Amount") === "27600.50",
+    JSON.stringify(tabs.body?.map?.((f) => [f.rowCount, tabTotal(f, "Amount")])),
+  );
+  const tabAsks = googleAsked.slice(asksBeforeTabs).map((a) => decodeURIComponent(a.path));
+  check(
+    "…from one call for all of the tabs' cells, after the list of tabs",
+    tabAsks.length === 2 && tabAsks[1].startsWith(`/sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?ranges='Jan'&ranges='Feb'&valueRenderOption=UNFORMATTED_VALUE`),
+    tabAsks.join(" | "),
+  );
+  const keptTabs = await q(`select user_id, filename, total_rows, created_at from ai_attachments where id = any($1::uuid[]) order by filename`, [tabs.body?.map?.((f) => f.id) ?? []]);
+  check(
+    "…kept as the asker's own, in one statement (one moment, which is how a reopened chat knows them for one Sheet)",
+    keptTabs.length === 2 && keptTabs.every((row) => row.user_id === admin.id) && keptTabs[0].created_at.getTime() === keptTabs[1].created_at.getTime(),
+    JSON.stringify(keptTabs.map((row) => [row.filename, row.total_rows])),
+  );
 
-  const doc = await call("POST", "/ai/attachments/link", { url: DOC_URL });
+  const book = await call("POST", "/ai/attachments/link", { url: BOOK_URL });
+  check(
+    "a mixed book: each tab with its own columns; the chart left out; an empty, hidden tab kept and said to be so",
+    book.status === 200 &&
+      book.body?.map?.((f) => `${f.name}:${f.rowCount}:${f.columns.map((c) => c.name).join("/")}`).join(" | ") ===
+        "LINKQA Book 2026 — Payments (tab 1 of 3):2:Date/Paid to/Amount | LINKQA Book 2026 — People (tab 2 of 3):1:Name/Joined/Salary | LINKQA Book 2026 — Notes (tab 3 of 3, hidden):0:",
+    `${book.status} ${Array.isArray(book.body) ? book.body.map((f) => `${f.name}:${f.rowCount}`).join(" | ") : book.body?.message}`,
+  );
+
+  const doc = one(await call("POST", "/ai/attachments/link", { url: DOC_URL }));
   const lines = (doc.body?.sample ?? []).map((row) => row.Text);
   check("a Doc's link: its text, a paragraph to a line", doc.status === 200 && doc.body?.kind === "text" && doc.body?.name === "LINKQA Board notes" && doc.body?.rowCount === 4, `${doc.status} ${doc.body?.kind} ${doc.body?.name ?? doc.body?.message} ${doc.body?.rowCount}`);
   check("a bullet marked, a table a row to a line", lines.includes("• Claude Max renewed on the 2nd") && lines.includes("Hostinger | 4,500"), JSON.stringify(lines));
 
-  const csv = await call("POST", "/ai/attachments/link", { url: CSV_URL });
+  const csv = one(await call("POST", "/ai/attachments/link", { url: CSV_URL }));
   check(
     "a CSV kept in Drive: downloaded and read as an upload, its type's extension added",
     csv.status === 200 && csv.body?.kind === "table" && csv.body?.name === "LINKQA bank july.csv" && csv.body?.rowCount === 2 && csv.body?.columns?.find((c) => c.name === "Debit")?.total === "25350.00",
@@ -352,7 +420,7 @@ try {
   let from = asked.length;
   const sheetTurn = await call("POST", "/ai/turn", { messages: [{ role: "user", content: `LINKQA ei sheet e koto? ${SHEET_URL}` }], attachmentId: sheet.body?.id });
   let request = asked[from];
-  check("a Sheet: FILE ATTACHED, with its totals", sheetTurn.status === 200 && everything(request).includes("FILE ATTACHED: LINKQA Expenses — Feb (tab 2 of 2)") && everything(request).includes("total 27600.50"), String(sheetTurn.status));
+  check("a Sheet's one tab, as one attachmentId (what a page loaded before A3b sends): FILE ATTACHED, with its totals", sheetTurn.status === 200 && everything(request).includes("FILE ATTACHED: LINKQA Expenses — Feb (tab 2 of 2)") && everything(request).includes("total 27600.50"), String(sheetTurn.status));
   check("…worked as a file, with both file tools", everything(request).includes("WORKING FROM A FILE") && toolsOf(request).includes("read_attachment") && toolsOf(request).includes("group_attachment"), toolsOf(request).join(","));
   check("it is told it cannot open a link, and what a read one looks like", everything(request).includes("You cannot open a link.") && everything(request).includes("arrives below as\\n  FILE ATTACHED or DOCUMENT ATTACHED"));
 
@@ -370,6 +438,65 @@ try {
   check("read_attachment reads it on by paragraph", toolResult.includes("Paragraphs 3–4 of 4:") && toolResult.includes("Hostinger | 4,500"), toolResult.match(/Paragraphs[^"]{0,60}/)?.[0]);
   check("a plan for Import made of a Doc is dropped", docTurn.body?.importPlan === null || docTurn.body?.importPlan === undefined, JSON.stringify(docTurn.body?.importPlan));
   check("the answer is given", docTurn.body?.summary === "LINKQA Hostinger 4,500.", docTurn.body?.summary);
+
+  /* A3b: a Sheet's every tab, in one turn. */
+  const tabIds = tabs.body?.map?.((f) => f.id) ?? [];
+  script = [
+    { tool: "read_attachment", input: { file: 2, offset: 0, limit: 5 } },
+    { tool: "read_attachment", input: { offset: 0 } },
+    { tool: "group_attachment", input: { file: 1, by: "Details", sum: "Amount" } },
+    { ...plain("LINKQA Jan 4,500; Feb 27,600.50."), importPlan: { accountName: "LINKQA", columnMap: { Amount: "amount" }, dateFormat: "dmy" } },
+  ];
+  from = asked.length;
+  const tabsTurn = await call("POST", "/ai/turn", { messages: [{ role: "user", content: `LINKQA ei sheet er tab gulo te koto? ${SHEET_FIRST_URL}` }], attachmentIds: tabIds });
+  request = asked[from];
+  const told = everything(request);
+  check(
+    "the tabs: each described on its own, numbered FILE 1 and FILE 2, each with its own total",
+    tabsTurn.status === 200 && told.includes("FILE 1 ATTACHED: LINKQA Expenses — Jan (tab 1 of 2)") && told.includes("FILE 2 ATTACHED: LINKQA Expenses — Feb (tab 2 of 2)") && told.includes("total 4500.00") && told.includes("total 27600.50"),
+    `${tabsTurn.status} ${tabsTurn.body?.message ?? ""}`,
+  );
+  check(
+    "…worked as a Sheet's tabs: never added together, never assumed alike, no plan",
+    told.includes("WORKING FROM A SHEET'S TABS") && told.includes("Never add one tab's figures to another's") && told.includes("never assume a tab is like the one before it") && !told.includes("WORKING FROM A FILE"),
+  );
+  const fileTools = (request?.tools ?? []).filter((tool) => ["read_attachment", "group_attachment"].includes(tool.name));
+  check(
+    "…and each file tool asks which file, by its number",
+    fileTools.length === 2 && fileTools.every((tool) => tool.input_schema?.properties?.file?.type === "number" && tool.input_schema?.required?.[0] === "file"),
+    JSON.stringify(fileTools.map((tool) => [tool.name, tool.input_schema?.required])),
+  );
+  // What the app answered the tool call just made, and nothing before it.
+  const lastResult = (sent) =>
+    (sent?.messages?.at(-1)?.content ?? [])
+      .filter?.((part) => part.type === "tool_result")
+      ?.map((part) => (typeof part.content === "string" ? part.content : JSON.stringify(part.content)))
+      .join("\n") ?? "";
+  const tabResults = [1, 2, 3].map((n) => lastResult(asked[from + n]));
+  check("read_attachment on FILE 2 reads Feb's rows, and says which file", tabResults[0].includes("FILE 2: Rows 1–3 of 3") && tabResults[0].includes("LINKQA Netflix") && !tabResults[0].includes("LINKQA Hostinger"), tabResults[0].match(/FILE 2[^"]{0,60}/)?.[0]);
+  check("…with no file named, it is asked to say which", tabResults[1].includes("Say which file, by its number: 1 to 2."), tabResults[1].match(/Say which[^"]{0,40}/)?.[0]);
+  check("group_attachment on FILE 1 totals Jan alone", tabResults[2].includes("FILE 1: Grouped by Details, totalling Amount") && tabResults[2].includes("LINKQA Hostinger: 1 row, 4500.00") && !tabResults[2].includes("Netflix"), tabResults[2].match(/FILE 1[^"]{0,90}/)?.[0]);
+  check("a plan for Import made of several tabs is dropped", tabsTurn.body?.importPlan === null || tabsTurn.body?.importPlan === undefined, JSON.stringify(tabsTurn.body?.importPlan));
+
+  const reopened = await call("GET", `/ai/chats/${tabsTurn.body?.chatId}`);
+  check(
+    "the conversation reopened: both tabs, in the Sheet's order",
+    reopened.status === 200 && reopened.body?.attachments?.map((f) => f.id).join(",") === tabIds.join(","),
+    JSON.stringify(reopened.body?.attachments?.map((f) => f.name)),
+  );
+  const bookIds = book.body?.map?.((f) => f.id) ?? [];
+  script = [plain("LINKQA book.")];
+  await call("POST", "/ai/turn", { chatId: tabsTurn.body?.chatId, messages: [{ role: "user", content: `LINKQA ar eta? ${BOOK_URL}` }, { role: "assistant", content: "LINKQA Jan 4,500; Feb 27,600.50." }, { role: "user", content: "LINKQA ar eta?" }], attachmentIds: bookIds });
+  const empty = everything(asked[asked.length - 1]);
+  check("an empty tab is told as empty, not described", empty.includes("FILE 3 ATTACHED: LINKQA Book 2026 — Notes (tab 3 of 3, hidden)\\nThis tab is empty"));
+  const reopenedAgain = await call("GET", `/ai/chats/${tabsTurn.body?.chatId}`);
+  check(
+    "…and reopened after a second Sheet, it is that Sheet's three tabs, not the five",
+    reopenedAgain.body?.attachments?.map((f) => f.id).join(",") === bookIds.join(","),
+    JSON.stringify(reopenedAgain.body?.attachments?.map((f) => f.name)),
+  );
+  const foreign = await call("POST", "/ai/turn", { messages: [{ role: "user", content: "LINKQA koto?" }], attachmentIds: [...tabIds, "00000000-0000-4000-8000-000000000000"] });
+  check("a file id that is not the asker's is left out, and the turn still answers", foreign.status === 200 && everything(asked[asked.length - 1]).includes("FILE 2 ATTACHED") && !everything(asked[asked.length - 1]).includes("FILE 3 ATTACHED"), String(foreign.status));
 
   /* ------------------------------------------------------------------ */
   console.log("\nC. The page");
@@ -420,7 +547,11 @@ try {
   check("a pasted link is read, and its card shows", shown.includes("LINKQA Expenses — Feb (tab 2 of 2)") && /3\s+rows/.test(shown), shown.slice(0, 200).replace(/\n/g, " | "));
   const order = page.sent.map((s) => s.path);
   const turnBody = JSON.parse(page.sent.find((s) => s.path === "/ai/turn")?.body || "{}");
-  check("the link was read before the message went, and the message carried the file", order.indexOf("/ai/attachments/link") > -1 && order.indexOf("/ai/attachments/link") < order.indexOf("/ai/turn") && turnBody.attachmentId === readReply?.id, `${order.join(" → ")} ${turnBody.attachmentId === readReply?.id}`);
+  check(
+    "the link was read before the message went, and the message carried the file",
+    order.indexOf("/ai/attachments/link") > -1 && order.indexOf("/ai/attachments/link") < order.indexOf("/ai/turn") && turnBody.attachmentIds?.length === 1 && turnBody.attachmentIds[0] === readReply?.[0]?.id,
+    `${order.join(" → ")} ${JSON.stringify(turnBody.attachmentIds)}`,
+  );
   check("the answer shows", shown.includes("LINKQA Feb e 3 ta entry."));
 
   const sentBefore = page.sent.length;
@@ -458,7 +589,81 @@ try {
   await shot(docPage, "link-doc");
   check("a Doc's card: Google Doc, its paragraphs, how it begins", shown.includes("LINKQA Board notes") && /Google Doc · 4\s+paragraphs/.test(shown) && shown.includes("LINKQA payments this month"), shown.slice(0, 240).replace(/\n/g, " | "));
   check("…and no Send to Import on it", !shown.includes("Send to Import"));
-  check("no page error", page.errors.length === 0 && docPage.errors.length === 0, [...page.errors, ...docPage.errors].slice(0, 2).join(" | "));
+
+  /* A3b: a Sheet's every tab, on the page. */
+  const bookPage = await openAs(admin);
+  await bookPage.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });
+  script = [plain("LINKQA tin ta tab.")];
+  const bookRead = bookPage.waitForResponse((r) => r.url().endsWith("/ai/attachments/link"), { timeout: 60000 });
+  const bookAnswered = bookPage.waitForResponse((r) => r.url().endsWith("/ai/turn") && r.request().method() === "POST", { timeout: 60000 });
+  await paste(bookPage, `LINKQA ei book ta dekho ${BOOK_URL}`);
+  await bookPage.keyboard.press("Enter");
+  const bookReply = await (await bookRead).json().catch(() => null);
+  await bookAnswered;
+  await bookPage.waitForFunction(() => document.body.innerText.includes("LINKQA tin ta tab."), { timeout: 30000 }).catch(() => undefined);
+  const cards = () =>
+    bookPage.evaluate(() =>
+      [...document.querySelectorAll("div.rounded-xl")]
+        .filter((card) => card.querySelector("p.truncate")?.title.startsWith("LINKQA Book 2026"))
+        .map((card) => ({ name: card.querySelector("p.truncate").title, label: card.querySelector("p.truncate").textContent, text: card.innerText.replace(/\s+/g, " "), imports: [...card.querySelectorAll("button")].filter((b) => b.textContent.includes("Send to Import")).length })),
+    );
+  let bookCards = await cards();
+  shown = await text(bookPage);
+  await shot(bookPage, "link-book");
+  check(
+    "a card a tab, in the Sheet's order, under one line naming the Sheet; each card headed by its tab alone",
+    bookCards.map((c) => c.name).join(" | ") === "LINKQA Book 2026 — Payments (tab 1 of 3) | LINKQA Book 2026 — People (tab 2 of 3) | LINKQA Book 2026 — Notes (tab 3 of 3, hidden)" &&
+      bookCards.map((c) => c.label).join(" | ") === "Payments (tab 1 of 3) | People (tab 2 of 3) | Notes (tab 3 of 3, hidden)" &&
+      shown.includes("LINKQA Book 2026 · 3 tabs, each read and counted on its own"),
+    bookCards.map((c) => c.label).join(" | "),
+  );
+  check(
+    "…each with its own rows, columns and totals: Payments 2 rows ৳5,140; People 1 row, its salary",
+    /2 rows · 3 columns/.test(bookCards[0]?.text ?? "") && (bookCards[0]?.text ?? "").includes("5140.00") && /1 rows · 3 columns/.test(bookCards[1]?.text ?? "") && (bookCards[1]?.text ?? "").includes("45000.00") && !(bookCards[0]?.text ?? "").includes("45000.00"),
+    bookCards.slice(0, 2).map((c) => c.text.slice(0, 120)).join(" || "),
+  );
+  check(
+    "…the empty tab said to be empty, with no Send to Import; the others have their own",
+    (bookCards[2]?.text ?? "").includes("Empty: no rows under a heading row, so nothing was read") && bookCards[2]?.imports === 0 && bookCards[0]?.imports === 1 && bookCards[1]?.imports === 1,
+    JSON.stringify(bookCards.map((c) => c.imports)),
+  );
+  const bookTurn = JSON.parse(bookPage.sent.find((s) => s.path === "/ai/turn")?.body || "{}");
+  const chip = await bookPage.evaluate(() => document.querySelector("form .truncate")?.textContent ?? "");
+  check(
+    "the message carried every tab, in order, and the box names the Sheet and its tabs",
+    bookTurn.attachmentIds?.join(",") === bookReply?.map?.((f) => f.id).join(",") && bookTurn.attachmentIds?.length === 3 && chip === "LINKQA Book 2026 · 3 tabs",
+    `${JSON.stringify(bookTurn.attachmentIds)} · ${chip}`,
+  );
+
+  // One tab removed by its own cross: that tab alone goes.
+  const removed = bookPage.waitForResponse((r) => r.url().includes("/ai/attachments/") && r.request().method() === "DELETE", { timeout: 30000 });
+  await bookPage.evaluate(() => {
+    const card = [...document.querySelectorAll("div.rounded-xl")].find((c) => c.querySelector("p.truncate")?.title === "LINKQA Book 2026 — People (tab 2 of 3)");
+    card?.querySelector('button[aria-label="Remove this file"]')?.click();
+  });
+  await removed;
+  await bookPage.waitForFunction(() => !document.body.innerText.includes("People (tab 2 of 3)"), { timeout: 10000 }).catch(() => undefined);
+  bookCards = await cards();
+  const [{ left: peopleLeft }] = await q(`select count(*)::int as left from ai_attachments where id = $1`, [bookReply?.[1]?.id]);
+  check(
+    "one tab's cross removes that tab alone, its rows too",
+    bookCards.map((c) => c.name).join(" | ") === "LINKQA Book 2026 — Payments (tab 1 of 3) | LINKQA Book 2026 — Notes (tab 3 of 3, hidden)" && peopleLeft === 0,
+    `${bookCards.map((c) => c.name).join(" | ")} · left ${peopleLeft}`,
+  );
+
+  // Reopened from the history: the tabs that are left, in order.
+  const chatOfBook = (await q(`select chat_id from ai_attachments where id = $1`, [bookReply?.[0]?.id]))[0]?.chat_id;
+  const reopenPage = await openAs(admin);
+  await reopenPage.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });
+  await reopenPage.evaluate(() => [...document.querySelectorAll("button, a")].find((b) => b.textContent.trim().startsWith("LINKQA ei book ta dekho"))?.click());
+  await reopenPage.waitForFunction(() => document.body.innerText.includes("Notes (tab 3 of 3, hidden)"), { timeout: 30000 }).catch(() => undefined);
+  const reopenShown = await text(reopenPage);
+  check(
+    "reopened from the history: the Sheet's tabs that are left, as cards, in order",
+    Boolean(chatOfBook) && reopenShown.includes("LINKQA Book 2026 · 2 tabs") && reopenShown.indexOf("Payments (tab 1 of 3)") > -1 && reopenShown.indexOf("Payments (tab 1 of 3)") < reopenShown.indexOf("Notes (tab 3 of 3, hidden)") && !reopenShown.includes("People (tab 2 of 3)"),
+    reopenShown.slice(0, 200).replace(/\n/g, " | "),
+  );
+  check("no page error", page.errors.length === 0 && docPage.errors.length === 0 && bookPage.errors.length === 0 && reopenPage.errors.length === 0, [...page.errors, ...docPage.errors, ...bookPage.errors, ...reopenPage.errors].slice(0, 2).join(" | "));
 
   const phone = await openAs(admin, 390);
   await phone.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });
@@ -482,6 +687,25 @@ try {
         .filter((bubble) => bubble.textContent.includes("docs.google.com"))
         .map((bubble) => ({ over: bubble.scrollWidth - bubble.clientWidth, right: Math.round(bubble.getBoundingClientRect().right), window: window.innerWidth })),
     );
+  const phoneBook = await openAs(admin, 390);
+  await phoneBook.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });
+  script = [plain("LINKQA phone book.")];
+  const phoneBookAnswered = phoneBook.waitForResponse((r) => r.url().endsWith("/ai/turn") && r.request().method() === "POST", { timeout: 60000 });
+  await paste(phoneBook, `LINKQA ${BOOK_URL}`);
+  await phoneBook.keyboard.press("Enter");
+  await phoneBookAnswered;
+  await phoneBook.waitForFunction(() => document.body.innerText.includes("LINKQA phone book."), { timeout: 30000 }).catch(() => undefined);
+  const bookSideways = await phoneBook.evaluate(() => {
+    const scroller = [...document.querySelectorAll("div")].find((div) => getComputedStyle(div).overflowY === "auto" && div.scrollHeight > div.clientHeight);
+    const cards = [...document.querySelectorAll("div.rounded-xl")].filter((card) => card.querySelector("p.truncate")?.title.startsWith("LINKQA Book 2026"));
+    // A heading too long for its card is cut with an ellipsis: the tab's own
+    // name and place must fit whole at a phone's width.
+    const cut = cards.map((card) => card.querySelector("p.truncate")).filter((p) => p.scrollWidth > p.clientWidth).map((p) => p.textContent);
+    return { page: document.documentElement.scrollWidth - document.documentElement.clientWidth, inner: scroller ? scroller.scrollWidth - scroller.clientWidth : 0, cards: cards.length, over: cards.filter((card) => card.getBoundingClientRect().right > window.innerWidth).length, cut };
+  });
+  await shot(phoneBook, "link-book-390");
+  check("at 390px a Sheet's three tab cards fit, each tab's name whole, and nothing scrolls sideways", bookSideways.cards === 3 && bookSideways.over === 0 && bookSideways.cut.length === 0 && bookSideways.page <= 0 && bookSideways.inner <= 0, JSON.stringify(bookSideways));
+
   const phoneBubbles = await spills(phone);
   const wideBubbles = await spills(docPage);
   check(

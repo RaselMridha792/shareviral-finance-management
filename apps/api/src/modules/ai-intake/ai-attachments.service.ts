@@ -14,7 +14,7 @@ import {
   isDocAttachment,
   isPdfAttachment,
 } from "@finance/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
@@ -29,6 +29,7 @@ import {
 } from "../connections/google-files";
 import type { RawRow } from "../imports/row-parser";
 import { readSpreadsheet } from "../imports/spreadsheet";
+import type { ModelTool } from "./model-turn";
 
 /**
  * The whole file is kept, up to what the import pipeline itself accepts.
@@ -89,13 +90,36 @@ export const AI_ATTACHMENT_TOOLS = [
 export const AI_ATTACHMENT_TOOL_NAMES = AI_ATTACHMENT_TOOLS.map((t) => t.name);
 
 /**
- * The tools for this attachment. A Doc has no columns to group or total, so
- * it is offered the reading one alone rather than a tool that cannot work.
+ * The tools for these attachments. A Doc has no columns to group or total,
+ * so it is offered the reading one alone rather than a tool that cannot work.
+ *
+ * Several files (a Sheet's tabs, A3b) add `file` to each tool: which one, by
+ * the number it was described under. One file has no such choice to make, so
+ * its tools are exactly as they were.
  */
-export function attachmentToolsFor(attachment: AiAttachment) {
-  return attachment.kind === "text"
-    ? AI_ATTACHMENT_TOOLS.filter((tool) => tool.name === "read_attachment")
-    : AI_ATTACHMENT_TOOLS;
+export function attachmentToolsFor(attachments: AiAttachment[]): ModelTool[] {
+  const tools = attachments.some((attachment) => attachment.kind === "table")
+    ? AI_ATTACHMENT_TOOLS
+    : AI_ATTACHMENT_TOOLS.filter((tool) => tool.name === "read_attachment");
+  if (attachments.length < 2) return tools;
+
+  return tools.map((tool) => ({
+    ...tool,
+    input_schema: {
+      ...tool.input_schema,
+      properties: {
+        file: {
+          type: "number",
+          description: `Which file, by its number: FILE 1 to FILE ${attachments.length}`,
+        },
+        ...tool.input_schema.properties,
+      },
+      required: [
+        "file",
+        ...((tool.input_schema as { required?: string[] }).required ?? []),
+      ],
+    },
+  }));
 }
 
 /**
@@ -156,6 +180,9 @@ export class AiAttachmentsService {
    * `upload` itself, a Doc as its paragraphs. From here on nothing can tell a
    * link from an upload except a Doc's name.
    *
+   * A Sheet whose link names no tab comes back as every tab (A3b), each an
+   * attachment of its own; anything else as one.
+   *
    * Gated like an upload, on owning what is made. The account can read
    * whatever was shared with it; this reads one file, by its id, and only
    * because the person has the link to it.
@@ -166,7 +193,7 @@ export class AiAttachmentsService {
     readPdf?: (
       buffer: Buffer,
     ) => Promise<{ headers: string[]; rows: RawRow[] }>,
-  ): Promise<AiAttachment> {
+  ): Promise<AiAttachment[]> {
     const [link] = findGoogleLinks(url);
     if (!link) {
       throw new BadRequestException(
@@ -206,21 +233,58 @@ export class AiAttachmentsService {
     }
 
     if (read.kind === "file") {
-      return this.upload(
-        { originalname: read.name, buffer: read.buffer },
-        actor,
-        readPdf,
-      );
+      return [
+        await this.upload(
+          { originalname: read.name, buffer: read.buffer },
+          actor,
+          readPdf,
+        ),
+      ];
     }
     if (read.kind === "text") {
-      return this.keep(
-        `${read.name}${AI_DOC_SUFFIX}`,
-        ["Text"],
-        read.paragraphs.map((paragraph) => ({ Text: paragraph })),
-        actor,
-      );
+      return [
+        await this.keep(
+          `${read.name}${AI_DOC_SUFFIX}`,
+          ["Text"],
+          read.paragraphs.map((paragraph) => ({ Text: paragraph })),
+          actor,
+        ),
+      ];
     }
-    return this.keep(read.name, read.headers, read.rows, actor);
+    if (read.kind === "tabs") return this.keepTabs(read.tables, actor);
+    return [await this.keep(read.name, read.headers, read.rows, actor)];
+  }
+
+  /**
+   * A Sheet's tabs, each kept as an attachment of its own, in one statement.
+   *
+   * One statement gives them one `created_at`, which is how a conversation
+   * reopened knows them for one Sheet (`forChat`). An empty tab is kept too,
+   * with no rows: it is shown as empty rather than left out unsaid. The
+   * reader has already refused a book with no rows at all, or too many.
+   */
+  private async keepTabs(
+    tables: { name: string; headers: string[]; rows: RawRow[] }[],
+    actor: AuthenticatedUser,
+  ): Promise<AiAttachment[]> {
+    const saved = await this.db.client
+      .insert(aiAttachments)
+      .values(
+        tables.map((table) => ({
+          userId: actor.id,
+          filename: table.name,
+          headers: table.headers,
+          rows: table.rows,
+          totalRows: table.rows.length,
+        })),
+      )
+      .returning();
+
+    // In the Sheet's own order, whatever order the rows came back in. A tab's
+    // name carries its place, so no two are alike.
+    return tables.map((table) =>
+      toDto(saved.find((row) => row.filename === table.name)!),
+    );
   }
 
   /** What was read, checked and kept: the same for a file and for a link. */
@@ -274,23 +338,37 @@ export class AiAttachmentsService {
     return toDto(await this.get(id, actor));
   }
 
-  /** The files on a conversation, for when it is reopened. */
+  /**
+   * The files a conversation was last about, for when it is reopened: the
+   * last upload, or every tab of the last Sheet, which were kept in one
+   * statement and so share its moment to the microsecond (`keepTabs`). In
+   * the Sheet's own order.
+   */
   async forChat(
     chatId: string,
     actor: AuthenticatedUser,
   ): Promise<AiAttachment[]> {
+    const mine = and(
+      eq(aiAttachments.chatId, chatId),
+      eq(aiAttachments.userId, actor.id),
+    );
     const rows = await this.db.client
       .select()
       .from(aiAttachments)
       .where(
         and(
-          eq(aiAttachments.chatId, chatId),
-          eq(aiAttachments.userId, actor.id),
+          mine,
+          eq(
+            aiAttachments.createdAt,
+            this.db.client
+              .select({ last: max(aiAttachments.createdAt) })
+              .from(aiAttachments)
+              .where(mine),
+          ),
         ),
-      )
-      .orderBy(desc(aiAttachments.createdAt));
+      );
 
-    return rows.map(toDto);
+    return rows.map(toDto).sort((a, b) => placeOf(a.name) - placeOf(b.name));
   }
 
   /**
@@ -330,11 +408,18 @@ export class AiAttachmentsService {
    * 2,000-row file becomes a few hundred words, and every figure in it was
    * added up in code.
    */
-  describe(attachment: AiAttachment): string {
+  describe(attachment: AiAttachment, number?: number): string {
     if (attachment.kind === "text") return this.describeDoc(attachment);
 
+    // One of several (a Sheet's tabs, A3b): numbered, so the tools can be
+    // told which.
+    const heading = `FILE${number ? ` ${number}` : ""} ATTACHED: ${attachment.name}`;
+    if (!attachment.rowCount) {
+      return `${heading}\nThis tab is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.`;
+    }
+
     const lines = [
-      `FILE ATTACHED: ${attachment.name}`,
+      heading,
       `${attachment.rowCount} rows` +
         (attachment.storedRows < attachment.rowCount
           ? `, of which the first ${attachment.storedRows} are readable here`
@@ -379,11 +464,14 @@ export class AiAttachmentsService {
       );
     }
 
-    lines.push(
-      "",
-      "The totals above were computed from the file, not by you. Quote them as they are and do not re-add them.",
-      "Use read_attachment to see more rows, and group_attachment to break a numeric column down by another column.",
-    );
+    // Several files are told this once, after the last of them.
+    if (!number) {
+      lines.push(
+        "",
+        "The totals above were computed from the file, not by you. Quote them as they are and do not re-add them.",
+        "Use read_attachment to see more rows, and group_attachment to break a numeric column down by another column.",
+      );
+    }
 
     return lines.join("\n");
   }
@@ -416,12 +504,41 @@ export class AiAttachmentsService {
   }
 
   /**
-   * Runs one of the two attachment tools.
+   * Runs one of the two attachment tools, on the file it names.
    *
-   * The attachment is fetched with the actor, so a tool call naming somebody
+   * `attachmentIds` are the turn's files in the order they were described,
+   * and `file` is a number among them; with one file it may be left out. The
+   * attachment is fetched with the actor, so a tool call naming somebody
    * else's file id gets the same "not here" a direct request would.
    */
   async runTool(
+    name: string,
+    input: Record<string, unknown>,
+    attachmentIds: string[],
+    actor: AuthenticatedUser,
+  ): Promise<{ ok: boolean; text: string }> {
+    const file =
+      attachmentIds.length === 1 && input.file === undefined
+        ? 1
+        : Number(input.file);
+    const attachmentId = Number.isInteger(file)
+      ? attachmentIds[file - 1]
+      : undefined;
+    if (!attachmentId) {
+      return {
+        ok: false,
+        text: `Say which file, by its number: 1 to ${attachmentIds.length}.`,
+      };
+    }
+
+    const result = await this.toolOn(name, input, attachmentId, actor);
+    // Which file the answer is about, when there was a choice.
+    return attachmentIds.length > 1
+      ? { ...result, text: `FILE ${file}: ${result.text}` }
+      : result;
+  }
+
+  private async toolOn(
     name: string,
     input: Record<string, unknown>,
     attachmentId: string,
@@ -551,6 +668,11 @@ export class AiAttachmentsService {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/** A Sheet's tab's place among its tabs, from its name; 0 for anything else. */
+function placeOf(name: string): number {
+  return Number(/\(tab (\d+) of \d+(?:, hidden)?\)$/.exec(name)?.[1] ?? 0);
+}
 
 function toDto(row: {
   id: string;

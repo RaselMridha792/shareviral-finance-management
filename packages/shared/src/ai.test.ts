@@ -12,12 +12,14 @@ import {
   AI_PROVIDERS,
   AI_FIRST_PAYMENT_NOTE,
   AI_INSTRUCTIONS_MAX,
+  AI_MAX_ATTACHMENTS,
   AI_TARGETS,
   AI_TARGET_ENDPOINT,
   AI_TARGET_LABELS,
   AI_TARGET_PERMISSION,
   AI_TARGET_SHOWS_ON,
   aiConfirmSchema,
+  aiIntakeRequestSchema,
   aiModelFrom,
   aiModelGoesWith,
   aiModelProviderProblem,
@@ -232,7 +234,10 @@ describe("Confirm and save (A4)", () => {
       chatId,
       draft: { amount: "4500", accountName: "City Bank" },
     });
-    assert.deepEqual(parsed.draft, { amount: "4500", accountName: "City Bank" });
+    assert.deepEqual(parsed.draft, {
+      amount: "4500",
+      accountName: "City Bank",
+    });
   });
 
   it("takes a row of the table by its number", () => {
@@ -246,7 +251,10 @@ describe("Confirm and save (A4)", () => {
       false,
     );
     assert.equal(aiConfirmSchema.safeParse({ chatId }).success, false);
-    assert.equal(aiConfirmSchema.safeParse({ chatId, row: 100 }).success, false);
+    assert.equal(
+      aiConfirmSchema.safeParse({ chatId, row: 100 }).success,
+      false,
+    );
     assert.equal(aiConfirmSchema.safeParse({ chatId, row: -1 }).success, false);
   });
 
@@ -408,5 +416,27 @@ describe("findGoogleLinks — a link pasted into the chat (A3)", () => {
   it("tells a Doc from an uploaded file by its name", () => {
     assert.equal(isDocAttachment("Board notes.gdoc"), true);
     assert.equal(isDocAttachment("statement.csv"), false);
+  });
+});
+
+describe("the files a turn reads (A3b)", () => {
+  const id = (n: number) =>
+    `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const turn = (extra: Record<string, unknown>) =>
+    aiIntakeRequestSchema.safeParse({
+      messages: [{ role: "user", content: "ei sheet e koto?" }],
+      ...extra,
+    });
+
+  it("takes every tab of a Sheet, up to the most one turn reads", () => {
+    const tabs = Array.from({ length: AI_MAX_ATTACHMENTS }, (_, n) => id(n));
+    assert.equal(turn({ attachmentIds: tabs }).success, true);
+    assert.equal(turn({ attachmentIds: [...tabs, id(99)] }).success, false);
+    assert.equal(turn({ attachmentIds: [] }).success, false);
+    assert.equal(turn({ attachmentIds: ["not-an-id"] }).success, false);
+  });
+
+  it("still takes the one file a page loaded before A3b sends", () => {
+    assert.equal(turn({ attachmentId: id(1) }).success, true);
   });
 });

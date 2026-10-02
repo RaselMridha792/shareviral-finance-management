@@ -435,6 +435,13 @@ export const aiMessageSchema = z.strictObject({
 });
 export type AiMessage = z.infer<typeof aiMessageSchema>;
 
+/**
+ * The most files one turn reads: the tabs of one Google Sheet (A3b, 3 Oct).
+ * A book with more is refused rather than cut, with the way round it: paste
+ * the link of the tab that is meant.
+ */
+export const AI_MAX_ATTACHMENTS = 20;
+
 export const aiIntakeRequestSchema = z.strictObject({
   /**
    * The whole conversation, resent each turn.
@@ -457,7 +464,16 @@ export const aiIntakeRequestSchema = z.strictObject({
    * server starts one and returns its id.
    */
   chatId: z.string().uuid().optional(),
-  /** A file attached to this conversation, for the assistant to read. */
+  /**
+   * The files the assistant is to read this turn: one upload, or every tab of
+   * a Google Sheet read by its link (A3b), each a file of its own.
+   */
+  attachmentIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(AI_MAX_ATTACHMENTS)
+    .optional(),
+  /** One file, as a page loaded before A3b still sends it. */
   attachmentId: z.string().uuid().optional(),
 });
 export type AiIntakeRequest = z.infer<typeof aiIntakeRequestSchema>;
@@ -647,7 +663,10 @@ export type AiAttachment = {
    * Import.
    */
   kind: "table" | "text";
-  /** Rows in the file. */
+  /**
+   * Rows in the file. Zero for an empty tab of a Sheet read whole (A3b): it
+   * is kept, and shown as empty, so that no tab goes missing unsaid.
+   */
   rowCount: number;
   /** Rows kept for analysis — fewer than rowCount for a very large file. */
   storedRows: number;
@@ -681,7 +700,11 @@ export type AiChat = AiChatSummary & {
   messages: AiMessage[];
   /** The last draft, so reopening a conversation resumes where it stopped. */
   reply: AiIntakeReply | null;
-  /** Files attached to it, so reopening shows what was being discussed. */
+  /**
+   * The files it was last about, so reopening shows what was being
+   * discussed: the last upload, or every tab of the last Sheet read by link,
+   * in the Sheet's own order.
+   */
   attachments: AiAttachment[];
 };
 
@@ -834,11 +857,19 @@ export const aiConfirmSchema = z
       .refine((draft) => Object.keys(draft).length <= 60, "Too many fields")
       .optional(),
     /** A row of the table, counted from 0. */
-    row: z.number().int().min(0).max(AI_BATCH_MAX_ROWS - 1).optional(),
+    row: z
+      .number()
+      .int()
+      .min(0)
+      .max(AI_BATCH_MAX_ROWS - 1)
+      .optional(),
   })
-  .refine((input) => (input.draft === undefined) !== (input.row === undefined), {
-    message: "Send either the card's values or the row to save, not both",
-  });
+  .refine(
+    (input) => (input.draft === undefined) !== (input.row === undefined),
+    {
+      message: "Send either the card's values or the row to save, not both",
+    },
+  );
 export type AiConfirmInput = z.infer<typeof aiConfirmSchema>;
 
 /** A record saved from the chat: what the books know it by, and when. */

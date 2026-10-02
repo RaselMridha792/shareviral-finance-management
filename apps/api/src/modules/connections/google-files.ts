@@ -1,4 +1,8 @@
-import { AI_ATTACHMENT_EXTENSIONS, type GoogleLink } from "@finance/shared";
+import {
+  AI_ATTACHMENT_EXTENSIONS,
+  AI_MAX_ATTACHMENTS,
+  type GoogleLink,
+} from "@finance/shared";
 
 import type { RawRow } from "../imports/row-parser";
 import { readGrid } from "../imports/spreadsheet";
@@ -12,7 +16,8 @@ import { GOOGLE_READ_SCOPES, googleAuth, type ServiceAccount } from "./google";
  * nothing here could change a file even if it tried. What comes back is one
  * of the three things an attachment already is:
  *
- * - a Sheet's tab: headings and rows, as an uploaded .xlsx gives;
+ * - a Sheet's tab: headings and rows, as an uploaded .xlsx gives; every tab,
+ *   each on its own, when the link names none (A3b);
  * - a Doc: its paragraphs, in order;
  * - a file kept in Drive (.xlsx, .csv, .pdf): its bytes, which then go through
  *   the upload's own reader, the PDF transcription included.
@@ -20,8 +25,21 @@ import { GOOGLE_READ_SCOPES, googleAuth, type ServiceAccount } from "./google";
  * Every refusal is a sentence the person can act on: most often, sharing the
  * file with the account's address.
  */
+export type GoogleTable = {
+  kind: "table";
+  name: string;
+  headers: string[];
+  rows: RawRow[];
+};
+
 export type GoogleRead =
-  | { kind: "table"; name: string; headers: string[]; rows: RawRow[] }
+  | GoogleTable
+  /**
+   * Every tab of a Sheet whose link names none (A3b), each its own table in
+   * the Sheet's order. An empty tab is one too, with no rows, so that the
+   * count of tabs read is the count the Sheet has.
+   */
+  | { kind: "tabs"; tables: GoogleTable[] }
   | { kind: "text"; name: string; paragraphs: string[] }
   | { kind: "file"; name: string; buffer: Buffer };
 
@@ -140,11 +158,12 @@ class Reader {
   /* --- a Sheet -------------------------------------------------------- */
 
   /**
-   * One tab: the one the link names, or else the first.
+   * The tab the link names; or, when it names none, every tab (A3b).
    *
-   * Only one, because an attachment is one table. The name says which tab
-   * and how many there are, so nobody takes the first tab for the whole
-   * book; another tab is read by pasting its own link.
+   * Every tab, because a book is often mixed: one tab of payments, the next
+   * of people. Each is read and counted on its own, never folded into the
+   * next, and named with its place among the tabs, so nobody takes one tab
+   * for the whole book. All of them come back from one call to Google.
    */
   async sheet(
     id: string,
@@ -153,7 +172,7 @@ class Reader {
   ): Promise<GoogleRead> {
     const meta = await this.get(
       `${SHEETS}/${encodeURIComponent(id)}?fields=${encodeURIComponent(
-        "properties.title,sheets.properties(sheetId,title,index,sheetType)",
+        "properties.title,sheets.properties(sheetId,title,index,sheetType,hidden)",
       )}`,
     );
     // An .xlsx opened in Sheets without being converted is still a Drive
@@ -180,39 +199,74 @@ class Reader {
       .filter((tab) => (text(tab.sheetType) || "GRID") === "GRID")
       .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
 
-    const at =
-      gid === undefined
-        ? 0
-        : tabs.findIndex((tab) => String(tab.sheetId) === gid);
-    const tab = tabs[at];
-    if (!tab) {
-      throw new GoogleFileProblem(
-        gid === undefined
-          ? `"${title}" has no tab of cells to read.`
-          : `"${title}" has no tab with that link any more. Open the tab you mean and copy its link again.`,
-      );
+    if (!tabs.length) {
+      throw new GoogleFileProblem(`"${title}" has no tab of cells to read.`);
     }
 
-    const tabTitle = text(tab.title);
+    const book = `${SHEETS}/${encodeURIComponent(id)}`;
+    const table = (at: number, range: unknown): GoogleTable => {
+      const tab = tabs[at];
+      return {
+        kind: "table",
+        name:
+          tabs.length > 1
+            ? `${title} — ${text(tab.title)} (tab ${at + 1} of ${tabs.length}${
+                tab.hidden === true ? ", hidden" : ""
+              })`
+            : title,
+        ...readGrid(list(record(range).values).map((row) => list(row))),
+      };
+    };
+
+    // One tab: the one the link names, or the only one there is.
+    if (gid !== undefined || tabs.length === 1) {
+      const at =
+        gid === undefined
+          ? 0
+          : tabs.findIndex((tab) => String(tab.sheetId) === gid);
+      if (at < 0) {
+        throw new GoogleFileProblem(
+          `"${title}" has no tab with that link any more. Open the tab you mean and copy its link again.`,
+        );
+      }
+      const values = await this.get(
+        `${book}/values/${encodeURIComponent(rangeOf(tabs[at]))}?${RENDER}`,
+      );
+      if (values.status !== 200) {
+        throw this.refused("Google Sheets API", values);
+      }
+      return table(at, values.body);
+    }
+
+    // Every tab. A book of more is refused rather than cut short.
+    if (tabs.length > AI_MAX_ATTACHMENTS) {
+      throw new GoogleFileProblem(
+        `"${title}" has ${tabs.length} tabs. The Assistant reads up to ${AI_MAX_ATTACHMENTS} at once: open the tab you mean and paste that tab's own link.`,
+      );
+    }
     const values = await this.get(
-      `${SHEETS}/${encodeURIComponent(id)}/values/${encodeURIComponent(
-        `'${tabTitle.replace(/'/g, "''")}'`,
-      )}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&majorDimension=ROWS`,
+      `${book}/values:batchGet?${tabs
+        .map((tab) => `ranges=${encodeURIComponent(rangeOf(tab))}`)
+        .join("&")}&${RENDER}`,
     );
     if (values.status !== 200) throw this.refused("Google Sheets API", values);
 
-    const { headers, rows } = readGrid(
-      list(values.body?.values).map((row) => list(row)),
-    );
-    return {
-      kind: "table",
-      name:
-        tabs.length > 1
-          ? `${title} — ${tabTitle} (tab ${at + 1} of ${tabs.length})`
-          : title,
-      headers,
-      rows,
-    };
+    // Google answers in the order the tabs were asked for.
+    const ranges = list(values.body?.valueRanges);
+    const tables = tabs.map((_, at) => table(at, ranges[at]));
+
+    const rows = tables.reduce((sum, read) => sum + read.rows.length, 0);
+    if (!rows) {
+      throw new GoogleFileProblem(
+        `"${title}" has no rows under a heading row on any of its ${tabs.length} tabs.`,
+      );
+    }
+    if (rows > this.limits.maxRows) {
+      throw new GoogleFileProblem(
+        `"${title}" has ${rows.toLocaleString("en-US")} rows across its ${tabs.length} tabs. The Assistant reads up to ${this.limits.maxRows.toLocaleString("en-US")} at once: paste the links of its tabs one at a time.`,
+      );
+    }
+    return { kind: "tabs", tables };
   }
 
   /* --- a Doc ---------------------------------------------------------- */
@@ -408,6 +462,15 @@ class Reader {
       `Google would not read that file: ${said || `status ${reply.status}`}.`,
     );
   }
+}
+
+/** Figures as numbers, dates as the sheet shows them, a row at a time. */
+const RENDER =
+  "valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&majorDimension=ROWS";
+
+/** A whole tab, by its name: quoted, an apostrophe in it doubled. */
+function rangeOf(tab: Record<string, unknown>): string {
+  return `'${text(tab.title).replace(/'/g, "''")}'`;
 }
 
 /** Sheets and Docs say this of an Office file that was opened, not converted. */

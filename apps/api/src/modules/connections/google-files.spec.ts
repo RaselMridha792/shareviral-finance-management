@@ -147,17 +147,179 @@ describe("a Google Sheet", () => {
     expect(asked.every((a) => a.auth === "Bearer ya29.stand-in")).toBe(true);
   });
 
-  it("reads the first tab of cells when the link names none", async () => {
-    const { fetcher } = google([
-      [/\/values\//, { json: { values: [["Name"], ["Rahim"]] } }],
-      [/spreadsheets\/[^/]+\?fields=/, { json: SHEET_META }],
+  it("reads every tab of cells when the link names none, each on its own (A3b)", async () => {
+    const { fetcher, asked } = google([
+      [
+        /\/values:batchGet\?/,
+        {
+          json: {
+            valueRanges: [
+              { range: "Jan!A1:B2", values: [["Name"], ["Rahim"]] },
+              {
+                range: "'Feb''s'!A1:C3",
+                values: [
+                  ["Date", "Amount"],
+                  ["17/02/2026", 1200.5],
+                  ["18/02/2026", 2400],
+                ],
+              },
+              // An empty tab comes back with no values at all.
+              { range: "Notes!A1:Z1000" },
+            ],
+          },
+        },
+      ],
+      [
+        /spreadsheets\/[^/]+\?fields=/,
+        {
+          json: {
+            ...SHEET_META,
+            sheets: [
+              ...SHEET_META.sheets,
+              {
+                properties: {
+                  sheetId: 9,
+                  title: "Notes",
+                  index: 3,
+                  sheetType: "GRID",
+                  hidden: true,
+                },
+              },
+            ],
+          },
+        },
+      ],
     ]);
+
     const got = await read(
       `https://docs.google.com/spreadsheets/d/${SHEET}/edit`,
       fetcher,
     );
+
+    // The chart's tab has no cells and is not one of them.
+    expect(got).toEqual({
+      kind: "tabs",
+      tables: [
+        {
+          kind: "table",
+          name: "Expenses 2026 — Jan (tab 1 of 3)",
+          headers: ["Name"],
+          rows: [{ Name: "Rahim" }],
+        },
+        {
+          kind: "table",
+          name: "Expenses 2026 — Feb's (tab 2 of 3)",
+          headers: ["Date", "Amount"],
+          rows: [
+            { Date: "17/02/2026", Amount: "1200.5" },
+            { Date: "18/02/2026", Amount: "2400" },
+          ],
+        },
+        {
+          kind: "table",
+          name: "Expenses 2026 — Notes (tab 3 of 3, hidden)",
+          headers: [],
+          rows: [],
+        },
+      ],
+    });
+
+    // The tabs, then all their cells in one call, each tab whole by its name.
+    expect(asked).toHaveLength(2);
+    const batch = decodeURIComponent(asked[1].url);
+    expect(batch).toContain(
+      "/values:batchGet?ranges='Jan'&ranges='Feb''s'&ranges='Notes'&",
+    );
+    expect(batch).toContain("valueRenderOption=UNFORMATTED_VALUE");
+    expect(batch).toContain("dateTimeRenderOption=FORMATTED_STRING");
+  });
+
+  it("still reads only the tab a link names, when the Sheet has several", async () => {
+    const { fetcher, asked } = google([
+      [/\/values\//, { json: { values: [["Name"], ["Rahim"]] } }],
+      [/spreadsheets\/[^/]+\?fields=/, { json: SHEET_META }],
+    ]);
+    const got = await read(
+      `https://docs.google.com/spreadsheets/d/${SHEET}/edit?gid=0#gid=0`,
+      fetcher,
+    );
     expect(got.kind === "table" && got.name).toBe(
       "Expenses 2026 — Jan (tab 1 of 2)",
+    );
+    expect(asked.some((a) => a.url.includes("batchGet"))).toBe(false);
+  });
+
+  it("refuses a book of more tabs than one turn reads, before reading any", async () => {
+    const { fetcher, asked } = google([
+      [
+        /spreadsheets\/[^/]+\?fields=/,
+        {
+          json: {
+            properties: { title: "Ledger" },
+            sheets: Array.from({ length: 21 }, (_, index) => ({
+              properties: { sheetId: index, title: `T${index}`, index },
+            })),
+          },
+        },
+      ],
+    ]);
+    const got = await refusal(
+      read(`https://docs.google.com/spreadsheets/d/${SHEET}/edit`, fetcher),
+    );
+    expect(got.message).toBe(
+      `"Ledger" has 21 tabs. The Assistant reads up to 20 at once: open the tab you mean and paste that tab's own link.`,
+    );
+    expect(asked).toHaveLength(1);
+  });
+
+  it("refuses a book with no rows on any tab, or more rows than it reads", async () => {
+    const meta: [RegExp, Route] = [
+      /spreadsheets\/[^/]+\?fields=/,
+      { json: SHEET_META },
+    ];
+    const empty = google([
+      [/batchGet/, { json: { valueRanges: [{}, { values: [["Date"]] }] } }],
+      meta,
+    ]);
+    expect(
+      (
+        await refusal(
+          read(
+            `https://docs.google.com/spreadsheets/d/${SHEET}/edit`,
+            empty.fetcher,
+          ),
+        )
+      ).message,
+    ).toBe(
+      `"Expenses 2026" has no rows under a heading row on any of its 2 tabs.`,
+    );
+
+    const rows = (count: number) => [
+      ["Amount"],
+      ...Array.from({ length: count }, (_, index) => [index + 1]),
+    ];
+    const big = google([
+      [
+        /batchGet/,
+        {
+          json: {
+            valueRanges: [{ values: rows(6_000) }, { values: rows(4_001) }],
+          },
+        },
+      ],
+      meta,
+    ]);
+    expect(
+      (
+        await refusal(
+          read(
+            `https://docs.google.com/spreadsheets/d/${SHEET}/edit`,
+            big.fetcher,
+          ),
+        )
+      ).message,
+    ).toBe(
+      `"Expenses 2026" has 10,001 rows across its 2 tabs. The Assistant reads up to 10,000 at once: paste the links of its tabs one at a time.`,
     );
   });
 
