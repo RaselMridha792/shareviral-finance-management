@@ -50,6 +50,23 @@ korar dorkar nei."*
   follows the map, and nothing is saved without Confirm. The model's care is not the only
   thing between a mistake and the books.
 
+## The order now — the owner's decisions after A3 (2 Oct, evening)
+
+1. **B1 next, before A4.**
+   - With a link, anyone who can use the Assistant reads any file shared with the
+     service account. HR still holds `ai.use`, so B1 comes first.
+   - It is a permissions change and goes out alone: `ai.use` for Super Admin and CFO
+     only, and the rail entry and the page hidden from everyone else.
+   - Prove it with `.rolecheck.mjs` and the Assistant harnesses: HR gets a 403 and
+     sees no entry.
+2. **Then A4**, then A5, then the rest of Part B.
+3. **A Google Sheet link that names no tab reads every tab, each counted separately.**
+   - The card and the summary show each tab's name, rows, columns and totals on its own,
+     because the boss's data is mixed and one tab may hold a different kind of record
+     from the next.
+   - A link that names a tab (`#gid=`) still reads only that tab.
+   - This is a follow-up to A3. Do it with A4, or on its own before A5.
+
 ---
 
 ## Part A — first
