@@ -220,6 +220,10 @@ of it is 2026**. That includes payments, income, people and vendors. So:
 - much of 2026 is already in the books from daily use, so "already recorded" matching
   matters more than it would for an empty year.
 
+The owner's estimate, not sure of it: **about the previous six months**, so roughly April
+to September 2026. Take the real range from the files themselves, and say it back to the
+owner in the summary before anything is confirmed.
+
 Still to come from the owner: the samples, and a rough count of sheets, rows and images.
 
 **The rule over all of it still holds.** At this volume a wrong mapping is hundreds of
