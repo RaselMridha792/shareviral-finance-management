@@ -27,10 +27,28 @@ page shows nothing.** "Ei type er vul gulato kora jabena."
 
 ## The rule over all of it
 
-**Wrong is worse than slow.** Every piece adds its cases to `.assistantbar.mjs` and reports
-invention as a number, which must be zero: an account, a category, a figure or a module
-nobody named. Nothing here is done until it has been measured on the live model, not on a
-stand-in.
+**Wrong is worse than slow.** The Assistant must never invent an account, a category, a
+figure or a module nobody named.
+
+**How it is tested — the owner's decision, 2 Oct:** *"local a kichu bosanor dorkar nei …
+ami sorasori live ei test korbo ager barer moto. sudhu sudhu retry kore local a token nosto
+korar dorkar nei."*
+
+- **No Google key goes into the local app, and no session spends tokens on real-model runs
+  locally.** Do not ask the owner for one.
+- **Locally, each piece is proved with the stand-in model and the page**, the way #133 was:
+  the harnesses and the four CI steps. That proves the code. It does not prove what the
+  model will say.
+- **The real model is tested by the owner, on the live site, after the deploy.** Every
+  handover therefore ends with a short list for the owner: the exact messages to type, and
+  what should come back for each (what the draft holds, what is asked, what must not
+  appear). Add the same cases to `.assistantbar.mjs`, so they exist as code for whenever a
+  key is available.
+- **What this costs, said once to the owner and accepted:** a wrong answer is found by the
+  owner's eyes, not by a count. Each fix is a push and a deploy of about eight minutes. So
+  make the code-side guards strong: the draft is checked against the schema, routing
+  follows the map, and nothing is saved without Confirm. The model's care is not the only
+  thing between a mistake and the books.
 
 ---
 
