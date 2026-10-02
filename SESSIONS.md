@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone, the first step of piece A2; nothing reads them yet |
 | 134 | **The Assistant's model: Gemini 3.8 Flash and 3.1 Pro Preview offered, before 2.5 Pro is retired** | **built** — piece A1 of the "made strong" brief; **neither model has answered a request of ours yet: the owner tries them on the live site** |
 | 133 | **The Assistant: drafts checked in code, a transfer between our own accounts, and plain talk** | **built** — brief items 1–5; **the quality bar (item 6) still not run: no model key on the local database** |
 | 132 | **The Assistant on Gemini, through the Google Cloud connection** | **built, ON TRIAL** — pushed 2 Oct at the owner's word to test on the live site; **the quality bar has not been run** |
@@ -112,6 +113,58 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 135. Schema: "Instructions for the Assistant" — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A2, its schema
+change, pushed alone** as the brief asks. The rest of A2 (the map of the app,
+routing before drafting, the screen that edits these instructions, more to
+read) follows in its own pushes.
+
+**What changed:** `deploy/sql/2026-10-02-assistant-instructions.sql` adds
+three columns to `app_settings`:
+
+- `ai_instructions` — text, not null, empty by default. The owner's rules,
+  one a line.
+- `ai_instructions_set_at`, `ai_instructions_set_by` — when it was last
+  saved and by whom. NULL means nobody has saved a set yet.
+
+**A column on the settings row, not a table.** #134 said "needs a table";
+the brief says plain text in the owner's own words, with a size limit, and
+"make this a rule" (A2b) writes one line into it. One text holds that, and
+the audit log keeps every before and after.
+
+**The file also writes the first instruction set**, the owner's rule of
+2 Oct: "Anything called a subscription belongs to Ai Tools and
+Subscriptions: software, AI tools, hosting and servers, and domains. Record
+it as a plan there, never as a plain payment." and "Claude, ChatGPT, Gemini
+kena = Ai Tools and Subscriptions." Only where the text is empty and nobody
+has saved one, so a second run does not put it back.
+
+**Nothing reads the columns yet.** Drizzle knows them
+(`db/schema/settings.ts`), and `GET /settings` leaves them out
+(`settings.service.ts`): every role with `settings.read` reads that, and who
+may read the instructions is for the Assistant's own endpoint to decide.
+The size limit will be the API's, not a CHECK.
+
+**Proved:**
+
+- Applied to the local database twice with `node .apply1.mjs`: three columns,
+  the text written once, no error on the second run.
+- The local API on :4001, restarted by its watcher: `GET /settings` answers
+  200 with 43 keys and none of the three.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 199)
+  pass, each on its own exit code.
+
+**Not proved:** the live database. The deploy applies the file before the
+containers swap.
+
+**Also in this push:** the two brief commits (bdaf14c, f28a908), which were
+committed and not pushed.
+
+**Next:** the rest of A2, in this order: the map and routing (a subscription
+drafted as a plan, not a plain payment); the instructions in the prompt and
+on Settings → Assistant; more look-up tools.
 
 ## 134. The Assistant's model: two Gemini 3 models offered — 2 Oct 2026
 
