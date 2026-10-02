@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 139 | **The Assistant reads a Google Sheet, Doc or Drive file by its link** | **built** — piece A3 of the "made strong" brief; **the owner tries it on the live site: the list is in #139.** Next is A4 (confirm in chat, then it saves) |
 | 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138, not fixed |
 | 137 | **Schema: the Assistant keeps its mistakes — a reply marked wrong, which model gave it, and whether it became a rule** | **done** — pushed alone, the schema half of A2b; the rest of A2b is the next session |
 | 136 | **The Assistant knows the app: a map of every part, routing before drafting, a plan and its renewal, the owner's instructions, seven more look-ups and counting** | **built** — piece A2 of the "made strong" brief (A2b still to do); **the owner tests it on the live site: the list is in #136** |
@@ -116,6 +117,148 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 139. The Assistant reads a Google Sheet, Doc or Drive file by its link — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A3** (files and
+links), which is step 3 of `2026-10-01-google-connections.md`. A3 is built;
+**the next piece is A4** (confirm in chat, then it saves). A1b's move to
+Opus 5.5 may still come any time.
+
+**What the owner now has:** paste a Google link into the message and press
+Send. The chat reads the file first, shows its card, and only then sends the
+message, with the file on it. The model cannot open a link, so it is never
+left to imagine what one holds.
+
+- **A Sheet** (`docs.google.com/spreadsheets/…`): the tab the link names
+  (`gid=`), or the first one. It becomes headings and rows, exactly as an
+  uploaded .xlsx does, so the same card, totals, tools and Send to Import.
+  The name says which tab: "Expenses — Feb (tab 2 of 3)". Another tab is
+  read by pasting that tab's own link. Figures are read unformatted; dates
+  as the sheet shows them.
+- **A Doc** (`docs.google.com/document/…`): its paragraphs, in order, every
+  tab. A table is one line a row ("Hostinger | 4,500"), a bullet keeps its
+  "•". It gets its own card (Google Doc · N paragraphs, how it begins), no
+  Send to Import. The model is given the text itself, up to about 3,000
+  tokens, and reads on with `read_attachment`. It has no `group_attachment`,
+  and it is told that nothing in a document was added up by the app. An
+  `importPlan` for a Doc is dropped in code, and `to-import` refuses one.
+- **A file in Drive** (`drive.google.com/file/…`, `open?id=`, `uc?id=`): an
+  .xlsx, .xls, .csv, .tsv, .txt or PDF is downloaded and goes through the
+  upload itself, the PDF transcription included. A name with no extension
+  gets its type's. A shortcut is followed. A Sheet or Doc linked through
+  Drive goes to its own reader. An .xlsx opened in Sheets but never
+  converted is read through Drive. That reads its first sheet, as an upload
+  does, so a link to another tab of it is named "… (first sheet).xlsx".
+- **Refused, each in words, and nothing is sent to the model:**
+  - **not shared:** "Share this file with <the account's address> first
+    (Viewer is enough), then send the link again. If it is shared already,
+    check that the link was copied whole." Google answers 403 or 404 alike
+    for both, so the sentence names both.
+  - **an API switched off:** names which, and says to press Test under
+    Connections.
+  - **no Google key:** says where it goes.
+  - **a folder, or a picture:** "not built yet". Folders and images are A5.
+  - **Slides, Forms or a published copy:** not read.
+  - **two links in one message:** "Send them one at a time." One card for
+    two links would let somebody believe both were read.
+  - **over 5 MB, or a Doc over 200,000 characters:** refused rather than
+    cut.
+
+  On a refusal the message goes back into the box, with the reason above
+  it.
+- **The prompt** gains one line under WHAT THIS APP CANNOT DO: it cannot
+  open a link; a read one arrives as FILE ATTACHED or DOCUMENT ATTACHED; a
+  link with neither was not read, and it must say so and never describe it.
+- **A long link wrapped out of its chat bubble.** On a phone it ran off the
+  screen. Both bubbles now wrap anywhere. It was found on the screenshots;
+  the harness's sideways check had passed it, because the transcript
+  scrolls on its own. The harness now measures the bubble itself.
+
+**How it is built:**
+
+- `POST /ai/attachments/link` (`ai.use`). Its form is on the map, "Paste a
+  Google link".
+- `connections/google-files.ts` does the reading, with the three read-only
+  scopes #131 set.
+- **No schema change.** A Doc is kept in `ai_attachments` as rows under the
+  one column "Text", named `<title>.gdoc`. That is what Google Drive itself
+  calls a Doc on a computer, and no upload can carry that extension.
+  `isDocAttachment` reads the name, and the DTO gains `kind: "table" |
+  "text"`.
+- `findGoogleLinks` in `packages/shared` finds the link for both the browser
+  and the server, so the two cannot disagree about what counts as one.
+
+**Shared code:** I asked no one, as #136 and #138 did. Readers:
+
+- `packages/shared/src/ai.ts`: `findGoogleLinks`, `aiLinkSchema`,
+  `isDocAttachment`, and `kind` on `AiAttachment`. Read by the `ai-intake`
+  module and the Assistant's web files only.
+- `apps/web/src/lib/ai.ts`: `attachLink`.
+- `imports/spreadsheet.ts` gains `readGrid`, next to `readDelimited`.
+  `readSpreadsheet` is unchanged, so Import is untouched.
+
+**Proved:**
+
+- `.assistantlinkqa.mjs` (new), **38/38**. Neither Google nor a model is
+  asked. Its API on :4015 is preloaded, from a temp file and not from the
+  app, to send `*.googleapis.com` to a local stand-in, with a made-up
+  token. It covers:
+  - every kind of link and every refusal, through the endpoint;
+  - what the model is told for a Sheet and for a Doc, its tools,
+    `read_attachment` by paragraph, the plan dropped;
+  - on the real page as the Super Admin: read before sent; not-shared puts
+    the message back and sends nothing; two links refused; the Doc's card;
+    390px; the bubble.
+
+  It leaves nothing behind (it prints the count: 0).
+- `google-files.spec.ts` (17) and 8 shared link tests.
+- `.assistantmapqa.mjs` 107/107, `.assistantdraftqa.mjs` 57/57,
+  `.assistantlearnqa.mjs` 71/71.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 306, up
+  from 289; shared 374) pass, each on its own exit code.
+
+**Not proved:**
+
+- **What Google really answers.** The stand-in answers as Google's
+  documentation says: 403 or 404 for a file not shared, 403
+  SERVICE_DISABLED for an API switched off, 400 "not supported" for an
+  Office file. No real Sheet has been read by this code.
+- **What a real model does with a Doc's text.** `.assistantbar.mjs` gains
+  section H, which waits for a key:
+  - H1: a CSV's totals;
+  - H2–H3: a Doc's figures as written, no total made up, never an
+    importPlan or an account;
+  - H4–H5: an unread link said to be unread;
+  - H6–H7: a real Sheet or Doc, when `LINK_SHEET` / `LINK_DOC` are set.
+
+**For the owner — on the live site, after the deploy.** First: under
+Settings → Connections, press **Test**. Sheets, Docs and Drive must each
+say they are on. Copy the address shown there (`…@….iam.gserviceaccount.com`),
+and share each test file with it as Viewer.
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Share a Google Sheet. Paste its link with `ei sheet e total koto?`, Send | "Reading the linked file…", then the card: the sheet's name, rows, columns and totals. The answer quotes the card's totals |
+| 2 | In a Sheet of several tabs, open the second tab, copy the link from the address bar, paste it | The card says "(tab 2 of N)" and shows that tab's columns |
+| 3 | Share a Doc. Paste its link with `ei doc e ki ache?` | A "Google Doc · N paragraphs" card with its first lines, no Send to Import. The answer quotes the Doc and makes up no total |
+| 4 | Paste the link of a file you have **not** shared | A red line: "Share this file with …@….iam.gserviceaccount.com first…". Your message is still in the box |
+| 5 | Upload an .xlsx and a PDF statement to Drive, share them, and paste each one's Drive link | Each is read like an attached file. The PDF takes longer: the model transcribes it |
+| 6 | Attach a CSV, an Excel and a PDF the usual way, with the paperclip (A3's first line) | Each card's totals match the file |
+| 7 | Paste a Drive **folder** link | "Reading a whole folder is not built yet…" |
+| 8 | Paste a Dropbox (or any non-Google) link with `total koto?` | It says it cannot read the link and gives no figures |
+
+**What the owner has to decide:**
+
+1. **The service account reads whatever is shared with it, for anybody who
+   may use the Assistant.** Today that is Super Admin, CFO and HR. Suppose
+   somebody has the link to a file they cannot open in Google themselves,
+   but the file is shared with the account. They can read it through the
+   chat. B1 (the Assistant for Super Admin and CFO only) closes most of
+   this. Until then: share only finance files with the account.
+2. A Sheet link reads one tab. Should a link with no tab named read every
+   tab instead, as several attachments? A5's "whole file at once" is the
+   natural place for that.
 
 ## 138. The Assistant gets better with use — 2 Oct 2026
 
