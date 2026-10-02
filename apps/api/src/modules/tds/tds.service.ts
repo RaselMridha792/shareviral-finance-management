@@ -727,7 +727,17 @@ export class TdsService {
     };
   }
 
-  async createDeposit(input: CreateTdsDepositInput, actor: AuthenticatedUser) {
+  async createDeposit(
+    input: CreateTdsDepositInput,
+    actor: AuthenticatedUser,
+    /**
+     * Said by the Assistant's Confirm and save (A4b): its payment is then
+     * "Added by the assistant" rather than "From a tax payment", so a batch
+     * the Assistant entered is found by its origin whole. The form says
+     * nothing. The challan is still a challan: it links to the row either way.
+     */
+    options: { createdVia?: "ai_intake" } = {},
+  ) {
     await this.settings.assertPeriodOpen(input.depositDate);
 
     if (input.depositDate < input.challanDate) {
@@ -796,7 +806,7 @@ export class TdsService {
               reference: input.challanNumber,
               // Every ledger row states the day's rate.
               usdRate: input.usdRate,
-              createdVia: "tax_payment",
+              createdVia: options.createdVia ?? "tax_payment",
               createdBy: actor.id,
               updatedBy: actor.id,
             })

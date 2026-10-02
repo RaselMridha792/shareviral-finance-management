@@ -65,6 +65,14 @@ import { nextRefNo } from "./ref-no";
 import { renewalInMonth } from "./renewal-in-month";
 
 /**
+ * Where a row came from, when the caller of a door here may say so: typed by
+ * hand, or saved through the Assistant's Confirm and save (A4b). The same two
+ * an entry's public schema allows, and no more — a row cannot be made to
+ * claim payroll or a tax payment from here.
+ */
+export type ClaimedOrigin = NonNullable<CreateTransactionInput["createdVia"]>;
+
+/**
  * The dedupe fingerprint. Computed here rather than by Postgres because a
  * date-to-text cast is not IMMUTABLE and generated columns require that.
  */
@@ -892,6 +900,7 @@ export class TransactionsService {
             description: input.description,
             year,
             actor,
+            createdVia: input.createdVia,
           });
 
           await watch.assert(tx);
@@ -932,6 +941,13 @@ export class TransactionsService {
       description: string;
       year: number;
       actor: AuthenticatedUser;
+      /**
+       * The entry's own origin, which a NEW charge takes with it: a charge
+       * written by the same save is part of what that save put in the books,
+       * so "Added by the assistant" finds the two together (A4b). A charge
+       * added later on the edit form is typed by hand, and is left at that.
+       */
+      createdVia?: ClaimedOrigin;
     },
   ): Promise<void> {
     /* Bound to a string before the guard, not read through the optional after
@@ -1113,7 +1129,7 @@ export class TransactionsService {
       paymentMethod: "bank_transfer",
       ...(readAt ? { usdRate: readAt } : {}),
       chargeForId: input.parentId,
-      createdVia: "manual",
+      createdVia: input.createdVia ?? "manual",
       dedupeHash: dedupeKey({
         accountId: input.accountId,
         txnDate: input.txnDate,
@@ -1438,8 +1454,11 @@ export class TransactionsService {
      * `upgrade`: this is the vendor's charge for an upgrade, not a renewal —
      * the once-a-month rule does not apply, and `upgradeSubscription` marks
      * the row as the upgrade's straight after.
+     *
+     * `createdVia`: the Assistant's Confirm and save says so (A4b); the
+     * Renew drawer says nothing, and the payment is typed by hand.
      */
-    options: { upgrade?: boolean } = {},
+    options: { upgrade?: boolean; createdVia?: ClaimedOrigin } = {},
   ) {
     /*
      * `subscriptionsService`, not `vendorsService`.
@@ -1646,6 +1665,7 @@ export class TransactionsService {
           ? `${plan.toolName} — ${input.note.trim()}`
           : `${plan.toolName} subscription`,
         paymentMethod: "card",
+        createdVia: options.createdVia,
       },
       actor,
     );
@@ -2069,8 +2089,18 @@ export class TransactionsService {
     };
   }
 
-  /** Moving money between our own accounts: one out row and one in row. */
-  async transfer(input: TransferInput, actor: AuthenticatedUser) {
+  /**
+   * Moving money between our own accounts: one out row and one in row.
+   *
+   * `createdVia` is said by the Assistant's Confirm and save (A4b), and goes
+   * on both halves and the charge; the Money Transfer form says nothing.
+   */
+  async transfer(
+    input: TransferInput,
+    actor: AuthenticatedUser,
+    options: { createdVia?: ClaimedOrigin } = {},
+  ) {
+    const createdVia = options.createdVia ?? "manual";
     await this.settings.assertPeriodOpen(input.txnDate);
     // Both sides, before either row is written.
     await this.assertAccountExists(input.fromAccountId);
@@ -2120,7 +2150,7 @@ export class TransactionsService {
             reference: input.reference,
             paymentMethod: input.paymentMethod,
             transferGroupId: groupId,
-            createdVia: "manual",
+            createdVia,
             createdBy: actor.id,
             updatedBy: actor.id,
           })
@@ -2147,7 +2177,7 @@ export class TransactionsService {
           reference: input.reference,
           paymentMethod: input.paymentMethod,
           transferGroupId: groupId,
-          createdVia: "manual",
+          createdVia,
           createdBy: actor.id,
           updatedBy: actor.id,
         });
@@ -2163,6 +2193,7 @@ export class TransactionsService {
           description: input.description,
           year,
           actor,
+          createdVia,
         });
 
         await watch.assert(tx);

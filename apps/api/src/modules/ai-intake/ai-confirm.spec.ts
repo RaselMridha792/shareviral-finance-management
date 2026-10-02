@@ -19,13 +19,16 @@ import {
   type AiTarget,
 } from "@finance/shared";
 
-import { PERMISSIONS_KEY } from "../../common/decorators/auth.decorators";
+import {
+  PERMISSIONS_KEY,
+  type AuthenticatedUser,
+} from "../../common/decorators/auth.decorators";
 import { SubscriptionsController } from "../subscriptions/subscriptions.controller";
 import { TdsController } from "../tds/tds.controller";
 import { TeamMembersController } from "../team-members/team-members.controller";
 import { TransactionsController } from "../transactions/transactions.controller";
 import { VendorsController } from "../vendors/vendors.controller";
-import { savedLine } from "./ai-confirm.service";
+import { AiConfirmService, savedLine } from "./ai-confirm.service";
 import { APP_MAP } from "./app-map";
 
 /**
@@ -275,6 +278,156 @@ describe("what the chat says after a save", () => {
       ),
     ).toBe(
       "Saved — money coming in, TXN-1: lots into Cash. It shows under All transactions.",
+    );
+  });
+});
+
+/*
+ * "Added by the assistant" on every ledger row Confirm writes (A4b).
+ *
+ * Before A4b only a plain payment said so: a transfer, a plan's payment and a
+ * challan's payment were written by their own services as "Entered by hand"
+ * or "From a tax payment", and the Assistant's batch could not be found by
+ * its origin. Each save is followed to the service it calls, which must be
+ * told the origin; the services' own use of it is measured against the
+ * database by .assistantoriginqa.mjs.
+ */
+describe("everything Confirm saves is added by the assistant", () => {
+  const ACCOUNT = "11111111-1111-4111-8111-111111111111";
+  const OTHER = "22222222-2222-4222-8222-222222222222";
+  const CATEGORY = "33333333-3333-4333-8333-333333333333";
+  const PLAN = "44444444-4444-4444-8444-444444444444";
+  const DAY = "2026-10-01";
+  const actor = {
+    id: "55555555-5555-4555-8555-555555555555",
+  } as AuthenticatedUser;
+
+  function confirmed(target: AiTarget, body: Record<string, unknown>) {
+    const transactions = {
+      create: jest.fn(() => Promise.resolve({ id: "t1", refNo: "TXN-1" })),
+      transfer: jest.fn(() => Promise.resolve({ id: "t2", refNo: "TXN-2" })),
+      payForSubscription: jest.fn(() =>
+        Promise.resolve({ id: "t3", refNo: "TXN-3" }),
+      ),
+      findOne: jest.fn(() => Promise.resolve({ id: "t4", refNo: "TXN-4" })),
+    };
+    const subscriptions = {
+      create: jest.fn(() => Promise.resolve({ id: PLAN, startDate: DAY })),
+    };
+    const tds = {
+      createDeposit: jest.fn(() =>
+        Promise.resolve({ id: "d1", transactionId: "t4" }),
+      ),
+    };
+    const chats = {
+      get: jest.fn(() => Promise.resolve({ reply: { target, area: null } })),
+      markSaved: jest.fn(() => Promise.resolve()),
+    };
+    const intake = {
+      readyToSave: jest.fn(() => Promise.resolve({ body, draft: {} })),
+      learn: jest.fn(() => Promise.resolve({ recorded: 0 })),
+    };
+    const service = new AiConfirmService(
+      chats as never,
+      intake as never,
+      transactions as never,
+      subscriptions as never,
+      {} as never,
+      {} as never,
+      tds as never,
+    );
+    return {
+      done: service.confirm({ chatId: PLAN, draft: {} }, actor),
+      transactions,
+      tds,
+    };
+  }
+
+  it("a payment, even when its body says otherwise", async () => {
+    const { done, transactions } = confirmed("transaction_out", {
+      direction: "out",
+      amount: "640",
+      accountId: ACCOUNT,
+      categoryId: CATEGORY,
+      usdRate: "122.5",
+      txnDate: DAY,
+      description: "Courier",
+      createdVia: "manual",
+    });
+    await done;
+    expect(transactions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ createdVia: "ai_intake" }),
+      actor,
+    );
+  });
+
+  it("a transfer, both halves told", async () => {
+    const { done, transactions } = confirmed("transfer", {
+      fromAccountId: ACCOUNT,
+      toAccountId: OTHER,
+      amount: "100",
+      usdRate: "122.5",
+      txnDate: DAY,
+      description: "Transfer from Cash to City Bank",
+    });
+    await done;
+    expect(transactions.transfer).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: "100" }),
+      actor,
+      { createdVia: "ai_intake" },
+    );
+  });
+
+  it("a plan's renewal", async () => {
+    const { done, transactions } = confirmed("subscription_payment", {
+      subscriptionId: PLAN,
+      txnDate: DAY,
+      advanceRenewal: true,
+    });
+    await done;
+    expect(transactions.payForSubscription).toHaveBeenCalledWith(
+      PLAN,
+      expect.objectContaining({ txnDate: DAY }),
+      actor,
+      { createdVia: "ai_intake" },
+    );
+  });
+
+  it("a new plan's first payment", async () => {
+    const { done, transactions } = confirmed("subscription", {
+      toolName: "Cursor",
+      planName: "Pro",
+      category: "ai_tool",
+      costUsd: "20",
+      usdRate: "122.5",
+      startDate: DAY,
+      accountId: ACCOUNT,
+    });
+    await done;
+    expect(transactions.payForSubscription).toHaveBeenCalledWith(
+      PLAN,
+      expect.objectContaining({ txnDate: DAY, advanceRenewal: false }),
+      actor,
+      { createdVia: "ai_intake" },
+    );
+  });
+
+  it("a challan's payment", async () => {
+    const { done, tds } = confirmed("tds_deposit", {
+      challanNumber: "A-123",
+      challanDate: DAY,
+      depositDate: DAY,
+      amount: "500",
+      periodYear: 2026,
+      periodMonth: 9,
+      accountId: ACCOUNT,
+      usdRate: "122.5",
+    });
+    await done;
+    expect(tds.createDeposit).toHaveBeenCalledWith(
+      expect.objectContaining({ challanNumber: "A-123" }),
+      actor,
+      { createdVia: "ai_intake" },
     );
   });
 });

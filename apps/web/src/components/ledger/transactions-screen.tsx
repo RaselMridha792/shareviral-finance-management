@@ -1,7 +1,7 @@
 "use client";
 
-import type { TxnDirection } from "@finance/shared";
-import { formatMoney } from "@finance/shared";
+import type { TxnDirection, TxnOrigin } from "@finance/shared";
+import { formatMoney, TXN_ORIGINS, TXN_ORIGIN_LABELS } from "@finance/shared";
 import { LoaderCircle, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -47,6 +47,8 @@ type LedgerFilters = {
   accountId?: string;
   direction?: TxnDirection;
   categoryId?: string;
+  /** How an entry came to be: by hand, from Excel, by the Assistant… */
+  createdVia?: TxnOrigin;
   q?: string;
   includeVoided?: boolean;
 };
@@ -335,6 +337,12 @@ export function TransactionsScreen({
  * hold there; the search box takes the 152px that are left and every pixel
  * gained after that. Why each control is sized the way it is now lives with the
  * control, in ui/filters.tsx.
+ *
+ * Origin (A4b, 3 Oct 2026) is the exception, and the owner's choice: its
+ * options read as the record's own popup does ("Added by the assistant"), not
+ * shortened to fit. It is 202px, so with the sidebar open the row holds one
+ * line from a 1490px window, and below that Origin goes to a second line on
+ * its own. Measured, not estimated.
  */
 function FilterRow({
   filters,
@@ -477,6 +485,28 @@ function FilterRow({
           ]),
         ]}
       />
+
+      {/*
+        Where an entry came from (A4b). "Added by the assistant" lists every
+        entry saved through Confirm and save, of every kind — a transfer's two
+        halves, a plan's payment, a challan's payment and any bank charge they
+        carried — so a batch the Assistant entered can be found whole, and
+        reversed whole if it was wrong.
+      */}
+      <FilterSelect
+        label="Origin"
+        value={filters.createdVia ?? ""}
+        onChange={(next) =>
+          set({ createdVia: (next || undefined) as TxnOrigin | undefined })
+        }
+      >
+        <option value="">Any origin</option>
+        {TXN_ORIGINS.map((origin) => (
+          <option key={origin} value={origin}>
+            {TXN_ORIGIN_LABELS[origin]}
+          </option>
+        ))}
+      </FilterSelect>
 
       {/*
         No "Show voided" tick.

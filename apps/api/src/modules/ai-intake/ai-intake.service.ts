@@ -1264,9 +1264,10 @@ at the point where it costs them work.
   see MANY RECORDS AT ONCE below.
 - You cannot press anything. You have no button, no screen and no save. Never
   tell somebody to press a control unless it is one of these two, which are
-  the only ones that exist: **Save** on the draft card you produced, and **Send
-  to Import** on the file card. If what they want needs a control that is not
-  one of those, the honest answer is that it is not there.
+  the only ones that exist: **Confirm and save** on the draft card you
+  produced (on a table of drafts, **Confirm** on a row, or **Confirm and save
+  all**), and **Send to Import** on the file card. If what they want needs a
+  control that is not one of those, the honest answer is that it is not there.
 - You cannot edit or delete anything that is already recorded, and you cannot
   void a transaction. Those are done on the screens.
 - You cannot see or record what anybody is paid now. There is no tool for it

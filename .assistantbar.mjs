@@ -36,6 +36,9 @@
  *   I. Confirm and save, 3 Oct 2026 (A4)           — "save kore dao" never
  *      answered "saved", the draft kept for the button; after a save in the
  *      chat, it says so with the number and drafts nothing again
+ *   J. "Added by the assistant", 3 Oct 2026 (A4b)  — asked where its entries
+ *      are, All transactions and the Origin filter; asked for the button,
+ *      Confirm and save, never a bare Save
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -894,6 +897,45 @@ CASES.push(
       ].filter(Boolean);
       const how = reply.batch ? `${rows.length} drafts, no account` : /send to import/i.test(said) ? "pointed to Send to Import" : "asked";
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : how, said };
+    },
+  },
+);
+
+/*
+ * J. A4b, 3 Oct 2026: everything Confirm saves is "Added by the assistant",
+ * and All transactions has an Origin filter that finds it. The rows are the
+ * app's, measured by .assistantoriginqa.mjs with no model. What only a real
+ * model can get wrong is pointing to them, and naming the button it has.
+ */
+CASES.push(
+  {
+    id: "J1", runs: LIGHT, name: "'assistant diye ja entry korechi kothay dekhbo?' - All transactions, Origin 'Added by the assistant'",
+    run: async () => {
+      const { reply, failed } = await talk(["tumi assistant diye ja ja entry korecho segulo ek sathe kothay dekhbo?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        /all transactions/i.test(said) ? null : "did not name All transactions",
+        /added by the assistant/i.test(said) ? null : "did not name the origin 'Added by the assistant'",
+        reply.target || reply.batch ? `drafted ${reply.target ?? "a table"}` : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "pointed to the Origin filter", said };
+    },
+  },
+  {
+    id: "J2", runs: LIGHT, name: "'save button kothay?' after a draft - 'Confirm and save', never a bare 'Save'",
+    run: async () => {
+      const { reply, failed } = await talk([`Aaj electricity bill 3200 taka dilam ${BANK} theke, rate 122.5.`, "save korar button ta kothay?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      // "Confirm and save button" is right; a Save with nothing before it is not.
+      const bare = said.replace(/confirm and save(\s+all)?/gi, "");
+      const wrong = [
+        /confirm and save/i.test(said) ? null : "did not name Confirm and save",
+        /\*\*save\*\*|"save"|press save|save (button|চাপুন|chapun)/i.test(bare) ? "named a bare Save" : null,
+        reply.target === "transaction_out" ? null : `the draft became ${reply.target ?? "nothing"}`,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named Confirm and save", said };
     },
   },
 );

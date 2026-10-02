@@ -27,7 +27,7 @@ export const TRANSACTIONS_MAP = [
       {
         href: "/transactions",
         name: "All transactions",
-        does: "Every entry, searchable and filtered by date, account, category and direction. A row opens the whole record; an entry is edited or voided from its row.",
+        does: 'Every entry, searchable and filtered by date, account, category, direction and origin. The origin "Added by the assistant" lists every entry saved through Confirm and save in the Assistant, of every kind. A row opens the whole record; an entry is edited or voided from its row.',
       },
     ],
     // Nothing is created on All transactions itself: money out starts on an

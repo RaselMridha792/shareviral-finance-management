@@ -58,7 +58,8 @@ import { AiIntakeService } from "./ai-intake.service";
  *      that endpoint calls, as the person who pressed the button.
  *   4. That service writes its own audit row, which says who saved it — and,
  *      because it runs `throughTheAssistant`, that it came through the
- *      Assistant.
+ *      Assistant. Every ledger row it writes, of every kind, has the origin
+ *      "Added by the assistant" (`ORIGIN`, A4b).
  *   5. The conversation keeps what was saved, so the same draft cannot be
  *      saved twice, and a table reopened later shows which rows are in.
  *
@@ -69,6 +70,16 @@ import { AiIntakeService } from "./ai-intake.service";
 
 /** A malformed id is a 400, as the endpoints' own `:id` is. */
 const planId = z.string().uuid("Say which plan this renewal is for.");
+
+/**
+ * The origin every ledger row saved here carries: "Added by the assistant"
+ * (A4b). A payment's draft states it in its body; a transfer, a plan's
+ * payment and a challan's payment are written by their own services, which
+ * are told it here. Before A5 enters months of the boss's files, everything
+ * the Assistant put in the books has to be findable by this, so a wrong batch
+ * can be found and reversed as one.
+ */
+const ORIGIN = { createdVia: "ai_intake" } as const;
 
 /** The figure, as a person reads it — or as it was written, if it will not parse. */
 function money(value: unknown, currency: "BDT" | "USD" = "BDT"): string {
@@ -336,16 +347,22 @@ export class AiConfirmService {
     switch (target) {
       case "transaction_out":
       case "transaction_in":
+        // The draft's body says so already; said here too, so that no
+        // other path to this save can leave it out.
         return done(
           await this.transactions.create(
-            parse(createTransactionSchema, body),
+            parse(createTransactionSchema, { ...body, ...ORIGIN }),
             actor,
           ),
         );
 
       case "transfer":
         return done(
-          await this.transactions.transfer(parse(transferSchema, body), actor),
+          await this.transactions.transfer(
+            parse(transferSchema, body),
+            actor,
+            ORIGIN,
+          ),
         );
 
       case "subscription_payment": {
@@ -356,6 +373,7 @@ export class AiConfirmService {
             planId.parse(subscriptionId),
             parse(paySubscriptionSchema, payment),
             actor,
+            ORIGIN,
           ),
         );
       }
@@ -382,6 +400,7 @@ export class AiConfirmService {
               advanceRenewal: false,
             }),
             actor,
+            ORIGIN,
           );
           return { id: plan.id, refNo: paid.refNo ?? null, warning: null };
         } catch (error) {
@@ -408,6 +427,7 @@ export class AiConfirmService {
         const deposit = await this.tds.createDeposit(
           parse(createTdsDepositSchema, body),
           actor,
+          ORIGIN,
         );
         // Its number in the books is its payment's, the ledger row.
         const payment = deposit.transactionId
