@@ -113,6 +113,42 @@ those first, and tell the owner how many there were.
 subscriptions and their charges, payroll runs, TDS, invoices, HR requests and budget, bank
 advice. Each one is gated on the asker's own permission, as the existing ones are.
 
+### A2b. It gets better with use — the owner's words, 2 Oct
+
+> "model er porikkha coltei thakbe and aste aste improve korbo oke train kore kore
+> serokom system banano jayna? puro application er kon page a ki ache and kon forms ta
+> kivabe kaj kore etc sob or knowledge thaka ucit."
+
+We cannot retrain Google's model. What can be built is a system around it that learns,
+with four parts:
+
+1. **The map covers pages and forms, and is generated where it can be.**
+   - For every page: what it shows, and what can be done there.
+   - For every form: its fields, which are required, what each means, and what happens on
+     Save.
+   - The field lists come from the same schemas the API validates with, as
+     `field-reference.ts` already does for the five targets. The map then cannot drift
+     from the app.
+   - The meaning of each page is written by hand, next to its module. A test fails when a
+     page or a form has no entry.
+2. **Every correction is kept** (`ai_corrections` exists; widen it).
+   - When the person changes a field in a draft before saving, or presses "this was wrong"
+     on a reply and says why, the app stores:
+     - what was asked;
+     - what the Assistant gave;
+     - what was right.
+   - Recent, relevant corrections are shown to the model on later turns.
+3. **Corrections become rules.**
+   - The Assistant's settings get a list of recent mistakes.
+   - Beside each is "make this a rule", which writes one line into the owner's instruction
+     set (A2). The owner can edit or delete any rule.
+   - This list is the "training" the owner asked for, in a form they can read and control.
+4. **Every mistake becomes a test.** Each recorded mistake is added to `.assistantbar.mjs`
+   as a case, so a later change to the prompt or the model cannot bring it back unnoticed.
+
+Also add a page the owner can open: **"What the Assistant knows"**. It shows the map, the
+rules and the recent corrections, so that the owner can see why it answered as it did.
+
 ### A3. Files and links
 
 - **Uploaded files.** PDF, CSV and Excel are read already. Confirm each on the live model.
