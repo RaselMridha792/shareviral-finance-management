@@ -33,6 +33,12 @@ const SECRET_COLUMNS = [
   "googleServiceAccount",
   "googleKeySetAt",
   "googleKeySetBy",
+  // The owner's instructions for the Assistant. Not secret, but GET /settings
+  // is read by every role with `settings.read`, and who may read these is the
+  // Assistant's own endpoint's decision.
+  "aiInstructions",
+  "aiInstructionsSetAt",
+  "aiInstructionsSetBy",
   /*
    * The card password's hash, and the two columns beside it. The hash is the
    * obvious one; the other two are here for the same reason the Anthropic

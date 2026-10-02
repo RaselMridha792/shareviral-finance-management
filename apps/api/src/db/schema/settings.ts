@@ -241,6 +241,18 @@ export const appSettings = pgTable(
      */
     aiDataAccess: text("ai_data_access").notNull().default("full"),
 
+    /**
+     * "Instructions for the Assistant": the owner's own rules, plain text, one
+     * a line (2 Oct 2026). Placed in the Assistant's prompt after the map of
+     * the app. Empty means no rules; a null `SetAt` means nobody has saved a
+     * set yet. The size limit is the API's.
+     */
+    aiInstructions: text("ai_instructions").notNull().default(""),
+    aiInstructionsSetAt: timestamp("ai_instructions_set_at", {
+      withTimezone: true,
+    }),
+    aiInstructionsSetBy: uuid("ai_instructions_set_by"),
+
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
