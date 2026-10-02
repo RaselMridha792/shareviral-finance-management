@@ -283,13 +283,16 @@ try {
   check("and the field fixed before Save, as before", /"LEARNQA Claude Code er ei masher bill dilam" → subscriptionName: you left it empty, they made it "LEARNQA Claude"/.test(told), "");
   check("one placed in no part is told to nobody", !told.includes("LEARNQA placed nowhere"), "");
 
+  // HR held `ai.use` until B1 (3 Oct 2026), and was the role these filters
+  // were measured on. Only the Super Admin and the CFO use the Assistant now,
+  // and both read every part, so a real role can no longer show the filter
+  // holding a mistake back; routing.spec.ts keeps the role gate as unit tests.
   const hrTurn = await turn("LEARNQA hello from HR", plain("LEARNQA hi"), { as: callHr });
-  const toldHr = systemOf(hrTurn.requests[0]);
-  check("HR is told the one in Team, which HR may read", toldHr.includes("LEARNQA team_members diye list koro"), "");
-  check("not the payment drafted wrong (no transactions.read)", !toldHr.includes("LEARNQA eta subscription, AI tools e jabe"), "");
-  check("nor the one in Accounts (no accounts.read)", !toldHr.includes("LEARNQA account_balances dekho"), "");
+  check("HR is refused the Assistant (403), and nothing reaches the model", hrTurn.status === 403 && hrTurn.requests.length === 0, `${hrTurn.status} ${hrTurn.requests.length}`);
   const cfoTurn = await turn("LEARNQA hello from the CFO", plain("LEARNQA hi"), { as: callCfo });
-  check("the CFO is told the payment one", systemOf(cfoTurn.requests[0]).includes("LEARNQA eta subscription, AI tools e jabe"), "");
+  const toldCfo = systemOf(cfoTurn.requests[0]);
+  check("the CFO is told the payment one", toldCfo.includes("LEARNQA eta subscription, AI tools e jabe"), "");
+  check("and the one in Team", toldCfo.includes("LEARNQA team_members diye list koro"), "");
 
   /* ------------------------------------------------------------------ */
   console.log("\nE. The owner's list");
@@ -342,8 +345,8 @@ try {
   check("the Super Admin removes one (204), and it is gone", removed.status === 204 && gone.n === 0, String(removed.status));
   const [removal] = await q(`select before from audit_logs where entity_table = 'ai_corrections' and entity_id = $1 and action = 'delete'`, [teamOnly]);
   check("with an audit row of what it said", removal?.before?.corrected === "LEARNQA team_members diye list koro", JSON.stringify(removal?.before?.corrected));
-  const hrAgain = await turn("LEARNQA HR once more", plain("LEARNQA hi"), { as: callHr });
-  check("and it is told to nobody any more", !systemOf(hrAgain.requests[0]).includes("LEARNQA team_members diye list koro"), "");
+  const cfoAgain = await turn("LEARNQA the CFO once more", plain("LEARNQA hi"), { as: callCfo });
+  check("and it is told to nobody any more", cfoAgain.requests.length > 0 && !systemOf(cfoAgain.requests[0]).includes("LEARNQA team_members diye list koro"), "");
   check("one that is not there (404)", (await call("DELETE", `/ai/mistakes/${randomUUID()}`)).status === 404);
   await q(`delete from ai_corrections where id = $1`, [nowhere]);
 
@@ -353,7 +356,7 @@ try {
   const parts = knowledge.body?.parts ?? [];
   const forms = parts.flatMap((part) => part.forms);
   check("the CFO reads it", knowledge.status === 200 && parts.length >= 21, `${knowledge.status} ${parts.length} parts`);
-  check("HR reads it too: it is what the Assistant is told, no record of anybody's", (await callHr("GET", "/ai/knowledge")).status === 200);
+  check("HR does not: the Assistant is not HR's (403)", (await callHr("GET", "/ai/knowledge")).status === 403);
   check("every part has its forms, a hundred and more of them", forms.length >= 100, String(forms.length));
   const addPlan = parts.find((part) => part.key === "subscriptions")?.forms.find((form) => form.draft);
   check(

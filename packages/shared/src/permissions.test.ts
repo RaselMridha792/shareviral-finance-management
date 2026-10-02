@@ -182,6 +182,15 @@ describe("the retired roles", () => {
   });
 });
 
+describe("the Assistant is the Super Admin's and the CFO's alone (2 Oct 2026)", () => {
+  it("grants ai.use to those two roles and no other", () => {
+    // Since #139 it reads any Google file shared with the service account by
+    // its link, so who may use it is who may read those files.
+    const allowed = ROLES.filter((role) => hasPermission(role, "ai.use"));
+    assert.deepEqual(allowed, ["super_admin", "cfo"]);
+  });
+});
+
 describe("the CFO runs operations but not the company", () => {
   it("holds every permission except the two that are super_admin's", () => {
     // Written out as "everything but these" rather than as a list, because a

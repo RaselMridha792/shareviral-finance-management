@@ -41,8 +41,11 @@ export type LearnableField = (typeof LEARNABLE_FIELDS)[number];
  *
  * These rows are the one thing in the assistant that carries one person's work
  * into another person's prompt, so they go through the same gate the records
- * themselves do. HR has `ai.use` and not `transactions.read`, and so is never
- * shown how somebody worded a payment.
+ * themselves do. HR held `ai.use` and not `transactions.read` until 3 Oct
+ * 2026, and so was never shown how somebody worded a payment. Only the Super
+ * Admin and the CFO use the Assistant now, and both read everything, so this
+ * filters nobody for now; it holds the line again the day a role like HR's is
+ * given the Assistant back.
  */
 export const CORRECTION_PERMISSION: Record<AiTarget, Permission> = {
   transaction_in: "transactions.read",

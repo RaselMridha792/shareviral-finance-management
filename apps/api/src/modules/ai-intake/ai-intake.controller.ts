@@ -186,9 +186,9 @@ export class AiIntakeController {
    * Hands the file's rows to the import screen.
    *
    * Separately permissioned, because this is where a file stops being
-   * something to read and becomes something about to enter the books. HR can
-   * attach a spreadsheet and ask about it; staging it for import is a
-   * different act and needs `imports.run`.
+   * something to read and becomes something about to enter the books.
+   * Attaching a spreadsheet and asking about it is `ai.use`; staging it for
+   * import is a different act and needs `imports.run` as well.
    */
   @Post("attachments/:id/to-import")
   @HttpCode(200)

@@ -31,10 +31,11 @@ import { users } from "./users";
  * Two reasons, and the second is the one that matters. An amount is true of one
  * payment and teaches nothing about the next. And these rows are read back into
  * other people's prompts, so anything kept here is shown to everybody the
- * filter lets through — an HR user has `ai.use` and no `transactions.read`, and
- * a "lesson" carrying ৳85,000 would walk the ledger straight through the wall
- * the whole permission matrix exists to hold. What is worth learning is which
- * words mean which category, and that survives the money being left out.
+ * filter lets through — HR held `ai.use` and no `transactions.read` until 3 Oct
+ * 2026, and a "lesson" carrying ৳85,000 would have walked the ledger straight
+ * through the wall the whole permission matrix exists to hold. What is worth
+ * learning is which words mean which category, and that survives the money
+ * being left out.
  *
  * `said` has its digits masked for the same reason, and reading is gated on the
  * permission for the record type — belt and braces, because this is the one

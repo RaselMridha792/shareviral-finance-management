@@ -340,12 +340,14 @@ const hrShouldNotSee = [
   "Reports",
   "TDS",
   "Import and Export",
+  // Not HR's since B1 (3 Oct 2026): the Super Admin's and the CFO's alone.
+  "AI Assistant",
 ];
 const railLeaks = hrShouldNotSee.filter((w) => railHas("hr", w));
 expect(
   "HR's rail carries no screen HR cannot open",
   railLeaks.length === 0,
-  railLeaks.length ? railLeaks.join(", ") : "six ledger screens all absent",
+  railLeaks.length ? railLeaks.join(", ") : "six ledger screens and the Assistant all absent",
 );
 expect(
   "and the CEO's carries no Import or Assistant",

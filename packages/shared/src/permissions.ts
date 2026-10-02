@@ -262,7 +262,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
      */
     "exports.run",
     "settings.read",
-    "ai.use",
+    /**
+     * `ai.use` was here until 3 Oct 2026 and is withdrawn on purpose: the
+     * Assistant is for the Super Admin and the CFO alone (the owner, 2 Oct).
+     * Since #139 it reads any Google file shared with the service account by
+     * its link, so whoever may use it can read a finance file they could not
+     * open in Google themselves. The rail entry, the page and every /ai
+     * endpoint all read this one permission, so this line is the whole change.
+     */
   ],
 };
 

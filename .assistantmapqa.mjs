@@ -310,8 +310,13 @@ try {
   const noArea = await turn("kemon acho", { draft: {}, missingFields: [], summary: "Bhalo. Ki record korbo?" });
   check("an answer with no part named carries no link", noArea.body?.screen === null && noArea.body?.area === null, JSON.stringify([noArea.body?.area, noArea.body?.screen]));
 
+  // HR held `ai.use` until B1 (3 Oct 2026), and was the role the gates inside
+  // a turn were measured on: a draft the role cannot save, the look-ups it may
+  // not run. The Super Admin and the CFO are the only roles left, and both
+  // save and read everything, so no real role reaches those gates now;
+  // routing.spec.ts keeps the role gate as unit tests.
   const asHr = await turn("aaj courier bill 500 taka dilam", { area: "transactions", target: "transaction_out", draft: { amount: "500", accountName: CARD.name, categoryName: PLAIN.name, usdRate: "122.5", txnDate: today, description: "Courier bill" }, missingFields: [] }, { as: callHr });
-  check("HR is not offered a payment HR could not save", asHr.status === 200 && asHr.body?.target === null && /^Your role cannot record money going out/.test(asHr.body?.summary ?? ""), `${asHr.status} ${shown(asHr.body)}`);
+  check("HR is refused the Assistant (403), and nothing reaches the model", asHr.status === 403 && asHr.requests.length === 0, `${asHr.status} ${asHr.requests.length}`);
 
   const named = await turn(`MAPQA Claude er bill dilam 500 taka ${CARD.name} theke, rate 122.5`, {
     area: "expenses",
@@ -400,9 +405,6 @@ try {
   check("their fields come from the form's schemas", /\nsubscription\n(?:.*\n)*?\s+costUsd\s+REQUIRED/.test(system) && /\nsubscription_payment\n(?:.*\n)*?\s+subscriptionName\s+REQUIRED/.test(system));
   const offered = (request?.tools ?? []).map((tool) => tool.name);
   check("the Super Admin is offered every look-up", ["find_subscriptions", "find_invoices", "hr_requests", "hr_budget", "bank_advices", "find_transactions", "payroll_status"].every((name) => offered.includes(name)), offered.join(", "));
-  const hrTools = (asHr.requests[0]?.tools ?? []).map((tool) => tool.name);
-  check("HR is offered the plans, and not the ledger, the invoices or the requests", hrTools.includes("find_subscriptions") && !["find_transactions", "find_invoices", "hr_requests", "hr_budget", "account_balances"].some((name) => hrTools.includes(name)), hrTools.join(", "));
-  check("and is told which records the role cannot save", /Their role cannot save: transaction_out, transaction_in, transfer, subscription, subscription_payment/.test(systemOf(asHr.requests[0])));
 
   /* ------------------------------------------------------------------ */
   console.log("\nE. The look-ups");
@@ -427,13 +429,9 @@ try {
   const plans = await lookUp("find_subscriptions", { search: "MAPQA" });
   check("find_subscriptions: the plan, its price, its rate and its card", plans.is_error === false && /MAPQA Claude — Max \(ai tool, active\)/.test(plans.content) && /\$100\.00, monthly, at a rate of 122\.5/.test(plans.content) && plans.content.includes(`paid from ${CARD.name}`), String(plans.content).slice(0, 300));
   check("and that nothing has been paid against it yet", /paid: nothing recorded against this plan/.test(plans.content ?? ""));
-  const plansHr = await lookUp("find_subscriptions", { search: "MAPQA Claude" }, callHr);
-  check("HR reads the plan, and no payments: the ledger is not HR's", /MAPQA Claude — Max/.test(plansHr.content ?? "") && /cannot read the ledger/.test(plansHr.content ?? "") && !/paid:/.test(plansHr.content ?? ""), String(plansHr.content).slice(-160));
 
   const invoices = await lookUp("find_invoices", { search: "MAPQA" });
   check("find_invoices: the number, the status, the client and the total", /MAPQA-INV-1 · SENT · MAPQA Client · MAPQA project · ৳15,000\.00/.test(invoices.content ?? ""), String(invoices.content).slice(0, 300));
-  const invoicesHr = await lookUp("find_invoices", {}, callHr);
-  check("HR is refused the invoices, in words", invoicesHr.is_error === true && /Refused: this account does not have permission/.test(invoicesHr.content ?? ""), String(invoicesHr.content).slice(0, 120));
 
   const budgets = await lookUp("hr_budget", { search: "MAPQA" });
   check("hr_budget: the budget, what was approved against it and what still waits", /MAPQA Snacks, .* asked ৳50,000\.00 \(approved\); 2 spends against it — approved ৳1,200\.00, of which paid ৳0\.00; still waiting ৳800\.00/.test(budgets.content ?? ""), String(budgets.content).slice(0, 300));
@@ -462,8 +460,8 @@ try {
   const counted = await lookUp("team_members");
   check("team_members: the Team screen's own total, current and past, as the books have them", (counted.content ?? "").startsWith(`The Team screen lists ${team.everyone} people in all: ${team.current} current`) && (counted.content ?? "").includes(`and ${team.everyone - team.current} past`), String(counted.content).slice(0, 240));
   check("and never a figure of anybody's pay", !/৳|salary|gross/i.test(counted.content ?? ""));
-  const contractors = await lookUp("team_members", { status: "current", engagement: "contractor" }, callHr);
-  check("HR may count the team too, filtered", contractors.is_error === false && (contractors.content ?? "").includes(`${team.contractors} match what was asked.`), String(contractors.content).slice(0, 240));
+  const contractors = await lookUp("team_members", { status: "current", engagement: "contractor" }, callCfo);
+  check("the CFO may count the team too, filtered",contractors.is_error === false && (contractors.content ?? "").includes(`${team.contractors} match what was asked.`), String(contractors.content).slice(0, 240));
   const [{ vendors: vendorCount }] = await q(`select count(*)::int as vendors from vendors where deleted_at is null`);
   const vendorList = await lookUp("list_vendors");
   check("list_vendors: how many vendors are on file", vendorCount ? (vendorList.content ?? "").startsWith(`${vendorCount} vendor${vendorCount === 1 ? "" : "s"} on file`) : /No vendor on file/.test(vendorList.content ?? ""), String(vendorList.content).slice(0, 160));
