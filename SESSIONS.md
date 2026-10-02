@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 137 | **Schema: the Assistant keeps its mistakes — a reply marked wrong, which model gave it, and whether it became a rule** | **done** — pushed alone, the schema half of A2b; the rest of A2b is the next session |
 | 136 | **The Assistant knows the app: a map of every part, routing before drafting, a plan and its renewal, the owner's instructions, seven more look-ups and counting** | **built** — piece A2 of the "made strong" brief (A2b still to do); **the owner tests it on the live site: the list is in #136** |
 | 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone and deployed; read from #136 on |
 | 134 | **The Assistant's model: Gemini 3.8 Flash and 3.1 Pro Preview offered, before 2.5 Pro is retired** | **built** — piece A1 of the "made strong" brief; **neither model has answered a request of ours yet: the owner tries them on the live site** |
@@ -114,6 +115,95 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 137. Schema: the Assistant keeps its mistakes — 2 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A2b, its schema
+change, pushed alone** as the brief asks ("every correction is kept …
+widen it"). The rest of A2b is the next session: it builds on these columns.
+
+**What changed:** `deploy/sql/2026-10-02-assistant-learning.sql` widens
+`ai_corrections` from "a field changed before Save" to the other kind of
+mistake too, a reply marked "this was wrong" with the reason:
+
+- `kind` — `field` (every row so far, hence the default) or `reply`.
+- `area` — the part of the app's map the reply was in.
+- `model` — which model gave it, so the owner can see which one errs.
+- `ruled_at` — when the owner made it one of their rules. NULL: not one.
+- `target` and `field` are no longer required: a wrong count drafted
+  nothing, and a reply is never about one field.
+
+**The table is created first if it is missing.** It was made by hand on
+Neon in August and never had a file in `deploy/sql`; whether the live `db`
+container has it cannot be seen from here, and an ALTER on a missing table
+stops the deploy. Where it exists, the CREATE does nothing.
+
+**Why these columns and not more:**
+
+- A reply marked wrong fits the three text columns already there: `said`
+  is what was asked, `drafted` what the Assistant gave, `corrected` what was
+  right — the brief's own three things. No new text columns.
+- No chat id. A chat belongs to one person and no endpoint shows it to
+  anybody else, Super Admin included (`db/schema/ai-chats.ts`). The owner's
+  list shows the mistake, not the conversation.
+- `ruled_at`, not the rule's text. The line lives in `ai_instructions`,
+  where the owner edits or deletes it, and the audit log has every before
+  and after.
+- No CHECK on `kind`: the table's other lists (`target`, `field`) live in
+  the code, and so does this one.
+
+**Code:** Drizzle knows the columns (`db/schema/ai-corrections.ts`). The one
+reader, `recentCorrections`, now reads `kind = 'field'` only: a reply row has
+no field and needs its own wording. Nothing writes a reply row yet. The code
+running live today keeps working on the new table: its inserts read as
+`field`.
+
+**Proved:**
+
+- Applied to the local database twice with `node .apply1.mjs`: 12 columns,
+  no error on the second run.
+- The missing-table path, in a scratch schema inside a rolled-back
+  transaction: the file run twice made the table and its index, took an
+  insert shaped like today's code (it reads as `field`) and a reply with no
+  target and no field; nothing left behind.
+- The built API on :4013 with a stand-in model: `/ai/learn` records a
+  changed category as before (`field`, digits masked, the new columns
+  empty); the next turn's prompt carries the lesson word for word and leaves
+  out a `reply` row; no "could not be read" warning in the log. 11 of 11,
+  nothing left behind. (A scratch script; the next session's harness takes
+  over.)
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 274,
+  shared 366) pass, each on its own exit code.
+
+**Not proved:** the live database. The deploy applies the file before the
+containers swap.
+
+**For the owner on the live site:** nothing changes on screen. The list in
+#136 still stands.
+
+**For the next session — the rest of A2b, and how these columns are meant
+to be used:**
+
+1. "This was wrong" on a reply: the server reads the reply and the last
+   thing the person typed from the chat itself, as `learn` does, never from
+   the browser. The row: `kind 'reply'`, `target` from the reply (or null),
+   `area` from the reply, `said` masked, `drafted` a short rendering of what
+   the reply said or drafted, `corrected` the person's reason. **Mask the
+   digits in all three**: these rows go into other people's prompts, and the
+   table keeps no money (its header says why).
+2. `model`: have the turn put the model it used on `ai_chats.reply` (jsonb,
+   no schema), so `learn` and the feedback can copy it.
+3. Reading reply rows into the prompt: a row with a target is gated by
+   `CORRECTION_PERMISSION`; a row with only an area needs that part's read
+   permission, which the map does not hold yet. Leave out rows with
+   `ruled_at` set: their rule is already in the prompt.
+4. "Make this a rule": Super Admin only; one line appended to
+   `ai_instructions` within its 4,000 characters, `ruled_at` set, an audit
+   row as `PUT /ai/instructions` writes.
+5. Then the rest of the brief's A2b: pages and forms in the map (field lists
+   from the shared schemas, a test that fails on a missing entry), wider
+   `LEARNABLE_FIELDS` for a plan and a renewal (never money), "What the
+   Assistant knows", and mistakes as cases for `.assistantbar.mjs`.
 
 ## 136. The Assistant knows the app — 2 Oct 2026
 
