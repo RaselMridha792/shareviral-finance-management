@@ -171,6 +171,49 @@ rules and the recent corrections, so that the owner can see why it answered as i
   users. The map says "point to the screen" for those.
 - After a save, the reply names what was saved and where it now shows, with a link.
 
+### A5. The boss's requirement — nothing typed by hand (2 Oct)
+
+The owner's boss keeps the company's data in Excel sheets, in images on Google Drive, and
+in Docs. The instruction passed on: build the Assistant so that he types nothing. He
+hands it the files and it enters the data.
+
+This is A3 and A4 at volume, plus three things they do not cover:
+
+1. **A whole file at once.**
+   - For a sheet of many rows, the Assistant proposes how the columns map to a record's
+     fields, and which part of the app each kind of row belongs to (the map, A2).
+   - **Code**, not the model, applies that mapping to every row.
+   - The result is a batch of drafts with a summary:
+     - how many;
+     - totals by account and by category;
+     - the date range;
+     - the rows it could not place, each with its question;
+     - the rows that look already recorded.
+   - The app already stages a whole attached file for the Import screen
+     (`ai-attachments.service.ts`); build on that.
+   - Confirm saves the batch. A batch can be put in the trash as one.
+2. **Images.**
+   - A receipt, a bill or a bank slip as a photo or scan. The model reads the date, the
+     amount, the party and what it was for.
+   - The image is attached to the record it becomes. The files module already holds
+     vouchers.
+   - A figure the model could not read clearly is left empty and asked for. It is never
+     guessed.
+3. **A Drive folder.**
+   - A folder shared with the service account is listed and worked through.
+   - The app remembers which files it has already turned into records, so that nothing is
+     entered twice. Decide where that memory lives: a schema change, which travels alone.
+
+**Before building, ask the owner for real samples:** one sheet, one Doc and a few images
+of each kind, shared with the service account. The first job is to read them and say
+what each row and each image would become. The owner has to say what the data is
+(payments, income, people, vendors, invoices, past years), and whether books for past
+periods are closed.
+
+**The rule over all of it still holds.** At this volume a wrong mapping is hundreds of
+wrong records at once. So the summary before Confirm is the control, and it must show
+totals a person can check against the sheet.
+
 ---
 
 ## Part B — after Part A
