@@ -3,11 +3,13 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   AI_BATCH_MAX_ROWS,
   AI_DRAFT_READY_LINE,
+  AI_INSTRUCTIONS_MAX,
   AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
@@ -24,7 +26,10 @@ import {
   type AiBatch,
   type AiIntakeReply,
   type AiImportPlan,
+  type AiFeedbackInput,
   type AiInstructions,
+  type AiKnowledge,
+  type AiMistake,
   type AiIntakeRequest,
   type AiDataAccess,
   type AiKeyResult,
@@ -32,10 +37,11 @@ import {
   type AiModel,
   type AiProvider,
   type AiTarget,
+  type MakeAiRuleInput,
   type SetAiInstructionsInput,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
-import { and, asc, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { AuditService } from "../../common/audit/audit.service";
@@ -61,7 +67,15 @@ import {
   vertexClient,
   type ServiceAccount,
 } from "../connections/google";
-import { APP_PART_KEYS, partOf, renderAppMap, screenOf } from "./app-map";
+import {
+  APP_MAP,
+  APP_PART_KEYS,
+  fieldsOf,
+  partOf,
+  partsDrafting,
+  renderAppMap,
+  screenOf,
+} from "./app-map";
 import {
   NAME_FIELDS,
   allFieldReferences,
@@ -98,9 +112,12 @@ import {
 import { renewalInMonth } from "../transactions/renewal-in-month";
 import {
   CORRECTION_PERMISSION,
+  describeReply,
   diffDraft,
   maskDigits,
+  proposedRule,
   renderCorrections,
+  renderReplyMistakes,
 } from "./corrections";
 import { readPdfStatement } from "./pdf-statement";
 import {
@@ -630,7 +647,7 @@ export class AiIntakeService {
     actor: AuthenticatedUser,
   ): Promise<AiIntakeReply> {
     const model = await this.model();
-    const { dataAccess, instructions } = await this.storedKey();
+    const { dataAccess, instructions, model: modelId } = await this.storedKey();
     const plans = await this.plans();
     const context = await this.context(plans);
     // After the cache breakpoint, deliberately: a new correction landing must
@@ -743,13 +760,16 @@ export class AiIntakeService {
           continue;
         }
 
-        return this.settle(reply, {
+        const settled = await this.settle(reply, {
           accountNames: context.accounts.map((account) => account.name),
           draftOpen,
           plans,
           refusal,
           said,
         });
+        // Which model answered goes on the conversation with the answer, so
+        // a mistake marked on it later says whose it was (A2b).
+        return { ...settled, model: modelId };
       }
 
       if (!calls.length) {
@@ -1218,7 +1238,9 @@ at the point where it costs them work.
 - You cannot see or record what anybody is paid now. There is no tool for it
   at any setting.
 - You have no memory between conversations beyond what somebody corrected on a
-  draft, and the owner's instructions above.
+  draft or marked wrong, and the owner's instructions above. A person who
+  thinks an answer of yours was wrong can say so with "This was wrong" under
+  it; the owner sees those, and can make one a rule.
 
 WHEN YOU ARE NOT SURE, ASK — that is not a failure, it is the job
 This app is somebody's books. A wrong answer given confidently costs more than
@@ -1886,11 +1908,24 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
 
     await this.db.client.insert(aiCorrections).values(
       changes.map((change) => ({
+        kind: "field" as const,
         target,
+        // Where the draft was, and whose it was: read from the conversation,
+        // like the draft itself (A2b).
+        area: partOf(chat.reply?.area)?.key ?? null,
         said: maskDigits(said).slice(0, 400),
         field: change.field,
-        drafted: change.drafted,
-        corrected: change.corrected,
+        // A description is free text and can carry a figure; a category or
+        // an account name is a name, and masking it would lose the lesson.
+        drafted:
+          change.field === "description" && change.drafted
+            ? maskDigits(change.drafted)
+            : change.drafted,
+        corrected:
+          change.field === "description" && change.corrected
+            ? maskDigits(change.corrected)
+            : change.corrected,
+        model: chat.reply?.model?.slice(0, 64) ?? null,
         userId: actor.id,
       })),
     );
@@ -1899,18 +1934,22 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
   }
 
   /**
-   * The recent lessons this person is allowed to be shown.
+   * The recent lessons this person is allowed to be shown: drafts somebody
+   * fixed before Save, and answers somebody marked wrong (A2b).
    *
    * Gated by the permission for the record type, because this is the one place
-   * where what one person did is put in front of another. Deduplicated on the
-   * lesson itself: somebody filing the same correction every month should not
-   * crowd out the other nine.
+   * where what one person did is put in front of another. An answer that
+   * drafted nothing is gated on its part of the map instead, as the part's
+   * own screen is; one that can be placed in neither is shown to nobody's
+   * model and stays on the owner's list. Deduplicated on the lesson itself:
+   * somebody filing the same correction every month should not crowd out
+   * the other nine. One the owner made a rule is left out: its rule is
+   * already in the prompt, in the owner's words.
    */
   private async recentCorrections(actor: AuthenticatedUser): Promise<string> {
     const allowed = (AI_TARGETS as readonly AiTarget[]).filter((target) =>
       hasPermission(actor.role, CORRECTION_PERMISSION[target]),
     );
-    if (!allowed.length) return "";
 
     /**
      * This runs on every single turn, and what it fetches is a nicety.
@@ -1926,22 +1965,33 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
      */
     const rows = await this.db.client
       .select({
+        kind: aiCorrections.kind,
+        target: aiCorrections.target,
+        area: aiCorrections.area,
         said: aiCorrections.said,
         field: aiCorrections.field,
         drafted: aiCorrections.drafted,
         corrected: aiCorrections.corrected,
       })
       .from(aiCorrections)
-      // A field changed before Save. A reply marked wrong (A2b) has no field
-      // and is written out differently.
       .where(
         and(
-          eq(aiCorrections.kind, "field"),
-          inArray(aiCorrections.target, allowed),
+          isNull(aiCorrections.ruledAt),
+          or(
+            // A field changed before Save, on a kind of record they may read.
+            allowed.length
+              ? and(
+                  eq(aiCorrections.kind, "field"),
+                  inArray(aiCorrections.target, allowed),
+                )
+              : undefined,
+            // An answer marked wrong: gated row by row below.
+            eq(aiCorrections.kind, "reply"),
+          ),
         ),
       )
       .orderBy(desc(aiCorrections.createdAt))
-      .limit(60)
+      .limit(120)
       .catch((error: unknown) => {
         this.log.warn(
           `Past corrections could not be read, carrying on without them: ${
@@ -1949,6 +1999,9 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
           }`,
         );
         return [] as Array<{
+          kind: "field" | "reply";
+          target: string | null;
+          area: string | null;
           said: string;
           field: string | null;
           drafted: string | null;
@@ -1957,16 +2010,284 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       });
 
     const seen = new Set<string>();
-    const distinct = rows.flatMap((row) => {
+    const fields = rows.flatMap((row) => {
       // Every field row names its field; this is for the type.
-      if (!row.field) return [];
+      if (row.kind !== "field" || !row.field) return [];
       const key = `${row.field}|${row.drafted ?? ""}|${row.corrected ?? ""}`;
       if (seen.has(key)) return [];
       seen.add(key);
       return [{ ...row, field: row.field }];
     });
 
-    return renderCorrections(distinct.slice(0, 12));
+    const replies = rows.filter((row) => {
+      if (row.kind !== "reply" || !this.mayBeShown(actor, row)) return false;
+      const key = `reply|${row.said}|${row.corrected ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return [
+      renderCorrections(fields.slice(0, 12)),
+      renderReplyMistakes(replies.slice(0, 8)),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  /**
+   * Whether a mistake may go into this person's prompt: the permission for
+   * the kind of record it drafted, or, where it drafted nothing, the one its
+   * part of the map asks for. Placed in neither: nobody's.
+   */
+  private mayBeShown(
+    actor: AuthenticatedUser,
+    row: { target: string | null; area: string | null },
+  ): boolean {
+    if (row.target) {
+      return (
+        (AI_TARGETS as readonly string[]).includes(row.target) &&
+        hasPermission(actor.role, CORRECTION_PERMISSION[row.target as AiTarget])
+      );
+    }
+    const part = partOf(row.area);
+    if (!part) return false;
+    return !part.permission || hasPermission(actor.role, part.permission);
+  }
+
+  /* --- it gets better with use (A2b) ------------------------------------ */
+
+  /**
+   * "This was wrong", said of the answer this conversation ended on.
+   *
+   * Only the reason comes from the browser. What was asked and what was
+   * answered are read from the conversation here, as `learn` reads the
+   * draft, so a mistake on file is what was really said. Digits are masked
+   * in all three: the row is read into other people's prompts, and this
+   * table keeps no money.
+   */
+  async feedback(
+    input: AiFeedbackInput,
+    actor: AuthenticatedUser,
+  ): Promise<{ recorded: true }> {
+    const chat = await this.chats.get(input.chatId, actor);
+    const reply = chat.reply;
+    const said = [...chat.messages]
+      .reverse()
+      .find((m) => m.role === "user")?.content;
+
+    if (!reply || !said) {
+      throw new BadRequestException(
+        "There is no answer in this conversation to mark yet.",
+      );
+    }
+
+    await this.db.client.insert(aiCorrections).values({
+      kind: "reply",
+      target: reply.target ?? reply.batch?.target ?? null,
+      area: partOf(reply.area)?.key ?? null,
+      said: maskDigits(said).slice(0, 400),
+      drafted: maskDigits(describeReply(reply)).slice(0, 600),
+      corrected: maskDigits(input.reason).slice(0, 500),
+      model: reply.model?.slice(0, 64) ?? null,
+      userId: actor.id,
+    });
+
+    return { recorded: true };
+  }
+
+  /**
+   * The owner's list of mistakes, newest first: both kinds, the rules among
+   * them marked, each with the line "Make this a rule" would offer.
+   */
+  async mistakes(): Promise<AiMistake[]> {
+    const rows = await this.db.client
+      .select({
+        id: aiCorrections.id,
+        kind: aiCorrections.kind,
+        target: aiCorrections.target,
+        area: aiCorrections.area,
+        said: aiCorrections.said,
+        field: aiCorrections.field,
+        drafted: aiCorrections.drafted,
+        corrected: aiCorrections.corrected,
+        model: aiCorrections.model,
+        ruledAt: aiCorrections.ruledAt,
+        by: users.fullName,
+        at: aiCorrections.createdAt,
+      })
+      .from(aiCorrections)
+      .leftJoin(users, eq(aiCorrections.userId, users.id))
+      .orderBy(desc(aiCorrections.createdAt))
+      .limit(100);
+
+    return rows.map((row) => {
+      const target = (AI_TARGETS as readonly string[]).includes(
+        row.target ?? "",
+      )
+        ? (row.target as AiTarget)
+        : null;
+      // A row from before A2b names no part; its kind of record says where.
+      const part =
+        partOf(row.area) ??
+        (target ? (partsDrafting(target)[0] ?? null) : null);
+      return {
+        id: row.id,
+        kind: row.kind,
+        target,
+        area: part?.key ?? null,
+        areaName: part?.name ?? null,
+        said: row.said,
+        field: row.field,
+        drafted: row.drafted,
+        corrected: row.corrected,
+        model: row.model,
+        ruledAt: row.ruledAt ? row.ruledAt.toISOString() : null,
+        by: row.by,
+        at: row.at.toISOString(),
+        rule: proposedRule(row),
+      };
+    });
+  }
+
+  /**
+   * "Make this a rule": one line added to the owner's instructions, and the
+   * mistake marked as ruled, in one transaction with its audit row.
+   *
+   * Audited as a change to the instructions, before and after, like
+   * `setInstructions` — the instructions are what the Assistant reads, and
+   * the log should show every way they changed. A line already there is
+   * not added twice.
+   */
+  async makeRule(
+    id: string,
+    input: MakeAiRuleInput,
+    actor: AuthenticatedUser,
+  ): Promise<AiInstructions> {
+    const [mistake] = await this.db.client
+      .select({ id: aiCorrections.id, ruledAt: aiCorrections.ruledAt })
+      .from(aiCorrections)
+      .where(eq(aiCorrections.id, id))
+      .limit(1);
+    if (!mistake) throw new NotFoundException("That mistake is not on file.");
+    if (mistake.ruledAt) {
+      throw new BadRequestException("That one is already one of your rules.");
+    }
+
+    const current = (await this.instructions()).instructions.trim();
+    const lines = current ? current.split("\n").map((line) => line.trim()) : [];
+    const next = lines.includes(input.rule)
+      ? current
+      : [current, input.rule].filter(Boolean).join("\n");
+
+    if (next.length > AI_INSTRUCTIONS_MAX) {
+      throw new BadRequestException(
+        `The instructions would be ${next.length.toLocaleString("en-US")} characters, over the ${AI_INSTRUCTIONS_MAX.toLocaleString("en-US")} they may hold. Shorten or remove a rule under Settings, Assistant first.`,
+      );
+    }
+
+    await this.audit.mutate({
+      action: "settings_change",
+      entityTable: "app_settings",
+      entityId: "1",
+      summary: "Made a mistake of the Assistant one of its instructions",
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({ instructions: appSettings.aiInstructions })
+          .from(appSettings)
+          .where(eq(appSettings.id, 1))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        const now = new Date();
+        await tx
+          .update(appSettings)
+          .set({
+            aiInstructions: next,
+            aiInstructionsSetAt: now,
+            aiInstructionsSetBy: actor.id,
+            updatedAt: now,
+            updatedBy: actor.id,
+          })
+          .where(eq(appSettings.id, 1));
+        await tx
+          .update(aiCorrections)
+          .set({ ruledAt: now })
+          .where(eq(aiCorrections.id, id));
+      },
+    });
+
+    return this.instructions();
+  }
+
+  /**
+   * Takes a mistake off the list, and out of every prompt from the next
+   * message. For a lesson that was itself wrong: somebody marked a right
+   * answer wrong, or changed a field by mistake. A rule made from it stays
+   * in the instructions, where the owner removes it.
+   */
+  async forgetMistake(id: string): Promise<void> {
+    await this.audit.mutate({
+      action: "delete",
+      entityTable: "ai_corrections",
+      entityId: id,
+      summary: "Took a mistake off the Assistant's list",
+      module: "settings",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({
+            kind: aiCorrections.kind,
+            target: aiCorrections.target,
+            area: aiCorrections.area,
+            said: aiCorrections.said,
+            field: aiCorrections.field,
+            drafted: aiCorrections.drafted,
+            corrected: aiCorrections.corrected,
+          })
+          .from(aiCorrections)
+          .where(eq(aiCorrections.id, id))
+          .limit(1);
+        if (!row) throw new NotFoundException("That mistake is not on file.");
+        return row;
+      },
+      run: async (tx) => {
+        await tx.delete(aiCorrections).where(eq(aiCorrections.id, id));
+      },
+    });
+  }
+
+  /**
+   * The map the Assistant is given, for "What the Assistant knows". The
+   * same entries the prompt is written from, so what the page shows is what
+   * the model reads.
+   */
+  knowledge(): AiKnowledge {
+    const screens = APP_MAP.flatMap((part) => part.screens);
+    return {
+      parts: APP_MAP.map((part) => ({
+        key: part.key,
+        name: part.name,
+        purpose: part.purpose,
+        keeps: [...part.keeps],
+        screens: part.screens.map((screen) => ({ ...screen })),
+        drafts: part.assistant.drafts.map((target) => AI_TARGET_LABELS[target]),
+        reads: [...part.assistant.reads],
+        otherwise: part.assistant.otherwise,
+        forms: part.forms.map((form) => {
+          const on = screens.find((screen) => screen.href === form.on);
+          return {
+            name: form.name,
+            on: on ? { name: on.name, href: on.href } : null,
+            opens: form.opens,
+            onSave: form.onSave,
+            draft: form.draft ? AI_TARGET_LABELS[form.draft] : null,
+            fields: fieldsOf(form),
+          };
+        }),
+      })),
+    };
   }
 
   /**

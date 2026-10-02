@@ -17,6 +17,7 @@ export const INCOME_TAX_MAP = [
       "Tax a client deducted when paying us: an advance-tax credit, which belongs here and never on the receipt.",
     ],
     screens: [],
+    forms: [],
     recordedBy: ["POST /income-tax/schedule", "POST /income-tax/:id/pay"],
     permission: "incometax.read",
     assistant: {

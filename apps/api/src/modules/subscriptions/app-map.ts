@@ -1,4 +1,11 @@
+import {
+  createSubscriptionSchema,
+  updateSubscriptionSchema,
+} from "@finance/shared";
+
 import { appPart } from "../../common/app-map";
+// A file of its own with no imports from this app: no cycle through here.
+import { paySubscriptionSchema } from "../transactions/pay-subscription.schema";
 
 /**
  * The part the owner's complaint was about (2 Oct 2026): told to buy an AI
@@ -34,12 +41,102 @@ export const SUBSCRIPTIONS_MAP = [
       {
         href: "/subscriptions",
         name: "AI tools and subscriptions",
-        does: "The plans running in a month, with price, renewal date and card. Add subscription adds a plan and takes its first payment; a row offers Renew, Upgrade and Edit, and opens the whole plan.",
+        does: "The plans running in a month, with price, renewal date and card. Add a subscription adds a plan and takes its first payment; a row offers Renew, Upgrade and Edit, and opens the whole plan.",
       },
       {
         href: "/subscriptions/[id]",
         name: "A plan's own page",
         does: "One plan, whole: what it costs, how it is paid, who it is for, who is on it.",
+      },
+    ],
+    // DELETE /subscriptions/:id is named by no form: nothing calls it. Move to
+    // trash goes through the trash, and a finished plan is cancelled instead.
+    forms: [
+      {
+        name: "Add a subscription",
+        on: "/subscriptions",
+        opens: "Add a subscription, top right",
+        saves: ["POST /subscriptions", "POST /subscriptions/:id/pay"],
+        schema: createSubscriptionSchema,
+        fields: {
+          costUsd: "the plan's price for one cycle, in dollars",
+          usdRate: "taka per dollar the price is read at",
+          costBdt: "the price in taka; any two of the three give the third",
+          chargeUsd: "what the card adds on top each cycle, in dollars",
+          accountId: "the card or account it is paid from; needed when active",
+          boughtFor: "the department it is for; on screen, User Department",
+        },
+        onSave:
+          "Adds the plan. If it is active, its first payment then leaves its account on the start date, under the AI tools heading; if that payment is refused, the plan stays and Renew takes it.",
+        permission: "vendors.write",
+        draft: "subscription",
+      },
+      {
+        name: "Edit",
+        on: "/subscriptions",
+        opens: "Edit, on a plan's row or in its popup",
+        saves: ["PATCH /subscriptions/:id"],
+        schema: updateSubscriptionSchema,
+        fields: {
+          users: "the whole list when sent; anyone left out comes off",
+        },
+        onSave:
+          "Changes the plan in place and never takes money. The renewal date moves only when the start date or the cycle changes, and the three prices must agree.",
+        permission: "vendors.write",
+      },
+      {
+        name: "Change status",
+        on: "/subscriptions",
+        opens: "Change status, on a plan's row",
+        saves: ["PATCH /subscriptions/:id"],
+        onSave:
+          "Pauses an active plan, or puts a paused, cancelled or expired one back to active. Nothing moves in the ledger. Cancelling is done in Edit.",
+        permission: "vendors.write",
+      },
+      {
+        name: "Renew",
+        on: "/subscriptions",
+        opens: "Renew, on a plan's row or in its popup",
+        saves: ["POST /subscriptions/:id/pay"],
+        schema: paySubscriptionSchema,
+        fields: {
+          amount: "taka charged; blank: the dollars at this payment's rate",
+          usdAmount: "dollars billed; blank: the plan's price plus its charge",
+          usdRate: "blank: the plan's own rate",
+          accountId: "blank: the plan's own card",
+          categoryId: "blank: the AI tools heading",
+          chargeUsd: "the bank's fee in dollars, written as its own row",
+          advanceRenewal: "move the renewal date on a cycle; on by default",
+        },
+        onSave:
+          "Records a money-out entry on the plan's card, tied to the plan and filed under the AI tools heading, and moves the renewal date on. Refused if already renewed that month, in a locked month, or below zero.",
+        permission: "transactions.write",
+        draft: "subscription_payment",
+      },
+      {
+        // The controller validates with `upgradeSubscriptionSchema`, which it
+        // does not export, so the fields are named here by hand.
+        name: "Upgrade",
+        on: "/subscriptions",
+        opens: "Upgrade, on a plan's row or in its popup",
+        saves: ["POST /subscriptions/:id/upgrade"],
+        fields: {
+          upgradedOn: "required; the day the new plan started",
+          toPlanName: "required; the new plan's name",
+          toCostUsd: "required; the new price per cycle, in dollars",
+          toChargeUsd: "what the card adds on top each cycle, in dollars",
+          usdRate:
+            "required; taka per dollar for the new price and today's charge",
+          chargedUsd:
+            "what the vendor charged today for the upgrade; empty for nothing",
+          chargedBdt: "the taka that charge came to, if not dollars × rate",
+          bankChargeUsd: "the bank's fee on today's charge, in dollars",
+          nextRenewalOn: "only when the vendor moved the billing date",
+          note: "a few words on why",
+        },
+        onSave:
+          "Changes the plan's name and price in place and keeps the old ones as history. A charge today becomes a payment from the plan's card that is not counted as the month's renewal. Needs transactions.write as well.",
+        permission: "vendors.write",
       },
     ],
     recordedBy: ["POST /subscriptions", "POST /subscriptions/:id/pay"],

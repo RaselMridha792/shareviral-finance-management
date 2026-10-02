@@ -1,7 +1,8 @@
 "use client";
 
 import type { AiChatSummary } from "@finance/shared";
-import { MessageSquarePlus, Trash2, X } from "lucide-react";
+import { BookOpen, MessageSquarePlus, Trash2, X } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
@@ -122,6 +123,18 @@ export function ChatRail({
             </div>
           ))
         )}
+      </div>
+
+      {/* What it is told about the app, its rules and its recent mistakes:
+          the owner's way to see why it answered as it did (A2b). */}
+      <div className="shrink-0 border-t border-border p-3">
+        <Link
+          href="/assistant/knowledge"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+        >
+          <BookOpen className="size-4 shrink-0" />
+          What the Assistant knows
+        </Link>
       </div>
     </div>
   );

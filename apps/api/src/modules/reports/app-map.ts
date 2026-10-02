@@ -1,3 +1,5 @@
+import { saveStatementSchema } from "@finance/shared";
+
 import { appPart } from "../../common/app-map";
 
 export const REPORTS_MAP = [
@@ -15,6 +17,42 @@ export const REPORTS_MAP = [
         href: "/reports",
         name: "Reports",
         does: "The finance statement for the period chosen, with its notes and sign-off.",
+      },
+    ],
+    forms: [
+      {
+        name: "Notes to the accounts",
+        on: "/reports",
+        opens:
+          "The card at the foot of the statement, for the period picked at the top; Save at its bottom",
+        saves: ["PATCH /reports/statement"],
+        schema: saveStatementSchema,
+        fields: {
+          periodStart: "first day of the period picked at the top",
+          cycle: "which statement this is within the financial year, 1 to 99",
+          status: "reconciled means every figure was checked against the bank",
+          signatories:
+            "up to 4, each a name, a title and an uploaded signature",
+          audited: "signed off by whoever audits; not on the screen",
+          committedForwardTxnIds:
+            "this period's receipts spent next period; not on the screen",
+        },
+        onSave:
+          "Keeps the period's notes, cycle, status and signatories, and drops any uploaded signature no signatory names. No figure changes. A signatory without a name and a title is left out. Shows on the statement and its PDF.",
+        permission: "transactions.write",
+      },
+      {
+        name: "Upload signature",
+        on: "/reports",
+        opens:
+          "Upload signature (Replace once there is one), on a signatory's card under Signed by",
+        saves: ["POST /reports/statement/signature"],
+        fields: {
+          file: "PNG or JPEG under 300 KB, at least 300px wide, wider than tall",
+        },
+        onSave:
+          "Stores the scan as a file of this period's statement, creating the statement's row if it has none, and shows it on that card. It stays on the signatory only once Notes to the accounts is saved.",
+        permission: "transactions.write",
       },
     ],
     recordedBy: ["PATCH /reports/statement"],

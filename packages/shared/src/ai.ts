@@ -662,7 +662,128 @@ export type AiIntakeReply = {
   importPlan?: AiImportPlan | null;
   /** Set when many records of one kind were understood at once. */
   batch?: AiBatch | null;
+  /**
+   * The model that gave this answer. Kept on the conversation with the
+   * reply, so that a mistake marked on it, or a field changed before Save,
+   * says which model made it (A2b).
+   */
+  model?: string;
 };
+
+/* -------------------------------------------------------------------------- */
+/*  It gets better with use (2 Oct 2026, piece A2b)                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "This was wrong", said of an answer, with why.
+ *
+ * Only the conversation and the reason come from the browser. What was
+ * asked and what the Assistant answered are read from the conversation on
+ * the server, so a mistake on file is what was really said, not what the
+ * caller says was said.
+ */
+export const AI_FEEDBACK_MAX = 500;
+
+export const aiFeedbackSchema = z.strictObject({
+  chatId: z.string().uuid(),
+  reason: z
+    .string()
+    .transform((text) => text.replace(/\s+/g, " ").trim())
+    .pipe(
+      z
+        .string()
+        .min(3, "Say in a few words what was wrong")
+        .max(AI_FEEDBACK_MAX, `Keep it under ${AI_FEEDBACK_MAX} characters`),
+    ),
+});
+export type AiFeedbackInput = z.infer<typeof aiFeedbackSchema>;
+
+/**
+ * One mistake, as the owner's list shows it: a field somebody changed on a
+ * draft before saving, or an answer marked wrong. Digits are masked in all
+ * three texts: these rows are read into other people's prompts.
+ */
+export type AiMistake = {
+  id: string;
+  kind: "field" | "reply";
+  /** The kind of record being drafted, if one was. */
+  target: AiTarget | null;
+  /** The part of the app's map it was in, and that part's own name. */
+  area: string | null;
+  areaName: string | null;
+  /** What was asked. */
+  said: string;
+  /** On a field changed before Save: which field. */
+  field: string | null;
+  /** What the Assistant gave. */
+  drafted: string | null;
+  /** What was right. */
+  corrected: string | null;
+  model: string | null;
+  /** When the owner made it one of their rules. Null: not one. */
+  ruledAt: string | null;
+  by: string | null;
+  at: string;
+  /** The line "Make this a rule" offers, for the owner to change first. */
+  rule: string;
+};
+
+/**
+ * "Make this a rule": one line, added to the owner's instructions. One line
+ * because the instructions are one rule a line.
+ */
+export const AI_RULE_MAX = 400;
+
+export const makeAiRuleSchema = z.strictObject({
+  rule: z
+    .string()
+    .transform((text) => text.replace(/\s+/g, " ").trim())
+    .pipe(
+      z
+        .string()
+        .min(3, "Write the rule")
+        .max(AI_RULE_MAX, `Keep one rule under ${AI_RULE_MAX} characters`),
+    ),
+});
+export type MakeAiRuleInput = z.infer<typeof makeAiRuleSchema>;
+
+/**
+ * "What the Assistant knows": the map of the app it is given, as a page
+ * (A2b). The same map the prompt is written from, and each form's fields
+ * generated from the schema its Save is checked with.
+ */
+export type AiKnowledgeForm = {
+  name: string;
+  /** The screen it is on, by name and address. */
+  on: { name: string; href: string } | null;
+  opens: string;
+  onSave: string;
+  /** The kind of record the Assistant drafts for it, by its label. */
+  draft: string | null;
+  /** `required` null: the map names the field and cannot say. */
+  fields: Array<{
+    name: string;
+    required: boolean | null;
+    means: string | null;
+  }>;
+};
+
+export type AiKnowledgePart = {
+  key: string;
+  name: string;
+  purpose: string;
+  keeps: string[];
+  screens: Array<{ name: string; href: string; does: string }>;
+  /** What it can draft here, by label. Empty: it only points to the screen. */
+  drafts: string[];
+  /** The look-ups that read this part. */
+  reads: string[];
+  /** What it says to anything else asked of this part. */
+  otherwise: string;
+  forms: AiKnowledgeForm[];
+};
+
+export type AiKnowledge = { parts: AiKnowledgePart[] };
 
 export type AiAvailability = {
   configured: boolean;

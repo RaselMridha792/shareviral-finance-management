@@ -11,12 +11,21 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { AI_TARGETS, AI_TARGET_SHOWS_ON, PERMISSIONS } from "@finance/shared";
+import {
+  AI_TARGETS,
+  AI_TARGET_ENDPOINT,
+  AI_TARGET_SHOWS_ON,
+  PERMISSIONS,
+} from "@finance/shared";
 
 import {
   APP_MAP,
   APP_PART_KEYS,
+  NOT_A_FORM,
   NOT_A_PART,
+  NOT_A_SCREEN,
+  allForms,
+  fieldsOf,
   partOf,
   partsDrafting,
   renderAppMap,
@@ -57,6 +66,49 @@ function routes(): Set<string> {
 /** Whether the web app has a page at this address. */
 function hasPage(href: string): boolean {
   return existsSync(path.join(PAGES, href, "page.tsx"));
+}
+
+/** Every page of the web app behind sign-in, as "/payroll/[runId]". */
+function pages(): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, href: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, `${href}/${name}`);
+      else if (name === "page.tsx") found.push(href || "/");
+    }
+  };
+  walk(PAGES, "");
+  return found;
+}
+
+/**
+ * Every request that changes something, by the module that declares it:
+ * "POST /subscriptions/:id/pay" under `transactions`.
+ */
+function writes(): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const folder of folders) {
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = path.join(dir, name);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (name.endsWith(".controller.ts")) {
+          const source = readFileSync(full, "utf8");
+          const prefix =
+            /@Controller\((?:"([^"]*)")?\)/.exec(source)?.[1] ?? "";
+          for (const match of source.matchAll(
+            /@(Post|Patch|Put|Delete)\((?:"([^"]*)")?\)/g,
+          )) {
+            const route = [prefix, match[2] ?? ""].filter(Boolean).join("/");
+            found.set(`${match[1].toUpperCase()} /${route}`, folder);
+          }
+        }
+      }
+    };
+    walk(path.join(MODULES, folder));
+  }
+  return found;
 }
 
 describe("every part of the app is on the map", () => {
@@ -143,6 +195,139 @@ describe("what the map names is really there", () => {
     expect(AI_TARGET_SHOWS_ON.subscription_payment?.href).toBe(
       "/subscriptions",
     );
+  });
+});
+
+describe("every page and every form is on the map (A2b)", () => {
+  const screens = new Set(
+    APP_MAP.flatMap((part) => part.screens.map((screen) => screen.href)),
+  );
+
+  it("has every page as a part's screen, or says why it is not one", () => {
+    for (const page of pages()) {
+      expect([page, screens.has(page) || page in NOT_A_SCREEN]).toEqual([
+        page,
+        true,
+      ]);
+    }
+    for (const page of Object.keys(NOT_A_SCREEN)) {
+      expect([page, hasPage(page), screens.has(page)]).toEqual([
+        page,
+        true,
+        false,
+      ]);
+    }
+  });
+
+  it("names every request that changes something in a form, or says why not", () => {
+    const named = new Set(allForms().flatMap(({ form }) => form.saves));
+    for (const [endpoint, folder] of writes()) {
+      if (folder in NOT_A_PART) continue;
+      expect([
+        endpoint,
+        folder,
+        named.has(endpoint) || endpoint in NOT_A_FORM,
+      ]).toEqual([endpoint, folder, true]);
+    }
+  });
+
+  it("names only requests a controller declares", () => {
+    const declared = writes();
+    for (const { part, form } of allForms()) {
+      for (const endpoint of form.saves) {
+        expect([part.key, form.name, endpoint, declared.has(endpoint)]).toEqual(
+          [part.key, form.name, endpoint, true],
+        );
+      }
+    }
+    for (const endpoint of Object.keys(NOT_A_FORM)) {
+      expect([endpoint, declared.has(endpoint)]).toEqual([endpoint, true]);
+    }
+  });
+
+  it("puts each form on a screen of the map, and says what it does", () => {
+    for (const { part, form } of allForms()) {
+      expect([part.key, form.name, screens.has(form.on)]).toEqual([
+        part.key,
+        form.name,
+        true,
+      ]);
+      expect([form.name, form.saves.length > 0]).toEqual([form.name, true]);
+      expect([form.name, form.opens.length > 3]).toEqual([form.name, true]);
+      expect([form.name, form.onSave.length > 15]).toEqual([form.name, true]);
+      if (form.permission) expect(PERMISSIONS).toContain(form.permission);
+    }
+  });
+
+  it("explains only fields the form's schema has", () => {
+    for (const { form } of allForms()) {
+      if (!form.schema) continue;
+      const fields = fieldsOf(form).map((field) => field.name);
+      // A schema the map cannot read its fields from is no help to it.
+      expect([form.name, fields.length > 0]).toEqual([form.name, true]);
+      for (const field of Object.keys(form.fields ?? {})) {
+        expect([form.name, field, fields.includes(field)]).toEqual([
+          form.name,
+          field,
+          true,
+        ]);
+      }
+    }
+  });
+
+  it("gives every kind of draft the form whose endpoint saves it", () => {
+    for (const target of AI_TARGETS) {
+      const drafting = allForms().filter(({ form }) => form.draft === target);
+      expect([target, drafting.length > 0]).toEqual([target, true]);
+      for (const { form } of drafting) {
+        expect([target, form.saves]).toEqual([
+          target,
+          expect.arrayContaining([`POST ${AI_TARGET_ENDPOINT[target]}`]),
+        ]);
+      }
+    }
+  });
+
+  it("writes each form into the map the model reads, with its fields", () => {
+    const rendered = renderAppMap();
+    for (const { form } of allForms()) {
+      expect(rendered).toContain(`"${form.name}"`);
+    }
+    // A form it drafts points to that kind's own list, not a second copy.
+    const subscriptions = rendered.slice(
+      rendered.indexOf("[subscriptions]"),
+      rendered.indexOf("[vendors]"),
+    );
+    expect(subscriptions).toMatch(
+      /Fields: those of subscription under EVERY FIELD\./,
+    );
+    // Any other form lists what its Save needs, generated from its schema.
+    const advice = rendered.slice(
+      rendered.indexOf("[bank_advice]"),
+      rendered.indexOf("[hr_requests]"),
+    );
+    expect(advice).toMatch(/paymentType\*/);
+    expect(advice).toMatch(/beneficiaryName\*/);
+    // And the page has every field of a drafted form, the tool required.
+    const plan = allForms().find(({ form }) => form.draft === "subscription");
+    expect(fieldsOf(plan!.form)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "toolName", required: true }),
+      ]),
+    );
+  });
+
+  it("reads a field behind a .transform() as the form takes it", () => {
+    // The bank file's email may be left out: its input has a default.
+    const payment = allForms().find(
+      ({ form }) =>
+        form.saves.includes("POST /bank-advices/:id/lines") &&
+        form.schema !== undefined,
+    );
+    const email = fieldsOf(payment!.form).find(
+      (field) => field.name === "email",
+    );
+    expect(email?.required).toBe(false);
   });
 });
 

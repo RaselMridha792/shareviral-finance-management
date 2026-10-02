@@ -26,7 +26,21 @@
  *      a payment for a plan on file is that plan's renewal, with no rate
  *      written that nobody gave; a salary is pointed to Payroll, not drafted;
  *      "how many people on the team" answered with the Team screen's count
- *      (docs/briefs/2026-10-02-assistant-powerful.md, A2)
+ *      (docs/briefs/2026-10-02-assistant-powerful.md, A2); and, A2b, how a
+ *      thing it cannot do is done: the screen and the form, nothing drafted
+ *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
+ *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
+ *      The mistakes are marked on the live site; "Download as test cases"
+ *      on What the Assistant knows gives the file, and a session adds its
+ *      entries there and writes each one's `expect`:
+ *        area       the part of the map it must be filed under
+ *        target     the kind of record it must draft (null: none)
+ *        notTarget  a kind it must not draft again
+ *        says       a pattern the answer must contain
+ *        notSays    a pattern it must not contain again
+ *        draft      { field: value } the draft must hold
+ *      A case with no `expect` yet still runs, and is listed to be read
+ *      beside what was right, rather than passed or failed.
  *
  * The invention cases run RUNS times each (six: "two of six" is how the bar
  * was first failed); the rest LIGHT times (two).
@@ -613,7 +627,78 @@ const CASES = [
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "said it is Payroll's, and where", said };
     },
   },
+  /*
+   * A2b: the map now holds every form and button, generated from what each
+   * Save accepts. Asked how something is done that it cannot do itself, it
+   * names the screen and the form, and drafts nothing.
+   */
+  {
+    id: "G5", runs: LIGHT, name: "'password reset kivabe?' - Settings, People who can sign in, nothing drafted",
+    run: async () => {
+      const { reply, failed } = await talk(["kono user er password kivabe reset korbo?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        reply.target ? `drafted a ${reply.target}` : null,
+        /settings/i.test(said) ? null : "did not name Settings",
+        /people who can sign in|new password|set a new password/i.test(said) ? null : "did not name the section or the button",
+        claimsDone(said) ? "said it was done" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named where it is done", said };
+    },
+  },
+  {
+    id: "G6", runs: LIGHT, name: "'bank advice e payment kivabe add?' - Add payment, and what it asks",
+    run: async () => {
+      const { reply, failed } = await talk(["bank advice e notun ekta payment kivabe add korbo? ki ki lagbe?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        reply.target ? `drafted a ${reply.target}` : null,
+        /add payment/i.test(said) ? null : "did not name Add payment",
+        /beneficiary|account|bank code|routing/i.test(said) ? null : "did not say what the form asks",
+        claimsDone(said) ? "said it was done" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named the form and its fields", said };
+    },
+  },
 ];
+
+/*
+ * M. The owner's recorded mistakes, each run again (A2b). What was asked is
+ * kept with its digits masked ("…"), so a figure-shaped mistake is better
+ * written by hand in its `expect`; the routing and the wording ones are what
+ * this catches.
+ */
+const MISTAKES = fs.existsSync(".assistantbar.mistakes.json")
+  ? JSON.parse(fs.readFileSync(".assistantbar.mistakes.json", "utf8"))
+  : [];
+for (const [index, mistake] of MISTAKES.entries()) {
+  CASES.push({
+    id: `M${index + 1}`,
+    runs: LIGHT,
+    name: `mistake of ${String(mistake.at ?? "").slice(0, 10)}: "${String(mistake.said).slice(0, 48)}"`,
+    run: async () => {
+      const { reply, failed } = await talk([mistake.said]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const expect = mistake.expect ?? {};
+      if (!Object.keys(expect).length) {
+        return { pass: true, read: true, note: `to read: what was right — ${mistake.right}`, said: `[${reply.area ?? "-"} / ${reply.target ?? "no draft"}] ${said}` };
+      }
+      const wrong = [
+        expect.area && reply.area !== expect.area ? `filed under ${reply.area}, wanted ${expect.area}` : null,
+        "target" in expect && reply.target !== expect.target ? `drafted ${reply.target}, wanted ${expect.target}` : null,
+        expect.notTarget && reply.target === expect.notTarget ? `drafted ${expect.notTarget} again` : null,
+        expect.says && !new RegExp(expect.says, "i").test(said) ? `did not say /${expect.says}/` : null,
+        expect.notSays && new RegExp(expect.notSays, "i").test(said) ? `said /${expect.notSays}/ again` : null,
+        ...Object.entries(expect.draft ?? {}).map(([field, value]) => (same(reply.draft[field], value) ? null : `${field} ${reply.draft[field]}, wanted ${value}`)),
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "not repeated", said };
+    },
+  });
+}
 
 /* ------------------------------------------------------------------------ */
 
@@ -677,7 +762,7 @@ try {
       console.log(`  ${passed === mine.length ? "ok  " : "FAIL"}  ${c.id}  ${passed}/${mine.length}  ${c.name}`);
       mine.forEach((o, i) => {
         transcript.push({ model, case: c.id, run: i + 1, ...o });
-        if (!o.pass) console.log(`          run ${i + 1}: ${o.error ? `error: ${o.error}` : o.note}${o.said ? `\n            said: ${o.said.slice(0, 300)}` : ""}`);
+        if (!o.pass || o.read) console.log(`          run ${i + 1}: ${o.error ? `error: ${o.error}` : o.note}${o.said ? `\n            said: ${o.said.slice(0, 300)}` : ""}`);
       });
     }
     summary.push({ model, reached, lines });

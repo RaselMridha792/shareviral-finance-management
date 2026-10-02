@@ -1,3 +1,11 @@
+import {
+  createTransactionSchema,
+  recordCashInSchema,
+  transferSchema,
+  updateTransactionSchema,
+  voidTransactionSchema,
+} from "@finance/shared";
+
 import { appPart } from "../../common/app-map";
 
 /**
@@ -20,6 +28,57 @@ export const TRANSACTIONS_MAP = [
         href: "/transactions",
         name: "All transactions",
         does: "Every entry, searchable and filtered by date, account, category and direction. A row opens the whole record; an entry is edited or voided from its row.",
+      },
+    ],
+    // Nothing is created on All transactions itself: money out starts on an
+    // Expenses screen (its "Record a movement" is under the expenses part),
+    // money in on Cash In. A money-in entry through POST /transactions is
+    // reached only from the Assistant's draft card.
+    forms: [
+      {
+        name: "The draft",
+        on: "/assistant",
+        opens:
+          "the draft card for money in (no screen records money in this way)",
+        saves: ["POST /transactions"],
+        schema: createTransactionSchema,
+        fields: {
+          direction: "in; the card sets it",
+          categoryId: "a money-in category; required here, unlike on Add cash",
+          usdRate: "taka per dollar on the day; asked on every entry",
+          originalAmount:
+            "the dollars sent, when it came from abroad; fxRate with it",
+          senderAccountName: "who sent it",
+        },
+        onSave:
+          "Records a money-in entry under a money-in category; a bank charge becomes its own money-out row. Refused in a locked month. Shows on All transactions and Cash In. On screen, money in is recorded with Add cash.",
+        permission: "transactions.write",
+        draft: "transaction_in",
+      },
+      {
+        name: "Edit",
+        on: "/transactions",
+        opens: "Edit, on an entry's row (the same on Expenses and a register)",
+        saves: ["PATCH /transactions/:id"],
+        schema: updateTransactionSchema,
+        fields: {
+          chargeAmount:
+            "rewrites the bank charge; 0.00 takes it off, absent leaves it",
+        },
+        onSave:
+          "Changes the entry in place. The account and the direction never change: that is a void and a new entry. Refused on a voided entry, half a transfer, a locked month, or if the account would go below zero.",
+        permission: "transactions.write",
+      },
+      {
+        name: "Void",
+        on: "/transactions",
+        opens: "Void, on an entry's row (the same on Expenses and a register)",
+        saves: ["POST /transactions/:id/void"],
+        schema: voidTransactionSchema,
+        fields: { reason: "why; kept with the entry" },
+        onSave:
+          "Voids the entry: it stays, struck through, out of every total, with the reason. Its bank charge, and a transfer's other half, go with it. Allowed in a locked month; refused if an account would go below zero.",
+        permission: "transactions.void",
       },
     ],
     recordedBy: ["POST /transactions"],
@@ -48,6 +107,51 @@ export const TRANSACTIONS_MAP = [
         does: "The month's money-in entries with their dollars and rate. Add cash records one; a row is corrected or voided here.",
       },
     ],
+    forms: [
+      {
+        name: "Add cash",
+        on: "/accounts/cash-in",
+        opens: "Add cash, top right",
+        saves: ["POST /transactions/cash-in"],
+        schema: recordCashInSchema,
+        fields: {
+          accountId: "our account it landed in; on screen, Received Bank Name",
+          amount: "the taka that landed; on a USD account, dollars × rate",
+          usdRate: "the day's rate; it governs the whole month",
+          usdSent: "the dollars sent; blank for a local receipt",
+          senderAccountName:
+            "who sent it, e.g. ShareViral Corp; on screen, Sender",
+          chargeAmount: "the bank's cut in taka, or chargeUsd in dollars",
+        },
+        onSave:
+          "Records a money-in entry with no category, the rate and the dollars sent beside it; a bank charge becomes its own money-out row. Refused in a locked month. Shows here and on All transactions.",
+        permission: "transactions.write",
+      },
+      {
+        name: "Edit",
+        on: "/accounts/cash-in",
+        opens: "Edit, on a receipt's row",
+        saves: ["PATCH /transactions/:id"],
+        schema: updateTransactionSchema,
+        fields: {
+          chargeAmount: "rewrites the bank charge; 0.00 takes it off",
+        },
+        onSave:
+          "Corrects the receipt in place: date, amount, description, bank charge, sender, note. The account never changes, and the dollars sent and the rate stay as first recorded. Refused on a voided entry or in a locked month.",
+        permission: "transactions.write",
+      },
+      {
+        name: "Void",
+        on: "/accounts/cash-in",
+        opens: "Void, on a receipt's row",
+        saves: ["POST /transactions/:id/void"],
+        schema: voidTransactionSchema,
+        fields: { reason: "why; kept with the entry" },
+        onSave:
+          "Voids the receipt and its bank charge: they stay, struck through, out of every total, with the reason. Refused if the account would then go below zero.",
+        permission: "transactions.void",
+      },
+    ],
     recordedBy: ["POST /transactions/cash-in"],
     permission: "accounts.read",
     assistant: {
@@ -74,6 +178,59 @@ export const TRANSACTIONS_MAP = [
         href: "/transfers",
         name: "Money Transfer",
         does: "Every transfer, one row for the pair. A transfer is recorded, edited (both halves together) or trashed here.",
+      },
+    ],
+    forms: [
+      {
+        name: "Move money between accounts",
+        on: "/transfers",
+        opens: "New transfer, top right",
+        saves: ["POST /transactions/transfer"],
+        schema: transferSchema,
+        fields: {
+          amount: "the taka moved; on a USD account, dollars × rate",
+          usdAmount:
+            "the dollars moved, when a dollar account is on either side",
+          usdRate: "taka per dollar on the day; on both halves",
+          chargeAmount: "the bank's fee in taka, a row on the From account",
+          chargeUsd: "or that fee in dollars; never both",
+        },
+        onSave:
+          "Writes two linked entries with no category: out of the From account, into the To account. A bank charge is its own row on the From account. Refused in a locked month, or below zero on the From account.",
+        permission: "transactions.write",
+        draft: "transfer",
+      },
+      {
+        // The controller validates with `updateTransferSchema`, which it does
+        // not export, so the fields are named here by hand.
+        name: "Edit",
+        on: "/transfers",
+        opens: "Edit, on a transfer's row or in its popup",
+        saves: ["PATCH /transactions/transfer/:id"],
+        fields: {
+          txnDate: "required; the day it moved",
+          amount: "required; the taka moved",
+          usdRate: "required; taka per dollar on the day",
+          usdAmount: "the dollars moved; empty clears them",
+          chargeAmount: "the bank's fee in taka; empty takes it off",
+          chargeUsd: "or that fee in dollars; never both",
+          description: "required; what it was for",
+          paymentMethod: "required; how it moved; on screen, Method",
+        },
+        onSave:
+          "Rewrites both halves and the bank charge together; an empty box means none. The accounts never change: that is a void and a new transfer. Refused on a voided transfer, in a locked month, or below zero on either account.",
+        permission: "transactions.write",
+      },
+      {
+        name: "Void",
+        on: "/transfers",
+        opens: "Void, on a transfer's row",
+        saves: ["POST /transactions/:id/void"],
+        schema: voidTransactionSchema,
+        fields: { reason: "why; kept with the transfer" },
+        onSave:
+          "Voids both halves and the bank charge together: they stay, struck through, out of every total, with the reason. Refused if either account would then go below zero.",
+        permission: "transactions.void",
       },
     ],
     recordedBy: ["POST /transactions/transfer"],

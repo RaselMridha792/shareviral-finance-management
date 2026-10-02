@@ -1,3 +1,5 @@
+import { createVendorSchema } from "@finance/shared";
+
 import { appPart } from "../../common/app-map";
 
 /**
@@ -18,6 +20,29 @@ export const VENDORS_MAP = [
       "Not a tool or a subscription: that is a plan under AI tools and subscriptions.",
     ],
     screens: [],
+    // PATCH /vendors/:id is named by no form: nothing calls it. No screen
+    // edits a vendor, and the Assistant only drafts new ones.
+    forms: [
+      {
+        name: "The draft",
+        on: "/assistant",
+        opens: "the draft card for a vendor (no screen adds one)",
+        saves: ["POST /vendors"],
+        schema: createVendorSchema,
+        fields: {
+          type: "never ai_tool, subscription or hosting: those are plans",
+          etin: "their e-TIN, 12 digits",
+          bin: "their VAT BIN, 13 digits",
+          psrStatus: "whether their tax return was submitted",
+          psrAssessmentYear: "the year the PSR is for, like 2026-2027",
+          nextRenewalOn: "kept for old rows; nothing reads it",
+        },
+        onSave:
+          "Adds the vendor with its tax details. Refused if a vendor of that name exists. No screen lists vendors; the Assistant's vendor look-ups find it.",
+        permission: "vendors.write",
+        draft: "vendor",
+      },
+    ],
     recordedBy: ["POST /vendors"],
     permission: "vendors.read",
     assistant: {

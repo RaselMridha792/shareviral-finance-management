@@ -1,4 +1,5 @@
 import { appPart } from "../../common/app-map";
+import { paySpendSchema } from "./hr-budget.schemas";
 
 /**
  * The HR Budget page (#121) became part of HR Requests (#125): its old
@@ -20,6 +21,25 @@ export const HR_BUDGET_MAP = [
         href: "/hr-requests",
         name: "HR Requests",
         does: "Budgets and spends are two of the four kinds listed there. An approved spend is paid from its row.",
+      },
+    ],
+    forms: [
+      {
+        name: "Pay this spend",
+        on: "/hr-requests",
+        opens: "Pay, on an approved spend's row or in its pop-up",
+        saves: ["POST /hr-budget/spends/:id/pay"],
+        schema: paySpendSchema,
+        fields: {
+          accountId: "Paid from: the account the money leaves",
+          categoryId: "Expense heading: what the expense is filed under",
+          txnDate: "the day it was paid; the spend is marked paid on it",
+          usdRate: "taka for one dollar that day",
+          notes: "may be left empty, and is then sent as nothing",
+        },
+        onSave:
+          "Writes an ordinary expense of the spend's amount out of that account and marks the spend paid against it; HR is told. Only an approved spend; refused in a closed month or if the account would go below zero. The invoice and slip attached go on the entry, on All transactions.",
+        permission: "hrbudget.manage",
       },
     ],
     recordedBy: [

@@ -16,6 +16,7 @@ export const DASHBOARD_MAP = [
         does: "The period at a glance, with links into each part.",
       },
     ],
+    forms: [],
     recordedBy: [],
     permission: "dashboard.view",
     assistant: {

@@ -24,6 +24,7 @@ import { BatchCard, type RowResult } from "@/components/assistant/batch-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
 import { DraftCard, labelFor } from "@/components/assistant/draft-card";
+import { MarkWrong } from "@/components/assistant/mark-wrong";
 import { Welcome } from "@/components/assistant/welcome";
 import { useCan, useSession } from "@/components/auth/session-provider";
 import { Card } from "@/components/ui/card";
@@ -511,6 +512,13 @@ export function AssistantScreen({
                   Open {place.name}
                   <ArrowRightIcon weight="bold" size={15} />
                 </Link>
+              ) : null}
+
+              {/* Under the latest answer only: the one the conversation
+                  holds whole on the server. Keyed on it, so a new answer
+                  gets a fresh box. */}
+              {chatId && reply && !thinking ? (
+                <MarkWrong key={messages.length} chatId={chatId} />
               ) : null}
 
               {/* A batch and a single draft are never both on offer: the

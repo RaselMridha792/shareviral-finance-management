@@ -8,6 +8,8 @@ import {
   type AiImportPlan,
   type AiInstructions,
   type AiKeyResult,
+  type AiKnowledge,
+  type AiMistake,
   type UpdateAiSettingsInput,
   type AiIntakeReply,
   type AiIntakeRequest,
@@ -55,6 +57,34 @@ export const aiApi = {
 
   turn: (request: AiIntakeRequest) =>
     apiFetch<AiIntakeReply>("/ai/turn", { method: "POST", ...json(request) }),
+
+  /**
+   * "This was wrong", on the answer the conversation ended on. Only the
+   * reason travels: what was asked and answered is read from the
+   * conversation on the server.
+   */
+  feedback: (chatId: string, reason: string) =>
+    apiFetch<{ recorded: true }>("/ai/feedback", {
+      method: "POST",
+      ...json({ chatId, reason }),
+    }),
+
+  /** The Assistant's mistakes, newest first. Super Admin's, as the rules are. */
+  mistakes: () => apiFetch<AiMistake[]>("/ai/mistakes", { cache: "no-store" }),
+
+  /** One line added to the owner's instructions; the instructions come back. */
+  makeRule: (id: string, rule: string) =>
+    apiFetch<AiInstructions>(`/ai/mistakes/${id}/rule`, {
+      method: "POST",
+      ...json({ rule }),
+    }),
+
+  forgetMistake: (id: string) =>
+    apiFetch<void>(`/ai/mistakes/${id}`, { method: "DELETE" }),
+
+  /** The map of the app the Assistant is given. */
+  knowledge: () =>
+    apiFetch<AiKnowledge>("/ai/knowledge", { cache: "no-store" }),
 
   /**
    * The history list. Always the signed-in person's own — the API has no

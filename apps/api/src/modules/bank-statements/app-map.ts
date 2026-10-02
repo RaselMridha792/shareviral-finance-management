@@ -21,6 +21,7 @@ export const BANK_STATEMENT_MAP = [
         does: "One account and a period: its entries with a running balance, laid out as a bank lays out a statement.",
       },
     ],
+    forms: [],
     recordedBy: [],
     permission: "transactions.read",
     assistant: {

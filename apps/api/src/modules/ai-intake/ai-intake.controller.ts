@@ -17,13 +17,17 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import {
   AI_ATTACHMENT_MAX_BYTES,
   AI_TARGETS,
+  aiFeedbackSchema,
   aiIntakeRequestSchema,
+  makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
   updateAiSettingsSchema,
+  type AiFeedbackInput,
   type AiImportPlan,
   type AiIntakeRequest,
   type AiTarget,
+  type MakeAiRuleInput,
   type SetAiInstructionsInput,
   type SetAiKeyInput,
   type UpdateAiSettingsInput,
@@ -295,5 +299,62 @@ export class AiIntakeController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.ai.setInstructions(body, actor);
+  }
+
+  /* --- it gets better with use (A2b) ------------------------------------ */
+
+  /**
+   * "This was wrong", on the answer a conversation ended on. Anybody who
+   * may use the Assistant may say so of their own conversation; what was
+   * asked and answered is read from it, not taken from the request.
+   */
+  @Post("feedback")
+  @HttpCode(200)
+  @RequirePermission("ai.use")
+  feedback(
+    @ZodBody(aiFeedbackSchema) body: AiFeedbackInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.ai.feedback(body, actor);
+  }
+
+  /**
+   * The mistakes, and making one a rule or taking it off: Super Admin
+   * alone, as the instructions are. A rule changes what the Assistant does
+   * for everybody, and the list carries what other people asked.
+   */
+  @Get("mistakes")
+  @RequirePermission("settings.write")
+  mistakes() {
+    return this.ai.mistakes();
+  }
+
+  @Post("mistakes/:id/rule")
+  @HttpCode(200)
+  @RequirePermission("settings.write")
+  makeRule(
+    @Param("id", ParseUUIDPipe) id: string,
+    @ZodBody(makeAiRuleSchema) body: MakeAiRuleInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.ai.makeRule(id, body, actor);
+  }
+
+  @Delete("mistakes/:id")
+  @HttpCode(204)
+  @RequirePermission("settings.write")
+  forgetMistake(@Param("id", ParseUUIDPipe) id: string) {
+    return this.ai.forgetMistake(id);
+  }
+
+  /**
+   * The map the Assistant is given, for "What the Assistant knows". It holds
+   * no record of anybody's, only what the app is, so whoever may use the
+   * Assistant may read what it is told.
+   */
+  @Get("knowledge")
+  @RequirePermission("ai.use")
+  knowledge() {
+    return this.ai.knowledge();
   }
 }

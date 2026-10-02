@@ -22,6 +22,7 @@ import {
   type AiProvider,
 } from "@finance/shared";
 import {
+  ArrowRight,
   CircleAlert,
   CircleCheck,
   ExternalLink,
@@ -42,6 +43,8 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
 
+import { AssistantMistakes } from "@/components/assistant/assistant-mistakes";
+
 import { AssistantInstructions } from "./assistant-instructions";
 
 /**
@@ -60,6 +63,8 @@ export function AssistantPanel() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  /** How many rules have been made from mistakes on this visit. */
+  const [rulesAdded, setRulesAdded] = useState(0);
 
   const model: AiModel = status?.model ?? "claude-opus-5";
   const provider: AiProvider = status?.provider ?? "anthropic";
@@ -421,7 +426,19 @@ export function AssistantPanel() {
         </CardBody>
       </Card>
 
-      <AssistantInstructions />
+      {/* Remounted when a mistake is made a rule, so the box reads the
+          instructions with the new line in them rather than saving over it. */}
+      <AssistantInstructions key={rulesAdded} />
+
+      <AssistantMistakes onRuled={() => setRulesAdded((n) => n + 1)} />
+
+      <Link
+        href="/assistant/knowledge"
+        className="inline-flex w-fit items-center gap-1.5 text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
+      >
+        What the Assistant knows: the map of the app it is given
+        <ArrowRight className="size-4" />
+      </Link>
 
       <Card>
         <CardHeader

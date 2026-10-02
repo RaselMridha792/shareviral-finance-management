@@ -1,4 +1,5 @@
 import { appPart } from "../../common/app-map";
+import { saveInvoiceSchema } from "./invoice-document";
 
 export const INVOICES_MAP = [
   appPart({
@@ -26,6 +27,34 @@ export const INVOICES_MAP = [
         href: "/invoices/[id]/edit",
         name: "A saved invoice, in the builder",
         does: "One invoice, open for changes.",
+      },
+    ],
+    forms: [
+      {
+        name: "Save invoice",
+        on: "/invoices/new",
+        opens: "Save invoice, top right of the builder",
+        saves: ["POST /invoices"],
+        schema: saveInvoiceSchema,
+        fields: {
+          document:
+            "the whole sheet: number, status, client lines, items, payment lines, notes",
+        },
+        onSave:
+          "Keeps the invoice, its total worked out again from the items, and opens it as a saved invoice; it shows on All Invoices. Nothing reaches the ledger, even marked PAID. Refused when the number is another invoice's.",
+      },
+      {
+        name: "Save invoice",
+        on: "/invoices/[id]/edit",
+        opens:
+          "Edit on an invoice's row on All Invoices, then Save invoice, top right",
+        saves: ["PATCH /invoices/:id"],
+        schema: saveInvoiceSchema,
+        fields: {
+          document: "the whole sheet as it now stands, not only what changed",
+        },
+        onSave:
+          "Replaces the saved invoice with the sheet as it now stands and works its total out again. Nothing reaches the ledger, even marked PAID. Refused when the number is now another invoice's.",
       },
     ],
     recordedBy: ["POST /invoices", "PATCH /invoices/:id"],

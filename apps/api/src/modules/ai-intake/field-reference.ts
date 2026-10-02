@@ -353,10 +353,55 @@ export function pairedFields(): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Any form's fields, for the map (piece A2b)                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The object a request schema validates, found through what is wrapped
+ * round it: a `.transform()` or a `.pipe()` puts the object on its way in.
+ * Null when there is no object to find (a schema of one value).
+ */
+export function objectShape(
+  schema: z.ZodType,
+): Record<string, z.ZodType> | null {
+  let current = schema;
+  for (let depth = 0; depth < 8; depth += 1) {
+    const def = (current as unknown as { def: Def }).def;
+    if (def?.type === "object") {
+      return (current as unknown as z.ZodObject<z.ZodRawShape>).shape as Record<
+        string,
+        z.ZodType
+      >;
+    }
+    const next =
+      def?.type === "pipe" ? def.in : def?.innerType ? def.innerType : null;
+    if (!next) return null;
+    current = next;
+  }
+  return null;
+}
+
+/**
+ * A form's fields, from the schema its endpoint validates with: each key,
+ * whether Save needs it, and what its value has to look like. The map's
+ * forms are written out with this (`app-map.ts`), so the list is the one
+ * Save checks and cannot drift from it.
+ */
+export function formFields(
+  schema: z.ZodType,
+): Array<{ name: string; required: boolean; shape: string }> {
+  const shape = objectShape(schema) ?? {};
+  return Object.entries(shape).map(([name, field]) => {
+    const described = describe(name, field);
+    return { name, required: described.required, shape: described.note };
+  });
+}
 
 type Def = {
   type?: string;
   innerType?: z.ZodType;
+  /** A pipe's input: for `.transform()`, the schema being transformed. */
+  in?: z.ZodType;
   entries?: Record<string, string>;
   checks?: Array<{ _zod?: { def?: Record<string, unknown> } }>;
 };
@@ -378,6 +423,17 @@ function describe(name: string, field: z.ZodType): Described {
     if (!def?.type) break;
 
     if (def.type === "optional" || def.type === "default") required = false;
+
+    /*
+     * A `.transform()` is a pipe, and what the field takes is its input: a
+     * pipe has no `innerType`, so this stopped at it and called the field
+     * required even where the input had a default — a bank-advice payment's
+     * email read as needed when the form leaves it out (A2b).
+     */
+    if (def.type === "pipe" && def.in) {
+      current = def.in;
+      continue;
+    }
 
     if (
       (def.type === "optional" ||
