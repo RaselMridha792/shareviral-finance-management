@@ -100,6 +100,15 @@ front of it. Three things:
    - It is placed in the stable part of the prompt, after the map. The owner's rules can
      add to the map, but they cannot unlock a permission.
 
+**The owner's first rule, decided 2 Oct (it goes into the map and the first instruction
+set):** anything called a subscription belongs to **Ai Tools and Subscriptions**. That
+covers software, AI tools, hosting and servers, and domains. It is recorded as a plan in
+that part, and filed under the "Ai Tools and Subscriptions" heading.
+
+The Technology sub-categories "Software & subscriptions" and "AI tools" are duplicates of
+that heading. The owner means to trash them. If payments are filed under them, re-file
+those first, and tell the owner how many there were.
+
 **Reading more.** Widen the look-up tools (`ai-tools.ts`) to every part the map lists:
 subscriptions and their charges, payroll runs, TDS, invoices, HR requests and budget, bank
 advice. Each one is gated on the asker's own permission, as the existing ones are.
@@ -136,18 +145,34 @@ Only Super Admin and CFO. `ai.use` comes off every other role. The rail entry, t
 the floating window (B4) are hidden from them; the API already refuses on the permission.
 **This is a permissions change, so it travels alone.**
 
-### B2. Settings in one place
+### B2. The Assistant's own settings, inside the chat (the owner's change, 2 Oct)
 
-- Assistant and Connections become one Settings tab.
-- The Assistant page gets a settings entry for Super Admin.
-- The Anthropic key box shows only when "Anthropic key" is the chosen route; it is not
+The owner wants it the way ChatGPT and Claude do it: a settings icon on the chat page
+itself, and everything about the Assistant behind it. Not two tabs in the app's Settings.
+
+- **A settings icon on the Assistant page**, and in the floating window (B4). It opens the
+  Assistant's own settings page or panel, which holds:
+  - the route and the model;
+  - the Google Cloud connection: the key, Test, and the address to share files with;
+  - how much it may read;
+  - the owner's instruction set (A2).
+
+  Super Admin can change these, as now. Decide with the owner what CFO sees. The default
+  is the usage panel only.
+- **The Assistant and Connections tabs leave the app's Settings.** Keep the old addresses
+  working as redirects, so links in SESSIONS and bookmarks do not break.
+- **The Anthropic key box** shows only when "Anthropic key" is the chosen route; it is not
   shown before.
+- **A panel on the right of the chat for usage** (B3): this month's tokens, the estimated
+  cost, the limit, and how much of it is used. It can be collapsed, and on a phone it sits
+  behind a button.
 
 ### B3. Token accounting
 
 - **Recording.** One row per model call: who, which chat, provider, model, input, output
   and thinking tokens, when. **This is a schema change, and it travels alone.**
-- **The report.** In the Assistant's settings: by day, month, person and model, with an
+- **The report.** In the chat's right-hand panel (B2), with the full breakdown in the
+  Assistant's settings: by day, month, person and model, with an
   estimated cost from a per-model price table in code. It is labelled as an estimate,
   because Google's invoice is the real figure.
 - **The optional monthly limit.** A warning at 80%. At 100% the Assistant stops, with a
