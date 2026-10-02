@@ -67,6 +67,25 @@ korar dorkar nei."*
    - A link that names a tab (`#gid=`) still reads only that tab.
    - This is a follow-up to A3. Do it with A4, or on its own before A5.
 
+## Next, after A4 (the owner, 2 Oct, night): three pieces in this order
+
+1. **A3b. A Sheet link that names no tab reads every tab.** This is decision 3 under "The
+   order now" above.
+2. **A4b. "Added by the assistant" shows as the origin of everything the Assistant
+   saves.**
+   - After A4, a transfer, a plan's payment and a challan's payment saved through
+     Confirm still show the origin "Entered by hand" or "From a tax payment" on the
+     ledger. Only the audit row says "through the Assistant".
+   - `TXN_ORIGINS` already has `ai_intake` ("Added by the assistant"), so **no schema
+     change** is needed. The Confirm path has to carry the origin through the transfer,
+     subscription and TDS services, as it already does for a plain payment.
+   - Why it matters: before A5 enters the boss's six months, every entry the Assistant
+     made must be findable by origin. A wrong batch can then be found and reversed as
+     one.
+   - Prove it on the page: All transactions, origin filter "Added by the assistant",
+     shows exactly the rows saved through Confirm, of every kind.
+3. **A5.** The boss's files.
+
 ---
 
 ## Part A — first
