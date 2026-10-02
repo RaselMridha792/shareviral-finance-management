@@ -98,3 +98,20 @@ as Save, that is a separate decision for them, with its own session.
 1 and 3 first: they stop an unsaveable or misleading draft whichever model answers. Then
 2 and 4, then 5, then 6. Reading Google Sheets/Docs from a link (step 3 of the
 2026-10-01 brief) follows after.
+
+## Added 2 Oct, after #133: Gemini 2.5 Pro is being retired this month
+
+- **The date.** Google is retiring Gemini 2.5 Pro, Flash and Flash Lite on Agent Platform
+  (Vertex AI). Its own pages say "no earlier than 16 October 2026", and the lifecycle page
+  says 20 October 2026. `gemini-2.5-pro` is the only Gemini model in `AI_MODELS`, so the
+  Assistant on Gemini stops working on that day unless a successor is offered first.
+- **The successor.** For Pro it is Gemini 3.1 Pro. One source gives its model ID as
+  `gemini-3.1-pro-preview`; confirm the exact ID in the owner's Agent Studio model list,
+  or with one request, before writing it down.
+- **The work.**
+  - Add it to `AI_MODELS` in `packages/shared`, the same users as before.
+  - Make it the Gemini default.
+  - Keep `gemini-2.5-pro` selectable only until it is retired.
+  - Run `.assistantbar.mjs` on the new model.
+  - Check its thinking and function-calling settings against Google's own page for that
+    model; do not assume they match 2.5's.
