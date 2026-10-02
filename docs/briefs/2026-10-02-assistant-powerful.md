@@ -84,7 +84,16 @@ korar dorkar nei."*
      one.
    - Prove it on the page: All transactions, origin filter "Added by the assistant",
      shows exactly the rows saved through Confirm, of every kind.
-3. **A5.** The boss's files.
+   - Also fix the prompt while here: it still says "**Save** on the draft card", but
+     since A4 the button is "Confirm and save" (found in A3b).
+3. **A3c. Excel files read every sheet too** (the owner's choice, 2 Oct night, on the
+   question A3b raised).
+   - An .xlsx, whether attached with the paperclip or fetched from a Drive link, reads
+     every sheet, each as its own card and its own FILE for the model, exactly as A3b
+     does for a Google Sheet's tabs.
+   - An empty sheet gets an "Empty" card.
+   - The boss keeps the data in Excel workbooks, so this comes before A5.
+4. **A5.** The boss's files.
 
 ---
 
