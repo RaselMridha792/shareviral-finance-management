@@ -129,6 +129,19 @@ The Technology sub-categories "Software & subscriptions" and "AI tools" are dupl
 that heading. The owner means to trash them. If payments are filed under them, re-file
 those first, and tell the owner how many there were.
 
+**A gap the owner found on live (2 Oct, Claude Opus 5):** "amader total team member
+kotojon?" was answered "Team member er total count dekhar kono tool amar kache nei". The
+Assistant can find a person by name, but it cannot count or list. Add counting and
+listing look-ups where the map says a part holds people or records:
+- team members by status and engagement;
+- vendors;
+- subscriptions;
+- open HR requests;
+- payroll runs.
+
+Make this question a case on the bar: it must answer with the count, and the count must
+match the Team screen.
+
 **Reading more.** Widen the look-up tools (`ai-tools.ts`) to every part the map lists:
 subscriptions and their charges, payroll runs, TDS, invoices, HR requests and budget, bank
 advice. Each one is gated on the asker's own permission, as the existing ones are.
@@ -276,6 +289,18 @@ itself, and everything about the Assistant behind it. Not two tabs in the app's 
   is the usage panel only.
 - **The Assistant and Connections tabs leave the app's Settings.** Keep the old addresses
   working as redirects, so links in SESSIONS and bookmarks do not break.
+- **Switching the model from the chat** (the owner asked, 2 Oct). Today the composer
+  shows only "Opus 5", because the chosen route is the Anthropic key, and that route
+  offers only Claude. To try Gemini the owner has to go to Settings and change the route.
+  - Make the route follow the model. The composer's picker lists every model that has a
+    working route right now: Claude Opus 5 through the Anthropic key (or Google Cloud
+    once its quota exists), and the Gemini models through Google Cloud.
+  - Picking one in the chat switches to it without a trip to Settings. Settings keeps only
+    the default.
+  - Decide with the owner whether a choice in the chat holds for that conversation or
+    becomes everyone's default. The first needs the model stored per chat, which is a
+    schema change if `ai_chats` has no such column.
+  - Only Super Admin and CFO can use the Assistant at all (B1), so both may switch.
 - **The Anthropic key box** shows only when "Anthropic key" is the chosen route; it is not
   shown before.
 - **A panel on the right of the chat for usage** (B3): this month's tokens, the estimated
