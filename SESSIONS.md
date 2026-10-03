@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 147 | **The Assistant as a floating window over every page — expanded to the Assistant page and back, the same conversation** | **built** — piece B4 of the "made strong" brief; **the owner tries it on the live site: the list is in #147.** Next is B2 (the Assistant's own settings inside the chat), then B3. A5 still waits for the samples in `F:\boss-samples\` |
 | 146 | **The Assistant: empty sheets do not count — one sheet or tab of data reads as one file, its Import plan back** | **built** — piece A3d of the "made strong" brief; **the owner tries it on the live site: the list is in #146.** A5 has not started: the samples are shared with the service account, which only the live server can use. The owner is asked to put copies in `F:\boss-samples\` |
 | 145 | **Accounts: editing a card no longer erases its stored number and CVC** | **done** — the bug #138 found (owner's decision 1 there). Blank now keeps, as the hint always said. Live data not touched; what the bug may already have erased on live is in #145 |
 | 144 | **The Assistant: an Excel workbook reads every sheet, a card each, each counted on its own** | **built** — piece A3c of the "made strong" brief; **the owner tries it on the live site: the list is in #144.** Next is A5, which starts by asking the owner for samples |
@@ -124,6 +125,159 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 147. The Assistant as a floating window — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B4**, the first of
+"While the boss's samples wait". The owner chose where the launcher goes
+(asked this session): **a round button at the bottom right**, with room left
+at the foot of every page so a page's last control never sits under it.
+The other choice offered was a button in the top bar.
+
+**What the owner now has:**
+
+- **A lime round button with the robot, at the bottom right of every
+  dashboard page**, for the Super Admin and the CFO only (`ai.use`, B1).
+  Nobody else sees it, and it is not on the Assistant's own pages
+  (`/assistant`, `/assistant/knowledge`), where the conversation is the
+  page.
+- **Pressed, the chat opens as a window above it**: 400px wide, up to 640px
+  tall, clear of the top bar. The button turns into a "minimise" chevron.
+  - Its header: History, New chat, **Expand** (⤢), Minimise (—).
+  - Inside: the same conversation, file cards, draft card, table of drafts,
+    "This was wrong", the message box with the paperclip, voice and model.
+  - A shorter greeting than the page: the examples, without the three
+    cards.
+  - Escape minimises it and gives the focus back to the button.
+- **Expand** opens the Assistant page on the same conversation: the
+  messages, the attached files, the draft card, and any figure already typed
+  over on it.
+- **On the Assistant page, a new "Open as a window" button** sits beside
+  New chat (and in the phone's top strip). It goes back to the page the
+  window was expanded from, or the last page before the Assistant, with the
+  window open on the same conversation.
+- **The conversation survives moving around.** Change pages with the window
+  open and it stays open, on the same conversation. A reply still on its way
+  arrives in whichever view is open by then.
+- **Minimised while it thinks**, the button spins. When the answer arrives
+  it gets a violet dot ("a new answer is waiting"), which goes when the
+  window is opened.
+- **Confirm and save works in the window**, the same call as on the page.
+  The page behind refreshes, so a saved row shows on it. Following a link
+  from the window ("Open All transactions", a file's staged rows, What the
+  Assistant knows) minimises the window so the page can be seen.
+- **It covers nothing of the page.** Every page with the button ends 92px
+  lower (it was 24px), so scrolled to its end, its last button sits above
+  the launcher. While scrolling, the page passes under it, as the owner was
+  told when choosing. Every popup, drawer and dialog sits over the button
+  and the window.
+- **On a phone** the window is the whole screen, over the top bar, and the
+  button steps aside. Minimise brings the page back.
+- **Printing** (a payslip, the security codes): neither the button nor the
+  window prints, and the page's foot is what it was.
+
+**How it is built:** no schema change, nothing under `packages/shared`,
+`components/ui` or `lib`.
+
+- `assistant/assistant-provider.tsx` (new) holds the whole conversation:
+  every state and action that `assistant-screen.tsx` held, moved, not
+  rewritten, plus the window's open state, its own reading of availability
+  (asked each time it opens), the "new answer" mark and where it was
+  expanded from. It is mounted in the dashboard layout, which stays mounted
+  across a navigation. That is why both views show one conversation.
+  Nothing is asked of the API until one of the two views opens.
+- What the person types over on a draft card is kept there too (`edits`),
+  so a corrected figure survives the card being drawn again in the other
+  view. `draft-card.tsx` takes it as `edits`/`onEdit`.
+- `assistant/conversation.tsx` (new): the transcript, the cards and the
+  message box, shared by the page and the window. The model picked in the
+  chat stays in the view, as before: a later change in Settings is not
+  hidden behind an old choice.
+- `assistant/assistant-window.tsx` (new): the button and the window.
+  `assistant/not-switched-on.tsx` (new): the "Not switched on" card, now
+  shared, with a compact form for the window.
+- `assistant-screen.tsx` is now the history rail, the phone's strip and
+  the conversation. `chat-rail.tsx` gains `onPopOut`. `welcome.tsx` and
+  `composer.tsx` gain `compact`. The draft card's two columns follow the
+  card's own width (a container query), so it is one column in the window
+  and two on the page, as before.
+- **Shared code, which the brief says the owner asked for:**
+  `app/(dashboard)/layout.tsx` wraps the shell in the provider and draws the
+  window. `layout/main-region.tsx` adds the 92px foot for those who see the
+  button (`LAUNCHER_ROOM`, back to its old foot in print).
+
+**Proved:**
+
+- `.assistantwindowqa.mjs` (new). It runs its own built API on :4022 with a
+  stand-in model and the real pages. **34/34 against a `next start` build**
+  (`WEB=http://localhost:3100`). Against `next dev` the same, except one
+  screen of the sweep, an account's page, which the dev server itself
+  could not serve (see "Seen, not touched").
+  - **Who:** the Super Admin and the CFO have the 52px button, 20px from
+    the corner, and the page a 92px foot. HR has neither (foot 24px). Not
+    on `/assistant` or `/assistant/knowledge`.
+  - **It covers nothing — 40 screens at 1440px and at 390px:** every rail
+    screen, an account, its register, a person, a plan, a payroll run, an
+    invoice, a bank advice, and every Settings section. Each was scrolled
+    to its end: no link, button or box under the button, nothing sideways,
+    no page error.
+  - **The window:** 400px, its foot 88px up, clear of the top bar. The
+    short greeting. The focus in the box. The box's controls on one line.
+    A CSV attached in it. A draft in it, one column. A figure typed over.
+    Expand: the page with the message, the file and the corrected figure,
+    two columns. Open as a window: back on All transactions with all of it.
+    A rail link with the window open: still open, same draft. Confirm and
+    save from the window: saved as corrected, origin `ai_intake`. The
+    sentence and its link; the link minimises the window. Minimised while
+    thinking: it spins, then the mark, gone on opening. Escape, and the
+    focus back. History over the chat. New chat. The navigation drawer
+    covers the button.
+  - **A phone:** the button 16px from the corner; the window the whole
+    390×844 screen; nothing past its edge; Minimise.
+  - It leaves nothing behind (entries, chats, files, lessons 0; key back).
+- The page's own harnesses, one at a time, after the move:
+  `.assistantconfirmqa.mjs` 60/60, `.assistantemptyqa.mjs` 26/26,
+  `.assistantlearnqa.mjs` 72/72, `.assistantlinkqa.mjs` 60/60.
+- `node .sweep.mjs`: all 14 screens h1 28 (the dashboard 32), padding
+  24/24, gap 18, 0px sideways at 1440, 1180 and 900. Its "wide" notes are
+  the page heads' decorations, which this session did not touch.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 359,
+  shared 382) pass, each on its own exit code.
+
+**Not proved:** nothing here is the model's. `.assistantbar.mjs` gains no
+case, because what the model is told has not changed.
+
+**For the owner — on the live site, after the deploy.** **Reload first.**
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Open All transactions | A lime round button with the robot, bottom right. Scroll to the very end: the pager and the last row sit above it, not under it |
+| 2 | Press it | The chat opens above it, with "Good …, <name>" and the examples. The cursor is in the box |
+| 3 | Type `courier ke 500 taka dilam` and send | The draft card, in the window. Change the amount to 550 |
+| 4 | Press ⤢ (Expand) | The Assistant page: the same message, the same draft, 550 still in it |
+| 5 | Press the small window icon beside "New chat" | Back on All transactions, the window open on the same conversation, 550 still there |
+| 6 | Click Team in the rail | The window stays open on the same conversation |
+| 7 | Confirm and save in the window | "Saved — …" and "Open All transactions". Press it: the window minimises and the row is on the page. The origin filter "Added by the assistant" shows it |
+| 8 | Ask anything, then press — at once | The button spins; when the answer is in, a violet dot. Open it: the answer is there |
+| 9 | On a phone | The button bottom right. Pressed, the chat fills the screen. — brings the page back |
+| 10 | Sign in as HR (or any role but Super Admin and CFO) | No button anywhere |
+
+**What the owner has to decide:** nothing for B4. These choices were made
+here and are easy to change: the window is 400×640; following a link from
+the window minimises it.
+
+**Seen, not touched:**
+
+- The local `next dev` on :3000 answered 500 on an account's page ("Jest
+  worker encountered 2 child process exceptions"), as #145 saw on every
+  page. A `next start` build served the same page fine. I restarted
+  `next dev` (`apps/web`, log in `.dev-web.log`, git-ignored); the page
+  answers 200 again.
+- A toast still shows over the bottom-right corner for its few seconds,
+  above the button and the window. It is the toast's place on every page.
+- `apps/web/next-env.d.ts` (rewritten by `next dev`/`next build`) and
+  `sheet-new.png` are modified in the working copy. They are not this
+  session's, and are not committed.
 
 ## 146. The Assistant: empty sheets do not count — 3 Oct 2026
 
