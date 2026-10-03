@@ -12,6 +12,7 @@ import {
   type AiIntakeReply,
   type AiMessage,
   type AiModel,
+  type AiUsageSummary,
 } from "@finance/shared";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -175,6 +176,20 @@ function useConversation() {
    * turn, so a field left empty is not asked about again (4 Oct 2026).
    */
   const [leaveEmpty, setLeaveEmpty] = useState<Record<string, boolean>>({});
+  /**
+   * What the Assistant has spent this month, against the company's limit
+   * (B3): the panel beside the chat, and the warning above the message box
+   * at 80%. Read when a view opens, and brought by every answer.
+   */
+  const [usage, setUsage] = useState<AiUsageSummary | null>(null);
+
+  const loadUsage = useCallback(async () => {
+    try {
+      setUsage(await aiApi.usage());
+    } catch {
+      // The panel is a convenience; the chat works without it.
+    }
+  }, []);
 
   /* ---------------------------------------------------------------------- */
   /*  The floating window                                                    */
@@ -497,6 +512,7 @@ function useConversation() {
       setEdits({});
       // What was left empty is on the answer now, marked.
       setLeaveEmpty({});
+      if (result.usage) setUsage(result.usage);
       // A new answer means a new set of rows. Carrying the last batch's
       // struck-out lines or its results onto it would strike out whichever
       // rows happened to share those positions.
@@ -515,6 +531,10 @@ function useConversation() {
           "The assistant could not answer. The ordinary forms all still work.",
         ),
       );
+      // Refused at the month's limit: the panel says so too.
+      if (caught instanceof ApiError && caught.status === 402) {
+        void loadUsage();
+      }
     } finally {
       setThinking(false);
     }
@@ -685,6 +705,8 @@ function useConversation() {
     attachInvoice,
     leaveEmpty,
     setSkip,
+    usage,
+    loadUsage,
     loadChats,
     startNew,
     openChat,

@@ -945,6 +945,11 @@ export type AiIntakeReply = {
    * not offered again: the same draft confirmed twice would be two records.
    */
   saved?: AiSaved | null;
+  /**
+   * The month's spending after this turn (B3), for the panel beside the
+   * chat and its warning at 80% of the limit. Not kept on the conversation.
+   */
+  usage?: AiUsageSummary;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -1182,3 +1187,111 @@ export type AiKeyResult = {
   /** What Anthropic said, when it refused. */
   message: string | null;
 };
+
+/* -------------------------------------------------------------------------- */
+/*  What the Assistant spends (B3, 4 Oct 2026)                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Tokens counted, and what they come to at the providers' published prices.
+ *
+ * Every dollar figure is an ESTIMATE, worked out from `ai_usage`'s counts and
+ * the price table in the API's code (ai-prices.ts) when it is read: the
+ * providers' invoices are the real figures. `costUsd` is text, to four
+ * places ("0.0123"), as every money figure in this app is text; null when no
+ * call in it has a price known, and `unpricedCalls` says how many had none.
+ */
+export type AiUsageTotals = {
+  calls: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  /** Gemini's thinking, which Google counts apart. Claude's is in output. */
+  thinkingTokens: number;
+  costUsd: string | null;
+  unpricedCalls: number;
+};
+
+/** At this share of the month's limit the Assistant warns; at 1 it stops. */
+export const AI_USAGE_WARN_SHARE = 0.8;
+
+/**
+ * This month, Dhaka's, for the panel beside the chat: what was spent, the
+ * company's limit, and how much of it is used.
+ */
+export type AiUsageSummary = {
+  /** YYYY-MM, Dhaka's month. */
+  month: string;
+  totals: AiUsageTotals;
+  /** The monthly limit in dollars of estimated cost; null: none. */
+  limitUsd: string | null;
+  /** The estimate as a share of the limit, 0 to 1 and over; null: no limit. */
+  usedShare: number | null;
+  /** `warning` from 80% of the limit; `stopped` at 100%: nothing is asked. */
+  state: "ok" | "warning" | "stopped";
+  /** Said when it warns or has stopped, naming who can raise the limit. */
+  message: string | null;
+};
+
+/** One line of a price table: US dollars per million tokens. */
+export type AiUsagePrice = {
+  model: string;
+  provider: AiProvider;
+  from: string | null;
+  until: string | null;
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  /** Over 200,000 prompt tokens, where the provider charges more. */
+  long: {
+    input: number;
+    cacheRead: number;
+    cacheWrite: number;
+    output: number;
+  } | null;
+  source: string;
+};
+
+/** The breakdown in the Assistant's settings: a month by day, person and model. */
+export type AiUsageReport = {
+  month: string;
+  totals: AiUsageTotals;
+  byDay: Array<AiUsageTotals & { day: string }>;
+  byPerson: Array<AiUsageTotals & { userId: string | null; name: string }>;
+  byModel: Array<
+    AiUsageTotals & { model: string; provider: string; label: string }
+  >;
+  /** The last twelve months, newest first, the month asked for among them. */
+  months: Array<AiUsageTotals & { month: string }>;
+  limitUsd: string | null;
+  prices: AiUsagePrice[];
+};
+
+export const aiUsageReportQuerySchema = z.strictObject({
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "A month like 2026-10")
+    .optional(),
+});
+export type AiUsageReportQuery = z.infer<typeof aiUsageReportQuerySchema>;
+
+/**
+ * The company's monthly limit, set by the Super Admin (the owner, 3 Oct
+ * 2026): dollars of estimated cost, one for everybody. Null takes it off.
+ */
+export const setAiUsageLimitSchema = z.strictObject({
+  limitUsd: z.union([
+    z
+      .string()
+      .trim()
+      .regex(/^\d{1,8}(\.\d{1,2})?$/, "Enter dollars like 30 or 30.00")
+      .refine(
+        (value) => Number(value) > 0,
+        "The limit has to be more than zero",
+      ),
+    z.null(),
+  ]),
+});
+export type SetAiUsageLimitInput = z.infer<typeof setAiUsageLimitSchema>;

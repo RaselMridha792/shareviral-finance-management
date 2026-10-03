@@ -20,11 +20,13 @@ import {
   aiFeedbackSchema,
   aiIntakeRequestSchema,
   aiLinkSchema,
+  aiUsageReportQuerySchema,
   isDocAttachment,
   isInvoiceAttachment,
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
+  setAiUsageLimitSchema,
   updateAiSettingsSchema,
   type AiConfirmInput,
   type AiFeedbackInput,
@@ -34,6 +36,8 @@ import {
   type MakeAiRuleInput,
   type SetAiInstructionsInput,
   type SetAiKeyInput,
+  type AiUsageReportQuery,
+  type SetAiUsageLimitInput,
   type UpdateAiSettingsInput,
 } from "@finance/shared";
 
@@ -42,12 +46,13 @@ import {
   RequirePermission,
   type AuthenticatedUser,
 } from "../../common/decorators/auth.decorators";
-import { ZodBody } from "../../common/pipes/zod-validation.pipe";
+import { ZodBody, ZodQuery } from "../../common/pipes/zod-validation.pipe";
 import { ImportsService } from "../imports/imports.service";
 import { AiAttachmentsService, emptyPartsOf } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiConfirmService } from "./ai-confirm.service";
 import { AiIntakeService } from "./ai-intake.service";
+import { AiUsageService } from "./ai-usage.service";
 
 /**
  * Nothing here writes to the books but Confirm and save.
@@ -70,6 +75,7 @@ export class AiIntakeController {
     private readonly attachments: AiAttachmentsService,
     private readonly imports: ImportsService,
     private readonly confirmer: AiConfirmService,
+    private readonly usage: AiUsageService,
   ) {}
 
   /** The key's description goes only to whoever may change it. */
@@ -77,6 +83,35 @@ export class AiIntakeController {
   @RequirePermission("ai.use")
   availability(@CurrentUser() actor: AuthenticatedUser) {
     return this.ai.availability(actor);
+  }
+
+  /* --- what it spends (B3) ---------------------------------------------- */
+
+  /**
+   * This month so far, against the limit: the panel beside the chat. Read
+   * by anybody who may use the Assistant, the CFO included (B2's answer).
+   */
+  @Get("usage")
+  @RequirePermission("ai.use")
+  usageSummary() {
+    return this.usage.summary();
+  }
+
+  /** A month by day, person and model, and the last twelve months. */
+  @Get("usage/report")
+  @RequirePermission("ai.use")
+  usageReport(@ZodQuery(aiUsageReportQuerySchema) query: AiUsageReportQuery) {
+    return this.usage.report(query.month);
+  }
+
+  /** The company's one limit, in dollars: the Super Admin's, and audited. */
+  @Put("usage/limit")
+  @RequirePermission("settings.write")
+  setUsageLimit(
+    @ZodBody(setAiUsageLimitSchema) body: SetAiUsageLimitInput,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usage.setLimit(body, actor);
   }
 
   @Post("turn")
@@ -156,7 +191,7 @@ export class AiIntakeController {
   ) {
     if (!file) throw new BadRequestException("Choose a file to attach");
     return this.attachments.upload(file, actor, (buffer) =>
-      this.ai.readPdf(buffer),
+      this.ai.readPdf(buffer, actor),
     );
   }
 
@@ -178,7 +213,7 @@ export class AiIntakeController {
   ) {
     if (!file) throw new BadRequestException("Choose the invoice to attach");
     return this.attachments.uploadInvoice(file, actor, (buffer, mimeType) =>
-      this.ai.readInvoice(buffer, mimeType),
+      this.ai.readInvoice(buffer, mimeType, actor),
     );
   }
 
@@ -199,7 +234,7 @@ export class AiIntakeController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.attachments.fromLink(body.url, actor, (buffer) =>
-      this.ai.readPdf(buffer),
+      this.ai.readPdf(buffer, actor),
     );
   }
 

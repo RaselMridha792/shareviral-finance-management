@@ -12,6 +12,7 @@ import { AiConfirmService } from "./ai-confirm.service";
 import { AiIntakeController } from "./ai-intake.controller";
 import { AiIntakeService } from "./ai-intake.service";
 import { AiToolsService } from "./ai-tools";
+import { AiUsageModule } from "./ai-usage.module";
 
 @Module({
   // The assistant hands an attached file to the same import pipeline the
@@ -25,6 +26,8 @@ import { AiToolsService } from "./ai-tools";
     VendorsModule,
     TeamMembersModule,
     TdsModule,
+    // What it spends (B3): every call to a model is counted there.
+    AiUsageModule,
   ],
   controllers: [AiIntakeController],
   providers: [

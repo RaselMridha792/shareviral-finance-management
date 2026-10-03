@@ -12,6 +12,8 @@ import {
   type UpdateAiSettingsInput,
   type AiIntakeReply,
   type AiIntakeRequest,
+  type AiUsageReport,
+  type AiUsageSummary,
 } from "@finance/shared";
 
 import { API_BASE_URL, ApiError, apiFetch } from "./api-client";
@@ -162,6 +164,26 @@ export const aiApi = {
     apiFetch<AiConfirmResult>("/ai/confirm", {
       method: "POST",
       ...json({ chatId, row }),
+    }),
+
+  /**
+   * What it spends (B3): this month against the limit, for the panel beside
+   * the chat. Every dollar figure is an estimate; the invoice is the real one.
+   */
+  usage: () => apiFetch<AiUsageSummary>("/ai/usage", { cache: "no-store" }),
+
+  /** A month (YYYY-MM; this one when left out) by day, person and model. */
+  usageReport: (month?: string) =>
+    apiFetch<AiUsageReport>(
+      `/ai/usage/report${month ? `?month=${month}` : ""}`,
+      { cache: "no-store" },
+    ),
+
+  /** The company's one monthly limit in dollars; null takes it off. */
+  setUsageLimit: (limitUsd: string | null) =>
+    apiFetch<AiUsageSummary>("/ai/usage/limit", {
+      method: "PUT",
+      ...json({ limitUsd }),
     }),
 };
 

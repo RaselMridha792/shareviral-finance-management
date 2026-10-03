@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 156 | **What the Assistant spends: a row for every call to a model, a price table in the code, the report in its settings, the usage panel beside the chat, and the company's monthly limit — a warning at 80%, a stop at 100%** | **built** — piece 2 of the brief of 4 Oct (B3's code; its schema was #152); **the owner tries it on the live site: the steps are in #156** |
 | 155 | **The Assistant asks about every field at once: what Save needs, then every column the page shows as "N/A" — Login accounts, User Name, User Department, Invoice, Reference on a plan; "skip" leaves one empty; an invoice attached in the chat becomes the plan's invoice** | **built** — piece 1 of the brief of 4 Oct; **the owner tries it on the live site: the messages are in #155.** Next is piece 2 (B3's code: what it spends) |
 | 154 | **Sign-in: Cloudflare Turnstile before the password** | **on, live, 4 Oct** — the owner made the widget `SFM finance sign-in` (app.hellonizam.com, Managed), set both keys on the server and signed in through it ("Success — you are verified"). How to switch it off is in STATUS.md |
 | 153 | **HR Requests: approving a spend asks "pay it now?" — Pay now opens the payment, Pay later puts it on a new To pay tab** | **built** — the brief of 3 Oct; **the owner tries it on the live site: the steps are in #153.** Pushed after 0483bf9 (Turnstile, -12) and B3's schema (-ab), one push at a time |
@@ -133,6 +134,148 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 156. What the Assistant spends — 4 Oct 2026
+
+`docs/briefs/2026-10-04-assistant-asks-everything-and-b3.md`, **piece 2**: the
+B3 code. The schema went out alone in #152 (`ai_usage`,
+`app_settings.ai_monthly_limit_usd`); the owner's answers then were dollars
+of estimated cost and one limit for the whole company. No schema,
+permission or deploy change in this push. Shared code was approved in #155.
+
+**What the owner now has:**
+
+- **A row of `ai_usage` for every call to a model**: every round of a turn
+  (a turn with a look-up is two), the PDF statement read, the invoice read
+  (#155), the Anthropic key's Test, and the Google Cloud key's two Tests. Who,
+  which chat (none for a reading or a Test), the way, the model, and the
+  counts as the model gave them. Claude: input apart from what came from or
+  went to the cache, its thinking inside its output (thinking null). Gemini:
+  the prompt less its cached part, its thinking on its own line. A turn that
+  fails after a model answered is still counted: those tokens were spent.
+  A conversation that was never kept: counted on no conversation.
+- **The price table is in the code** (`ai-intake/ai-prices.ts`), read from
+  the providers' own pages on 4 Oct 2026, not recalled:
+  - Anthropic, Claude Opus 5: $5 input, $6.25 5-minute cache write, $0.50
+    cache read, $25 output, per million tokens.
+  - Google, the Global endpoint (this app's, unless its region was changed;
+    a regional one is 10% more): Claude Opus 5 the same as Anthropic;
+    Gemini 3.8 Flash **$0.75 / $0.075 / $3.75 through 31 Dec 2026, $1.50 /
+    $0.15 / $7.50 from 1 Jan 2027** (both kept, by date); Gemini 3.1 Pro
+    Preview $2 / $0.20 / $12, and $4 / $0.40 / $18 for a prompt over
+    200,000 tokens; Gemini 2.5 Pro $1.25 / $0.125 / $10, and $2.50 / $0.25
+    / $15 over 200,000. Gemini's output price covers its thinking.
+  - **Every figure is an estimate**, and says so wherever it is shown. A
+    model with no price shows its tokens and "no price known", never $0.
+  - No cost is stored: tokens are summed in SQL by model, way, Dhaka day
+    and prompt length, and the dollars are worked out as whole numbers
+    (BigInt, 10⁻¹² of a dollar), never as float sums (`ai-cost.ts`).
+- **The usage panel on the right of the chat** (the Assistant page, wider
+  than 1280px): this month's estimate, the calls, the limit with a meter of
+  how much is used, and the tokens by kind; "By day, person and model" goes
+  to the report. **Hide** folds it to a button, and this browser remembers.
+  Narrower, it is behind a **Usage** button in the top strip (on a phone,
+  the gauge icon), over the chat.
+- **The report, in the Assistant's settings** (behind the gear, "What it
+  spends"): the month's estimate, calls and tokens; by model, by person, by
+  day and by month (the last twelve); a month picker once there are two; and
+  the prices the estimate uses. **The CFO reads all of it** and changes
+  nothing.
+- **The monthly limit**, one for the company, in dollars, set there by the
+  Super Admin (Save the limit / Remove the limit; audited as "Set the
+  Assistant's monthly limit to $X of estimated cost"). The CFO sees it as a
+  line.
+  - **From 80%**: the panel turns amber, and a line above the message box,
+    in the window as on the page, says how much is used and that a Super
+    Admin can raise it.
+  - **At 100%**: the Assistant stops for everybody, the CFO included. A turn,
+    a PDF or an invoice is refused (402) with "The Assistant has reached
+    this month's limit of $X … It is off until the 1st, unless a Super Admin
+    raises the limit in the Assistant's settings." **Nothing is asked of any
+    model and nothing is kept.** The keys' Tests still run.
+  - No limit set: none. The month is Dhaka's.
+
+**How it is built:** `ai-usage.service.ts` (recording, the summary, the
+report, the limit) in its own `AiUsageModule`, which the Assistant's module
+and Connections both import. The two adapters take a meter
+(`model-turn.ts`, `gemini.ts`); `GET /ai/usage` and `GET /ai/usage/report`
+are `ai.use`, `PUT /ai/usage/limit` is `settings.write`. The turn's answer
+carries the month's summary for the panel. Web: `usage-panel.tsx`,
+`usage-report.tsx`, the provider holds the summary. Nothing under
+`components/ui` changed.
+
+**Proved:**
+
+- `.assistantusageqa.mjs` (new) **40/40**, a stand-in Anthropic giving known
+  counts:
+  - rows: a turn with a look-up, two rows on its chat with the counts as
+    given and thinking null; a PDF statement and an invoice read, a document
+    row each on no chat; the key's Test, a test row;
+  - the report against the rows **in SQL**: the month's totals, by model, by
+    person, by day; the estimate worked out independently from the prices,
+    equal to the ten-thousandth, with Gemini rows put in directly (3.8 Flash
+    with thinking, 3.1 Pro with a prompt over 200,000 tokens, a retired model
+    with no price, counted and left out of the dollars);
+  - the CFO reads both, gets 403 setting the limit; HR 403; a zero limit
+    refused;
+  - the limit: 86% warns and the turn carries it; at the limit a turn (as
+    the CFO) and a PDF get 402 with the sentence, the model asked nothing, no
+    chat and no row kept; taken off, it answers; three audit rows;
+  - the page: 288px on the right at 1440, the estimate, "the invoice is the
+    real figure", the limit and its meter, the tokens; the warning above the
+    message box; hidden and still hidden after a reload; at 390px no panel
+    beside the chat and nothing sideways, the Usage button opening it; the
+    settings card's estimate the report's, four tables, the Super Admin's
+    box, the CFO's line and no box. No page error.
+- `ai-cost.spec.ts` (13): Opus 5's four rates, Google's global Opus, a turn
+  to the fraction of a cent, 3.8 Flash both sides of 1 Jan 2027, thinking as
+  output, the long-prompt rates, no price never $0, a thousand small sums
+  exact, both providers' counts mapped.
+- The earlier Assistant harnesses after this change, one at a time:
+  `.assistantaskallqa` 53/53, `.assistantconfirmqa` 60/60,
+  `.assistantdraftqa` 57/57, `.assistantmapqa` 103/103, `.assistantlearnqa`
+  81/81, `.assistantemptyqa` 26/26, `.assistantoriginqa` 31/31,
+  `.assistantlinkqa` 60/60, `.assistantexcelqa` 35/35,
+  `.assistantsettingsqa` 51/51, `.assistantwindowqa` 33/33
+  (`SKIP_SWEEP=1`). In the batch, settings failed once on reopening a chat
+  from History and window once on the Expand; both pass alone, twice for
+  window.
+- The four CI steps green, each on its own exit code: lint its 2 old
+  warnings; tests API 448 (up 13), shared 386.
+
+**Not proved:** the real models' counts (Claude's and Gemini's own usage
+fields are read as their SDKs type them; the owner sees the first real
+figures on live), and Google's Test on a real key.
+
+**For the owner — on the live site, after the deploy.** Reload first.
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Open the Assistant on a wide screen | **Usage** on the right: October 2026, an estimate in dollars ("the provider's invoice is the real figure"), the calls, "No monthly limit is set", the tokens |
+| 2 | Ask it anything, e.g. `amader total team member kotojon?` | After the answer the estimate and the calls go up |
+| 3 | Gear → Assistant settings → **What it spends** | The month's estimate, by model, by person, by day, by month, and the prices. As the CFO: the same, and the limit as a line |
+| 4 | Type a limit a little above this month's estimate (e.g. if it says $0.40, type `0.45`) and **Save the limit** | The panel turns amber, and a line above the message box says how much is used and that a Super Admin can raise it |
+| 5 | Set the limit below the estimate (e.g. `0.01`) and send a message | Refused with "The Assistant has reached this month's limit of $0.01 … It is off until the 1st, unless a Super Admin raises the limit in the Assistant's settings." No answer comes |
+| 6 | **Remove the limit**, or set the one you want | It answers again |
+| 7 | On a phone | The gauge icon at the top of the chat opens Usage |
+
+Compare the month's estimate with the Anthropic Console and Google Cloud's
+billing after a few days: the estimate should be close; the invoices are the
+real figures.
+
+**What the owner has to decide:** the limit itself (none is set). Easy to
+change: the warning at 80%; the Tests not being stopped at the limit.
+
+**Seen, not touched:**
+- While harnesses ran in a batch, the dev watcher rebuilt `apps/api/dist`
+  under them and two failed with a 500 (both pass alone). The interrupted
+  `.assistantlearnqa` left its two LEARNQA rules in the **local**
+  `app_settings.ai_instructions`; they were put back to the owner's rules as
+  the audit log had them before the run. Live was never touched.
+- #155's Deploy run went red on `verify` alone (test and build green): the
+  runner got no answer from api.hellonizam.com for 33 minutes, while the
+  live API answered on e5801ea throughout. The same as #134 and #137.
+- `sheet-new.png` is still modified in the working copy. Not this session's.
 
 ## 155. The Assistant asks about every field at once — 4 Oct 2026
 

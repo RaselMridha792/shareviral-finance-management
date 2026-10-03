@@ -5,6 +5,7 @@ import {
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
+  setAiUsageLimitSchema,
   setGoogleKeySchema,
   updateAiSettingsSchema,
 } from "@finance/shared";
@@ -26,17 +27,18 @@ export const ASSISTANT_MAP = [
       "The conversations, each person's own.",
       "Its mistakes: what somebody corrected on a draft before saving, and answers somebody marked wrong, with why. Both are shown to it on later turns; the owner can make one a rule.",
       "Its settings: the model new chats start with, the way Claude is reached, the Anthropic key and the Google Cloud key, how much it may read, and the owner's instructions. Each conversation keeps the model picked for it in the chat.",
+      "What it spends: every call to a model, with its tokens, and the company's monthly limit in dollars of estimated cost. At 80% of the limit it warns; at 100% it stops for everybody until the 1st, unless a Super Admin raises it.",
     ],
     screens: [
       {
         href: "/assistant",
         name: "AI Assistant",
-        does: "The chat, its history and the draft cards. Under its latest answer, This was wrong says why it was not right. Which model answers this conversation is picked in the message box, beside Send; the conversation keeps it. The default, and the owner's instructions, are in the Assistant's settings, behind the gear.",
+        does: "The chat, its history and the draft cards. Under its latest answer, This was wrong says why it was not right. Which model answers this conversation is picked in the message box, beside Send; the conversation keeps it. The default, and the owner's instructions, are in the Assistant's settings, behind the gear. On the right, Usage: this month's tokens, the estimated cost, the limit and how much of it is used; on a phone, behind the Usage button.",
       },
       {
         href: "/assistant/settings",
         name: "Assistant settings",
-        does: "The model new chats start with and the way Claude is reached, the Anthropic key (when Claude goes that way) and the Google Cloud key with the address to share files with, how much it may read, the owner's instructions and its recent mistakes. The Super Admin changes them. The CFO reads them and changes nothing, and sees no key and no Google address.",
+        does: "The model new chats start with and the way Claude is reached, the Anthropic key (when Claude goes that way) and the Google Cloud key with the address to share files with, how much it may read, the owner's instructions and its recent mistakes, and What it spends: a month by day, person and model, the last twelve months, the prices the estimate is worked out with, and the monthly limit. The Super Admin changes them. The CFO reads them and changes nothing, and sees no key and no Google address.",
       },
       {
         href: "/assistant/knowledge",
@@ -194,6 +196,21 @@ export const ASSISTANT_MAP = [
         permission: "settings.write",
         onSave:
           "Deletes the stored Anthropic key. Through that route the Assistant stops answering until a key is added again.",
+      },
+      {
+        name: "Monthly limit",
+        on: "/assistant/settings",
+        opens:
+          "the What it spends card: the limit's box, Save, and Remove the limit. Super Admin only",
+        saves: ["PUT /ai/usage/limit"],
+        schema: setAiUsageLimitSchema,
+        permission: "settings.write",
+        fields: {
+          limitUsd:
+            "dollars of estimated cost a month, for the whole company; null takes it off",
+        },
+        onSave:
+          "Sets the one limit for everybody, from the next message. At 80% the chat warns; at 100% the Assistant stops until the 1st, before any model is asked. In What changed.",
       },
       {
         name: "Which model answers",

@@ -19,12 +19,15 @@ import { seal } from "../../common/crypto/secret-box";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import { DbService } from "../../db/db.service";
 import { appSettings, users } from "../../db/schema";
+import { AiUsageService } from "../ai-intake/ai-usage.service";
 import { explainClaudeError } from "../ai-intake/claude-errors";
+import { geminiUsage } from "../ai-intake/gemini";
 import {
   asGeminiError,
   explainGeminiError,
   scrub,
 } from "../ai-intake/gemini-errors";
+import { claudeUsage } from "../ai-intake/model-turn";
 import {
   GOOGLE_READ_SCOPES,
   geminiClient,
@@ -69,6 +72,7 @@ export class ConnectionsService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly usage: AiUsageService,
   ) {}
 
   private async row() {
@@ -226,7 +230,7 @@ export class ConnectionsService {
    * is still missing rather than one red light for all of them. Nothing is
    * written anywhere — the scopes could not allow it.
    */
-  async testGoogle(): Promise<GoogleTestResult> {
+  async testGoogle(actor: AuthenticatedUser): Promise<GoogleTestResult> {
     const row = await this.row();
     const account = openServiceAccount(row?.sealed);
     if (!account) {
@@ -246,8 +250,8 @@ export class ConnectionsService {
 
     const [models, reads] = await Promise.all([
       Promise.all([
-        ...(claude ? [this.checkVertex(account, region, claude)] : []),
-        ...(gemini ? [this.checkGemini(account, region, gemini)] : []),
+        ...(claude ? [this.checkVertex(account, region, claude, actor)] : []),
+        ...(gemini ? [this.checkGemini(account, region, gemini, actor)] : []),
       ]),
       this.checkReads(account),
     ]);
@@ -258,11 +262,12 @@ export class ConnectionsService {
     account: ServiceAccount,
     region: string,
     model: AiModel,
+    actor: AuthenticatedUser,
   ): Promise<GoogleCheck> {
     try {
       // One token, no retries: the point is the answer, and a button that
       // spins for a minute retrying a 404 is a worse answer.
-      await vertexClient(account, region, {
+      const answered = await vertexClient(account, region, {
         maxRetries: 0,
         timeout: 30_000,
       }).messages.create({
@@ -270,6 +275,16 @@ export class ConnectionsService {
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       });
+      // A Test is a call like any other, and counted (B3).
+      await this.usage.record([
+        {
+          userId: actor.id,
+          provider: "vertex",
+          model,
+          kind: "test",
+          usage: claudeUsage(answered.usage),
+        },
+      ]);
       return check(
         "vertex",
         true,
@@ -294,12 +309,13 @@ export class ConnectionsService {
     account: ServiceAccount,
     region: string,
     model: AiModel,
+    actor: AuthenticatedUser,
   ): Promise<GoogleCheck> {
     try {
       // One small request, no retries. Not `maxOutputTokens: 1`, though:
       // Gemini thinks first, out of the same allowance, and has to be left
       // room to say anything at all.
-      await geminiClient(account, region, {
+      const answered = await geminiClient(account, region, {
         attempts: 1,
         timeout: 30_000,
       }).models.generateContent({
@@ -307,6 +323,15 @@ export class ConnectionsService {
         contents: "hi",
         config: { maxOutputTokens: 1_024 },
       });
+      await this.usage.record([
+        {
+          userId: actor.id,
+          provider: "vertex",
+          model,
+          kind: "test",
+          usage: geminiUsage(answered),
+        },
+      ]);
       return check(
         "gemini",
         true,

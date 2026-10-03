@@ -71,6 +71,23 @@ export type DocumentRequest = {
 export type DocumentMime =
   "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
 
+/**
+ * The tokens one call to a model counted (B3, 4 Oct 2026), as `ai_usage`
+ * keeps them: input at the full rate (cached input not in it), the cache
+ * read and written, the output, and Gemini's thinking, which Google counts
+ * apart. Claude counts its thinking inside its output: null there.
+ */
+export type ModelUsage = {
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  thinkingTokens: number | null;
+};
+
+/** Told of every call the moment its answer arrives, to be counted. */
+export type UsageMeter = (usage: ModelUsage) => void;
+
 export interface TurnModel {
   converse(request: TurnRequest): ModelConversation;
   /**
@@ -87,7 +104,11 @@ export interface TurnModel {
  * Claude — with an Anthropic key, or on Vertex AI. The two clients take the
  * same requests, so this is one adapter for both.
  */
-export function claudeModel(client: ClaudeClient, model: string): TurnModel {
+export function claudeModel(
+  client: ClaudeClient,
+  model: string,
+  meter?: UsageMeter,
+): TurnModel {
   return {
     converse(request) {
       const messages: Anthropic.MessageParam[] = request.messages.map((m) => ({
@@ -126,6 +147,8 @@ export function claudeModel(client: ClaudeClient, model: string): TurnModel {
             tools: request.tools,
             tool_choice: only ? { type: "tool", name: only } : { type: "any" },
           });
+
+          meter?.(claudeUsage(response.usage));
 
           const calls = response.content.filter((c) => c.type === "tool_use");
           // Its own words go back with the results: a `tool_result` has to
@@ -188,6 +211,7 @@ export function claudeModel(client: ClaudeClient, model: string): TurnModel {
           tool_choice: { type: "tool", name: request.tool.name },
         })
         .finalMessage();
+      meter?.(claudeUsage(response.usage));
 
       const call = response.content.find(
         (block) =>
@@ -198,5 +222,25 @@ export function claudeModel(client: ClaudeClient, model: string): TurnModel {
         truncated: response.stop_reason === "max_tokens",
       };
     },
+  };
+}
+
+/**
+ * Claude's counts as `ai_usage` keeps them. Its input excludes what was read
+ * from or written to the cache, which come back on their own lines; its
+ * thinking is inside its output.
+ */
+export function claudeUsage(usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+}): ModelUsage {
+  return {
+    inputTokens: usage.input_tokens ?? 0,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    thinkingTokens: null,
   };
 }

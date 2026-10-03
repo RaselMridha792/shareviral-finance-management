@@ -41,6 +41,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { AssistantInstructions } from "@/components/assistant/assistant-instructions";
 import { AssistantMistakes } from "@/components/assistant/assistant-mistakes";
 import { GoogleConnection } from "@/components/assistant/google-connection";
+import { UsageReportCard } from "@/components/assistant/usage-report";
 import { useCan } from "@/components/auth/session-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -382,6 +383,9 @@ export function AssistantSettingsScreen({
             </Card>
           </div>
         </div>
+
+        {/* What it spends (B3): the report, and the Super Admin's limit. */}
+        <UsageReportCard canConfigure={canConfigure} />
       </div>
     </div>
   );

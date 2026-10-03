@@ -1,7 +1,13 @@
 "use client";
 
 import { type AiAvailability } from "@finance/shared";
-import { History, PictureInPicture2, Settings, SquarePen } from "lucide-react";
+import {
+  Gauge,
+  History,
+  PictureInPicture2,
+  Settings,
+  SquarePen,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -9,6 +15,7 @@ import { useAssistant } from "@/components/assistant/assistant-provider";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Conversation } from "@/components/assistant/conversation";
 import { NotSwitchedOn } from "@/components/assistant/not-switched-on";
+import { UsageAside, UsageDrawer } from "@/components/assistant/usage-panel";
 import { useCan } from "@/components/auth/session-provider";
 
 /**
@@ -31,6 +38,8 @@ export function AssistantScreen({
   const canConfigure = useCan("settings.write");
   const assistant = useAssistant();
   const [drawer, setDrawer] = useState(false);
+  /** The usage panel, over the chat, on a screen too narrow for it beside. */
+  const [usageOpen, setUsageOpen] = useState(false);
 
   if (!availability.configured) {
     return (
@@ -88,7 +97,20 @@ export function AssistantScreen({
         </div>
       ) : null}
 
+      {usageOpen ? <UsageDrawer onClose={() => setUsageOpen(false)} /> : null}
+
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* What it spends (B3), for a screen with no room for the panel. */}
+        <div className="hidden shrink-0 justify-end border-b border-border px-3 py-1.5 lg:flex xl:hidden">
+          <button
+            type="button"
+            onClick={() => setUsageOpen(true)}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <Gauge className="size-4" />
+            Usage
+          </button>
+        </div>
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 lg:hidden">
           <button
             type="button"
@@ -100,10 +122,19 @@ export function AssistantScreen({
           </button>
           <button
             type="button"
+            onClick={() => setUsageOpen(true)}
+            aria-label="Usage"
+            title="Usage this month"
+            className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <Gauge className="size-4" />
+          </button>
+          <button
+            type="button"
             onClick={assistant.shrink}
             aria-label="Open as a window"
             title="Open as a window over the page you came from"
-            className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
           >
             <PictureInPicture2 className="size-4" />
           </button>
@@ -127,6 +158,8 @@ export function AssistantScreen({
 
         <Conversation availability={availability} />
       </div>
+
+      <UsageAside />
     </div>
   );
 }

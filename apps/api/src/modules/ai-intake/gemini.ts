@@ -12,7 +12,13 @@ import {
 import { Logger } from "@nestjs/common";
 
 import { asGeminiError } from "./gemini-errors";
-import type { ModelCall, ModelTool, TurnModel } from "./model-turn";
+import type {
+  ModelCall,
+  ModelTool,
+  ModelUsage,
+  TurnModel,
+  UsageMeter,
+} from "./model-turn";
 
 /**
  * Gemini on Vertex AI, as a `TurnModel` (2 Oct 2026).
@@ -72,7 +78,11 @@ function thinkingFor(model: string): { thinkingConfig?: ThinkingConfig } {
     : {};
 }
 
-export function geminiModel(client: GeminiClient, model: string): TurnModel {
+export function geminiModel(
+  client: GeminiClient,
+  model: string,
+  meter?: UsageMeter,
+): TurnModel {
   return {
     converse(request) {
       const contents: Content[] = request.messages.map((message) => ({
@@ -115,6 +125,7 @@ export function geminiModel(client: GeminiClient, model: string): TurnModel {
             }),
           );
           log.log(`${model}, round ${round}: ${spent(response, started)}`);
+          meter?.(geminiUsage(response));
 
           const content = response.candidates?.[0]?.content;
           const calls = callsIn(content?.parts, round);
@@ -200,7 +211,10 @@ export function geminiModel(client: GeminiClient, model: string): TurnModel {
           finish = candidate?.finishReason ?? finish;
         }
       });
-      if (last) log.log(`${model}, a document: ${spent(last, started)}`);
+      if (last) {
+        log.log(`${model}, a document: ${spent(last, started)}`);
+        meter?.(geminiUsage(last));
+      }
 
       const call = callsIn(parts, 1).find((c) => c.name === request.tool.name);
       if (!call) {
@@ -275,6 +289,25 @@ function spent(response: GenerateContentResponse, started: number): string {
     `${count(usage?.thoughtsTokenCount)} thinking`,
     `finish ${response.candidates?.[0]?.finishReason ?? "not given"}`,
   ].join(", ");
+}
+
+/**
+ * Gemini's counts as `ai_usage` keeps them (B3): what it read at the full
+ * rate is the prompt less what came from its cache; it writes nothing to a
+ * cache here (its caching is implicit); its thinking is counted apart, and
+ * billed as output. In a stream the last chunk carries the whole count.
+ */
+export function geminiUsage(response: GenerateContentResponse): ModelUsage {
+  const usage = response.usageMetadata;
+  const prompt = usage?.promptTokenCount ?? 0;
+  const cached = usage?.cachedContentTokenCount ?? 0;
+  return {
+    inputTokens: Math.max(prompt - cached, 0),
+    cacheReadTokens: cached,
+    cacheWriteTokens: 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+    thinkingTokens: usage?.thoughtsTokenCount ?? 0,
+  };
 }
 
 /** The SDK's call, with whatever Google refused turned into a `GeminiError`. */

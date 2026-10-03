@@ -122,6 +122,11 @@ export function Conversation({
   // Whichever view is open is the one reading the answers, so the launcher
   // has nothing to mark.
   useEffect(() => watch(), [watch]);
+  // The month's spending, for the warning above the message box (B3).
+  const { loadUsage } = assistant;
+  useEffect(() => {
+    void loadUsage();
+  }, [loadUsage]);
 
   useEffect(() => {
     if (configured) void loadChats();
@@ -315,6 +320,25 @@ export function Conversation({
           </div>
         )}
       </div>
+
+      {/* What it spends (B3): at 80% of the month's limit a warning, at
+          100% the sentence that says it has stopped and who can raise it. */}
+      {assistant.usage?.message && !error ? (
+        <div className={cn("shrink-0 pt-2", compact ? "px-3" : "px-4")}>
+          <p
+            role="status"
+            data-usage-notice={assistant.usage.state}
+            className={cn(
+              "mx-auto max-w-3xl rounded-lg px-3 py-2 text-sm",
+              assistant.usage.state === "stopped"
+                ? "bg-negative/10 text-negative"
+                : "bg-warning/10 text-foreground",
+            )}
+          >
+            {assistant.usage.message}
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <div className={cn("shrink-0 pt-2", compact ? "px-3" : "px-4")}>

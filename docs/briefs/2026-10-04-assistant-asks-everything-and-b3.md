@@ -89,6 +89,9 @@ build:
   sums checked against the rows, in SQL. The panel on the page at 1440px and 390px. The
   limit's warning and its stop.
 
+**Done: SESSIONS #156.** Prices read from Anthropic's and Google's pages on
+4 Oct 2026 (the Global endpoint for Google), in `ai-intake/ai-prices.ts`.
+
 ## Order
 
 Piece 1 first: it is what the owner saw go wrong. Then piece 2. Each piece is its own

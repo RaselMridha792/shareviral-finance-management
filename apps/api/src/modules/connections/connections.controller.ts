@@ -46,7 +46,7 @@ export class ConnectionsController {
   @Post("google/test")
   @HttpCode(200)
   @RequirePermission("settings.write")
-  testGoogle() {
-    return this.connections.testGoogle();
+  testGoogle(@CurrentUser() actor: AuthenticatedUser) {
+    return this.connections.testGoogle(actor);
   }
 }

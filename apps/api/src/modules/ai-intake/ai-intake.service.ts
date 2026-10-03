@@ -59,15 +59,19 @@ import {
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
+import { AiUsageService } from "./ai-usage.service";
 import { explainClaudeError } from "./claude-errors";
 import { geminiModel } from "./gemini";
 import { GeminiError, explainGeminiError } from "./gemini-errors";
 import {
   claudeModel,
+  claudeUsage,
   type DocumentMime,
   type ModelCallResult,
   type ModelTool,
+  type ModelUsage,
   type TurnModel,
+  type UsageMeter,
 } from "./model-turn";
 import {
   geminiClient,
@@ -243,6 +247,7 @@ export class AiIntakeService {
     private readonly tools: AiToolsService,
     private readonly chats: AiChatsService,
     private readonly attachments: AiAttachmentsService,
+    private readonly usage: AiUsageService,
   ) {}
 
   /**
@@ -555,11 +560,21 @@ export class AiIntakeService {
    */
   async setKey(apiKey: string, actor: AuthenticatedUser): Promise<AiKeyResult> {
     try {
-      await new Anthropic({ apiKey }).messages.create({
+      const tested = await new Anthropic({ apiKey }).messages.create({
         model: DEFAULT_MODEL,
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       });
+      // A Test is a call like any other, and counted (B3).
+      await this.usage.record([
+        {
+          userId: actor.id,
+          provider: "anthropic",
+          model: DEFAULT_MODEL,
+          kind: "test",
+          usage: claudeUsage(tested.usage),
+        },
+      ]);
     } catch (error) {
       const message =
         error instanceof Anthropic.APIError
@@ -670,34 +685,56 @@ export class AiIntakeService {
      * a model that cannot be reached is refused here, before anything is
      * asked of anybody.
      */
+    // At the month's limit nothing is asked and nothing is kept (B3).
+    await this.usage.assertUnderLimit();
     const route = await this.route(input.model);
-    const reply = await this.think(input, actor, route).catch(
-      (error: unknown) => {
-        const { provider, model, region } = route;
 
-        if (error instanceof GeminiError) {
-          // Google's own words, every time, whether or not they could be
-          // explained. `scrub` has already cut anything secret out of them.
-          this.log.warn(
-            `Google Cloud refused a Gemini turn (${error.status ?? error.kind}): ${error.message}`,
-          );
-          throw new ServiceUnavailableException(
-            `${explainGeminiError(error, { model, region })} The ordinary forms all still work.`,
-          );
-        }
+    /*
+     * Every round of the turn, counted as it answers and kept once the
+     * conversation is (B3). Tokens spent on a turn that then failed were
+     * still spent: they are kept too, on the conversation it was in.
+     */
+    const spent: ModelUsage[] = [];
+    const count = (chatId?: string | null) =>
+      this.usage.record(
+        spent.splice(0).map((usage) => ({
+          userId: actor.id,
+          chatId: chatId ?? null,
+          provider: route.provider,
+          model: route.model,
+          kind: "turn" as const,
+          usage,
+        })),
+      );
 
-        const detail = explainClaudeError(error, provider, { model, region });
-        if (!detail || !(error instanceof Anthropic.APIError)) throw error;
+    const reply = await this.think(input, actor, route, (usage) =>
+      spent.push(usage),
+    ).catch(async (error: unknown) => {
+      await count(input.chatId);
+      const { provider, model, region } = route;
 
-        // The message and the status only: neither carries the key.
+      if (error instanceof GeminiError) {
+        // Google's own words, every time, whether or not they could be
+        // explained. `scrub` has already cut anything secret out of them.
         this.log.warn(
-          `${provider === "vertex" ? "Google Cloud" : "Anthropic"} refused a turn (${error.status ?? "no status"}): ${error.message}`,
+          `Google Cloud refused a Gemini turn (${error.status ?? error.kind}): ${error.message}`,
         );
         throw new ServiceUnavailableException(
-          `${detail} The ordinary forms all still work.`,
+          `${explainGeminiError(error, { model, region })} The ordinary forms all still work.`,
         );
-      },
-    );
+      }
+
+      const detail = explainClaudeError(error, provider, { model, region });
+      if (!detail || !(error instanceof Anthropic.APIError)) throw error;
+
+      // The message and the status only: neither carries the key.
+      this.log.warn(
+        `${provider === "vertex" ? "Google Cloud" : "Anthropic"} refused a turn (${error.status ?? "no status"}): ${error.message}`,
+      );
+      throw new ServiceUnavailableException(
+        `${detail} The ordinary forms all still work.`,
+      );
+    });
 
     // Written after the answer, not before: a turn that failed leaves no
     // half-conversation in the history, and a question that was never answered
@@ -730,15 +767,20 @@ export class AiIntakeService {
       }
     }
 
-    return { ...reply, chatId };
+    // What the turn cost, then the month so far, for the panel and its
+    // warning at 80% of the limit.
+    await count(chatId);
+    const usage = await this.usage.summary().catch(() => undefined);
+    return { ...reply, chatId, ...(usage ? { usage } : {}) };
   }
 
   private async think(
     input: AiIntakeRequest,
     actor: AuthenticatedUser,
     route: Awaited<ReturnType<AiIntakeService["route"]>>,
+    meter: UsageMeter,
   ): Promise<AiIntakeReply> {
-    const model = this.client(route);
+    const model = this.client(route, meter);
     const { dataAccess, instructions, model: modelId } = route;
     const plans = await this.plans();
     const context = await this.context(plans);
@@ -960,8 +1002,9 @@ export class AiIntakeService {
    */
   async readPdf(
     buffer: Buffer,
+    actor: AuthenticatedUser,
   ): Promise<{ headers: string[]; rows: RawRow[] }> {
-    return readPdfStatement(this.client(await this.route()), buffer);
+    return this.reading(actor, (model) => readPdfStatement(model, buffer));
   }
 
   /**
@@ -971,8 +1014,37 @@ export class AiIntakeService {
   async readInvoice(
     buffer: Buffer,
     mimeType: DocumentMime,
+    actor: AuthenticatedUser,
   ): Promise<AiInvoiceReading> {
-    return readInvoicePaper(this.client(await this.route()), buffer, mimeType);
+    return this.reading(actor, (model) =>
+      readInvoicePaper(model, buffer, mimeType),
+    );
+  }
+
+  /**
+   * A document read by the default model (B3): refused at the month's
+   * limit, and its call counted as a document, on no conversation yet.
+   */
+  private async reading<T>(
+    actor: AuthenticatedUser,
+    read: (model: TurnModel) => Promise<T>,
+  ): Promise<T> {
+    await this.usage.assertUnderLimit();
+    const route = await this.route();
+    const spent: ModelUsage[] = [];
+    try {
+      return await read(this.client(route, (usage) => spent.push(usage)));
+    } finally {
+      await this.usage.record(
+        spent.map((usage) => ({
+          userId: actor.id,
+          provider: route.provider,
+          model: route.model,
+          kind: "document" as const,
+          usage,
+        })),
+      );
+    }
   }
 
   /**
@@ -987,6 +1059,8 @@ export class AiIntakeService {
    */
   private client(
     route: Awaited<ReturnType<AiIntakeService["route"]>>,
+    /** Told of every call's tokens, to be counted (B3). */
+    meter?: UsageMeter,
   ): TurnModel {
     const { key, provider, google, region, model } = route;
 
@@ -997,8 +1071,8 @@ export class AiIntakeService {
         );
       }
       return isGeminiModel(model)
-        ? geminiModel(geminiClient(google, region, GEMINI_TURN), model)
-        : claudeModel(vertexClient(google, region), model);
+        ? geminiModel(geminiClient(google, region, GEMINI_TURN), model, meter)
+        : claudeModel(vertexClient(google, region), model, meter);
     }
 
     if (!key) {
@@ -1006,7 +1080,7 @@ export class AiIntakeService {
         `${unreachable(model, route.provider)} Or use the ordinary form.`,
       );
     }
-    return claudeModel(new Anthropic({ apiKey: key }), model);
+    return claudeModel(new Anthropic({ apiKey: key }), model, meter);
   }
 
   /**

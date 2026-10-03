@@ -173,6 +173,12 @@ describe("a turn keeps the model picked for its conversation", () => {
       },
     };
     inner.attachments = { attachToChat: () => Promise.resolve() };
+    // What it spends (B3): under any limit, and counted nowhere here.
+    inner.usage = {
+      assertUnderLimit: () => Promise.resolve(),
+      record: () => Promise.resolve(),
+      summary: () => Promise.resolve(undefined),
+    };
     return { service, recorded, thought };
   }
   const messages = [{ role: "user" as const, content: "kemon acho" }];

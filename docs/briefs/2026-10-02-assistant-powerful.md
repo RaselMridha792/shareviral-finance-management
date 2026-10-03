@@ -177,6 +177,7 @@ both as written:
     (B2's answer).
   - **Where it shows:** the panel on the right of the chat (B2's last
     bullet), and the full breakdown on `/assistant/settings`.
+- **The B3 code is built: SESSIONS #156** (from the brief of 4 Oct, piece 2).
 
 ## Next, after A4 (the owner, 2 Oct, night): three pieces in this order
 
