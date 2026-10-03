@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 146 | **The Assistant: empty sheets do not count — one sheet or tab of data reads as one file, its Import plan back** | **built** — piece A3d of the "made strong" brief; **the owner tries it on the live site: the list is in #146.** A5 has not started: the samples are shared with the service account, which only the live server can use. The owner is asked to put copies in `F:\boss-samples\` |
 | 145 | **Accounts: editing a card no longer erases its stored number and CVC** | **done** — the bug #138 found (owner's decision 1 there). Blank now keeps, as the hint always said. Live data not touched; what the bug may already have erased on live is in #145 |
 | 144 | **The Assistant: an Excel workbook reads every sheet, a card each, each counted on its own** | **built** — piece A3c of the "made strong" brief; **the owner tries it on the live site: the list is in #144.** Next is A5, which starts by asking the owner for samples |
 | 143 | **The Assistant: everything Confirm saves is "Added by the assistant", and All transactions filters by origin** | **built** — piece A4b of the "made strong" brief; **the owner tries it on the live site: the list is in #143.** Next is A3c (an Excel file reads every sheet), then A5 |
@@ -123,6 +124,139 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 146. The Assistant: empty sheets do not count — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A3d**, the owner's
+answer to the question #144 raised. **A5 has not started.** See "A5" below.
+
+**What the owner now has:**
+
+- **A workbook whose rows are all on one sheet reads as that sheet.** This is
+  the old Excel file with data on Sheet1 and nothing on Sheet2 and Sheet3.
+  It holds for the paperclip, a Drive link and an .xlsx opened in Sheets.
+  - One card, headed by the file and the sheet: "Book.xlsx — Sheet1". A
+    hidden one says so: "Book.xlsx — Data (hidden)".
+  - One line under the card names the empty ones: "Sheet2, Sheet3: empty".
+  - The message box says "Book.xlsx — Sheet1". There is no "· 3 sheets,
+    each read and counted on its own" line.
+  - It is one file again, so the model can offer a plan for Import, and the
+    card shows it ("Into <account>, filed as <category>"), as before A3c.
+  - A sheet with a heading and nothing under it counts as empty.
+  - The count of empty sheets does not matter. One sheet of data among 24
+    empty ones is read, where A3c refused it as more than 20 sheets.
+- **A Google Sheet link with no tab, and one tab of data, works the same
+  way**: "Expenses — Jan" and "Feb, Notes: empty" under it.
+- **Two or more sheets or tabs with data stay separate**, exactly as A3b and
+  A3c made them. Empty ones among them are still shown as "Empty" cards.
+- **Send to Import** stages the rows under "Book.xlsx — Sheet1", without the
+  line of empty sheets.
+- **What the model is told:**
+  - FILE ATTACHED: "Book.xlsx — Sheet1", then one line: "The rest of the
+    file is empty: Sheet2, Sheet3 — … This is the only part of the file that
+    holds data, so it is the whole file."
+  - It is then worked as one file (WORKING FROM A FILE). The tools ask for
+    no file number.
+  - The line under WHAT THIS APP CANNOT DO adds this case.
+- **The map's** "Attach a spreadsheet" and "Paste a Google link" say the
+  same.
+
+**How it is built:** no schema change, `packages/shared` not touched.
+
+- The empty sheets' names are kept on **a second line of the attachment's
+  stored name**: "Book.xlsx — Sheet1\nSheet2, Sheet3: empty". The codebase
+  already does this kind of thing: a Doc is ".gdoc", a tab is "(tab N of M)".
+  A file or sheet name never holds a line break. This needed no column (a
+  schema change) and no field in the shared `AiAttachment` type (shared
+  code). `emptyPartsOf` reads it back, once in the API
+  (`ai-attachments.service.ts`) and once in the web (`attachment-card.tsx`).
+  The two must agree.
+- `ai-attachments.service.ts`: the new `keepBook` holds the rule, used by
+  both an Excel workbook and a Sheet's tabs. For Excel the rule comes before
+  the limit of 20 sheets.
+- `google-files.ts`: a Sheet's tabs read whole now carry the Sheet's title,
+  and each tab's own title and hidden flag, so `keepBook` can name them.
+- `ai-intake.controller.ts`: Send to Import stages under the name's first
+  line.
+- The web: `attachment-card.tsx` heads the card with the first line.
+  `assistant-screen.tsx` puts the line of empty sheets under the card, and
+  gives the message box the first line. Page-local files only.
+
+**Proved:**
+
+- `.assistantemptyqa.mjs` (new), **26/26**. It runs its own built API on
+  :4021 with a stand-in model, a stand-in Google and the real page.
+  - **The endpoint:** the old workbook comes back as one file, ৳5,140, kept
+    as one row. 24 empty sheets plus a hidden one with data give one file.
+    Two sheets with data still give three. A Sheet with one tab of data
+    gives one file, in the same two calls to Google. A Sheet with two tabs
+    of data still gives three. A Drive .xlsx gives one. Send to Import
+    stages under the clean name.
+  - **What the model is told:** FILE ATTACHED and the "rest is empty" line;
+    WORKING FROM A FILE, with no FILE numbers; the line under WHAT THIS APP
+    CANNOT DO; tools with no file number; read_attachment with no file
+    named; the plan kept; reopened, the one file. A Sheet's one tab is told
+    the same way.
+  - **On the page:** one card, with the line under it; the box says the file
+    and the sheet; the plan on the card. Reopened from History, the same.
+    At 390px the heading fits, and 24 names wrap onto two lines with nothing
+    sideways. No page error. It leaves nothing behind (count 0, keys back).
+- `ai-attachments.spec.ts` gains three tests: the old workbook as one file
+  told as one; hidden with 24 empty; other names left alone. The A3c test
+  for an empty sheet now uses three sheets, two of them with data.
+  `google-files.spec.ts`: a Sheet's tabs carry the title, tab and hidden.
+- The older harnesses, one at a time: `.assistantexcelqa.mjs` 35/35 and
+  `.assistantlinkqa.mjs` 60/60.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 359, up
+  from 356; shared 382) pass, each on its own exit code.
+
+**Not proved:** what a real model does with it. `.assistantbar.mjs` gains
+L1 and L2, the old workbook through the real endpoint. Neither has run: no
+key locally.
+
+- L1: "ei file e ki ki ache? baki sheet gulo te ki ache? total koto?" The
+  answer gives Sheet1's 5,140 and says the other sheets are empty. No other
+  figures, nothing drafted.
+- L2: the account, category, direction, date order and rate all given. The
+  answer is a plan for Import, to the letter.
+
+**For the owner — on the live site, after the deploy.** **Reload the
+Assistant page first.**
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Paperclip → an Excel file with data on Sheet1 alone, Sheet2 and Sheet3 empty | One card, "<file>.xlsx — Sheet1", its rows and totals. Under it: "Sheet2, Sheet3: empty". The box says "<file>.xlsx — Sheet1". No "· 3 sheets" line |
+| 2 | Then `baki sheet gulo te ki ache? total koto?` | Sheet1's total. Sheet2 and Sheet3 are said to be empty. Nothing is invented about them |
+| 3 | Then `ei file er entry gulo boi te tulo` | It asks which account (never assumes), what to file them as, and the dollar rate. Once you answer, a plan on the card: "Into <account>, filed as <category>", with Send to Import |
+| 4 | Paste a Google Sheet link (no `#gid`) where one tab has data and the others are empty | The same: one card, "<Sheet> — <tab>", the empty tabs named under it |
+| 5 | Paperclip → a workbook with two sheets that both hold data | As before (#144): a card per sheet, each counted on its own, no plan |
+| 6 | History → reopen the chat from 1 | The same card and the line under it |
+
+**A5 — not started, and why.** The owner said the samples are shared with
+the service account. The service account's key is sealed on the live
+server alone. The brief says no Google key goes into the local app, so this
+session cannot read them. The Google Drive connected to Claude here is a
+different account, and the samples are not in it (searched by type and
+date; nothing else was opened). **The owner is asked to download them**:
+the sheet(s), the Doc (as .docx or PDF) and the images. They go in
+`F:\boss-samples\`, outside the repository, so nothing can be committed by
+accident. The next session reads them and says what each row and image would
+become, as the brief says, before anything is built.
+
+**What the owner has to decide:** nothing new for A3d. For A5, the samples.
+
+**Seen, not touched:**
+
+- A Google Sheet of more than 20 tabs is still refused before its cells
+  are read, even when only one tab holds data. Knowing which tabs are empty
+  would mean fetching them all. An Excel workbook is read whole first, so
+  the rule comes before its limit.
+- A long name is cut with "…" on a phone, as any file's card always was. The
+  whole name shows on hover. "Book 2026.xlsx — Sheet1" fits at 390px.
+- Another session pushed #145 (accounts) while this one ran. Its files were
+  left alone. `apps/web/next-env.d.ts` (rewritten by `next dev`) and
+  `sheet-new.png` are modified in the working copy. They are not this
+  session's, and are not committed.
 
 ## 145. Accounts: editing a card keeps its stored number and CVC — 3 Oct 2026
 
