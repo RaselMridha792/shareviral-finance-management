@@ -67,6 +67,19 @@ korar dorkar nei."*
    - A link that names a tab (`#gid=`) still reads only that tab.
    - This is a follow-up to A3. Do it with A4, or on its own before A5.
 
+## While the boss's samples wait (the owner, 3 Oct)
+
+A3b, A4b, A3c and A3d are done. **A5 waits** for the boss's sample files. The owner will
+put them in `F:\boss-samples\`, outside the repository. When they are there, A5 starts
+by reading them and saying what each row and image would become, before anything is
+built.
+
+Until then, do Part B in this order:
+1. **B4. The floating window.** The owner has asked for it longest.
+2. **B2. The Assistant's settings and usage inside the chat**, and switching the model
+   from the chat.
+3. **B3. Token accounting.** Its schema change goes out alone first.
+
 ## Next, after A4 (the owner, 2 Oct, night): three pieces in this order
 
 1. **A3b. A Sheet link that names no tab reads every tab.** This is decision 3 under "The
