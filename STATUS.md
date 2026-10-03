@@ -1187,6 +1187,31 @@ token and no new refresh cookie; and the browser sends one refresh at a time
 (`refreshOnce()` in `lib/api-client.ts`). A replay after the window is still
 refused and still takes the family with it.
 
+## Cloudflare Turnstile on the sign-in (2026-10-03)
+
+The password step asks Cloudflare first (`captcha.service.ts`), **and only
+when its keys are set** — with none the sign-in works as it always did, which
+is how it shipped. The finance app has its own widget and keys, not the HR
+portal's. The code step does not ask again.
+
+- **The keys**, both in `/opt/sfm/deploy/.env`, typed into the server
+  terminal (the commands are in `deploy/.env.example`), then
+  `COMPOSE_PROFILES=local-db docker compose up -d api web`:
+  `TURNSTILE_SITE_KEY` (web, read per request — not `NEXT_PUBLIC_`, so no
+  rebuild) and `TURNSTILE_SECRET_KEY` (api).
+- **It fails closed.** No token, a bad one, or no answer from Cloudflare
+  within 5 s: refused, with the same "Email or password is incorrect". A
+  refused check never counts toward the five-wrong-passwords lockout.
+- **Switching it off** if Cloudflare is down and nobody can sign in: delete
+  the `TURNSTILE_SECRET_KEY` line from `/opt/sfm/deploy/.env`, then
+  `COMPOSE_PROFILES=local-db docker compose up -d api`. That alone lets
+  people in: when the box cannot verify, Sign in goes without a token and
+  the server decides. The box stays on the page until `TURNSTILE_SITE_KEY`
+  comes off too and `web` is recreated.
+- The box is the handoff's; Cloudflare's own frame shows in its place only
+  when Cloudflare wants a click. Each refused sign-in resets it, because a
+  token is good once.
+
 ## The rate limiter was charging six seconds for every sign-in (2026-08-18)
 
 Reported as "login is slow". It was not the server.

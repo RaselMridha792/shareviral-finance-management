@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 154 | **Sign-in: Cloudflare Turnstile before the password — off until the owner sets its keys** | **built** — both pushes of the sign-in captcha brief, each alone; **changes nothing live until the keys are in.** The keys and the owner's browser check are in #154 |
 | 151 | **The Assistant's own settings behind a gear on the chat and its window; the CFO reads them; the picker beside Send for both roles, a model for each conversation; the route follows the model** | **built** — piece B2's code; **the owner tries it on the live site: the list is in #151.** Next is B3 (token accounting), its schema alone first |
 | 150 | **Permissions: the CFO reads what is behind the Assistant's settings — the instructions and the mistakes — and changes nothing; the key's hint goes to the Super Admin alone** | **done** — pushed alone, B2's permission change. **Next: the B2 code** (the settings icon, the page, the model picker) |
 | 149 | **Schema: each conversation with the Assistant keeps its own model — `ai_chats.model`** | **done** — pushed alone, the schema half of B2, from the owner's answer "each chat its own". **Next: B2's permission change, alone** (the CFO reads the settings and instructions, changes nothing; in the brief), **then the B2 code** |
@@ -129,6 +130,83 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 154. Sign-in: Cloudflare Turnstile before the password — 3 Oct 2026
+
+`docs/briefs/2026-10-03-signin-captcha.md`, in its two pushes, each alone:
+**fa18c8a** (deploy config: the two keys named on `api` and `web`, nothing
+reading them), then **the auth change** (0483bf9 and its follow-up).
+**It is off until the owner sets the keys**, so the day it ships nothing on
+the live site changes. The two briefs committed beneath it (37c3be8 and the HR
+Requests one, 67912ff) went out with these pushes.
+
+**What it does once the keys are in:**
+
+- The password step asks Cloudflare first (`captcha.service.ts`), before the
+  account is looked at. No token, a bad one, or no answer within 5 s: refused
+  with "Email or password is incorrect", the wrong password's sentence. A
+  refused check never reaches the lockout count. The code step does not ask
+  again. Each refusal is an audit row, "(human check refused)".
+- `app/login/page.tsx` reads `TURNSTILE_SITE_KEY` per request, not
+  `NEXT_PUBLIC_`. No key: no box.
+- **The box is the handoff's own**, 52px at 900px high, between the password
+  and Sign in. It says "Success — you are verified" only once Cloudflare's
+  callback has handed over a token (#79 left it out because the prototype
+  ticked itself on a timer). Cloudflare's widget is a fixed 65px frame and
+  cannot be the handoff's size, so it runs "interaction-only": hidden while
+  Cloudflare is satisfied, shown in the box's place when it wants a click.
+- Every refused sign-in resets the widget (a token is good once).
+- Sign in pressed before Cloudflare answers: "Wait for verification to
+  finish." (the handoff's words), and nothing sent. **If the check failed**
+  (Cloudflare down, script blocked) it sends without a token and the server
+  decides, so taking the secret off really is the way out. The first version
+  waited there too, which would have kept everybody out even with the secret
+  removed; found while writing the off-switch note, fixed in the follow-up.
+
+**Where it differs from the brief:**
+
+- The login body's schema is the API's own (`modules/auth/auth.schemas.ts`),
+  not `packages/shared`, so nothing shared changed and no build of it.
+- `lib/api-client.ts`: `login()` takes an optional third argument, the
+  token. `lib/` is shared code; `login(` has one caller, the login form.
+
+**Measured** on a clean worktree of the commit, with its own API and web on
+spare ports and Cloudflare's published test keys:
+
+- The four CI steps, each alone: green. 400 tests, 16 of them new
+  (`captcha.service.spec.ts`).
+- **No keys:** `.loginqa.mjs` 58/58 (including "no Turnstile box"),
+  `.sessionqa.mjs` 15/15. `.rolecheck.mjs` and the Assistant harnesses mint
+  their own JWT and never post a password, so the sign-in cannot reach them.
+- **API** (`.captchaqa.mjs`, 17 checks): no keys signs in as before. Passing
+  test secret: no token or an empty one gets the sentence. Five refusals with
+  the right password and five with a wrong one leave the count at 0 and the
+  account unlocked; then the right password with a token signs in. A good
+  token with a wrong password does count. Failing secret: the sentence. A
+  verify URL that never answers: refused in 5.6 s. Connection refused:
+  refused. Neither the secret nor the token appears in any log line.
+- **Browser** (`.captchabrowser.mjs`): the box at 400×52, the handoff's
+  border, corners, padding, gap, 26px violet circle and 13.5px/800 line. A
+  wrong password then the right one, without reloading, signs in, both tries
+  carrying a token. Script blocked with the secret on: the sentence. Script
+  blocked with the secret off: signs in. Sign in before Cloudflare answers:
+  waits, sends nothing, and the message clears when the answer comes. 375px:
+  no sideways scroll. The click-wanted key: Cloudflare's frame shows and the
+  box stands aside. The blocking key: never says verified.
+- Both scripts are at the repository root. They run against a built
+  `apps/api/dist` and start their own servers (4011–4016, 3011).
+
+**For the owner, after this is live** — the brief's "For the owner" section,
+steps 1–3: a new widget "SFM finance sign-in" (Managed; app.hellonizam.com,
+localhost, 127.0.0.1), both keys typed into the server terminal, then
+`COMPOSE_PROFILES=local-db docker compose up -d api web`. Then the browser
+check on the live site: the box where the handoff draws it; the right
+password signs in; **a wrong password, then the right one, without
+reloading**, signs in. Switching it off: delete the `TURNSTILE_SECRET_KEY`
+line and recreate `api` (STATUS.md, "Cloudflare Turnstile on the sign-in").
+
+**Next:** B3's schema (#152), then HR Requests (#153), one push at a time,
+as the three sessions agreed.
 
 ## 151. The Assistant's own settings, and a model for each conversation — 3 Oct 2026
 

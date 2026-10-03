@@ -67,6 +67,13 @@ export type TurnstileHandle = {
    * password is refused, which reads as "my password stopped working".
    */
   reset(): void;
+  /**
+   * Cloudflare is still working: no token yet, and no failure either. Only
+   * then does Sign in wait. A check that failed sends no token and lets the
+   * server decide, so taking the secret off — the way out of a Cloudflare
+   * outage — lets people in even while this box says it could not verify.
+   */
+  pending(): boolean;
 };
 
 /**
@@ -102,6 +109,11 @@ export function Turnstile({
   useEffect(() => {
     report.current = onToken;
   });
+  /** The status, readable from the handle without re-creating it. */
+  const latest = useRef<Status>(status);
+  useEffect(() => {
+    latest.current = status;
+  }, [status]);
 
   useImperativeHandle(
     ref,
@@ -112,6 +124,9 @@ export function Turnstile({
         if (widget.current && window.turnstile) {
           window.turnstile.reset(widget.current);
         }
+      },
+      pending() {
+        return latest.current === "verifying";
       },
     }),
     [],

@@ -136,7 +136,9 @@ export function LoginForm({
       setInvalid({ password: true });
       return;
     }
-    if (captchaSiteKey && !captchaToken) {
+    // Only while Cloudflare is still working. If it failed, this goes without
+    // a token and the server decides (turnstile.tsx, `pending`).
+    if (captchaSiteKey && !captchaToken && captcha.current?.pending()) {
       setError(WAIT_FOR_CHECK);
       return;
     }
