@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 144 | **The Assistant: an Excel workbook reads every sheet, a card each, each counted on its own** | **built** — piece A3c of the "made strong" brief; **the owner tries it on the live site: the list is in #144.** Next is A5, which starts by asking the owner for samples |
 | 143 | **The Assistant: everything Confirm saves is "Added by the assistant", and All transactions filters by origin** | **built** — piece A4b of the "made strong" brief; **the owner tries it on the live site: the list is in #143.** Next is A3c (an Excel file reads every sheet), then A5 |
 | 142 | **The Assistant: a Sheet link that names no tab reads every tab, a card each, each counted on its own** | **built** — piece A3b of the "made strong" brief; **the owner tries it on the live site: the list is in #142.** Next is A4b (the origin "Added by the assistant" on everything Confirm saves), then A5 |
 | 141 | **The Assistant: Confirm and save — the server checks the card again and saves it as the form does, the audit row marked "through the Assistant"** | **built** — piece A4 of the "made strong" brief; **the owner tries it on the live site: the list is in #141.** Next: a Sheet link with no tab reads every tab (A3's follow-up, on its own), then A5 |
@@ -121,6 +122,177 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 144. The Assistant: an Excel workbook reads every sheet — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece A3c** (the last of
+"Next, after A4"). **Next is A5**, the boss's files. It starts by asking the
+owner for real samples, as the brief says, before anything is built.
+
+**What the owner now has:**
+
+- **An Excel workbook of several sheets reads every sheet.** That holds for
+  one attached with the paperclip, one kept in Drive and pasted by link, and
+  one opened in Sheets but never converted.
+  - Each sheet is a file of its own, named with its place: "Book 2026.xlsx —
+    People (sheet 2 of 3)". A hidden sheet says so: "(sheet 3 of 3,
+    hidden)". A chart on a sheet of its own has no cells and is not counted.
+  - Each sheet gets its own card: its rows, its columns, its totals and its
+    own Send to Import. Above the cards one line names the workbook: "<the
+    file> · 3 sheets, each read and counted on its own". Each card is headed
+    by its sheet alone.
+  - An empty sheet is kept and shown as empty, with no Send to Import.
+  - The message box says "<the file> · 3 sheets". Its cross removes them
+    all; a card's cross removes that sheet alone, and its rows.
+  - Reopened from History, the conversation shows the workbook's sheets, in
+    order.
+  - Send to Import on a sheet's card stages that sheet's rows alone.
+- **A workbook of one sheet, and a CSV, are read exactly as before**: one
+  card, named by the file, and an importPlan still possible.
+- **Refused in words, and nothing kept:**
+  - more than 20 sheets ("copy the sheets you mean into a workbook of their
+    own");
+  - more than 10,000 rows across its sheets;
+  - no rows under a heading on any sheet.
+- **An .xlsx opened in Sheets, linked with `#gid=`**, used to read the first
+  sheet and say "(first sheet)" in its name. It now reads every sheet, each
+  named. A gid cannot be matched to a sheet of an unconverted file.
+- **What the model is told:**
+  - Each sheet as FILE 1, FILE 2 and on, with its own totals, as A3b does
+    for a Sheet's tabs.
+  - A section WORKING FROM A WORKBOOK'S SHEETS, with the tabs' rules in the
+    word "sheet": never add one sheet's figures to another's, a sheet may
+    hold a different kind of record, an empty sheet is empty, no importPlan
+    for several (Send to Import on that sheet's card instead).
+  - The line under WHAT THIS APP CANNOT DO adds that a workbook of several
+    sheets arrives a FILE a sheet.
+  - A Google Sheet's tabs are told in exactly the words they were.
+- **The map's** "Attach a spreadsheet" and "Paste a Google link" forms say
+  the same.
+
+**How it is built:** no schema change.
+
+- `imports/spreadsheet.ts`: `readWorkbook` reads every sheet, by the rules
+  the first one always had, and says which are hidden. `readSpreadsheet` is
+  unchanged in what it returns. **The Import screen still reads the first
+  sheet alone.**
+- `ai-attachments.service.ts`: `upload` returns a **list**. Several sheets
+  are kept through A3b's `keepTabs`, in one statement, so they share one
+  moment and a reopened chat knows them for one workbook. `placeOf` reads
+  "(sheet N of M)" as well as "(tab N of M)".
+- `POST /ai/attachments` answers with a list, as `/ai/attachments/link` has
+  since A3b. A Drive .xlsx goes through `upload`, so it reads every sheet too.
+- `google-files.ts`: the "(first sheet)" rename is gone.
+
+**Shared code:** `apps/web/src/lib/ai.ts`. `aiApi.attach` returns a list. I
+asked no one, as #136–#143 did; the brief names this. Read by the Assistant's
+screen alone (grepped). `packages/shared` is not touched.
+
+**Proved:**
+
+- `.assistantexcelqa.mjs` (new), **35/35**. It runs its own built API on :4018
+  with a stand-in model and a stand-in Google, and the real page.
+  - **The endpoint:** a mixed workbook (payments, people, a hidden empty
+    sheet) comes back as three, in order, each counted on its own (Payments
+    ৳5,140, People ৳45,000), in one statement. One sheet and a CSV are as
+    before. 21 sheets, no rows and 12,000 rows are refused, nothing kept. A
+    Drive .xlsx and an unconverted one linked by a tab read every sheet.
+    Send to Import on People stages its one row alone.
+  - **What the model is told:** FILE 1–3 with their own totals; the
+    workbook's section, and not the tabs' or a single file's; the empty
+    sheet as "This sheet is empty"; the tools asking which file;
+    read_attachment on FILE 2 reads People alone; group_attachment on FILE 1
+    totals Payments alone; a plan dropped; reopened, the three in order. One
+    sheet is still WORKING FROM A FILE.
+  - **On the page:** the paperclip gives three cards under the workbook's
+    line, each headed by its sheet; their own rows and totals; the empty one
+    is said to be empty, with no Send to Import. The box reads "… · 3
+    sheets", and the turn carried all three in order. One card's cross
+    removes that sheet and its rows ("· 2 sheets"). Reopened from History it
+    shows the two left, in order. One sheet's card is as before. At 390px
+    the three cards fit, names whole, nothing sideways. No page error.
+  - It leaves nothing behind (it prints the count: 0).
+- `spreadsheet.spec.ts` (new, 4) and `ai-attachments.spec.ts` (4 new): every
+  sheet in order, hidden and very hidden, an empty one kept, a CSV as one
+  sheet, the first sheet alone for Import; one sheet as before; several in
+  one statement; "This sheet is empty"; the three refusals with nothing
+  kept. `google-files.spec.ts`: the "(first sheet)" test now expects the
+  whole file.
+- The older harnesses, one at a time: `.assistantlinkqa.mjs` 60/60 (the tabs
+  told in the same words), `.assistantdraftqa.mjs` 57/57,
+  `.assistantmapqa.mjs` 102/102, `.assistantlearnqa.mjs` 72/72,
+  `.assistantconfirmqa.mjs` 60/60, `.assistantoriginqa.mjs` 31/31. Each left
+  nothing behind.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 356, up
+  from 348; shared 382) pass, each on its own exit code.
+
+**Not proved:** what a real model does with a workbook's sheets.
+`.assistantbar.mjs` gains K1 and K2, a two-sheet workbook attached through
+the real endpoint. Neither has run: no key locally.
+
+- K1: "ei file e total koto taka?" Each sheet's total, never the two added
+  together.
+- K2: "Payments sheet er entry gulo boi te tule dao". Nothing from the Income
+  sheet, no account made up, no plan.
+
+The bar's `attach` now takes the endpoint's list.
+
+**For the owner — on the live site, after the deploy.** **Reload the
+Assistant page first.** A tab left open from before reads the paperclip's
+answer the old way, and the page breaks on the first attach until it is
+reloaded.
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Paperclip → an Excel file with several sheets, then `ei file e ki ki ache? total koto?` | A line "<file>.xlsx · N sheets, each read and counted on its own", then one card per sheet: its name and place "(sheet 2 of N)", its rows, columns and totals |
+| 2 | Read the answer to 1 | Each sheet's total, by the sheet's name. **Not** one total for all the sheets together |
+| 3 | `2 number sheet e koyta row?` | The second sheet's row count, as its card shows |
+| 4 | If a sheet is empty (or hidden) | Its card says "Empty: no rows under a heading row…" (or "hidden" in its name), with no Send to Import |
+| 5 | Press the × on one sheet's card | Only that card goes; the message box says one sheet fewer |
+| 6 | Open the conversation again from History | The same sheet cards, in order |
+| 7 | `<a sheet's name> sheet er entry gulo boi te tule dao` | No "Ready to stage" plan. It points to **Send to Import** on that sheet's card, or asks for the account. Nothing from another sheet is drafted |
+| 8 | Paperclip → an Excel file of **one** sheet | One card named by the file, as before |
+| 9 | Put a several-sheet .xlsx in Drive, share it with the service account, paste its link | As in 1 |
+
+**What the owner has to decide:**
+
+1. **A workbook of one sheet of data and empty sheets.** An older Excel file
+   often has Sheet1 with the data and an empty Sheet2 and Sheet3. It now
+   shows three cards, two of them "Empty". With several files there is no
+   "Ready to stage" plan, so the model points to Send to Import on Sheet1's
+   card, and the Import screen asks for the account and the columns. Before
+   this piece the same file was one card, and the model could hand Import a
+   plan. If you want it, empty sheets can be dropped when only one sheet
+   has rows, so the file reads as one sheet with its plan. That would be a
+   small piece of its own.
+
+**Seen, not touched:**
+
+- **The local database's Assistant settings were overwritten twice during
+  this session, and are put back.** A harness that fails on its page part
+  can end before it restores `app_settings`. Mine did so once, when the dev
+  API on :4001 had stopped. `.assistantmapqa.mjs` did so once by itself.
+  Each left a made-up model key, and the map harness its own rules in place
+  of the owner's instructions. They are restored from the audit log and
+  the migration: the Anthropic route, `claude-opus-5`, `full`, no key, no
+  Google key, and the owner's two seeded rules with no `set_at`. The live
+  site was never touched.
+  - Mine and `.assistantmapqa.mjs` now carry a guard, so a failed page wait
+    cannot end the run before the restore.
+  - `.assistantlinkqa.mjs`, `.assistantconfirmqa.mjs`,
+    `.assistantlearnqa.mjs`, `.assistantdraftqa.mjs` and
+    `.assistantoriginqa.mjs` have the same gap, and are left as they were.
+- **The dev API on :4001 had stopped mid-session.** The web's server render
+  then shows "This page couldn't load" on every page. I started it again
+  with its watcher (`npm run start:dev` in `apps/api`). It is still running
+  from this session.
+- Comments in `packages/shared/src/ai.ts` still describe several files as
+  "the tabs of one Google Sheet" (`AI_MAX_ATTACHMENTS`,
+  `AiAttachment.rowCount`, `AiChat.attachments`). They are left alone so
+  that shared code stays untouched.
+- `.xls` (Excel 97–2003) is in the paperclip's list, but exceljs reads only
+  .xlsx. Reading the code, such a file falls through to the CSV reader and
+  will not read sensibly. This was so before this piece and is not measured.
 
 ## 143. The Assistant: everything it saves is "Added by the assistant" — 3 Oct 2026
 
