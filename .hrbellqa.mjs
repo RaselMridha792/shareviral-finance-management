@@ -331,7 +331,11 @@ try {
   /* ------------------------------------------------------------------ */
   console.log("\nStill a normal send when the bell cannot be raised for anyone");
   const s3 = await hr("POST", "/hr-budget/spends", spendBody({ externalId: S3, purpose: `${MARK} Chairs`, amount: "900" }));
-  check("a third spend: 201 and rung", s3.status === 201 && (await bellsFor(`hr-spend:${await spendId(S3)}`)).length === deciders.length, `${s3.status}`);
+  /* The bell is raised for every decider after the 201; with many of them on
+     the local database, the last are written a moment later. */
+  const s3id = await spendId(S3);
+  const rung = await until(async () => (await bellsFor(`hr-spend:${s3id}`)).length === deciders.length);
+  check("a third spend: 201 and rung", s3.status === 201 && Boolean(rung), `${s3.status}`);
 
   console.log("");
   check("no page errors, no 5xx", errors.length === 0, errors.slice(0, 3).join(" | "));

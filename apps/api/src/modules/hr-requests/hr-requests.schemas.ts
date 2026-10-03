@@ -97,12 +97,17 @@ export type WithdrawInput = z.infer<typeof withdrawSchema>;
 export const listRequestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  /** Waiting (pending and held) is the default view: it is the work. */
+  /**
+   * Waiting (pending and held) is the default view: it is the work. To pay
+   * is the next piece of it — spends approved and not yet paid. Approved
+   * stays everything approved, those spends included.
+   */
   state: z
     .enum([
       "waiting",
       "pending",
       "held",
+      "to_pay",
       "approved",
       "rejected",
       "withdrawn",

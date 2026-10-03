@@ -27,7 +27,8 @@ export const HR_BUDGET_MAP = [
       {
         name: "Pay this spend",
         on: "/hr-requests",
-        opens: "Pay, on an approved spend's row or in its pop-up",
+        opens:
+          "Pay now, straight after approving a spend; or Pay, on an approved spend's row (the To pay tab lists them) or in its pop-up",
         saves: ["POST /hr-budget/spends/:id/pay"],
         schema: paySpendSchema,
         fields: {

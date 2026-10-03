@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -38,6 +39,14 @@ const WORDS: Record<Decision, { title: string; label: string }> = {
  * read is also what catches a request HR sent again, or somebody decided,
  * after the list was drawn: the drawer then says so and will not approve
  * what it has not shown.
+ *
+ * Approving a spend is two steps for whoever may pay it (`onPayNow`). The
+ * owner, 3 Oct 2026: *"jokhon aprove korbe tokhon etake multi-step forms
+ * banano jay tokhoni option dibe pay now or pay letter"*. Once the approval
+ * is saved the drawer asks whether to pay it now: Pay now hands over to the
+ * Pay drawer, Pay later closes, and the spend waits on To pay. Closing it any
+ * other way is Pay later too — the approval is already saved, and the step
+ * says so.
  */
 export function DecisionDrawer({
   request,
@@ -46,6 +55,7 @@ export function DecisionDrawer({
   onClose,
   onStale,
   onDone,
+  onPayNow,
 }: {
   request: HrRequestDto;
   decision: Decision;
@@ -54,6 +64,12 @@ export function DecisionDrawer({
   /** On closing, when the fresh read found the request changed. */
   onStale?: () => void;
   onDone: (notice: string | null) => void;
+  /**
+   * Given for a spend, to whoever may pay it: a saved approval then asks
+   * "pay it now?" instead of closing, and Pay now calls this with the
+   * request as approved.
+   */
+  onPayNow?: (approved: HrRequestDto) => void;
 }) {
   const money = useMoney();
   const [pending, setPending] = useState(false);
@@ -62,6 +78,12 @@ export function DecisionDrawer({
   const words = WORDS[decision];
   const needsNote = decision === "refused" || decision === "held";
   const readsFigures = decision === "approved" && request.kind === "pay_change";
+  const twoSteps = decision === "approved" && onPayNow !== undefined;
+  /* Set once a two-step approval is saved: the second step is showing. */
+  const [approved, setApproved] = useState<{
+    request: HrRequestDto;
+    notice: string | null;
+  } | null>(null);
   /* null while it is read; `detail: null` when it could not be. */
   const [figures, setFigures] = useState<{
     detail: HrRequestDetailDto | null;
@@ -107,6 +129,10 @@ export function DecisionDrawer({
         decision,
         note,
       );
+      if (twoSteps) {
+        setApproved({ request: result.request, notice: result.notice });
+        return;
+      }
       onDone(result.notice);
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -129,13 +155,70 @@ export function DecisionDrawer({
         : request.kind === "one_off"
           ? "This adds it to their bonus on that month's salary sheet — at once if the sheet is a draft with them on it, otherwise when it is built."
           : request.kind === "spend"
-            ? "Approved, it can be paid: Pay writes the expense into the books."
+            ? twoSteps
+              ? "Approving it saves the decision first. Next you choose: pay it now, or later from To pay. Paying writes the expense into the books."
+              : "Approved, it can be paid: Pay writes the expense into the books."
             : "The budget is agreed. Each spend against it is still decided on its own."
       : decision === "refused"
         ? "Nothing moves, for good. HR sees your note."
         : decision === "held"
           ? "Nothing moves yet, and it stays in the waiting list — a salary sheet it affects cannot be built until it is decided. HR sees your note."
           : "It goes back to waiting, undecided.";
+
+  if (approved) {
+    /* Step 2. The approval is saved, so every way out but Pay now is Pay
+       later: the spend stays approved and unpaid, on To pay. */
+    const later = () => onDone(approved.notice);
+    return (
+      <Drawer
+        open
+        onClose={later}
+        title="Approved — pay it now?"
+        description={summary}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={later}
+              data-hrr-pay-later
+            >
+              Pay later
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => onPayNow?.(approved.request)}
+              data-hrr-pay-now
+            >
+              Pay now
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4" data-hrr-step="pay">
+          <Steps at={2} />
+          <p className="flex items-start gap-2.5 rounded-lg bg-(--sv-pos-tint) px-3 py-2.5 text-[13.5px] text-(--sv-ink)">
+            <CheckCircleIcon
+              weight="duotone"
+              size={20}
+              className="shrink-0 text-(--sv-pos)"
+            />
+            <span>
+              <span className="font-extrabold">Approved.</span> The decision is
+              saved and HR is told.
+            </span>
+          </p>
+          <p className="text-[13.5px] text-(--sv-muted)" data-hrr-consequence>
+            Pay now opens the payment: the account it leaves, the heading, and
+            the invoice and reference. Pay later leaves it approved and unpaid,
+            on the To pay tab, to be paid from there — and closing this does the
+            same.
+          </p>
+        </div>
+      </Drawer>
+    );
+  }
 
   return (
     <Drawer
@@ -166,6 +249,7 @@ export function DecisionDrawer({
         onSubmit={onSubmit}
         className="flex flex-col gap-4"
       >
+        {twoSteps ? <Steps at={1} /> : null}
         <p className="text-[13.5px] text-(--sv-muted)" data-hrr-consequence>
           {consequence}
         </p>
@@ -202,6 +286,49 @@ export function DecisionDrawer({
         ) : null}
       </form>
     </Drawer>
+  );
+}
+
+/** Where a spend's two-step approval is: approve, then pay. */
+function Steps({ at }: { at: 1 | 2 }) {
+  return (
+    <ol
+      className="flex items-center gap-2 text-[12.5px] font-bold"
+      aria-label={`Step ${at} of 2`}
+      data-hrr-steps={at}
+    >
+      {(["Approve", "Pay now or later"] as const).map((name, index) => {
+        const step = index + 1;
+        const done = step < at;
+        const current = step === at;
+        return (
+          <li
+            key={name}
+            className="flex items-center gap-2"
+            aria-current={current ? "step" : undefined}
+          >
+            {index > 0 ? (
+              <span aria-hidden className="h-px w-6 bg-(--sv-line)" />
+            ) : null}
+            <span
+              aria-hidden
+              className={`grid size-5 place-items-center rounded-full text-[11px] ${
+                done
+                  ? "bg-(--sv-pos) text-white"
+                  : current
+                    ? "bg-(--sv-violet) text-white"
+                    : "bg-(--sv-track) text-(--sv-muted)"
+              }`}
+            >
+              {done ? "✓" : step}
+            </span>
+            <span className={current ? "text-(--sv-ink)" : "text-(--sv-muted)"}>
+              {name}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

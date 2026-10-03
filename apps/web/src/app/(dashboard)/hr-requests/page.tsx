@@ -15,6 +15,7 @@ const STATES: StateFilter[] = [
   "waiting",
   "pending",
   "held",
+  "to_pay",
   "approved",
   "rejected",
   "withdrawn",

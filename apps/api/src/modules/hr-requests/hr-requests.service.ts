@@ -361,6 +361,7 @@ export class HrRequestsService {
     Paginated<RequestRow> & {
       counts: {
         waiting: number;
+        to_pay: number;
         approved: number;
         rejected: number;
         withdrawn: number;
@@ -387,18 +388,22 @@ export class HrRequestsService {
       waiting: sql`r.status in ('received', 'held')`,
       pending: sql`r.status = 'received'`,
       held: sql`r.status = 'held'`,
+      /* A paid spend reads as approved with `paid` set (`request-rows.ts`). */
+      to_pay: sql`r.kind = 'spend' and r.status = 'approved' and not r.paid`,
       approved: sql`r.status = 'approved'`,
       rejected: sql`r.status = 'refused'`,
       withdrawn: sql`r.status = 'withdrawn'`,
       all: sql`true`,
     };
     const where = sql`${scope} and ${states[query.state]}`;
-    /* Waiting first — the oldest waiting at the top, since it has waited
-       longest; everything decided after it, newest first. */
+    /* The work first — what waits, and what is approved and still to pay —
+       the oldest at the top, since it has waited longest; everything else
+       newest first. */
     const order =
       query.state === "waiting" ||
       query.state === "pending" ||
-      query.state === "held"
+      query.state === "held" ||
+      query.state === "to_pay"
         ? sql`order by r.received_at asc`
         : sql`order by r.received_at desc`;
 
@@ -407,6 +412,7 @@ export class HrRequestsService {
         limit ${query.pageSize} offset ${(query.page - 1) * query.pageSize}`),
       this.db.client.execute(sql`
         select count(*) filter (where r.status in ('received', 'held'))::int as waiting,
+               count(*) filter (where ${states.to_pay})::int as to_pay,
                count(*) filter (where r.status = 'approved')::int as approved,
                count(*) filter (where r.status = 'refused')::int as rejected,
                count(*) filter (where r.status = 'withdrawn')::int as withdrawn,
@@ -417,6 +423,7 @@ export class HrRequestsService {
     ]);
     const counts = counted.rows[0] as {
       waiting: number;
+      to_pay: number;
       approved: number;
       rejected: number;
       withdrawn: number;
@@ -431,6 +438,7 @@ export class HrRequestsService {
       totalPages: Math.max(1, Math.ceil(counts.total / query.pageSize)),
       counts: {
         waiting: counts.waiting,
+        to_pay: counts.to_pay,
         approved: counts.approved,
         rejected: counts.rejected,
         withdrawn: counts.withdrawn,

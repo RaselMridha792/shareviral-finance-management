@@ -13,10 +13,12 @@ export type RequestState =
   "pending" | "held" | "approved" | "rejected" | "withdrawn";
 /** As stored — what a decision sends. `received` is "back to waiting". */
 export type Decision = "approved" | "refused" | "held" | "received";
+/** `to_pay`: spends approved and not yet paid. `approved` includes them. */
 export type StateFilter =
   | "waiting"
   | "pending"
   | "held"
+  | "to_pay"
   | "approved"
   | "rejected"
   | "withdrawn"
@@ -76,6 +78,7 @@ export type HrRequestDetailDto = HrRequestDto & {
 export type HrRequestList = Paginated<HrRequestDto> & {
   counts: {
     waiting: number;
+    to_pay: number;
     approved: number;
     rejected: number;
     withdrawn: number;

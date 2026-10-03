@@ -35,6 +35,7 @@ ticking all seventeen.
 | # | What | State |
 |---|---|---|
 | 154 | **Sign-in: Cloudflare Turnstile before the password — off until the owner sets its keys** | **built** — both pushes of the sign-in captcha brief, each alone; **changes nothing live until the keys are in.** The keys and the owner's browser check are in #154 |
+| 153 | **HR Requests: approving a spend asks "pay it now?" — Pay now opens the payment, Pay later puts it on a new To pay tab** | **built** — the brief of 3 Oct; **the owner tries it on the live site: the steps are in #153.** Pushed after 0483bf9 (Turnstile, -12) and B3's schema (-ab), one push at a time |
 | 152 | **Schema: what the Assistant spends — `ai_usage`, a row per model call, and `app_settings.ai_monthly_limit_usd`** | **done** — pushed alone, the schema half of B3. The owner's answers: the limit is in dollars of estimated cost, one for the whole company. **Next: the B3 code** (recording, the report, the limit, the usage panel); what it needs is in the brief |
 | 151 | **The Assistant's own settings behind a gear on the chat and its window; the CFO reads them; the picker beside Send for both roles, a model for each conversation; the route follows the model** | **built** — piece B2's code; **the owner tries it on the live site: the list is in #151.** Next is B3 (token accounting), its schema alone first |
 | 150 | **Permissions: the CFO reads what is behind the Assistant's settings — the instructions and the mistakes — and changes nothing; the key's hint goes to the Super Admin alone** | **done** — pushed alone, B2's permission change. **Next: the B2 code** (the settings icon, the page, the model picker) |
@@ -208,6 +209,92 @@ line and recreate `api` (STATUS.md, "Cloudflare Turnstile on the sign-in").
 
 **Next:** B3's schema (#152), then HR Requests (#153), one push at a time,
 as the three sessions agreed.
+
+## 153. HR Requests: approve a spend, then pay now or later; a To pay tab — 3 Oct 2026
+
+`docs/briefs/2026-10-03-hr-requests-pay-now.md`, from the owner's words:
+*"jokhon aprove korbe tokhon etake multi-step forms banano jay tokhoni option
+dibe pay now or pay letter ... opore jekhane filters gula ache oikhane to pay
+name ekta tab rakha jete pare"*. HR Requests page only. No schema, permission
+or deploy change.
+
+- **Approving a spend is two steps, in the same popup** (`decision-drawer.tsx`):
+  - Step 1 is the approval as before, under a "1 Approve — 2 Pay now or
+    later" marker, with a sentence saying what comes next.
+  - Once the approval is saved: **"Approved — pay it now?"** with **Pay now**
+    and **Pay later**. It says the decision is saved and HR is told, and that
+    closing it does the same as Pay later.
+  - **Pay now** hands over to the existing `PayDrawer`: account, heading,
+    invoice and reference (#122), the same endpoint. Cancelling there leaves
+    it approved, and the toast says "Approved, not paid yet. It is on To pay."
+  - **Pay later**, Escape or the ✕ closes it: "Approved. It is on To pay
+    until it is paid."
+  - Only for a spend, and only for whoever may pay (`hrbudget.manage` +
+    `transactions.write`, what the pay route checks: the screen's `canPay`).
+    A pay change, a one-off and a budget stay one step. Today every role
+    that may approve may also pay (CFO, Super Admin), so nobody sees step 1
+    alone; the code still handles it.
+- **A To pay tab**: Waiting, **To pay**, Approved, Rejected, Withdrawn, All,
+  with its count. `?state=to_pay` opens on it; empty, it says "Nothing to pay".
+  - The API: `state=to_pay` (a spend, approved, not paid) and `counts.to_pay`,
+    oldest first like Waiting, since it is work.
+  - **Approved stays "everything approved"**, paid and unpaid spends
+    included: the brief's simplest choice.
+- **The webhook is unchanged**: approving sends `approved`, paying sends
+  `approved` with `appliedAt` (#128). Nothing new goes to the HR portal.
+- The Assistant's map of the page (`hr-requests/app-map.ts`, and the Pay
+  form in `hr-budget/app-map.ts`) now describes To pay and Pay now. Its
+  `hr_requests` tool (`ai-intake/ai-tools.ts`) is untouched: it still lists
+  approved ones and says which are paid, with no "to pay" filter of its own.
+- `apps/web/src/lib/hr-requests.ts`, this page's own client: `StateFilter`
+  and the counts type gained `to_pay`. Its readers are this screen, its
+  `page.tsx`, and the rail's waiting badge, which reads only `waiting()` and
+  is unchanged.
+
+**Proved:**
+- `.hrpaynowqa.mjs` (new) 26/26, API and browser:
+  - To pay filters and counts, and a spend put back to waiting leaves it;
+    an unknown state is a 400;
+  - approve → step 2 → Pay now → the Pay drawer → paid: the expense in the
+    ledger (150.00, out), the row Paid, HR's status approved with appliedAt;
+  - approve → Pay later → To pay counted 1 → paid from its row there → off
+    the tab, counted 0; Approved lists the paid one and the unpaid one;
+  - Escape on step 2 is Pay later; Pay now then Cancel leaves it on To pay,
+    and says so;
+  - a pay change's approval is still one step;
+  - `?state=to_pay` at 1440 and 390, nothing scrolls sideways; no page
+    errors or 5xx; cleaned up.
+- `.hrrequestsqa` 62/62, `.hrbudgetqa` 38/38, `.hrbellqa` 23/23.
+  - `.hrbellqa` failed "a third spend: rung" twice, the same way. The bells
+    are all written (17 on the local database, one per active CFO and Super
+    Admin), but the check read them the instant the 201 came back. It now
+    waits, as its other checks do. A harness fault, not the app's.
+- The four CI steps are green: lint has only its 2 old warnings; tests are
+  400 + 386.
+
+**For the owner, on live** (after the deploy):
+1. HR Requests: the tabs read Waiting, To pay, Approved, Rejected, Withdrawn,
+   All.
+2. Approve a waiting spend. The popup shows "1 Approve — 2 Pay now or later".
+   Press Approve.
+3. It asks "Approved — pay it now?". Press **Pay now**: the payment popup
+   opens. Pay, and the row reads Paid; the expense is on All transactions.
+4. Approve another spend and press **Pay later**: it moves to To pay and the
+   count goes up by one. Pay it from its row there, as before.
+5. Approve a pay change or a one-off: still one step.
+
+**Also, this session:**
+- **Local database only:** around 21:39 `node .sql.mjs --help` was run by
+  mistake. The script takes no flags, so it applied every file in
+  `deploy/sql` to the local Neon database, including the B3 session's then
+  uncommitted `2026-10-03-assistant-usage.sql`. The B3 session checked: the
+  local table matches its file. Production was not touched.
+- The local API on :4001 was an orphan from 19:11 on old code. It was stopped
+  and `npm run dev:api` started detached (log: `.dev-api.log`).
+- **Push order, agreed with the other two sessions:** 0483bf9 (Sign-in:
+  Cloudflare Turnstile, an auth change), then B3's schema (#152), then this,
+  each after the previous push's CI run. This stayed uncommitted until then,
+  so neither push could carry it.
 
 ## 152. Schema: what the Assistant spends — 3 Oct 2026
 

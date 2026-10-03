@@ -119,6 +119,11 @@ function StateBadge({ row }: { row: HrRequestDto }) {
  * A row opens everything HR sent, where it lands, and what has been done with
  * it; the decision is the same drawer from the row or the pop-up. Only an
  * approval moves anything, and an applied one is not taken back.
+ *
+ * A spend has one more step (3 Oct 2026): approving it asks whoever may pay
+ * whether to pay it now, and one paid later waits on To pay — the spends
+ * approved and not yet paid. Approved still lists every approval, paid or
+ * not.
  */
 export function HrRequestsScreen({
   initial,
@@ -151,6 +156,7 @@ export function HrRequestsScreen({
   const [rows, setRows] = useState<HrRequestDto[]>([]);
   const [counts, setCounts] = useState({
     waiting: 0,
+    to_pay: 0,
     approved: 0,
     rejected: 0,
     withdrawn: 0,
@@ -168,7 +174,11 @@ export function HrRequestsScreen({
     row: HrRequestDto;
     decision: Decision;
   } | null>(null);
-  const [paying, setPaying] = useState<HrRequestDto | null>(null);
+  /* `justApproved`: opened by Pay now, straight after the approval. */
+  const [paying, setPaying] = useState<{
+    row: HrRequestDto;
+    justApproved: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -325,7 +335,7 @@ export function HrRequestsScreen({
           HandCoinsIcon,
           () => {
             setShowing(null);
-            setPaying(row);
+            setPaying({ row, justApproved: false });
           },
           "primary",
         ),
@@ -367,6 +377,7 @@ export function HrRequestsScreen({
           }}
           options={[
             { id: "waiting", label: "Waiting", count: counts.waiting },
+            { id: "to_pay", label: "To pay", count: counts.to_pay },
             { id: "approved", label: "Approved", count: counts.approved },
             { id: "rejected", label: "Rejected", count: counts.rejected },
             { id: "withdrawn", label: "Withdrawn", count: counts.withdrawn },
@@ -425,11 +436,19 @@ export function HrRequestsScreen({
         <Card>
           <EmptyState
             icon={TrayIcon}
-            title={state === "waiting" ? "Nothing waiting" : "Nothing here"}
+            title={
+              state === "waiting"
+                ? "Nothing waiting"
+                : state === "to_pay"
+                  ? "Nothing to pay"
+                  : "Nothing here"
+            }
           >
             {state === "waiting" && !kind && !month && !query
               ? "Every request from HR has been decided. A new one — a raise, a one-off, a budget or a spend — arrives here, and rings the bell."
-              : "Try another state, kind or month, or clear the search."}
+              : state === "to_pay" && !kind && !month && !query
+                ? "Every approved spend has been paid. A spend approved and paid later waits here until it is."
+                : "Try another state, kind or month, or clear the search."}
           </EmptyState>
         </Card>
       ) : (
@@ -559,7 +578,10 @@ export function HrRequestsScreen({
           onStale={() => void load()}
           onDone={(notice) => {
             const word = {
-              approved: "Approved",
+              approved:
+                deciding.row.kind === "spend"
+                  ? "Approved. It is on To pay until it is paid"
+                  : "Approved",
               refused: "Rejected",
               held: "Put on hold",
               received: "Put back to waiting",
@@ -568,20 +590,37 @@ export function HrRequestsScreen({
             setDeciding(null);
             void load();
           }}
+          /* Only a spend has anything to pay, and only for whoever may. */
+          onPayNow={
+            deciding.row.kind === "spend" && canPay
+              ? (approved) => {
+                  setDeciding(null);
+                  setPaying({ row: approved, justApproved: true });
+                  void load();
+                }
+              : undefined
+          }
         />
       ) : null}
 
       {paying ? (
         <PayDrawer
-          key={paying.id}
+          key={paying.row.id}
           spend={{
-            id: paying.id,
-            amount: paying.amount,
-            purpose: paying.subject,
+            id: paying.row.id,
+            amount: paying.row.amount,
+            purpose: paying.row.subject,
           }}
           accounts={accounts}
           categories={categories}
-          onClose={() => setPaying(null)}
+          onClose={() => {
+            /* Approved a moment ago and not paid after all: say where it
+               went, so nobody reads the approval as lost. */
+            if (paying.justApproved) {
+              toast.show("Approved, not paid yet. It is on To pay.", "success");
+            }
+            setPaying(null);
+          }}
           onDone={() => {
             setPaying(null);
             void load();

@@ -22,7 +22,7 @@ export const HR_REQUESTS_MAP = [
       {
         href: "/hr-requests",
         name: "HR Requests",
-        does: "The queue, filtered by kind, state and month. A row opens the request; Approve, Reject and Hold are decided there, a decided one can be put back to waiting, and an approved spend is paid there.",
+        does: "The queue, filtered by state (Waiting, To pay, Approved, Rejected, Withdrawn, All), kind and month. A row opens the request; Approve, Reject and Hold are decided there, and a decided one can be put back to waiting. An approved spend is paid there: straight after approving it (Pay now), or later from To pay, which lists the spends approved and not yet paid.",
       },
     ],
     forms: [
@@ -34,7 +34,7 @@ export const HR_REQUESTS_MAP = [
         schema: decisionSchema,
         fields: DECISION_FIELDS,
         onSave:
-          "The only decision that writes. A pay change goes into the person's salary history from its date; a one-off onto its month's salary sheet as bonus, refused once that sheet is finalised; a budget is agreed; a spend can then be paid. HR is told.",
+          "The only decision that writes. A pay change goes into the person's salary history from its date; a one-off onto its month's salary sheet as bonus, refused once that sheet is finalised; a budget is agreed; a spend can then be paid, and whoever may pay it is asked at once: Pay now opens the payment, Pay later leaves it on To pay. HR is told.",
         permission: "hrrequests.decide",
       },
       {
