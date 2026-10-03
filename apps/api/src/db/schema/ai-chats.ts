@@ -46,6 +46,14 @@ export const aiChats = pgTable(
      */
     reply: jsonb("reply").$type<Record<string, unknown> | null>(),
 
+    /**
+     * The model this conversation is held with, once somebody switched it in
+     * the chat (B2; the owner, 3 Oct 2026: each conversation its own). NULL:
+     * the default in the Assistant's settings. No check of its own, as the
+     * list of models changes: read it through `aiModelFrom`.
+     */
+    model: text("model"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
