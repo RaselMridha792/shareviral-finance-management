@@ -117,6 +117,14 @@ services:
       # copied across on the server, never through a chat window.
       HR_WEBHOOK_URL: ${HR_WEBHOOK_URL:-https://hrmapi.hellonizam.com/api/finance/webhook/decisions}
       HR_WEBHOOK_SECRET: ${HR_WEBHOOK_SECRET:-}
+      # Cloudflare Turnstile on the sign-in's password step. Off while this
+      # is empty: the API asks Cloudflare nothing and signs in as it always
+      # has. Set, it refuses a sign-in without a good token — and refuses it
+      # too when Cloudflare cannot be reached, so the way out of an outage
+      # there is to delete this line from .env and recreate this container.
+      # Its pair is TURNSTILE_SITE_KEY on `web`; a widget of its own, not the
+      # HR portal's.
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     volumes:
       # Uploaded files, on the host rather than in the container's own layer.
       #
@@ -152,6 +160,11 @@ services:
       API_URL: http://api:4001/api
       NEXT_PUBLIC_API_URL: ${API_ORIGIN}/api
       TZ: Asia/Dhaka
+      # The Turnstile widget's public key, read by the sign-in page on each
+      # request. Deliberately not NEXT_PUBLIC_: those are inlined when CI
+      # builds the image, and a key baked in there could not be set or taken
+      # off without a rebuild. Empty: no widget, and no empty box either.
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
     expose:
       - "3000"
 
