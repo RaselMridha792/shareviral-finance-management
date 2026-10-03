@@ -51,6 +51,15 @@ export function AccountForm({
     setFieldErrors({});
 
     const data = new FormData(event.currentTarget);
+    /*
+     * The number and CVC are never shown back, so their boxes always open
+     * empty — and "" CLEARS what is stored (the schema reads "" as null, and
+     * null is the clear). Sending them blank made every edit of a card, a new
+     * name or a new expiry, erase its number. So they go only when something
+     * was typed: a blank box means "keep the stored one", as its hint says.
+     */
+    const cardNumber = String(data.get("cardNumber") ?? "").trim();
+    const cardCvc = String(data.get("cardCvc") ?? "").trim();
     const payload = {
       name: String(data.get("name") ?? ""),
       type: String(data.get("type") ?? "bank"),
@@ -82,9 +91,9 @@ export function AccountForm({
         ? {
             cardHolderName: String(data.get("cardHolderName") ?? ""),
             cardLabel: String(data.get("cardLabel") ?? ""),
-            cardNumber: String(data.get("cardNumber") ?? ""),
             cardExpiry: String(data.get("cardExpiry") ?? ""),
-            cardCvc: String(data.get("cardCvc") ?? ""),
+            ...(cardNumber ? { cardNumber } : {}),
+            ...(cardCvc ? { cardCvc } : {}),
           }
         : {}),
     } as Parameters<typeof accountsApi.create>[0];
@@ -235,7 +244,11 @@ export function AccountForm({
               <Field
                 label="CVC"
                 error={fieldErrors.cardCvc}
-                hint="Encrypted, and never shown without the card password"
+                hint={
+                  editing
+                    ? "Leave blank to keep what is on file."
+                    : "Encrypted, and never shown without the card password"
+                }
               >
                 <Input
                   name="cardCvc"

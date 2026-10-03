@@ -34,13 +34,14 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 145 | **Accounts: editing a card no longer erases its stored number and CVC** | **done** — the bug #138 found (owner's decision 1 there). Blank now keeps, as the hint always said. Live data not touched; what the bug may already have erased on live is in #145 |
 | 144 | **The Assistant: an Excel workbook reads every sheet, a card each, each counted on its own** | **built** — piece A3c of the "made strong" brief; **the owner tries it on the live site: the list is in #144.** Next is A5, which starts by asking the owner for samples |
 | 143 | **The Assistant: everything Confirm saves is "Added by the assistant", and All transactions filters by origin** | **built** — piece A4b of the "made strong" brief; **the owner tries it on the live site: the list is in #143.** Next is A3c (an Excel file reads every sheet), then A5 |
 | 142 | **The Assistant: a Sheet link that names no tab reads every tab, a card each, each counted on its own** | **built** — piece A3b of the "made strong" brief; **the owner tries it on the live site: the list is in #142.** Next is A4b (the origin "Added by the assistant" on everything Confirm saves), then A5 |
 | 141 | **The Assistant: Confirm and save — the server checks the card again and saves it as the form does, the audit row marked "through the Assistant"** | **built** — piece A4 of the "made strong" brief; **the owner tries it on the live site: the list is in #141.** Next: a Sheet link with no tab reads every tab (A3's follow-up, on its own), then A5 |
 | 140 | **Permissions: the Assistant is the Super Admin's and the CFO's alone — `ai.use` off HR** | **done** — piece B1 of the "made strong" brief, pushed alone as the owner ordered (B1 before A4). **Next is A4** (confirm in chat, then it saves) |
 | 139 | **The Assistant reads a Google Sheet, Doc or Drive file by its link** | **built** — piece A3 of the "made strong" brief; **the owner tries it on the live site: the list is in #139.** Next is A4 (confirm in chat, then it saves) |
-| 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138, not fixed |
+| 138 | **The Assistant gets better with use: "This was wrong", its mistakes made rules, every page and form on its map, "What the Assistant knows"** | **built** — the rest of A2b; **the owner tries it on the live site: the list is in #138.** A data-loss bug found on the way (editing a card clears its number) is in #138 — **fixed in #145** |
 | 137 | **Schema: the Assistant keeps its mistakes — a reply marked wrong, which model gave it, and whether it became a rule** | **done** — pushed alone, the schema half of A2b; the rest of A2b is the next session |
 | 136 | **The Assistant knows the app: a map of every part, routing before drafting, a plan and its renewal, the owner's instructions, seven more look-ups and counting** | **built** — piece A2 of the "made strong" brief (A2b still to do); **the owner tests it on the live site: the list is in #136** |
 | 135 | **Schema: "Instructions for the Assistant" — the owner's rules, three columns on the settings row** | **done** — pushed alone and deployed; read from #136 on |
@@ -122,6 +123,78 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 145. Accounts: editing a card keeps its stored number and CVC — 3 Oct 2026
+
+The bug #138 found while reading every form ("What the owner has to decide",
+1). The owner: "eta thik koro, live data na chhuye".
+
+**What was wrong:** the Edit account drawer said "On file. Leave blank to
+keep the stored one." under the card number. But it always sent
+`cardNumber: ""` and `cardCvc: ""` for a card — the two boxes always open
+empty, because the secrets are never sent to a screen — and the schema reads
+"" as null, and null is the clear. So **every save of a card's drawer, a new
+name or a new expiry, erased its number, its last four and its CVC.**
+
+**What changed:**
+
+- `account-form.tsx`: the number and the CVC are sent only when something
+  was typed. Blank keeps what is stored; a typed number or CVC still
+  replaces it. The holder, card name and expiry are sent as before (they
+  open filled, so blank there is a deliberate clear).
+- The CVC's hint, when editing, now says "Leave blank to keep what is on
+  file." (When adding, it still says it is encrypted.)
+- `accounts/app-map.ts`: the Assistant's map said "blank clears the stored
+  number" — what the code did, not what the form promised. It now says
+  blank keeps.
+- No schema change, nothing under `packages/shared`, `components/ui` or
+  `lib`. The API still clears on an explicit "" or null, as the schema says;
+  only the form stopped sending it by accident.
+
+**How it is proved:** `.cardeditqa.mjs` (new, local only, writes and deletes
+its own `CEQA %` rows). It drives the real drawer on the account's own page:
+renames a card and moves its expiry with the number and CVC left blank,
+then reads the sealed columns back. 13 checks: the PATCH carries neither
+key, the sealed number, last four and sealed CVC are byte-for-byte what they
+were, a typed number and CVC still replace them, and a new card with no
+number still saves holding none. **Run against the old form, it fails 4 —
+last four null, CVC null — so it does see the bug.** `.cardformqa.mjs`
+still passes 15 of 15. build:shared, typecheck, lint, test: all green.
+
+**What the owner should know:**
+
+1. **Cards on the live site may already have lost their number.** Any card
+   whose drawer was saved since the card fields shipped had it erased; the
+   sealed value was overwritten, so it cannot be recovered — only typed in
+   again. The audit log says exactly which: an `accounts` update whose
+   `before` had a last four and whose `after` has none.
+
+   ```sql
+   select after->>'name' as card, before->>'cardLast4' as had, occurred_at
+     from audit_logs
+    where entity_table = 'accounts' and action = 'update'
+      and before->>'cardLast4' is not null and after->>'cardLast4' is null
+    order by occurred_at desc;
+   ```
+
+   Proved on the local database: it finds the one card the old form erased
+   in this session's test, and nothing else. **Not run on live** — live
+   data untouched. (`card_last4 is null` alone would also list cards that
+   never had a number.)
+2. **Such a card shows "CVC •••" in Card details though nothing is
+   stored.** `card-details.tsx` reads `cardSecretsSetAt` as "a CVC is on
+   file", and the bug set that date while clearing. It corrects itself once
+   the number and CVC are typed in again. Left as it is.
+3. **The form now has no way to remove a stored number on purpose.** It
+   never had one intentionally — the only way was this bug. If the owner
+   wants it, it is a small "Remove the stored number" control, a decision
+   for the design.
+
+**Also:** the local `next dev` on :3000 (running since 2 Oct) answered 500
+on every page ("Jest worker encountered 2 child process exceptions"). I
+restarted it (`npx next dev -p 3000` in `apps/web`); it is running from this
+session. Another session's uncommitted A3d work (ai-intake, assistant,
+google-files) was in the tree throughout; it is not in this commit.
 
 ## 144. The Assistant: an Excel workbook reads every sheet — 3 Oct 2026
 

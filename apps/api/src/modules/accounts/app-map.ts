@@ -61,8 +61,9 @@ export const ACCOUNTS_MAP = [
         fields: {
           openingBalance: "changing it moves every balance after it",
           isActive: "not on the form; Archive and Restore set it",
-          cardNumber: "blank clears the stored number and its last four",
-          cardCvc: "blank clears the stored CVC",
+          cardNumber:
+            "always opens empty; blank keeps the stored number, a new one replaces it",
+          cardCvc: "always opens empty; blank keeps the stored CVC",
         },
         onSave:
           "Changes the account's details; no entry is written. A new opening balance or date is refused in a locked period, and a lower opening is refused if the account would then dip below zero on any day.",
