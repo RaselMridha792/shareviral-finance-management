@@ -93,7 +93,16 @@ korar dorkar nei."*
      does for a Google Sheet's tabs.
    - An empty sheet gets an "Empty" card.
    - The boss keeps the data in Excel workbooks, so this comes before A5.
-4. **A5.** The boss's files.
+4. **A3d. Empty sheets do not count** (the owner, 3 Oct, on the question A3c raised).
+   - Old workbooks often hold the data in Sheet1 and leave Sheet2 and Sheet3 empty.
+     Since A3c such a file shows three cards, and with more than one card the
+     Assistant offers no Import plan.
+   - When exactly one sheet or tab holds data, read the file as one: one card, and the
+     Import plan offered as before. The empty ones are named in a single line under the
+     card ("Sheet2, Sheet3: empty").
+   - Several sheets with data stay separate, as A3b and A3c made them.
+   - Do it in the same session as the start of A5, or just before it. It is small.
+5. **A5.** The boss's files.
 
 ---
 
