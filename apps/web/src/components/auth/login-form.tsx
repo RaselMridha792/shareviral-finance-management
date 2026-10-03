@@ -17,8 +17,9 @@ import { SignOutIcon } from "@phosphor-icons/react/dist/ssr/SignOut";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { Turnstile, type TurnstileHandle } from "@/components/auth/turnstile";
 import { startBoot } from "@/components/boot/boot-overlay";
 import { ApiError, login, verifySecondStep } from "@/lib/api-client";
 
@@ -60,19 +61,28 @@ const NOTES: Record<
 
 type Note = keyof typeof NOTES;
 
+/** The handoff's own words for Sign in pressed before Cloudflare has answered. */
+const WAIT_FOR_CHECK = "Wait for verification to finish.";
+
 /** idle → sending → done. "done" is the session existing; the preloader takes it from there. */
 type Stage = "idle" | "sending" | "done";
 
 export function LoginForm({
   next,
   notice,
+  captchaSiteKey,
 }: {
   next: string;
   notice: ArrivalNotice | null;
+  /** Cloudflare Turnstile's site key; null when the server has none, and then no box. */
+  captchaSiteKey: string | null;
 }) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>("idle");
   const [note, setNote] = useState<Note | null>(notice);
+  /** Single-use and about five minutes long, so it is never kept past one try. */
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captcha = useRef<TurnstileHandle>(null);
   /**
    * Held here and nowhere else.
    *
@@ -126,17 +136,23 @@ export function LoginForm({
       setInvalid({ password: true });
       return;
     }
+    if (captchaSiteKey && !captchaToken) {
+      setError(WAIT_FOR_CHECK);
+      return;
+    }
 
     setStage("sending");
     setError(null);
     setInvalid({});
 
     try {
-      const outcome = await login(email, password);
+      const outcome = await login(email, password, captchaToken ?? undefined);
 
       // The password was right but is not, on its own, a session. No cookie
       // has been set; the code is what completes it.
       if (outcome.twoFactorRequired) {
+        // Spent. "Start again" draws a new widget, which brings a new one.
+        setCaptchaToken(null);
         setChallenge(outcome.challenge);
         setStage("idle");
         return;
@@ -154,6 +170,8 @@ export function LoginForm({
       } else {
         setError("Can't reach the server. Check that the API is running.");
       }
+      // The token was spent on this try, refused or not.
+      captcha.current?.reset();
       setStage("idle");
     }
   }
@@ -328,6 +346,17 @@ export function LoginForm({
                 </div>
 
                 {error ? <ErrorLine>{error}</ErrorLine> : null}
+
+                {captchaSiteKey ? (
+                  <Turnstile
+                    ref={captcha}
+                    siteKey={captchaSiteKey}
+                    onToken={(token) => {
+                      setCaptchaToken(token);
+                      if (token && error === WAIT_FOR_CHECK) setError(null);
+                    }}
+                  />
+                ) : null}
 
                 <SubmitButton
                   stage={stage}

@@ -246,10 +246,11 @@ export type LoginOutcome =
   | ({ twoFactorRequired?: undefined } & SessionUser)
   | { twoFactorRequired: true; challenge: string };
 
-export function login(email: string, password: string) {
+/** `captchaToken` is Cloudflare Turnstile's, sent only when the page shows the widget. */
+export function login(email: string, password: string, captchaToken?: string) {
   return apiFetch<LoginOutcome>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, captchaToken }),
   });
 }
 

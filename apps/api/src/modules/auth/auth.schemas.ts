@@ -3,6 +3,13 @@ import { z } from "zod";
 export const loginSchema = z.strictObject({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
   password: z.string().min(1, "Enter your password"),
+  /**
+   * Cloudflare Turnstile's token, when the sign-in page shows the widget.
+   * Optional here because the check is off until its key is set; once it is
+   * on, the service refuses a sign-in without one. 2048 is Cloudflare's own
+   * ceiling for a token.
+   */
+  captchaToken: z.string().max(2048).optional(),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 

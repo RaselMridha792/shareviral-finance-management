@@ -12,6 +12,7 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import { DbService } from "../../db/db.service";
 import { users } from "../../db/schema";
 import type { ChangePasswordInput, LoginInput } from "./auth.schemas";
+import { CaptchaService } from "./captcha.service";
 import { ChallengeService } from "./challenge.service";
 import {
   TokenService,
@@ -79,18 +80,38 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly twoFactor: TwoFactorService,
     private readonly challenges: ChallengeService,
+    private readonly captcha: CaptchaService,
   ) {}
 
   async login(input: LoginInput, client: ClientInfo): Promise<LoginResult> {
+    // One message for every failure. Distinguishing "no such account" from
+    // "wrong password" tells an attacker which emails are registered.
+    const invalid = new UnauthorizedException("Email or password is incorrect");
+
+    /*
+     * The human check, before anything about the account is looked at — so a
+     * refusal here says nothing about the password, and it never reaches
+     * registerFailure. If it counted toward the lockout, anybody could lock
+     * any account by posting its email five times without a token. Same
+     * sentence as a wrong password, whatever the cause: no token, a bad one,
+     * or Cloudflare unreachable. Not asked again at the code step — whoever
+     * reaches that has already passed it.
+     */
+    if (!(await this.captcha.verify(input.captchaToken, client.ip))) {
+      await this.audit.log({
+        action: "login_failed",
+        entityTable: "users",
+        summary: `Failed sign-in for ${input.email} (human check refused)`,
+        module: "auth",
+      });
+      throw invalid;
+    }
+
     const [record] = await this.db.client
       .select()
       .from(users)
       .where(sql`lower(${users.email}) = ${input.email}`)
       .limit(1);
-
-    // One message for every failure. Distinguishing "no such account" from
-    // "wrong password" tells an attacker which emails are registered.
-    const invalid = new UnauthorizedException("Email or password is incorrect");
 
     if (!record || record.deletedAt) {
       await this.audit.log({

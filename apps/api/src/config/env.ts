@@ -89,6 +89,14 @@ const envSchema = z.object({
      webhook (hr-webhook.service.ts, `configured`). */
   HR_WEBHOOK_URL: z.string().trim().optional(),
   HR_WEBHOOK_SECRET: z.string().trim().optional(),
+
+  /**
+   * Cloudflare Turnstile on the sign-in's password step. Off while the secret
+   * is unset (captcha.service.ts, `enabled`). The verify URL is Cloudflare's
+   * unless overridden, which only a test of "Cloudflare is unreachable" does.
+   */
+  TURNSTILE_SECRET_KEY: z.string().trim().optional(),
+  TURNSTILE_VERIFY_URL: z.string().trim().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
