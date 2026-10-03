@@ -33,14 +33,21 @@ export type GoogleTable = {
   rows: RawRow[];
 };
 
+/**
+ * One of a Sheet's tabs read whole (A3b): beside the name it is kept under,
+ * the tab's own title and whether it is hidden, so a Sheet with one tab of
+ * data among empty ones can be kept as that tab alone (A3d).
+ */
+export type GoogleTab = GoogleTable & { tab: string; hidden: boolean };
+
 export type GoogleRead =
   | GoogleTable
   /**
    * Every tab of a Sheet whose link names none (A3b), each its own table in
-   * the Sheet's order. An empty tab is one too, with no rows, so that the
-   * count of tabs read is the count the Sheet has.
+   * the Sheet's order, and the Sheet's title. An empty tab is one too, with
+   * no rows, so that the count of tabs read is the count the Sheet has.
    */
-  | { kind: "tabs"; tables: GoogleTable[] }
+  | { kind: "tabs"; title: string; tables: GoogleTab[] }
   | { kind: "text"; name: string; paragraphs: string[] }
   | { kind: "file"; name: string; buffer: Buffer };
 
@@ -245,7 +252,11 @@ class Reader {
 
     // Google answers in the order the tabs were asked for.
     const ranges = list(values.body?.valueRanges);
-    const tables = tabs.map((_, at) => table(at, ranges[at]));
+    const tables = tabs.map((tab, at) => ({
+      ...table(at, ranges[at]),
+      tab: text(tab.title),
+      hidden: tab.hidden === true,
+    }));
 
     const rows = tables.reduce((sum, read) => sum + read.rows.length, 0);
     if (!rows) {
@@ -258,7 +269,7 @@ class Reader {
         `"${title}" has ${rows.toLocaleString("en-US")} rows across its ${tabs.length} tabs. The Assistant reads up to ${this.limits.maxRows.toLocaleString("en-US")} at once: paste the links of its tabs one at a time.`,
       );
     }
-    return { kind: "tabs", tables };
+    return { kind: "tabs", title, tables };
   }
 
   /* --- a Doc ---------------------------------------------------------- */

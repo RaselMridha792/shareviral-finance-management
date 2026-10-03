@@ -42,6 +42,9 @@
  *   K. an Excel workbook's sheets, 3 Oct 2026 (A3c) — attached whole, a file
  *      a sheet: each sheet's total as its own, never added together; one
  *      sheet's rows asked for, nothing from the other and no account
+ *   L. empty sheets do not count, 3 Oct 2026 (A3d) — Sheet1 of rows and two
+ *      empty sheets arrive as one file: the empty ones said to be empty,
+ *      Sheet1's total; everything said, a plan for Import as one file has
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -967,6 +970,70 @@ CASES.push(
       ].filter(Boolean);
       const how = reply.batch ? `${rows.length} drafts, no account` : /send to import/i.test(said) ? "pointed to Send to Import" : "asked";
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : how, said };
+    },
+  },
+);
+
+/*
+ * L. A3d, 3 Oct 2026: a workbook whose rows are all on one sheet arrives as
+ * that sheet, one FILE, the empty sheets named beside it. Attached through
+ * the real endpoint. Held to: the empty sheets said to be empty and never
+ * described, and the file worked as one, so a plan for Import is possible
+ * again once everything is known.
+ */
+async function oldBook() {
+  const book = new ExcelJS.Workbook();
+  const first = book.addWorksheet("Sheet1");
+  first.addRow(["Date", "Paid to", "Amount"]);
+  for (const row of TAB_ROWS.payments) first.addRow([row.Date, row["Paid to"], Number(row.Amount)]);
+  book.addWorksheet("Sheet2");
+  book.addWorksheet("Sheet3");
+  const file = await attach("Barqa Old book.xlsx", Buffer.from(await book.xlsx.writeBuffer()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  if (file.problem) return { problem: file.problem };
+  return file.attachments.length === 1 && file.attachment.name === "Barqa Old book.xlsx — Sheet1\nSheet2, Sheet3: empty"
+    ? { id: file.attachment.id }
+    : { problem: `the workbook came back as ${file.attachments.map((f) => JSON.stringify(f.name)).join(" | ")}` };
+}
+CASES.push(
+  {
+    id: "L1", runs: LIGHT, name: "a workbook with Sheet1 of rows and two empty sheets: 'baki sheet e ki ache?' - empty, said so, Sheet1's total",
+    run: async () => {
+      const { id, problem } = await oldBook();
+      if (problem) return { error: problem };
+      const { reply, failed } = await talk(["ei file e ki ki ache? baki sheet gulo te ki ache? total koto?"], id);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const invented = figuresIn(said).filter((n) => n > 31 && ![5140, 4500, 640, 2026].includes(n));
+      const wrong = [
+        says(said, 5140) ? null : "left out Sheet1's total, 5,140",
+        /empty|khali|kichu nei|faka|ফাঁকা|খালি/i.test(said) ? null : "did not say the other sheets are empty",
+        invented.length ? `said figures the workbook does not hold: ${invented.join(", ")}` : null,
+        reply.target || reply.batch || reply.importPlan ? "drafted something" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "Sheet1's total, the rest empty", said };
+    },
+  },
+  {
+    id: "L2", runs: LIGHT, name: "the same workbook, everything said: a plan for Import, as one file has, not 'Send to Import on its card'",
+    run: async () => {
+      const { id, problem } = await oldBook();
+      if (problem) return { error: problem };
+      const { reply, failed } = await talk(
+        [`These are payments, money out, all from ${BANK}. File every row as ${CATEGORY}. The dates are day first. Read the file at 121.50 taka to the dollar. Enter them.`, "Yes, exactly that. Go ahead."],
+        id,
+      );
+      if (failed) return { error: failed };
+      const plan = reply.importPlan;
+      const said = textOf(reply);
+      if (!plan) return { pass: false, note: "no plan after two turns", said };
+      const wrong = [
+        same(plan.accountName, BANK) ? null : `account ${plan.accountName}`,
+        Number(plan.usdRate) === 121.5 ? null : `rate ${plan.usdRate}`,
+        same(plan.categoryName, CATEGORY) ? null : `category ${plan.categoryName}`,
+        ["amount", "amountOut"].includes(plan.columnMap.Amount) ? null : `Amount -> ${plan.columnMap.Amount}`,
+        plan.dateFormat === "dmy" ? null : `dates ${plan.dateFormat}`,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "a plan, to the letter", said };
     },
   },
 );

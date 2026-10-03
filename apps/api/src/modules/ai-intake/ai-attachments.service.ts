@@ -144,7 +144,7 @@ export class AiAttachmentsService {
    *
    * An Excel workbook of several sheets comes back as every sheet (A3c),
    * each an attachment of its own, as a Google Sheet's tabs do; anything else
-   * as one.
+   * as one. So does a workbook whose data is on one sheet alone (A3d).
    */
   async upload(
     file: { originalname: string; buffer: Buffer },
@@ -198,12 +198,28 @@ export class AiAttachmentsService {
    * it is, so nobody takes one sheet for the whole workbook. An empty sheet
    * is kept and shown as empty. A workbook too large to read whole is
    * refused rather than cut short, with the same limits as a Sheet's tabs.
+   *
+   * A workbook with one sheet of data among empty ones is that sheet alone
+   * (A3d, `keepBook`), whatever the count of empty ones beside it.
    */
   private async keepSheets(
     filename: string,
     sheets: WorkbookSheet[],
     actor: AuthenticatedUser,
   ): Promise<AiAttachment[]> {
+    const parts = sheets.map((sheet, at) => ({
+      name: `${filename} — ${sheet.name} (sheet ${at + 1} of ${sheets.length}${
+        sheet.hidden ? ", hidden" : ""
+      })`,
+      tab: sheet.name,
+      hidden: sheet.hidden,
+      headers: sheet.headers,
+      rows: sheet.rows,
+    }));
+    if (parts.filter((part) => part.rows.length).length === 1) {
+      return this.keepBook(filename, parts, actor);
+    }
+
     if (sheets.length > AI_MAX_ATTACHMENTS) {
       throw new BadRequestException(
         `"${filename}" has ${sheets.length} sheets. The Assistant reads up to ${AI_MAX_ATTACHMENTS} at once: copy the sheets you mean into a workbook of their own and attach that.`,
@@ -221,16 +237,51 @@ export class AiAttachmentsService {
       );
     }
 
-    return this.keepTabs(
-      sheets.map((sheet, at) => ({
-        name: `${filename} — ${sheet.name} (sheet ${at + 1} of ${sheets.length}${
-          sheet.hidden ? ", hidden" : ""
-        })`,
-        headers: sheet.headers,
-        rows: sheet.rows,
-      })),
-      actor,
-    );
+    return this.keepBook(filename, parts, actor);
+  }
+
+  /**
+   * A Sheet's tabs (A3b) or a workbook's sheets (A3c), kept.
+   *
+   * When exactly one of them holds data, the file is read as that one (A3d,
+   * the owner, 3 Oct). An older workbook keeps its rows on Sheet1 and leaves
+   * Sheet2 and Sheet3 empty; as three cards it was offered no Import plan,
+   * since a plan is for one file. Kept as one, it has its card, its plan and
+   * its tools exactly as a workbook of one sheet does.
+   *
+   * The empty ones are not dropped unsaid. They are named on a second line
+   * of the name, "Book.xlsx — Sheet1\nSheet2, Sheet3: empty", which is what
+   * the card shows under itself and what the model is told (`emptyPartsOf`).
+   * The name is the one place a stored row can carry it without a column of
+   * its own, as a Doc's ".gdoc" does; no file or tab name holds a line break.
+   *
+   * Several with data stay several, each with its own card, the empty ones
+   * among them shown as empty.
+   */
+  private async keepBook(
+    book: string,
+    parts: {
+      name: string;
+      tab: string;
+      hidden: boolean;
+      headers: string[];
+      rows: RawRow[];
+    }[],
+    actor: AuthenticatedUser,
+  ): Promise<AiAttachment[]> {
+    const withRows = parts.filter((part) => part.rows.length);
+    if (withRows.length !== 1) return this.keepTabs(parts, actor);
+
+    const [only] = withRows;
+    const empty = parts.filter((part) => part !== only).map((part) => part.tab);
+    return [
+      await this.keep(
+        `${book} — ${only.tab}${only.hidden ? " (hidden)" : ""}\n${empty.join(", ")}${EMPTY_LINE_END}`,
+        only.headers,
+        only.rows,
+        actor,
+      ),
+    ];
   }
 
   /**
@@ -243,7 +294,8 @@ export class AiAttachmentsService {
    *
    * A Sheet whose link names no tab comes back as every tab (A3b), and an
    * Excel workbook kept in Drive as every sheet (A3c), each an attachment of
-   * its own; anything else as one.
+   * its own; anything else as one, a Sheet or a workbook with one tab or
+   * sheet of data among empty ones included (A3d).
    *
    * Gated like an upload, on owning what is made. The account can read
    * whatever was shared with it; this reads one file, by its id, and only
@@ -311,7 +363,9 @@ export class AiAttachmentsService {
         ),
       ];
     }
-    if (read.kind === "tabs") return this.keepTabs(read.tables, actor);
+    if (read.kind === "tabs") {
+      return this.keepBook(read.title, read.tables, actor);
+    }
     return [await this.keep(read.name, read.headers, read.rows, actor)];
   }
 
@@ -474,13 +528,21 @@ export class AiAttachmentsService {
 
     // One of several (a Sheet's tabs, A3b; a workbook's sheets, A3c):
     // numbered, so the tools can be told which.
-    const heading = `FILE${number ? ` ${number}` : ""} ATTACHED: ${attachment.name}`;
+    const { name, empty } = emptyPartsOf(attachment.name);
+    const heading = `FILE${number ? ` ${number}` : ""} ATTACHED: ${name}`;
     if (!attachment.rowCount) {
       return `${heading}\nThis ${sheetOrTab(attachment.name)} is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.`;
     }
 
     const lines = [
       heading,
+      // The one sheet or tab of data among empty ones (A3d), read as the
+      // whole file, and said to be.
+      ...(empty
+        ? [
+            `The rest of the file is empty: ${empty} — no rows under a heading row, so nothing there was read. This is the only part of the file that holds data, so it is the whole file.`,
+          ]
+        : []),
       `${attachment.rowCount} rows` +
         (attachment.storedRows < attachment.rowCount
           ? `, of which the first ${attachment.storedRows} are readable here`
@@ -729,6 +791,25 @@ export class AiAttachmentsService {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/** How the line naming a file's empty sheets or tabs ends (A3d). */
+const EMPTY_LINE_END = ": empty";
+
+/**
+ * A file kept as its one sheet or tab of data (A3d, `keepBook`): its name,
+ * and the empty ones beside it, "Sheet2, Sheet3"; null for any other file.
+ */
+export function emptyPartsOf(name: string): {
+  name: string;
+  empty: string | null;
+} {
+  const cut = name.indexOf("\n");
+  if (cut < 0 || !name.endsWith(EMPTY_LINE_END)) return { name, empty: null };
+  return {
+    name: name.slice(0, cut),
+    empty: name.slice(cut + 1, -EMPTY_LINE_END.length),
+  };
+}
 
 /** "(tab 2 of 3)", "(sheet 3 of 3, hidden)": where one of several files sits. */
 const PLACE = /\((tab|sheet) (\d+) of \d+(?:, hidden)?\)$/;

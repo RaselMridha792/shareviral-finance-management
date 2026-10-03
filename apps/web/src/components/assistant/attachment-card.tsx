@@ -14,6 +14,21 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 /**
+ * A file read as its one sheet or tab of data (A3d): its name, and the
+ * empty sheets or tabs beside it, "Sheet2, Sheet3". The server keeps them on
+ * a second line of the name, "Book.xlsx — Sheet1\nSheet2, Sheet3: empty"
+ * (`emptyPartsOf` in ai-attachments.service.ts); null for any other file.
+ */
+export function emptyPartsOf(name: string): {
+  name: string;
+  empty: string | null;
+} {
+  const cut = name.indexOf("\n");
+  if (cut < 0 || !name.endsWith(": empty")) return { name, empty: null };
+  return { name: name.slice(0, cut), empty: name.slice(cut + 1, -7) };
+}
+
+/**
  * The file, as the app read it.
  *
  * Shown before anything is asked about it, because the first thing to check is
@@ -51,6 +66,8 @@ export function AttachmentCard({
    * headings, shown as such.
    */
   const empty = attachment.rowCount === 0;
+  /** A sheet read as its whole file (A3d), headed without its empty ones. */
+  const { name } = emptyPartsOf(attachment.name);
 
   if (attachment.kind === "text") {
     return <DocumentCard attachment={attachment} onRemove={onRemove} />;
@@ -66,10 +83,10 @@ export function AttachmentCard({
         </span>
         <div className="min-w-0 flex-1">
           <p
-            title={attachment.name}
+            title={name}
             className="truncate text-sm font-semibold tracking-tight"
           >
-            {label ?? attachment.name}
+            {label ?? name}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {empty ? (

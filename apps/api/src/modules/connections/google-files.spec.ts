@@ -197,18 +197,25 @@ describe("a Google Sheet", () => {
     );
 
     // The chart's tab has no cells and is not one of them.
+    // Each tab's own title and whether it is hidden, and the Sheet's, so
+    // one tab of data among empty ones can be kept alone (A3d).
     expect(got).toEqual({
       kind: "tabs",
+      title: "Expenses 2026",
       tables: [
         {
           kind: "table",
           name: "Expenses 2026 — Jan (tab 1 of 3)",
+          tab: "Jan",
+          hidden: false,
           headers: ["Name"],
           rows: [{ Name: "Rahim" }],
         },
         {
           kind: "table",
           name: "Expenses 2026 — Feb's (tab 2 of 3)",
+          tab: "Feb's",
+          hidden: false,
           headers: ["Date", "Amount"],
           rows: [
             { Date: "17/02/2026", Amount: "1200.5" },
@@ -218,6 +225,8 @@ describe("a Google Sheet", () => {
         {
           kind: "table",
           name: "Expenses 2026 — Notes (tab 3 of 3, hidden)",
+          tab: "Notes",
+          hidden: true,
           headers: [],
           rows: [],
         },

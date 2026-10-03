@@ -2,7 +2,8 @@
  * The file tools as the model is offered them (A3b): one file's are exactly
  * as they were; several files (a Sheet's tabs) make each tool say which.
  *
- * And an Excel workbook attached (A3c): every sheet, each kept on its own.
+ * And an Excel workbook attached (A3c): every sheet, each kept on its own;
+ * one sheet of data among empty ones, that sheet alone (A3d).
  */
 import type { AiAttachment } from "@finance/shared";
 import ExcelJS from "exceljs";
@@ -13,6 +14,7 @@ import {
   AI_ATTACHMENT_TOOLS,
   AiAttachmentsService,
   attachmentToolsFor,
+  emptyPartsOf,
   sheetOrTab,
 } from "./ai-attachments.service";
 
@@ -171,12 +173,12 @@ describe("an Excel workbook attached", () => {
     const got = await service.upload(
       {
         originalname: "Book.xlsx",
-        buffer: await xlsx([PAYMENTS, { name: "Blank", rows: [] }]),
+        buffer: await xlsx([PAYMENTS, { name: "Blank", rows: [] }, PEOPLE]),
       },
       actor,
     );
     expect(service.describe(got[1], 2)).toBe(
-      "FILE 2 ATTACHED: Book.xlsx — Blank (sheet 2 of 2)\nThis sheet is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.",
+      "FILE 2 ATTACHED: Book.xlsx — Blank (sheet 2 of 3)\nThis sheet is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.",
     );
     expect(sheetOrTab(got[0].name)).toBe("sheet");
     expect(sheetOrTab("Expenses 2026 — Jan (tab 1 of 2)")).toBe("tab");
@@ -227,5 +229,87 @@ describe("an Excel workbook attached", () => {
     ).rejects.toThrow('"Big.xlsx" has 12,000 rows across its 2 sheets.');
 
     expect(statements).toHaveLength(0);
+  });
+});
+
+/* --- one sheet of data among empty ones (A3d) ---------------------------- */
+
+describe("a workbook whose rows are all on one sheet", () => {
+  it("is that sheet alone, one file, its empty sheets named on its second line", async () => {
+    const { service, statements } = fakeDb();
+    const got = await service.upload(
+      {
+        originalname: "Old book.xlsx",
+        buffer: await xlsx([
+          { ...PAYMENTS, name: "Sheet1" },
+          { name: "Sheet2", rows: [] },
+          // A heading with nothing under it holds no data either.
+          { name: "Sheet3", rows: [["Amount"]], hidden: true },
+        ]),
+      },
+      actor,
+    );
+
+    expect(got).toHaveLength(1);
+    expect(got[0].name).toBe("Old book.xlsx — Sheet1\nSheet2, Sheet3: empty");
+    expect(emptyPartsOf(got[0].name)).toEqual({
+      name: "Old book.xlsx — Sheet1",
+      empty: "Sheet2, Sheet3",
+    });
+    expect(got[0].rowCount).toBe(2);
+    expect(
+      got[0].columns.find((column) => column.name === "Amount")?.total,
+    ).toBe("5140.00");
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toHaveLength(1);
+
+    // One file: its tools ask for no file number, as a workbook of one
+    // sheet's never did.
+    expect(attachmentToolsFor(got)).toBe(AI_ATTACHMENT_TOOLS);
+
+    // Told as one file, the rest said to be empty.
+    const told = service.describe(got[0]);
+    expect(told.split("\n").slice(0, 3)).toEqual([
+      "FILE ATTACHED: Old book.xlsx — Sheet1",
+      "The rest of the file is empty: Sheet2, Sheet3 — no rows under a heading row, so nothing there was read. This is the only part of the file that holds data, so it is the whole file.",
+      "2 rows",
+    ]);
+    expect(told).toContain("- Amount (number, 2 filled) — total 5140.00");
+    expect(told).toContain(
+      "The totals above were computed from the file, not by you.",
+    );
+  });
+
+  it("says when the one sheet of data is hidden, and reads it whatever the count of empty ones", async () => {
+    const { service } = fakeDb();
+    const empties = Array.from({ length: 24 }, (_, at) => ({
+      name: `E${at + 1}`,
+      rows: [],
+    }));
+    const got = await service.upload(
+      {
+        originalname: "Wide.xlsx",
+        buffer: await xlsx([
+          ...empties,
+          { ...PEOPLE, name: "Data", hidden: true },
+        ]),
+      },
+      actor,
+    );
+    expect(got).toHaveLength(1);
+    expect(emptyPartsOf(got[0].name)).toEqual({
+      name: "Wide.xlsx — Data (hidden)",
+      empty: empties.map((sheet) => sheet.name).join(", "),
+    });
+  });
+
+  it("leaves every other name alone", () => {
+    for (const name of [
+      "Bank July.xlsx",
+      "Book 2026.xlsx — Notes (sheet 3 of 3, hidden)",
+      "Expenses 2026 — Jan (tab 1 of 2)",
+    ]) {
+      expect(emptyPartsOf(name)).toEqual({ name, empty: null });
+    }
   });
 });

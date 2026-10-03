@@ -20,7 +20,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AttachmentCard } from "@/components/assistant/attachment-card";
+import {
+  AttachmentCard,
+  emptyPartsOf,
+} from "@/components/assistant/attachment-card";
 import { BatchCard, type RowResult } from "@/components/assistant/batch-card";
 import { ChatRail } from "@/components/assistant/chat-rail";
 import { Composer } from "@/components/assistant/composer";
@@ -93,9 +96,14 @@ function partsOf(attachments: AiAttachment[]): "tabs" | "sheets" {
     : "tabs";
 }
 
-/** What the message box says is attached: the file, or its tabs or sheets. */
+/**
+ * What the message box says is attached: the file, or its tabs or sheets.
+ * A file read as its one sheet of data (A3d) by that sheet's name alone.
+ */
 function attachedLabel(attachments: AiAttachment[]): string | null {
-  if (attachments.length < 2) return attachments[0]?.name ?? null;
+  if (attachments.length < 2) {
+    return attachments[0] ? emptyPartsOf(attachments[0].name).name : null;
+  }
   const parts = partsOf(attachments);
   const whole = parts === "sheets" ? "A workbook" : "A Google Sheet";
   return `${sheetOf(attachments) ?? whole} · ${attachments.length} ${parts}`;
@@ -514,6 +522,12 @@ export function AssistantScreen({
    * its sheets: named once, above their cards.
    */
   const sheet = attachments.length > 1 ? sheetOf(attachments) : null;
+  /**
+   * The empty sheets or tabs beside the one a file was read as (A3d), named
+   * under its card so nobody wonders where the rest of it went.
+   */
+  const emptyParts =
+    attachments.length === 1 ? emptyPartsOf(attachments[0].name).empty : null;
 
   // A draft has its own card; a link beside it would be a second thing to
   // press before the first has been read.
@@ -616,6 +630,11 @@ export function AssistantScreen({
                       onRemove={() => void detach(attachment.id)}
                     />
                   ))}
+                  {emptyParts ? (
+                    <p className="-mt-1.5 px-1 text-xs text-muted-foreground wrap-anywhere">
+                      {emptyParts}: empty
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 

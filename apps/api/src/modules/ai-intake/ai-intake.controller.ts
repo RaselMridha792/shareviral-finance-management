@@ -43,7 +43,7 @@ import {
 } from "../../common/decorators/auth.decorators";
 import { ZodBody } from "../../common/pipes/zod-validation.pipe";
 import { ImportsService } from "../imports/imports.service";
-import { AiAttachmentsService } from "./ai-attachments.service";
+import { AiAttachmentsService, emptyPartsOf } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiConfirmService } from "./ai-confirm.service";
 import { AiIntakeService } from "./ai-intake.service";
@@ -219,8 +219,10 @@ export class AiIntakeController {
       return { batchId: attachment.importBatchId, alreadyStaged: true };
     }
 
+    // A sheet read as its whole file (A3d) is staged under its own name,
+    // without the line that names the empty sheets beside it.
     const { batch } = await this.imports.stage(
-      attachment.filename,
+      emptyPartsOf(attachment.filename).name,
       attachment.headers,
       attachment.rows,
       actor,
