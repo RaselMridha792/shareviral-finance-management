@@ -80,6 +80,41 @@ Until then, do Part B in this order:
    from the chat.
 3. **B3. Token accounting.** Its schema change goes out alone first.
 
+### B2 — the owner's three answers (3 Oct), and the order they make
+
+1. **A model picked in the chat holds for that conversation.** Each chat keeps
+   its own, and opening it again from History brings that model back. A chat
+   nobody switched follows the default in the Assistant's settings.
+   - That needs `ai_chats.model`. **Done, pushed alone: SESSIONS #149.**
+   - NULL means "the default". Read it through `aiModelFrom`; the column has
+     no check of its own.
+2. **CFO sees everything behind the settings icon, and changes nothing.** That
+   covers the route, the model, how much it may read and the owner's
+   instructions. Never a key, a key's hint, or the Google address.
+   - `GET /ai/instructions` is `settings.write` today, so the CFO is refused.
+     Opening its read to `ai.use` (writes stay `settings.write`) is a
+     permission change. **It goes out alone, before the B2 code**, proved as
+     #140 was: the CFO reads and gets a 403 on every write; HR gets a 403 on
+     all of it.
+   - `/ai/availability` already sends `keyHint` and `setBy` to anyone with
+     `ai.use`. The CFO's view must not draw them.
+3. **Shared code is approved** for `packages/shared/src/ai.ts`: availability
+   lists every model that has a working route now, and a turn carries the
+   chat's model. Only the Assistant's own screens and its settings read
+   these.
+
+Found while reading the code (#149). These are suggestions, not the owner's
+decisions:
+- **The route follows the model.** Gemini goes only through Google Cloud.
+  Claude goes the way the settings' route says, so `app_settings.ai_provider`
+  becomes Claude's route. The Anthropic key box shows only when that route
+  is "Anthropic key".
+- **Where it lives.** Suggested: a page, `/assistant/settings`, beside
+  `/assistant/knowledge`. The window's settings icon goes there.
+  `/settings?tab=assistant` and `?tab=connections` redirect to it. The
+  "Not switched on" card, the knowledge screen, and the API's sentences that
+  say "Settings → Connections" or "Settings, Assistant" are changed to match.
+
 ## Next, after A4 (the owner, 2 Oct, night): three pieces in this order
 
 1. **A3b. A Sheet link that names no tab reads every tab.** This is decision 3 under "The

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 149 | **Schema: each conversation with the Assistant keeps its own model — `ai_chats.model`** | **done** — pushed alone, the schema half of B2, from the owner's answer "each chat its own". **Next: B2's permission change, alone** (the CFO reads the settings and instructions, changes nothing; in the brief), **then the B2 code** |
 | 148 | **The Assistant's message box: no stray ring inside it when it has the focus** | **done** — the owner's report from the live site, 3 Oct |
 | 147 | **The Assistant as a floating window over every page — expanded to the Assistant page and back, the same conversation** | **built** — piece B4 of the "made strong" brief; **the owner tries it on the live site: the list is in #147.** Next is B2 (the Assistant's own settings inside the chat), then B3. A5 still waits for the samples in `F:\boss-samples\` |
 | 146 | **The Assistant: empty sheets do not count — one sheet or tab of data reads as one file, its Import plan back** | **built** — piece A3d of the "made strong" brief; **the owner tries it on the live site: the list is in #146.** A5 has not started: the samples are shared with the service account, which only the live server can use. The owner is asked to put copies in `F:\boss-samples\` |
@@ -126,6 +127,75 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 149. Schema: each conversation keeps its own model — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B2, its schema
+change, pushed alone.** No B2 code is in this push. The owner's three answers
+and the order they make are now in the brief, under "B2 — the owner's three
+answers".
+
+**The owner's answers (asked this session):**
+
+1. A model picked in the chat holds **for that conversation**. Each chat
+   keeps its own, and opening it from History brings it back. The other two
+   choices offered were "in this browser until changed" (no schema) and
+   "everyone's default" (a permission change).
+2. **The CFO sees everything behind the settings icon and changes nothing.**
+   That covers the route, the model, how much it may read and the
+   instructions, but no key and no Google address.
+3. Changing `packages/shared/src/ai.ts` for B2 is approved.
+
+**What changed:** `deploy/sql/2026-10-03-assistant-chat-model.sql` adds
+`ai_chats.model` (text, NULL). NULL means "the default in the Assistant's
+settings". That is every chat so far, and a new one until somebody switches
+it. There is no CHECK, as with `app_settings.ai_model`, because the list of
+models changes when Google retires one; the next session reads it through
+`aiModelFrom`. There is no route column, because the route follows the
+model.
+
+**The table is created first if it is missing**, as #137 did for
+`ai_corrections`: no file in `deploy/sql` ever created `ai_chats`. Live
+has it (history is in use there). Where it exists, the CREATE does nothing.
+
+**Code:** Drizzle knows the column (`db/schema/ai-chats.ts`). Nothing
+reads or writes it yet. `ai-chats.service.ts`'s `get` selects the whole
+row, so it names `model`, which is why this has to reach live before any
+code that uses it. The deploy applies the file before the containers swap.
+
+**Proved:**
+
+- The missing-table path, in a scratch schema inside a rolled-back
+  transaction. The file was run twice. It made the table with its 8 columns,
+  the index on (user_id, updated_at) and the cascade to users. An insert
+  shaped like today's code reads `model` NULL. A model no longer listed is
+  stored, not refused. Nothing was left behind: 8/8.
+- Applied to the local database twice with `node .apply1.mjs`, with no
+  error on the second run. The 75 chats there are untouched, `model` NULL.
+- The built API with the column, `.assistantemptyqa.mjs` **26/26**. A turn
+  makes the chat, `GET /ai/chats/:id` reopens it, and the page reopens it
+  from History. Nothing left behind.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 359,
+  shared 382) pass, each on its own exit code.
+
+**Not proved:** the live database. The deploy applies the file.
+
+**Found for the next sessions (in the brief):**
+
+- **The CFO's read-only view needs a permission change first.**
+  `GET /ai/instructions` is `settings.write`, so the CFO gets a 403 today.
+  `/ai/knowledge` gives the map only, not the rules. Opening that one read
+  to `ai.use` goes out alone, as #140 did, before the B2 code.
+- `/ai/availability` already sends the Anthropic key's hint and who set it
+  to anyone with `ai.use`, so to the CFO. It is a hint, never the key, but
+  the CFO's view must not draw it, as the owner asked.
+
+**What the owner has to decide:** nothing more for B2.
+
+**Seen, not touched:** another session ran alongside this one and pushed
+#148 (the message box's focus edge) while this was being written, so this
+entry is #149. `sheet-new.png` is still modified in the working copy. It is
+not this session's.
 
 ## 148. The Assistant's message box: one edge for the focus — 3 Oct 2026
 
