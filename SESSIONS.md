@@ -34,7 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
-| 154 | **Sign-in: Cloudflare Turnstile before the password — off until the owner sets its keys** | **built** — both pushes of the sign-in captcha brief, each alone; **changes nothing live until the keys are in.** The keys and the owner's browser check are in #154 |
+| 154 | **Sign-in: Cloudflare Turnstile before the password** | **on, live, 4 Oct** — the owner made the widget `SFM finance sign-in` (app.hellonizam.com, Managed), set both keys on the server and signed in through it ("Success — you are verified"). How to switch it off is in STATUS.md |
 | 153 | **HR Requests: approving a spend asks "pay it now?" — Pay now opens the payment, Pay later puts it on a new To pay tab** | **built** — the brief of 3 Oct; **the owner tries it on the live site: the steps are in #153.** Pushed after 0483bf9 (Turnstile, -12) and B3's schema (-ab), one push at a time |
 | 152 | **Schema: what the Assistant spends — `ai_usage`, a row per model call, and `app_settings.ai_monthly_limit_usd`** | **done** — pushed alone, the schema half of B3. The owner's answers: the limit is in dollars of estimated cost, one for the whole company. **Next: the B3 code** (recording, the report, the limit, the usage panel); what it needs is in the brief |
 | 151 | **The Assistant's own settings behind a gear on the chat and its window; the CFO reads them; the picker beside Send for both roles, a model for each conversation; the route follows the model** | **built** — piece B2's code; **the owner tries it on the live site: the list is in #151.** Next is B3 (token accounting), its schema alone first |
