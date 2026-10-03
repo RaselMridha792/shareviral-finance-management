@@ -375,6 +375,30 @@ try {
     greeting.slice(0, 120).replace(/\n/g, " | "),
   );
   check("the message box has the focus", await page.evaluate((s) => document.activeElement?.matches(s), BOX));
+  /* The owner, 3 Oct: a violet rectangle round the textarea inside the box
+     read as a stray border. The box's own edge shows the focus instead,
+     by mouse and by keyboard alike. */
+  const ring = async () =>
+    page.evaluate((s) => {
+      const box = document.querySelector(`${s} textarea`);
+      const edge = box.closest(".sv-composer");
+      return {
+        textarea: getComputedStyle(box).outlineStyle,
+        edge: edge ? getComputedStyle(edge).borderTopColor : null,
+        violet: getComputedStyle(document.documentElement).getPropertyValue("--sv-violet").trim(),
+      };
+    }, WINDOW);
+  await page.click(`${WINDOW} ${BOX}`);
+  const byMouse = await ring();
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.focus(`${WINDOW} ${BOX}`);
+  await page.keyboard.press("Shift");
+  const byKeys = await ring();
+  check(
+    "focused, the textarea draws no ring of its own and the box's edge turns violet",
+    byMouse.textarea === "none" && byKeys.textarea === "none" && byMouse.edge !== null && byMouse.edge === byKeys.edge && byMouse.edge !== "rgb(0, 0, 0)",
+    JSON.stringify({ byMouse, byKeys }),
+  );
   const fits = await page.evaluate((s) => {
     const form = document.querySelector(`${s} form`);
     const row = form?.querySelector("textarea")?.parentElement?.lastElementChild;

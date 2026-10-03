@@ -233,7 +233,10 @@ export function Composer({
             must not be scrolled past. */}
         <VoiceReadback numbers={heard} onAccept={accept} onUndo={undo} />
 
-        <div className="rounded-2xl border border-border bg-surface shadow-e1 transition focus-within:border-primary">
+        {/* The box, not the textarea inside it, shows the focus: `sv-composer`
+            in new-design.css, because the app-wide focus ring is unlayered and
+            beats both `outline-none` and `focus-within:border-primary`. */}
+        <div className="sv-composer rounded-2xl border border-border bg-surface shadow-e1 transition">
           {attachedName ? (
             <div className="flex items-center gap-2 border-b border-border px-3 py-2">
               <Paperclip className="size-3.5 shrink-0 text-primary" />

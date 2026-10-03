@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 148 | **The Assistant's message box: no stray ring inside it when it has the focus** | **done** — the owner's report from the live site, 3 Oct |
 | 147 | **The Assistant as a floating window over every page — expanded to the Assistant page and back, the same conversation** | **built** — piece B4 of the "made strong" brief; **the owner tries it on the live site: the list is in #147.** Next is B2 (the Assistant's own settings inside the chat), then B3. A5 still waits for the samples in `F:\boss-samples\` |
 | 146 | **The Assistant: empty sheets do not count — one sheet or tab of data reads as one file, its Import plan back** | **built** — piece A3d of the "made strong" brief; **the owner tries it on the live site: the list is in #146.** A5 has not started: the samples are shared with the service account, which only the live server can use. The owner is asked to put copies in `F:\boss-samples\` |
 | 145 | **Accounts: editing a card no longer erases its stored number and CVC** | **done** — the bug #138 found (owner's decision 1 there). Blank now keeps, as the hint always said. Live data not touched; what the bug may already have erased on live is in #145 |
@@ -125,6 +126,34 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 148. The Assistant's message box: one edge for the focus — 3 Oct 2026
+
+The owner, from the live site: clicking into the Assistant's message box drew a violet
+rectangle round the text area inside it — "ekta border cole asche, eta ekta design
+problem".
+
+- **Why.** globals.css sets `:focus-visible { outline }` unlayered, and an unlayered rule
+  beats any Tailwind utility (new-design.css explains this). So the textarea's
+  `outline-none` lost and the ring was drawn inside the box. The box's own
+  `focus-within:border-primary` lost to `* { border-color }` in the same way, so the box
+  never changed.
+- **Fix.** The box carries `sv-composer`. In new-design.css (unlayered, so it wins),
+  `.sv-composer:focus-within` turns the box's edge violet, and
+  `.sv-composer textarea:focus-visible` drops the inner ring. This is the pattern
+  `.sv-field` already uses. The buttons in the box keep their own ring for the keyboard.
+  It applies on the Assistant page and in the floating window, which share the
+  composer.
+
+**Proved:**
+- `.assistantwindowqa.mjs` (`SKIP_SWEEP=1`) 33/33, with a new check: focused by mouse and
+  by keyboard, the textarea's outline is `none` and the box's edge is `rgb(133, 88, 236)`,
+  which is `--sv-violet`.
+- The four CI steps are green: lint shows its 2 old warnings; tests are 359 + 382.
+
+**For the owner:** reload the live site after the deploy, and click into the message box
+on the Assistant page and in the window. The whole box gets a violet edge, and there is
+no rectangle inside it.
 
 ## 147. The Assistant as a floating window — 3 Oct 2026
 

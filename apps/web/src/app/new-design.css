@@ -973,6 +973,19 @@
   outline: none;
 }
 
+/* The Assistant's composer, on its page and in the floating window. One box
+   holds the text, the file and the buttons, so the box's edge shows where the
+   typing is, as `.sv-field` does. A violet rectangle drawn round the textarea
+   inside it read as a second, stray border (the owner, 3 Oct). The buttons in
+   it keep their own ring for the keyboard. */
+.sv-composer:focus-within {
+  border-color: var(--sv-violet);
+}
+
+.sv-composer textarea:focus-visible {
+  outline: none;
+}
+
 .sv-primary-button {
   box-shadow: 0 8px 20px rgb(150 200 0 / 0.28);
   transition:
