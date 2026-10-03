@@ -79,6 +79,8 @@ Until then, do Part B in this order:
 2. **B2. The Assistant's settings and usage inside the chat**, and switching the model
    from the chat.
 3. **B3. Token accounting.** Its schema change goes out alone first.
+   **Done: SESSIONS #152.** The owner's two answers and what the code needs
+   are under "B3 — the owner's two answers" below.
 
 ### B2 — the owner's three answers (3 Oct), and the order they make
 
@@ -126,6 +128,55 @@ both as written:
   `/settings?tab=assistant` and `?tab=connections` redirect to it. The
   "Not switched on" card, the knowledge screen, and the API's sentences that
   say "Settings → Connections" or "Settings, Assistant" are changed to match.
+
+### B3 — the owner's two answers (3 Oct), and what is done
+
+1. **The monthly limit is in dollars of estimated cost**, not in tokens. A
+   million tokens on Opus and on Gemini Flash are very different money, so a
+   token limit would mean a different sum on each model.
+2. **One limit for the whole company**, not one per person. At 100% the
+   Assistant stops for the Super Admin and the CFO alike, and the sentence
+   says the Super Admin can raise it in the Assistant's settings.
+
+- **The schema is done, pushed alone: SESSIONS #152.**
+  - `ai_usage` holds one row per model call. It records who, which chat
+    (NULL for a key's Test), the provider (`anthropic` | `vertex`), the
+    model, and the kind (`turn` | `document` | `test`). It also records
+    input, cache-read, cache-write, output and thinking tokens, and when.
+  - Rows outlive the chat and the person (`SET NULL`). Deleting a chat must
+    never lower the month's total under the limit.
+  - `app_settings.ai_monthly_limit_usd` is numeric(10,2). NULL means no
+    limit. `GET /settings` does not carry it (`SECRET_COLUMNS`).
+- **Next is the B3 code.** What the schema expects of it:
+  - **Write a row at every model call.** That covers both adapters' rounds
+    (`model-turn.ts`, `gemini.ts`), `readDocument` (a PDF), and the three
+    Tests: the Anthropic key in `ai-intake.service.ts` and the two in
+    `connections.service.ts`.
+  - **Claude:** `input_tokens`, `cache_read_input_tokens`,
+    `cache_creation_input_tokens` and `output_tokens`. Its thinking is
+    inside `output_tokens`, so `thinking_tokens` is NULL.
+  - **Gemini:** `promptTokenCount − cachedContentTokenCount` as the input,
+    `cachedContentTokenCount` as the cache read, 0 as the cache write,
+    `candidatesTokenCount` as the output and `thoughtsTokenCount` as the
+    thinking.
+  - **The price table is in the code, per model and per route.** Claude
+    through Google Cloud is priced by Google. Take each price from the
+    provider's own page when it is built; do not recall one. A model with no
+    price shows its tokens and "no price known", never $0.
+  - **No cost column.** The estimate is worked out when it is read. Sum the
+    tokens in SQL.
+  - **The month is Dhaka's:** `created_at >= date_trunc('month', now() at
+    time zone 'Asia/Dhaka') at time zone 'Asia/Dhaka'`
+    (`ai_usage_created_idx` serves it).
+  - **Check the limit before the model is asked.**
+    - At 80%, a warning.
+    - At 100%, a refusal in words that names who can raise it. Nothing is
+      asked and nothing is kept.
+  - **Who may do what:** setting the limit is `settings.write` and audited.
+    The report and the limit are read with `ai.use`, so the CFO reads them
+    (B2's answer).
+  - **Where it shows:** the panel on the right of the chat (B2's last
+    bullet), and the full breakdown on `/assistant/settings`.
 
 ## Next, after A4 (the owner, 2 Oct, night): three pieces in this order
 

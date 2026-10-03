@@ -39,6 +39,8 @@ const SECRET_COLUMNS = [
   "aiInstructions",
   "aiInstructionsSetAt",
   "aiInstructionsSetBy",
+  // The Assistant's monthly limit, for the same reason (B3).
+  "aiMonthlyLimitUsd",
   /*
    * The card password's hash, and the two columns beside it. The hash is the
    * obvious one; the other two are here for the same reason the Anthropic

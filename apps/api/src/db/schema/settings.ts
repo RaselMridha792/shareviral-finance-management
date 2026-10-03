@@ -253,6 +253,16 @@ export const appSettings = pgTable(
     }),
     aiInstructionsSetBy: uuid("ai_instructions_set_by"),
 
+    /**
+     * The Assistant's monthly limit, in dollars of estimated cost, for the
+     * whole company (B3; the owner, 3 Oct 2026). NULL: no limit. Above 80% it
+     * warns; at 100% it stops. Read against `ai_usage`.
+     */
+    aiMonthlyLimitUsd: numeric("ai_monthly_limit_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

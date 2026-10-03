@@ -35,6 +35,7 @@ ticking all seventeen.
 | # | What | State |
 |---|---|---|
 | 154 | **Sign-in: Cloudflare Turnstile before the password — off until the owner sets its keys** | **built** — both pushes of the sign-in captcha brief, each alone; **changes nothing live until the keys are in.** The keys and the owner's browser check are in #154 |
+| 152 | **Schema: what the Assistant spends — `ai_usage`, a row per model call, and `app_settings.ai_monthly_limit_usd`** | **done** — pushed alone, the schema half of B3. The owner's answers: the limit is in dollars of estimated cost, one for the whole company. **Next: the B3 code** (recording, the report, the limit, the usage panel); what it needs is in the brief |
 | 151 | **The Assistant's own settings behind a gear on the chat and its window; the CFO reads them; the picker beside Send for both roles, a model for each conversation; the route follows the model** | **built** — piece B2's code; **the owner tries it on the live site: the list is in #151.** Next is B3 (token accounting), its schema alone first |
 | 150 | **Permissions: the CFO reads what is behind the Assistant's settings — the instructions and the mistakes — and changes nothing; the key's hint goes to the Super Admin alone** | **done** — pushed alone, B2's permission change. **Next: the B2 code** (the settings icon, the page, the model picker) |
 | 149 | **Schema: each conversation with the Assistant keeps its own model — `ai_chats.model`** | **done** — pushed alone, the schema half of B2, from the owner's answer "each chat its own". **Next: B2's permission change, alone** (the CFO reads the settings and instructions, changes nothing; in the brief), **then the B2 code** |
@@ -207,6 +208,106 @@ line and recreate `api` (STATUS.md, "Cloudflare Turnstile on the sign-in").
 
 **Next:** B3's schema (#152), then HR Requests (#153), one push at a time,
 as the three sessions agreed.
+
+## 152. Schema: what the Assistant spends — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B3, its schema
+change, pushed alone.** No B3 code is in this push. The owner's two answers
+and what the code needs are in the brief, under "B3 — the owner's two
+answers".
+
+**The owner's answers (asked this session):**
+
+1. The monthly limit is in **dollars of estimated cost**. The other choices
+   were tokens and taka. A million tokens on Opus and on Gemini Flash are
+   very different money, and taka adds a rate on top of an estimate.
+2. **One limit for the whole company**, not one per person.
+
+**What changed:** `deploy/sql/2026-10-03-assistant-usage.sql`.
+
+- **A new table, `ai_usage`**, with one row per call to a model.
+  - **Who and where:** `user_id`, and `chat_id` (NULL for a key's Test).
+  - **Which model:** `provider` (`anthropic` | `vertex`), `model`, and
+    `kind` (`turn` | `document` | `test`).
+  - **The counts:** `input_tokens` (full rate, cached input not in it),
+    `cache_read_tokens`, `cache_write_tokens`, `output_tokens` and
+    `thinking_tokens`. `thinking_tokens` is NULL for Claude, which counts its
+    thinking inside its output.
+  - **When:** `created_at`.
+  - **Indexes:** `created_at` (the month's total, read before each turn),
+    `(user_id, created_at)` (the report by person), and `chat_id`.
+- **A new column, `app_settings.ai_monthly_limit_usd`**, numeric(10,2).
+  NULL means no limit, which is how it starts.
+
+**Why these choices:**
+
+- **Both foreign keys are `ON DELETE SET NULL`.** What was spent stays
+  spent. Deleting a chat must never lower the month's total under the limit.
+- **No cost column.** The estimate is worked out from the tokens and a price
+  table in the code when it is read. A price corrected in the code then
+  corrects every month at once; a stored figure would keep the mistake.
+- **Cache read and cache write are kept apart from input**, because each is
+  priced differently: about a tenth of the full rate, and about a quarter
+  more than it. The prompt's stable half (about 6,000 tokens) is cached, so
+  one figure for all input would overstate the cost several times.
+- **No CHECK on `model`, `provider` or `kind`.** The lists are the code's, as
+  with `ai_model`. A row about a retired model is still true.
+- **No CHECK on the limit either.** "More than zero" is the API's check, as
+  the size of `ai_instructions` is.
+
+**Code:** Drizzle knows the table (`db/schema/ai-usage.ts`) and the column
+(`db/schema/settings.ts`). Nothing writes or reads them yet. `GET /settings`
+hides the limit (`SECRET_COLUMNS`, beside the instructions): who reads it is
+the Assistant's own endpoint's decision. Every read of the settings row now
+names the column, which is why this has to reach live before any code. The
+deploy applies the file before the containers swap.
+
+**Proved:**
+
+- Applied to the local database twice with `node .apply1.mjs`, with no error
+  on the second run.
+- A scratch check against it, **21/21**:
+  - 12 columns with their types, NULLs and defaults; the limit is
+    numeric(10,2), NULL, with no default; the settings row has no limit.
+  - The four indexes, and both foreign keys `SET NULL`.
+  - Then, in a transaction that was rolled back:
+    - a bare row reads `turn`, 0, 0, 0, 0 and thinking NULL;
+    - a Test row has no chat;
+    - a model no longer listed is stored, not refused;
+    - deleting the chat keeps its row, with `chat_id` NULL;
+    - the month's total, counted from Dhaka's midnight, reads the rows;
+    - a $30.00 limit is stored as the string `30.00`.
+  - Nothing was left behind.
+- **The built API**, in a clean git worktree holding only this change, on
+  :4031: **12/12**.
+  - The worktree was needed because another session's sign-in work in the
+    shared working copy did not compile at the time.
+  - With a $30.00 limit stored, the Super Admin and the CFO both get 200
+    from `GET /settings`, with 43 keys (as before) and no limit.
+  - `/ai/availability`, `/ai/knowledge` and `/ai/chats` answer 200 for both.
+  - The API's log has no database error, and the limit was put back.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (384) pass,
+  each on its own exit code, in that same clean worktree.
+
+**Not proved:** the live database. The deploy applies the file.
+
+**For the owner on the live site:** nothing changes on screen.
+
+**What the owner has to decide:** nothing more for the schema. The B3 code
+will need the Gemini prices from Google's own page when it is built; they are
+not guessed.
+
+**Seen, not touched:**
+
+- `sheet-new.png` is still modified in the working copy. It is not this
+  session's.
+- Two other sessions ran alongside this one.
+  - The sign-in captcha commit (0483bf9) was committed but not pushed while
+    this was written. It is an auth change and must travel alone, so this
+    push waited until it was on origin and its run had finished.
+  - The HR Requests session ran `node .sql.mjs` by mistake. That applied
+    every file in `deploy/sql` to the local Neon database, this one
+    included, in the shape it has now.
 
 ## 151. The Assistant's own settings, and a model for each conversation — 3 Oct 2026
 
