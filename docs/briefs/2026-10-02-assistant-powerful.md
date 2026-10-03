@@ -98,6 +98,15 @@ Until then, do Part B in this order:
      all of it.
    - `/ai/availability` already sends `keyHint` and `setBy` to anyone with
      `ai.use`. The CFO's view must not draw them.
+   - **Done, pushed alone: SESSIONS #150.** The CFO reads the instructions
+     and, by the owner's answer that session, the recent mistakes too
+     (`GET /ai/mistakes`, each only about a part the reader may read). The
+     key's hint, its date and who set it now go only to `settings.write`:
+     the CFO is sent them null, so the page has nothing to hide.
+   - **The next piece is the B2 code.** The web still reads the
+     instructions and the mistakes only for `settings.write`
+     (`knowledge-screen.tsx`'s `canConfigure`); the CFO's read-only view is
+     the B2 code's to draw.
 3. **Shared code is approved** for `packages/shared/src/ai.ts`: availability
    lists every model that has a working route now, and a turn carries the
    chat's model. Only the Assistant's own screens and its settings read

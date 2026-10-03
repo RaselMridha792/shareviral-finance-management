@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 150 | **Permissions: the CFO reads what is behind the Assistant's settings — the instructions and the mistakes — and changes nothing; the key's hint goes to the Super Admin alone** | **done** — pushed alone, B2's permission change. **Next: the B2 code** (the settings icon, the page, the model picker) |
 | 149 | **Schema: each conversation with the Assistant keeps its own model — `ai_chats.model`** | **done** — pushed alone, the schema half of B2, from the owner's answer "each chat its own". **Next: B2's permission change, alone** (the CFO reads the settings and instructions, changes nothing; in the brief), **then the B2 code** |
 | 148 | **The Assistant's message box: no stray ring inside it when it has the focus** | **done** — the owner's report from the live site, 3 Oct |
 | 147 | **The Assistant as a floating window over every page — expanded to the Assistant page and back, the same conversation** | **built** — piece B4 of the "made strong" brief; **the owner tries it on the live site: the list is in #147.** Next is B2 (the Assistant's own settings inside the chat), then B3. A5 still waits for the samples in `F:\boss-samples\` |
@@ -127,6 +128,80 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 150. Permissions: the CFO reads the Assistant's settings and changes nothing — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B2, its permission
+change, pushed alone** as the brief says (after #149's schema, before the B2
+code). No screen changes in this push.
+
+**The owner's answer, asked this session:** the recent mistakes list is the
+CFO's to read too. Making a rule and removing one stay the Super Admin's.
+
+**What changed (API only):**
+
+- `GET /ai/instructions`: `settings.write` → `ai.use`. `PUT` stays
+  `settings.write`.
+- `GET /ai/mistakes`: `settings.write` → `ai.use`. Making a rule and
+  removing a mistake stay `settings.write`. The list carries what other
+  people asked, so whoever lacks `settings.write` sees only the mistakes
+  about a part they may read, with the same check that decides which ones
+  the model is told (`mayBeShown`). The CFO reads every part, so the CFO
+  sees all of them except one placed in no part at all. Such a mistake stays
+  on the Super Admin's list alone, as it already stayed out of every prompt.
+- `GET /ai/availability`: the Anthropic key's hint, when it was set, who set
+  it and "from the environment" now go only to `settings.write`. The CFO is
+  sent them null. The brief only said the page must not draw them; not
+  sending them is the stronger form of the owner's "never a key's hint".
+  `configured`, the route, the model and the reach are unchanged for
+  everybody.
+- `packages/shared/src/ai.ts`: a comment on `keyHint` saying so. No type
+  changed.
+
+**Who reads it:** only the Assistant's own screens. The web still fetches the
+instructions and the mistakes only for `settings.write` (`canConfigure` in
+`knowledge-screen.tsx`), and `keyHint` is drawn only on Settings → Assistant,
+which is the Super Admin's. So nothing on any screen changes until the B2
+code draws the CFO's read-only view.
+
+**Proved:**
+
+- `ai-settings-access.spec.ts` (new, 11 tests): reads every handler's gate
+  off the controller. The four reads behind the settings are `ai.use`; the
+  six writes (key set and clear, model/route/reach, instructions, make a
+  rule, remove a mistake) are `settings.write`; nothing on the controller is
+  ungated. The service, with stubbed rows: the Super Admin is sent the hint,
+  the CFO is not (nor for a key from the environment); the mistakes filter
+  shows HR's shape (Team yes, Accounts no, nowhere no).
+- `.rolecheck.mjs` (git-ignored) against the built API on its own port: a
+  new block of eight doors. CFO: 200 on both reads, **403 on all six
+  writes**, and no hint. HR and the CEO: 403 on all eight. Super Admin: 200
+  on the reads (its writes are not sent; `DELETE /ai/key` would clear a real
+  key). It now takes `API=` for the base, defaulting to :4001.
+- `.assistantlearnqa.mjs` **81/81** (was 70). Section E: the CFO reads the
+  list, sees the Team, plan and count mistakes and not the one placed
+  nowhere; HR 403. New E2: the CFO reads the instructions; a CFO save is 403
+  and nothing is written; model change and key clear 403; HR 403; with a
+  key stored, the Super Admin gets `sk-ant-…0000` and its setter, the CFO
+  gets `keyHint`, `setAt`, `setBy` all null and the route and model.
+- `.assistantmapqa.mjs` **103/103**: its "the CFO does not read the
+  instructions" is now "the CFO reads them too"; HR 403.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 370, up
+  11; shared 382) pass, each on its own exit code.
+
+**Not proved:** the live site. Nothing on it looks different after this
+deploy, which is the point; what to check is below.
+
+**For the owner — on the live site, after the deploy:** nothing to see yet.
+The Assistant, its window and Settings → Assistant look and behave as
+before for both roles. The CFO's view of the settings appears with the B2
+code.
+
+**What the owner has to decide:** nothing for this piece. The next session
+builds the B2 code.
+
+**Seen, not touched:** `sheet-new.png` is still modified in the working copy;
+not this session's.
 
 ## 149. Schema: each conversation keeps its own model — 3 Oct 2026
 

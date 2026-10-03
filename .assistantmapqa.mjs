@@ -478,7 +478,9 @@ try {
   check("the Super Admin reads them", read.status === 200 && read.body?.instructions === before.ai_instructions, `${read.status} ${String(read.body?.instructions).slice(0, 60)}`);
   const readHr = await callHr("GET", "/ai/instructions");
   const readCfo = await callCfo("GET", "/ai/instructions");
-  check("HR and the CFO do not", readHr.status === 403 && readCfo.status === 403, `${readHr.status} ${readCfo.status}`);
+  // B2's permission change (3 Oct 2026): the CFO reads them and saves none.
+  check("the CFO reads them too", readCfo.status === 200 && readCfo.body?.instructions === before.ai_instructions, `${readCfo.status}`);
+  check("HR does not", readHr.status === 403, `${readHr.status}`);
   const settings = await callCfo("GET", "/settings");
   check("and GET /settings carries none of it", settings.status === 200 && !Object.keys(settings.body ?? {}).some((key) => /instruction/i.test(key)), Object.keys(settings.body ?? {}).filter((key) => /instruction/i.test(key)).join(", "));
 

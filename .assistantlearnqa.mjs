@@ -14,7 +14,11 @@
  *      the model and the part, a description's figures masked;
  *   D. what the model is told on the next turn: the answers marked wrong,
  *      each only to a role that may read that part;
- *   E. the owner's list: Super Admin only, with the rule each offers;
+ *   E. the owner's list, with the rule each offers: the CFO reads it too
+ *      (each only about a part they read), HR does not; and the rest behind
+ *      the settings (B2's permission change, 3 Oct 2026): the CFO reads
+ *      the instructions and the model, changes nothing, and is never sent
+ *      the key's hint;
  *   F. "Make this a rule": one line added to the instructions, audited,
  *      never twice, within 4,000 characters; the mistake then leaves the
  *      prompt and its rule is in it;
@@ -328,8 +332,46 @@ try {
   check("each names its part and model, and offers a rule", countMistake?.areaName === "Team" && countMistake?.model === "claude-opus-5" && countMistake?.rule === '"LEARNQA amader total team member kotojon? … jon na?": LEARNQA count ache, Team screen e … jon', JSON.stringify(countMistake?.rule));
   const planMistake = listed.find((m) => m.field === "subscriptionName");
   check("a field's rule reads as the field", planMistake?.areaName === "AI tools and subscriptions" && planMistake?.rule === '"LEARNQA Claude Code er ei masher bill dilam" → subscription: LEARNQA Claude', JSON.stringify(planMistake?.rule));
-  check("the CFO cannot read the list (403)", (await callCfo("GET", "/ai/mistakes")).status === 403);
-  check("nor HR (403)", (await callHr("GET", "/ai/mistakes")).status === 403);
+  check("the Super Admin's list has the one placed in no part", listed.some((m) => m.corrected === "LEARNQA placed nowhere"));
+  // B2's permission change (3 Oct 2026): the CFO reads everything behind the
+  // settings and changes nothing. Each mistake only about a part they read.
+  const cfoList = await callCfo("GET", "/ai/mistakes");
+  const cfoListed = (cfoList.body ?? []).filter((m) => /LEARNQA/.test(`${m.said} ${m.corrected}`));
+  check(
+    "the CFO reads the list too (200): the Team one, the plan's field, the count",
+    cfoList.status === 200 &&
+      cfoListed.some((m) => m.corrected === "LEARNQA team_members diye list koro") &&
+      cfoListed.some((m) => m.field === "subscriptionName") &&
+      cfoListed.some((m) => m.corrected === "LEARNQA count ache, Team screen e … jon"),
+    `${cfoList.status} ${cfoListed.length}`,
+  );
+  check("but not the one placed in no part", !cfoListed.some((m) => m.corrected === "LEARNQA placed nowhere"));
+  check("HR cannot read it (403)", (await callHr("GET", "/ai/mistakes")).status === 403);
+
+  console.log("\nE2. The rest behind the settings: the CFO reads, changes nothing");
+  const cfoRules = await callCfo("GET", "/ai/instructions");
+  check("the CFO reads the owner's instructions (200)", cfoRules.status === 200 && cfoRules.body?.instructions === "LEARNQA rule one.", `${cfoRules.status} ${JSON.stringify(cfoRules.body?.instructions)}`);
+  const cfoSave = await callCfo("PUT", "/ai/instructions", { instructions: "LEARNQA the CFO's rule" });
+  const [rulesKept] = await q(`select ai_instructions from app_settings where id = 1`);
+  check("and cannot save them (403), nothing written", cfoSave.status === 403 && rulesKept.ai_instructions === "LEARNQA rule one.", `${cfoSave.status} ${JSON.stringify(rulesKept.ai_instructions)}`);
+  check("nor change the model (403)", (await callCfo("PATCH", "/ai/settings", { model: "claude-opus-5" })).status === 403);
+  check("nor clear the key (403)", (await callCfo("DELETE", "/ai/key")).status === 403);
+  check("HR reads none of it (403)", (await callHr("GET", "/ai/instructions")).status === 403);
+  const adminSees = await call("GET", "/ai/availability");
+  check("the Super Admin is sent the key's hint and who set it", /0000$/.test(adminSees.body?.keyHint ?? "") && adminSees.body?.setBy === admin.full_name, `${adminSees.body?.keyHint} ${adminSees.body?.setBy}`);
+  const cfoSees = await callCfo("GET", "/ai/availability");
+  check(
+    "the CFO is sent the route and the model, and no hint, date or name",
+    cfoSees.status === 200 &&
+      cfoSees.body?.configured === true &&
+      cfoSees.body?.model === "claude-opus-5" &&
+      cfoSees.body?.provider === "anthropic" &&
+      cfoSees.body?.keyHint === null &&
+      cfoSees.body?.setAt === null &&
+      cfoSees.body?.setBy === null &&
+      !JSON.stringify(cfoSees.body).includes(admin.full_name),
+    JSON.stringify(cfoSees.body),
+  );
 
   /* ------------------------------------------------------------------ */
   console.log("\nF. Make this a rule");

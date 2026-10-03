@@ -58,8 +58,8 @@ import { AiIntakeService } from "./ai-intake.service";
  * through the Assistant (A4).
  *
  * The key endpoints are Super Admin only, and the key travels one way: in. No
- * response from this API ever contains it — only whether one is set and its
- * last four characters.
+ * response from this API ever contains it — only whether one is set and, to
+ * the Super Admin, its last four characters.
  */
 @Controller("ai")
 export class AiIntakeController {
@@ -71,10 +71,11 @@ export class AiIntakeController {
     private readonly confirmer: AiConfirmService,
   ) {}
 
+  /** The key's description goes only to whoever may change it. */
   @Get("availability")
   @RequirePermission("ai.use")
-  availability() {
-    return this.ai.availability();
+  availability(@CurrentUser() actor: AuthenticatedUser) {
+    return this.ai.availability(actor);
   }
 
   @Post("turn")
@@ -307,13 +308,14 @@ export class AiIntakeController {
   /**
    * The owner's instructions for the assistant: read, and saved.
    *
-   * Super Admin alone, both ways. A rule here changes what the assistant
+   * Saving is Super Admin alone. A rule here changes what the assistant
    * drafts for everybody who uses it, so it sits with the other decisions
-   * only they can make; and reading is theirs too until the owner says who
-   * else may (the brief leaves what the CFO sees to them).
+   * only they can make. Reading is anybody's who may use the Assistant: the
+   * CFO sees everything behind its settings and changes nothing (the owner,
+   * 3 Oct 2026). The text is the owner's and holds no key.
    */
   @Get("instructions")
-  @RequirePermission("settings.write")
+  @RequirePermission("ai.use")
   instructions() {
     return this.ai.instructions();
   }
@@ -345,14 +347,18 @@ export class AiIntakeController {
   }
 
   /**
-   * The mistakes, and making one a rule or taking it off: Super Admin
-   * alone, as the instructions are. A rule changes what the Assistant does
-   * for everybody, and the list carries what other people asked.
+   * The mistakes, and making one a rule or taking it off.
+   *
+   * Making a rule and taking one off are Super Admin alone, as saving the
+   * instructions is: a rule changes what the Assistant does for everybody.
+   * Reading the list is the CFO's too (the owner, 3 Oct 2026). It carries
+   * what other people asked, so the service shows them only the mistakes
+   * about a part they may read.
    */
   @Get("mistakes")
-  @RequirePermission("settings.write")
-  mistakes() {
-    return this.ai.mistakes();
+  @RequirePermission("ai.use")
+  mistakes(@CurrentUser() actor: AuthenticatedUser) {
+    return this.ai.mistakes(actor);
   }
 
   @Post("mistakes/:id/rule")

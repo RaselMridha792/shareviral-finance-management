@@ -1015,7 +1015,9 @@ export type AiAvailability = {
   reason: string | null;
   /**
    * "sk-ant-…LTa4" when a key is stored — enough to recognise which key it is,
-   * never enough to use. The key itself never leaves the server.
+   * never enough to use. The key itself never leaves the server. This and the
+   * three after it go only to whoever may change the key (`settings.write`);
+   * anybody else gets them null.
    */
   keyHint?: string | null;
   /** When it was set, and by whom, so a shared credential has an owner. */

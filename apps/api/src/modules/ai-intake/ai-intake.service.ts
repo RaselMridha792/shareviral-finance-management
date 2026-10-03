@@ -349,12 +349,13 @@ export class AiIntakeService {
       },
     });
 
-    return this.availability();
+    return this.availability(actor);
   }
 
   /**
    * The owner's instructions for the assistant, for the screen that edits
-   * them: the text, and when and by whom it was last saved.
+   * them and for the CFO's view of it: the text, and when and by whom it was
+   * last saved.
    */
   async instructions(): Promise<AiInstructions> {
     const [row] = await this.db.client
@@ -421,7 +422,7 @@ export class AiIntakeService {
     return this.instructions();
   }
 
-  async availability(): Promise<AiAvailability> {
+  async availability(actor: AuthenticatedUser): Promise<AiAvailability> {
     const stored = await this.storedKey();
     const route = {
       provider: stored.provider,
@@ -430,14 +431,19 @@ export class AiIntakeService {
 
     // The Anthropic key's own description, whichever way Claude is reached:
     // the Assistant settings still show that key, and may switch back to it.
-    const anthropicKey = stored.key
-      ? {
-          keyHint: hint(stored.key),
-          setAt: stored.setAt ? stored.setAt.toISOString() : null,
-          setBy: stored.setBy,
-          fromEnvironment: stored.fromEnvironment,
-        }
-      : { keyHint: null, setAt: null, setBy: null, fromEnvironment: false };
+    //
+    // Only to whoever may change it. The CFO sees the route and the model
+    // and changes nothing (the owner, 3 Oct 2026), and is never sent a key,
+    // its hint or who set it — not left undrawn by the page, absent.
+    const anthropicKey =
+      stored.key && hasPermission(actor.role, "settings.write")
+        ? {
+            keyHint: hint(stored.key),
+            setAt: stored.setAt ? stored.setAt.toISOString() : null,
+            setBy: stored.setBy,
+            fromEnvironment: stored.fromEnvironment,
+          }
+        : { keyHint: null, setAt: null, setBy: null, fromEnvironment: false };
 
     const unavailable =
       stored.provider === "vertex"
@@ -2171,8 +2177,14 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
   /**
    * The owner's list of mistakes, newest first: both kinds, the rules among
    * them marked, each with the line "Make this a rule" would offer.
+   *
+   * The CFO reads it too, and changes nothing (the owner, 3 Oct 2026). Like
+   * the lessons told to the model, it puts what one person asked in front of
+   * another, so whoever cannot change the settings sees only the mistakes
+   * about a part they may read. One placed in no part stays the Super
+   * Admin's alone.
    */
-  async mistakes(): Promise<AiMistake[]> {
+  async mistakes(actor: AuthenticatedUser): Promise<AiMistake[]> {
     const rows = await this.db.client
       .select({
         id: aiCorrections.id,
@@ -2193,7 +2205,12 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       .orderBy(desc(aiCorrections.createdAt))
       .limit(100);
 
-    return rows.map((row) => {
+    const mayChange = hasPermission(actor.role, "settings.write");
+    const shown = mayChange
+      ? rows
+      : rows.filter((row) => this.mayBeShown(actor, row));
+
+    return shown.map((row) => {
       const target = (AI_TARGETS as readonly string[]).includes(
         row.target ?? "",
       )
