@@ -51,6 +51,7 @@ import {
   AI_ATTACHMENT_TOOL_NAMES,
   AiAttachmentsService,
   attachmentToolsFor,
+  sheetOrTab,
 } from "./ai-attachments.service";
 import { AiChatsService } from "./ai-chats.service";
 import { AiToolsService } from "./ai-tools";
@@ -667,7 +668,8 @@ export class AiIntakeService {
      * about the company's books, which this is not. It still has to belong to
      * them: one that is not is left out, and the tools never see its id.
      *
-     * Several are a Sheet's tabs (A3b), in the Sheet's order.
+     * Several are a Sheet's tabs (A3b) or a workbook's sheets (A3c), in
+     * their own order.
      */
     const attachments: AiAttachment[] = [];
     for (const id of attachmentIdsOf(input)) {
@@ -722,6 +724,7 @@ export class AiIntakeService {
                   .join("\n\n"),
                 kind: "tabs",
                 count: attachments.length,
+                part: sheetOrTab(attachments[0].name),
               }
             : null,
       ),
@@ -795,8 +798,8 @@ export class AiIntakeService {
         // a mistake marked on it later says whose it was (A2b). A plan for
         // Import cannot be made of a Doc's paragraphs: it would put a button
         // on the card that stages rows of text as money.
-        // Nor of several tabs at once: a plan is for one file, and its card
-        // would not say which.
+        // Nor of several tabs or sheets at once: a plan is for one file, and
+        // its card would not say which.
         return {
           ...settled,
           ...(attachments.length > 1 || attachments[0]?.kind === "text"
@@ -1277,7 +1280,8 @@ at the point where it costs them work.
   FILE ATTACHED or DOCUMENT ATTACHED. If a message holds a link and nothing
   below says it was read, it was not: say so, and ask them to attach the file.
   Never say what a link might hold. A Sheet's link that names no tab arrives
-  as every tab, numbered FILE 1, FILE 2 and on.
+  as every tab, numbered FILE 1, FILE 2 and on. An Excel workbook of several
+  sheets, attached or kept in Drive, arrives the same way, a FILE a sheet.
 - You have no memory between conversations beyond what somebody corrected on a
   draft or marked wrong, and the owner's instructions above. A person who
   thinks an answer of yours was wrong can say so with "This was wrong" under
@@ -1516,7 +1520,13 @@ nextQuestion and summary out.`;
     draft?: Record<string, unknown>,
     attachment?:
       | { described: string; kind: "table" | "text" }
-      | { described: string; kind: "tabs"; count: number }
+      | {
+          described: string;
+          kind: "tabs";
+          count: number;
+          /** A Google Sheet's tabs (A3b), or an Excel workbook's sheets (A3c). */
+          part: "tab" | "sheet";
+        }
       | null,
   ): string {
     // A draft this person could not save is not theirs to be offered.
@@ -1547,28 +1557,7 @@ writes it; whatever it does not say, ask.
 
 The totals above were computed from the file, not by you.
 
-WORKING FROM A SHEET'S TABS
-The link named no tab, so every tab of the Sheet was read: ${attachment.count} tabs,
-FILE 1 to FILE ${attachment.count}, in the Sheet's order. Each was read and counted on its own.
-
-  * Every total above is its own tab's, computed in code. Quote it as it is and
-    say which tab it is from. Never add one tab's figures to another's: if a
-    total across the tabs is wanted, give each tab's own total and say that
-    the Sheet was counted tab by tab, so a figure for all of them together is
-    not in it.
-  * A tab may hold a different kind of record from the next: payments on one,
-    people or income on another. Decide what each tab holds from its own
-    columns, and never assume a tab is like the one before it.
-  * The two file tools take file, the tab's number above: read_attachment to
-    see its rows, group_attachment to break its figures down.
-  * An empty tab is empty. Say so if asked; never describe what it holds.
-  * There is no importPlan for several tabs at once, so never send one. Each
-    tab has its own Send to Import on its card. For a tab's rows to go into the
-    books, tell them to press it on that tab's card: the import screen asks for
-    the account and the columns, and shows every row before anything is
-    written. A handful of rows they point to can be drafted as usual (MANY
-    RECORDS AT ONCE), one kind of record to a batch.
-`
+${partsSection(attachment.count, attachment.part)}`
       : attachment
         ? `${attachment.described}
 
@@ -2645,6 +2634,42 @@ function attachmentIdsOf(input: AiIntakeRequest): string[] {
       input.attachmentIds ?? (input.attachmentId ? [input.attachmentId] : []),
     ),
   ];
+}
+
+/**
+ * How several files are worked: a Google Sheet's tabs (A3b), or an Excel
+ * workbook's sheets (A3c). The same rules for both, each in its own word.
+ */
+function partsSection(count: number, part: "tab" | "sheet"): string {
+  const whole = part === "tab" ? "Sheet" : "workbook";
+  const opening =
+    part === "tab"
+      ? `WORKING FROM A SHEET'S TABS
+The link named no tab, so every tab of the Sheet was read: ${count} tabs,`
+      : `WORKING FROM A WORKBOOK'S SHEETS
+The Excel workbook has several sheets, and every one was read: ${count} sheets,`;
+
+  return `${opening}
+FILE 1 to FILE ${count}, in the ${whole}'s order. Each was read and counted on its own.
+
+  * Every total above is its own ${part}'s, computed in code. Quote it as it is and
+    say which ${part} it is from. Never add one ${part}'s figures to another's: if a
+    total across the ${part}s is wanted, give each ${part}'s own total and say that
+    the ${whole} was counted ${part} by ${part}, so a figure for all of them together is
+    not in it.
+  * A ${part} may hold a different kind of record from the next: payments on one,
+    people or income on another. Decide what each ${part} holds from its own
+    columns, and never assume a ${part} is like the one before it.
+  * The two file tools take file, the ${part}'s number above: read_attachment to
+    see its rows, group_attachment to break its figures down.
+  * An empty ${part} is empty. Say so if asked; never describe what it holds.
+  * There is no importPlan for several ${part}s at once, so never send one. Each
+    ${part} has its own Send to Import on its card. For a ${part}'s rows to go into the
+    books, tell them to press it on that ${part}'s card: the import screen asks for
+    the account and the columns, and shows every row before anything is
+    written. A handful of rows they point to can be drafted as usual (MANY
+    RECORDS AT ONCE), one kind of record to a batch.
+`;
 }
 
 function takeString(

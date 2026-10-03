@@ -68,9 +68,9 @@ function savedRows(
 }
 
 /**
- * The Sheet several tabs were read from (A3b), from the names they share:
- * "Expenses 2026 — Jan (tab 1 of 3)" and "Expenses 2026 — Feb (tab 2 of 3)"
- * are of "Expenses 2026".
+ * The Sheet several tabs were read from (A3b), or the workbook several
+ * sheets were (A3c), from the names they share: "Expenses 2026 — Jan (tab 1
+ * of 3)" and "Expenses 2026 — Feb (tab 2 of 3)" are of "Expenses 2026".
  */
 function sheetOf(attachments: AiAttachment[]): string | null {
   let shared = attachments[0]?.name ?? "";
@@ -83,10 +83,22 @@ function sheetOf(attachments: AiAttachment[]): string | null {
   return cut > 0 ? shared.slice(0, cut) : null;
 }
 
-/** What the message box says is attached: the file, or a Sheet's tabs. */
+/**
+ * What several files are, from how each is named: a Google Sheet's tabs, or
+ * an Excel workbook's sheets, "Book.xlsx — Feb (sheet 2 of 3)" (A3c).
+ */
+function partsOf(attachments: AiAttachment[]): "tabs" | "sheets" {
+  return /\(sheet \d+ of \d+(?:, hidden)?\)$/.test(attachments[0]?.name ?? "")
+    ? "sheets"
+    : "tabs";
+}
+
+/** What the message box says is attached: the file, or its tabs or sheets. */
 function attachedLabel(attachments: AiAttachment[]): string | null {
   if (attachments.length < 2) return attachments[0]?.name ?? null;
-  return `${sheetOf(attachments) ?? "A Google Sheet"} · ${attachments.length} tabs`;
+  const parts = partsOf(attachments);
+  const whole = parts === "sheets" ? "A workbook" : "A Google Sheet";
+  return `${sheetOf(attachments) ?? whole} · ${attachments.length} ${parts}`;
 }
 
 /** Said when a conversation was never kept, so nothing on it can be confirmed. */
@@ -119,7 +131,10 @@ export function AssistantScreen({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
-  /** One upload, or every tab of a Sheet read by its link (A3b). */
+  /**
+   * One file, or every tab of a Sheet read by its link (A3b), or every sheet
+   * of an Excel workbook (A3c).
+   */
   const [attachments, setAttachments] = useState<AiAttachment[]>([]);
   const [attaching, setAttaching] = useState(false);
   /** A Google link in the message being read, before the message goes. */
@@ -247,7 +262,7 @@ export function AssistantScreen({
     setAttaching(true);
     setError(null);
     try {
-      setAttachments([await aiApi.attach(file)]);
+      setAttachments(await aiApi.attach(file));
     } catch (caught) {
       setError(explain(caught, "That file could not be read."));
     } finally {
@@ -494,7 +509,10 @@ export function AssistantScreen({
     }
   }
 
-  /** The Sheet, when the files are its tabs: named once, above their cards. */
+  /**
+   * The Sheet, when the files are its tabs, or the workbook, when they are
+   * its sheets: named once, above their cards.
+   */
   const sheet = attachments.length > 1 ? sheetOf(attachments) : null;
 
   // A draft has its own card; a link beside it would be a second thing to
@@ -567,15 +585,16 @@ export function AssistantScreen({
             />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
-              {/* A Sheet read whole (A3b): a card a tab, each with its own
-                  rows, columns and totals, never one card for the lot. */}
+              {/* A Sheet read whole (A3b), or a workbook (A3c): a card a tab
+                  or a sheet, each with its own rows, columns and totals,
+                  never one card for the lot. */}
               {attachments.length ? (
                 <div className="flex flex-col gap-3">
                   {sheet ? (
                     <p className="text-xs text-muted-foreground">
                       {sheet} ·{" "}
-                      <span className="num">{attachments.length}</span> tabs,
-                      each read and counted on its own
+                      <span className="num">{attachments.length}</span>{" "}
+                      {partsOf(attachments)}, each read and counted on its own
                     </p>
                   ) : null}
                   {attachments.map((attachment) => (

@@ -35,7 +35,8 @@ export function AttachmentCard({
   /**
    * What the card is headed, when not the file's whole name: one of a
    * Sheet's tabs (A3b) under the line that names the Sheet is headed by the
-   * tab alone, so a phone shows which tab rather than the Sheet again.
+   * tab alone, so a phone shows which tab rather than the Sheet again. A
+   * workbook's sheets (A3c) the same.
    */
   label?: string;
   /** Where the assistant worked out these rows should go, if it got that far. */
@@ -45,7 +46,10 @@ export function AttachmentCard({
   onRemove?: () => void;
 }) {
   const truncated = attachment.storedRows < attachment.rowCount;
-  /** A Sheet's tab with nothing under its headings (A3b), shown as such. */
+  /**
+   * A Sheet's tab (A3b) or a workbook's sheet (A3c) with nothing under its
+   * headings, shown as such.
+   */
   const empty = attachment.rowCount === 0;
 
   if (attachment.kind === "text") {

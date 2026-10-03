@@ -139,6 +139,8 @@ export class AiIntakeController {
    * down from here — this is the one place that holds both services.
    *
    * It belongs to whoever attached it, like the conversation it sits in.
+   * A list of them: one, or every sheet of an Excel workbook that has
+   * several (A3c), as a Sheet's link gives every tab.
    */
   @Post("attachments")
   @HttpCode(200)

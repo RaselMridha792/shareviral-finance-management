@@ -20,7 +20,8 @@ import { GOOGLE_READ_SCOPES, googleAuth, type ServiceAccount } from "./google";
  *   each on its own, when the link names none (A3b);
  * - a Doc: its paragraphs, in order;
  * - a file kept in Drive (.xlsx, .csv, .pdf): its bytes, which then go through
- *   the upload's own reader, the PDF transcription included.
+ *   the upload's own reader, the PDF transcription included, and every sheet
+ *   of a workbook (A3c).
  *
  * Every refusal is a sentence the person can act on: most often, sharing the
  * file with the account's address.
@@ -177,19 +178,10 @@ class Reader {
     );
     // An .xlsx opened in Sheets without being converted is still a Drive
     // file, and the Sheets API will not read it. Drive will, through the
-    // upload's reader, which takes a workbook's first sheet. A link to
-    // another tab of it says so in the name rather than pass that sheet off
-    // as the tab.
-    if (!fromDrive && notNative(meta)) {
-      const read = await this.drive(id, 1);
-      if (gid !== undefined && read.kind === "file") {
-        return {
-          ...read,
-          name: read.name.replace(/(\.[^.]+)$/, " (first sheet)$1"),
-        };
-      }
-      return read;
-    }
+    // upload's reader, which reads every sheet of a workbook (A3c), each
+    // named with its place. A `gid` in such a link cannot be matched to a
+    // sheet, so it reads them all, as the same link with no gid would.
+    if (!fromDrive && notNative(meta)) return this.drive(id, 1);
     if (meta.status !== 200) throw this.refused("Google Sheets API", meta);
 
     const title = text(record(meta.body?.properties).title) || "Google Sheet";

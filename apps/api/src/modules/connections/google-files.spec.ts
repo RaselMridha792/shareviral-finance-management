@@ -393,15 +393,15 @@ describe("a Google Sheet", () => {
     expect(got.kind === "file" && got.name).toBe("Bank July.xlsx");
     expect(got.kind === "file" && got.buffer.toString()).toBe("PK-xlsx-bytes");
 
-    // The upload's reader takes a workbook's first sheet: a link to another
-    // tab says so rather than pass that sheet off as the tab.
+    // The upload's reader reads every sheet of a workbook (A3c), each named
+    // with its place. A gid cannot be matched to one of them, so a link to a
+    // tab is the whole file, as it is, under its own name.
     const tab = await read(
       `https://docs.google.com/spreadsheets/d/${SHEET}/edit#gid=99`,
       fetcher,
     );
-    expect(tab.kind === "file" && tab.name).toBe(
-      "Bank July (first sheet).xlsx",
-    );
+    expect(tab.kind === "file" && tab.name).toBe("Bank July.xlsx");
+    expect(tab.kind === "file" && tab.buffer.toString()).toBe("PK-xlsx-bytes");
   });
 });
 

@@ -105,8 +105,11 @@ export const aiApi = {
    * Multipart, so this cannot go through `apiFetch` — setting a JSON
    * content-type would strip the boundary the server needs to find the file.
    * The cookie and the CSRF header still travel.
+   *
+   * A list: the file, or every sheet of an Excel workbook that has several,
+   * an attachment each, in the workbook's order (A3c).
    */
-  attach: async (file: File): Promise<AiAttachment> => {
+  attach: async (file: File): Promise<AiAttachment[]> => {
     const body = new FormData();
     body.append("file", file);
 
@@ -127,7 +130,7 @@ export const aiApi = {
       );
     }
 
-    return response.json() as Promise<AiAttachment>;
+    return response.json() as Promise<AiAttachment[]>;
   },
 
   /**

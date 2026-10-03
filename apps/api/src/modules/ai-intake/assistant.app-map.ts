@@ -68,7 +68,7 @@ export const ASSISTANT_MAP = [
           file: "a CSV, Excel or PDF file, up to 5 MB",
         },
         onSave:
-          "Reads the file into rows and totals, for the Assistant to answer from. Nothing enters the books.",
+          "Reads the file into rows and totals, for the Assistant to answer from. An Excel workbook of several sheets is read sheet by sheet, each counted on its own with a card of its own, an empty sheet shown as empty. Nothing enters the books.",
       },
       {
         name: "Paste a Google link",
@@ -81,7 +81,7 @@ export const ASSISTANT_MAP = [
           url: "the link from the file's Share button; the chat finds it in the message",
         },
         onSave:
-          "Reads the file with the Google Cloud service account, before the message goes: a Sheet's tab as rows and totals (the tab the link names, or else every tab, each counted on its own with a card of its own), a Doc as its text, an Excel, CSV or PDF file in Drive as if it had been attached. A file not shared with the account's address is refused with that address to share it with. Nothing enters the books.",
+          "Reads the file with the Google Cloud service account, before the message goes: a Sheet's tab as rows and totals (the tab the link names, or else every tab, each counted on its own with a card of its own), a Doc as its text, an Excel, CSV or PDF file in Drive as if it had been attached (every sheet of a workbook, each on its own). A file not shared with the account's address is refused with that address to share it with. Nothing enters the books.",
       },
       {
         name: "Remove this file",

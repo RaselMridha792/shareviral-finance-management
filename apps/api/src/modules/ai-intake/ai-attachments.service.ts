@@ -8,6 +8,7 @@ import {
   AI_ATTACHMENT_EXTENSIONS,
   AI_ATTACHMENT_MAX_BYTES,
   AI_DOC_SUFFIX,
+  AI_MAX_ATTACHMENTS,
   type AiAttachment,
   type AiAttachmentColumn,
   findGoogleLinks,
@@ -28,7 +29,7 @@ import {
   type GoogleRead,
 } from "../connections/google-files";
 import type { RawRow } from "../imports/row-parser";
-import { readSpreadsheet } from "../imports/spreadsheet";
+import { readWorkbook, type WorkbookSheet } from "../imports/spreadsheet";
 import type { ModelTool } from "./model-turn";
 
 /**
@@ -140,6 +141,10 @@ export class AiAttachmentsService {
    * service for `describe` and `runTool`. Injecting it back would close the
    * circle. The caller has both, so the caller supplies the one function this
    * needs, and a spreadsheet upload never touches the assistant at all.
+   *
+   * An Excel workbook of several sheets comes back as every sheet (A3c),
+   * each an attachment of its own, as a Google Sheet's tabs do; anything else
+   * as one.
    */
   async upload(
     file: { originalname: string; buffer: Buffer },
@@ -147,7 +152,7 @@ export class AiAttachmentsService {
     readPdf?: (
       buffer: Buffer,
     ) => Promise<{ headers: string[]; rows: RawRow[] }>,
-  ): Promise<AiAttachment> {
+  ): Promise<AiAttachment[]> {
     const extension = file.originalname
       .slice(file.originalname.lastIndexOf("."))
       .toLowerCase();
@@ -165,11 +170,67 @@ export class AiAttachmentsService {
       );
     }
 
-    const { headers, rows } = pdf
-      ? await readPdf!(file.buffer)
-      : await readSpreadsheet(file.buffer);
+    const sheets: WorkbookSheet[] = pdf
+      ? [{ name: "", hidden: false, ...(await readPdf!(file.buffer)) }]
+      : await readWorkbook(file.buffer);
 
-    return this.keep(file.originalname, headers, rows, actor);
+    // One sheet is read as a workbook always was: named by the file alone,
+    // and refused the same ways.
+    if (sheets.length < 2) {
+      const [only] = sheets;
+      return [
+        await this.keep(
+          file.originalname,
+          only?.headers ?? [],
+          only?.rows ?? [],
+          actor,
+        ),
+      ];
+    }
+    return this.keepSheets(file.originalname, sheets, actor);
+  }
+
+  /**
+   * A workbook's every sheet (A3c), each kept as an attachment of its own, as
+   * a Google Sheet's tabs are (`keepTabs`).
+   *
+   * Each is named with its place among the sheets, and said to be hidden if
+   * it is, so nobody takes one sheet for the whole workbook. An empty sheet
+   * is kept and shown as empty. A workbook too large to read whole is
+   * refused rather than cut short, with the same limits as a Sheet's tabs.
+   */
+  private async keepSheets(
+    filename: string,
+    sheets: WorkbookSheet[],
+    actor: AuthenticatedUser,
+  ): Promise<AiAttachment[]> {
+    if (sheets.length > AI_MAX_ATTACHMENTS) {
+      throw new BadRequestException(
+        `"${filename}" has ${sheets.length} sheets. The Assistant reads up to ${AI_MAX_ATTACHMENTS} at once: copy the sheets you mean into a workbook of their own and attach that.`,
+      );
+    }
+    const rows = sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
+    if (!rows) {
+      throw new BadRequestException(
+        `"${filename}" has no rows under a heading row on any of its ${sheets.length} sheets.`,
+      );
+    }
+    if (rows > MAX_ROWS) {
+      throw new BadRequestException(
+        `"${filename}" has ${rows.toLocaleString("en-US")} rows across its ${sheets.length} sheets. The Assistant reads up to ${MAX_ROWS.toLocaleString("en-US")} at once: split it into smaller workbooks and attach them one at a time.`,
+      );
+    }
+
+    return this.keepTabs(
+      sheets.map((sheet, at) => ({
+        name: `${filename} — ${sheet.name} (sheet ${at + 1} of ${sheets.length}${
+          sheet.hidden ? ", hidden" : ""
+        })`,
+        headers: sheet.headers,
+        rows: sheet.rows,
+      })),
+      actor,
+    );
   }
 
   /**
@@ -180,8 +241,9 @@ export class AiAttachmentsService {
    * `upload` itself, a Doc as its paragraphs. From here on nothing can tell a
    * link from an upload except a Doc's name.
    *
-   * A Sheet whose link names no tab comes back as every tab (A3b), each an
-   * attachment of its own; anything else as one.
+   * A Sheet whose link names no tab comes back as every tab (A3b), and an
+   * Excel workbook kept in Drive as every sheet (A3c), each an attachment of
+   * its own; anything else as one.
    *
    * Gated like an upload, on owning what is made. The account can read
    * whatever was shared with it; this reads one file, by its id, and only
@@ -233,13 +295,11 @@ export class AiAttachmentsService {
     }
 
     if (read.kind === "file") {
-      return [
-        await this.upload(
-          { originalname: read.name, buffer: read.buffer },
-          actor,
-          readPdf,
-        ),
-      ];
+      return this.upload(
+        { originalname: read.name, buffer: read.buffer },
+        actor,
+        readPdf,
+      );
     }
     if (read.kind === "text") {
       return [
@@ -256,7 +316,8 @@ export class AiAttachmentsService {
   }
 
   /**
-   * A Sheet's tabs, each kept as an attachment of its own, in one statement.
+   * A Sheet's tabs, or a workbook's sheets (A3c), each kept as an attachment
+   * of its own, in one statement.
    *
    * One statement gives them one `created_at`, which is how a conversation
    * reopened knows them for one Sheet (`forChat`). An empty tab is kept too,
@@ -340,9 +401,9 @@ export class AiAttachmentsService {
 
   /**
    * The files a conversation was last about, for when it is reopened: the
-   * last upload, or every tab of the last Sheet, which were kept in one
-   * statement and so share its moment to the microsecond (`keepTabs`). In
-   * the Sheet's own order.
+   * last upload, or every tab of the last Sheet (every sheet of the last
+   * workbook), which were kept in one statement and so share its moment to
+   * the microsecond (`keepTabs`). In the Sheet's own order.
    */
   async forChat(
     chatId: string,
@@ -411,11 +472,11 @@ export class AiAttachmentsService {
   describe(attachment: AiAttachment, number?: number): string {
     if (attachment.kind === "text") return this.describeDoc(attachment);
 
-    // One of several (a Sheet's tabs, A3b): numbered, so the tools can be
-    // told which.
+    // One of several (a Sheet's tabs, A3b; a workbook's sheets, A3c):
+    // numbered, so the tools can be told which.
     const heading = `FILE${number ? ` ${number}` : ""} ATTACHED: ${attachment.name}`;
     if (!attachment.rowCount) {
-      return `${heading}\nThis tab is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.`;
+      return `${heading}\nThis ${sheetOrTab(attachment.name)} is empty: no rows under a heading row. Nothing in it was read, and it has nothing to total.`;
     }
 
     const lines = [
@@ -669,9 +730,23 @@ export class AiAttachmentsService {
 
 /* -------------------------------------------------------------------------- */
 
-/** A Sheet's tab's place among its tabs, from its name; 0 for anything else. */
+/** "(tab 2 of 3)", "(sheet 3 of 3, hidden)": where one of several files sits. */
+const PLACE = /\((tab|sheet) (\d+) of \d+(?:, hidden)?\)$/;
+
+/**
+ * A Sheet's tab's place among its tabs, or a workbook's sheet's among its
+ * sheets, from its name; 0 for anything else.
+ */
 function placeOf(name: string): number {
-  return Number(/\(tab (\d+) of \d+(?:, hidden)?\)$/.exec(name)?.[1] ?? 0);
+  return Number(PLACE.exec(name)?.[2] ?? 0);
+}
+
+/**
+ * What one of several files is: a Google Sheet's "tab" (A3b) or an Excel
+ * workbook's "sheet" (A3c), from its name. The model is told in that word.
+ */
+export function sheetOrTab(name: string): "tab" | "sheet" {
+  return PLACE.exec(name)?.[1] === "sheet" ? "sheet" : "tab";
 }
 
 function toDto(row: {

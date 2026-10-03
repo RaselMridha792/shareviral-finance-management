@@ -39,6 +39,9 @@
  *   J. "Added by the assistant", 3 Oct 2026 (A4b)  — asked where its entries
  *      are, All transactions and the Origin filter; asked for the button,
  *      Confirm and save, never a bare Save
+ *   K. an Excel workbook's sheets, 3 Oct 2026 (A3c) — attached whole, a file
+ *      a sheet: each sheet's total as its own, never added together; one
+ *      sheet's rows asked for, nothing from the other and no account
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -264,8 +267,10 @@ async function attach(name, buffer, type) {
   const res = await fetch(`${API}/ai/attachments`, { method: "POST", headers: auth, body });
   const json = await res.json().catch(() => null);
   if (res.status !== 200) return { status: res.status, problem: json?.message ?? `status ${res.status}` };
-  made.attachments.add(json.id);
-  return { status: 200, attachment: json };
+  // A list since A3c: the file, or every sheet of a workbook that has several.
+  const files = Array.isArray(json) ? json : [json];
+  for (const file of files) made.attachments.add(file.id);
+  return { status: 200, attachment: files[0], attachments: files };
 }
 
 /**
@@ -893,6 +898,71 @@ CASES.push(
         rows.some((row) => row.amount !== undefined && [120000, 35000].some((n) => amountIs(row.amount, n))) ? "drafted the Income tab's money" : null,
         rows.some((row) => row.amount !== undefined && ![4500, 640].some((n) => amountIs(row.amount, n))) ? "an amount the Payments tab does not hold" : null,
         rows.some(hasAccount) ? `filled in the account: ${rows.find(hasAccount).accountName ?? rows.find(hasAccount).accountId}` : null,
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      const how = reply.batch ? `${rows.length} drafts, no account` : /send to import/i.test(said) ? "pointed to Send to Import" : "asked";
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : how, said };
+    },
+  },
+);
+
+/*
+ * K. A3c, 3 Oct 2026: an Excel workbook of several sheets arrives as every
+ * sheet, each a file of its own, as a Sheet's tabs do (H8, H9). Attached
+ * through the real endpoint, which needs no model: what is held to is the
+ * model's part, each sheet's total as its own and nothing drafted from the
+ * wrong sheet, under the workbook's own wording.
+ */
+async function bookOfTwo() {
+  const book = new ExcelJS.Workbook();
+  const payments = book.addWorksheet("Payments");
+  payments.addRow(["Date", "Paid to", "Amount"]);
+  for (const row of TAB_ROWS.payments) payments.addRow([row.Date, row["Paid to"], Number(row.Amount)]);
+  const income = book.addWorksheet("Income");
+  income.addRow(["Date", "Received from", "Received"]);
+  for (const row of TAB_ROWS.income) income.addRow([row.Date, row["Received from"], Number(row.Received)]);
+  const file = await attach("Barqa Book 2026.xlsx", Buffer.from(await book.xlsx.writeBuffer()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  if (file.problem) return { problem: file.problem };
+  const names = file.attachments.map((f) => f.name).join(" | ");
+  return names === "Barqa Book 2026.xlsx — Payments (sheet 1 of 2) | Barqa Book 2026.xlsx — Income (sheet 2 of 2)"
+    ? { ids: file.attachments.map((f) => f.id) }
+    : { problem: `the workbook came back as ${names}` };
+}
+CASES.push(
+  {
+    id: "K1", runs: LIGHT, name: "an Excel workbook's two sheets: each sheet's total as its own, never the two added together",
+    run: async () => {
+      const { ids, problem } = await bookOfTwo();
+      if (problem) return { error: problem };
+      const { reply, failed } = await talk(["ei file e total koto taka?"], ids);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const held = [5140, 155000, 4500, 640, 120000, 35000, 2026];
+      const invented = figuresIn(said).filter((n) => n > 31 && !held.includes(n) && n !== 160140);
+      const wrong = [
+        says(said, 5140) ? null : "left out the Payments sheet's 5,140",
+        says(said, 155000) ? null : "left out the Income sheet's 1,55,000",
+        says(said, 160140) ? "added the two sheets together (1,60,140)" : null,
+        invented.length ? `said figures the workbook does not hold: ${invented.join(", ")}` : null,
+        reply.target || reply.batch || reply.importPlan ? "drafted something" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "each sheet's own total", said };
+    },
+  },
+  {
+    id: "K2", runs: LIGHT, name: "an Excel workbook's two sheets: 'Payments sheet boi te tolo' - nothing from Income, no account made up",
+    run: async () => {
+      const { ids, problem } = await bookOfTwo();
+      if (problem) return { error: problem };
+      const { reply, failed } = await talk(["Payments sheet er entry gulo boi te tule dao"], ids);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const rows = reply.batch?.rows ?? (reply.target ? [reply.draft] : []);
+      const wrong = [
+        rows.some((row) => row.amount !== undefined && [120000, 35000].some((n) => amountIs(row.amount, n))) ? "drafted the Income sheet's money" : null,
+        rows.some((row) => row.amount !== undefined && ![4500, 640].some((n) => amountIs(row.amount, n))) ? "an amount the Payments sheet does not hold" : null,
+        rows.some(hasAccount) ? `filled in the account: ${rows.find(hasAccount).accountName ?? rows.find(hasAccount).accountId}` : null,
+        reply.importPlan ? "sent a plan for Import, which several sheets never have" : null,
         claimsDone(said) ? "said it was recorded" : null,
       ].filter(Boolean);
       const how = reply.batch ? `${rows.length} drafts, no account` : /send to import/i.test(said) ? "pointed to Send to Import" : "asked";

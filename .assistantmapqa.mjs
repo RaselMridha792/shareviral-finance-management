@@ -91,6 +91,9 @@ const callHr = callAs(tokenFor(hr));
 const callCfo = callAs(tokenFor(cfo));
 
 const results = [];
+// A wait left pending when the browser closes must not end the run before
+// the settings it changed are put back (it did, twice, 3 Oct 2026).
+process.on("unhandledRejection", (error) => console.log(`  (a wait gave up: ${error?.message ?? error})`));
 const check = (name, pass, detail) => {
   results.push(Boolean(pass));
   console.log(`  ${pass ? "ok  " : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);

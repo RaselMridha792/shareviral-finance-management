@@ -14,21 +14,69 @@ export async function readSpreadsheet(buffer: Buffer): Promise<{
   headers: string[];
   rows: RawRow[];
 }> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = await loadWorkbook(buffer);
+  // Not xlsx — try CSV, which many banks still hand out.
+  if (!workbook) return readDelimited(buffer.toString("utf8"));
 
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { headers: [], rows: [] };
+  return readSheet(sheet);
+}
+
+/** One sheet of a workbook: its name, whether it is hidden, and its rows. */
+export type WorkbookSheet = {
+  name: string;
+  hidden: boolean;
+  headers: string[];
+  rows: RawRow[];
+};
+
+/**
+ * Every sheet of a workbook, in the workbook's own order (A3c, 3 Oct 2026).
+ *
+ * The Assistant reads a workbook whole, as it reads a Google Sheet's tabs:
+ * each sheet on its own, by the rules `readSpreadsheet` applies to the first.
+ * An empty sheet is one too, with no rows, so the count of sheets read is the
+ * count the workbook has. A chart on a sheet of its own has no cells, and
+ * exceljs does not list it. A CSV is one sheet, with no name.
+ *
+ * The Import screen still reads the first sheet alone, through
+ * `readSpreadsheet`.
+ */
+export async function readWorkbook(buffer: Buffer): Promise<WorkbookSheet[]> {
+  const workbook = await loadWorkbook(buffer);
+  if (!workbook) {
+    return [
+      { name: "", hidden: false, ...readDelimited(buffer.toString("utf8")) },
+    ];
+  }
+
+  return workbook.worksheets.map((sheet) => ({
+    name: sheet.name,
+    // "veryHidden" is a sheet Excel's own menus cannot show; it is hidden too.
+    hidden: sheet.state !== "visible",
+    ...readSheet(sheet),
+  }));
+}
+
+/** The workbook in the bytes, or null when they are not an .xlsx. */
+async function loadWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook | null> {
+  const workbook = new ExcelJS.Workbook();
   try {
     // exceljs types this against its own Buffer declaration, which no longer
     // lines up with Node's generic Buffer<ArrayBufferLike>.
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    return workbook;
   } catch {
-    // Not xlsx — try CSV, which many banks still hand out.
-    const text = buffer.toString("utf8");
-    return readDelimited(text);
+    return null;
   }
+}
 
-  const sheet = workbook.worksheets[0];
-  if (!sheet) return { headers: [], rows: [] };
-
+/** A sheet's first row as the headings, and every row under it with a value. */
+function readSheet(sheet: ExcelJS.Worksheet): {
+  headers: string[];
+  rows: RawRow[];
+} {
   const headers: string[] = [];
   sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, column) => {
     headers[column - 1] = (cellText(cell.value) ?? "").trim();
