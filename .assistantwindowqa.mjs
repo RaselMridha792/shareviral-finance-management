@@ -111,6 +111,13 @@ const [advice] = await q(`select id from bank_advices order by created_at limit 
 /*  A stand-in for the model: it says what it is told to, when it is told    */
 /* ------------------------------------------------------------------------ */
 
+/**
+ * Worth asking (4 Oct 2026, .assistantaskallqa.mjs): a draft is not ready
+ * while a field its page shows is neither filled nor left empty on purpose.
+ * The stand-in leaves them all empty on purpose unless a case says
+ * otherwise, so the checks below go on measuring what they were written for.
+ */
+const LEFT_EMPTY = ["invoiceNo", "reference", "loginEmail", "userNames", "boughtFor", "invoice", "employeeCode", "designation", "employmentType", "department"];
 let answer = null;
 let delay = 0;
 const asked = [];
@@ -119,7 +126,7 @@ const stub = http.createServer((req, res) => {
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", () => {
     asked.push(JSON.parse(raw || "{}"));
-    const input = answer ?? { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
+    const input = answer ? { skipped: LEFT_EMPTY, ...answer } : { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
     setTimeout(() => {
       res.writeHead(200, { "content-type": "application/json", "request-id": "req_windowqa" });
       res.end(

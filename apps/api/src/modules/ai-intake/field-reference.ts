@@ -116,6 +116,32 @@ export const NOT_FOR_THE_MODEL_ON: Partial<
   subscription_payment: ["advanceRenewal"],
 };
 
+/**
+ * Keys a draft has that its schema does not, each standing in for one it
+ * does, as `accountName` stands in for `accountId` (4 Oct 2026).
+ *
+ * Who is on a plan is `users`, a list of team members' ids the model cannot
+ * know. It gives their names instead, as the person said them, and the app
+ * finds each on Team (draft-check.ts). Asked because the plan's row shows
+ * them under User Name, which read "N/A" on the plan the owner had the
+ * Assistant buy.
+ */
+export const STAND_IN_FIELDS: Partial<
+  Record<AiTarget, Record<string, { for: string; note: string }>>
+> = {
+  subscription: {
+    userNames: {
+      for: "users",
+      note: "the people on the team who use the plan — their names as Team has them, a comma between two",
+    },
+  },
+};
+
+/** Whether this kind of record has this key in place of a schema field. */
+export function isStandIn(target: AiTarget, key: string): boolean {
+  return Boolean(STAND_IN_FIELDS[target]?.[key]);
+}
+
 /** Whether the model may fill this key in, on this kind of record. */
 export function forTheModel(target: AiTarget, key: string): boolean {
   return (
@@ -199,6 +225,10 @@ export function fieldReferenceFor(target: AiTarget): string {
     );
   }
 
+  for (const [name, standIn] of Object.entries(STAND_IN_FIELDS[target] ?? {})) {
+    rows.push({ name, required: false, note: standIn.note });
+  }
+
   const width = Math.max(...rows.map((r) => r.name.length));
   const line = (r: Described) =>
     `  ${r.name.padEnd(width)}  ${r.required ? "REQUIRED" : "optional"}  ${r.note}`;
@@ -257,7 +287,18 @@ const FIELD_NOTES: Partial<
     startDate: {
       note: "the day it was bought, YYYY-MM-DD. Its first payment is recorded on that day.",
     },
-    boughtFor: { note: "who or which team it is for, in their words" },
+    boughtFor: {
+      note: "the department it is for, in their words — on the page, User Department",
+    },
+    loginEmail: {
+      note: "the email or account the plan is signed in with — on the page, Login accounts",
+    },
+    invoiceNo: {
+      note: "the invoice's number, exactly as printed on it. Never made up.",
+    },
+    reference: {
+      note: "what the card or bank statement calls the charge, as they said it",
+    },
     accountName: {
       required: true,
       note: "the card or account it is paid from — its name, exactly as listed above. The price comes out of it when the plan is saved.",

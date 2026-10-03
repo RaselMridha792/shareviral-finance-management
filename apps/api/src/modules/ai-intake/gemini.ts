@@ -25,7 +25,7 @@ import type { ModelCall, ModelTool, TurnModel } from "./model-turn";
  *   tool_choice tool  -> mode ANY, allowedFunctionNames: [that one]
  *   tool_use          -> a `functionCall` part, role "model"
  *   tool_result       -> a `functionResponse` part, role "user"
- *   document block    -> `inlineData`, application/pdf
+ *   document block    -> `inlineData`, application/pdf or the picture's type
  *   cache_control     -> nothing: Google caches a repeated prefix on its own
  *
  * The client is anything with `models`, so a test can hand one in.
@@ -164,8 +164,8 @@ export function geminiModel(client: GeminiClient, model: string): TurnModel {
               parts: [
                 {
                   inlineData: {
-                    mimeType: "application/pdf",
-                    data: request.pdf.toString("base64"),
+                    mimeType: request.mimeType,
+                    data: request.file.toString("base64"),
                   },
                 },
                 { text: request.instruction },

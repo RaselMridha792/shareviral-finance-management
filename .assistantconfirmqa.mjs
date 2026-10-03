@@ -134,6 +134,13 @@ if (!PLAIN || !INCOME || !TOOLING) throw new Error("The local books need a plain
 /*  A stand-in for the model: it says what it is told to                     */
 /* ------------------------------------------------------------------------ */
 
+/**
+ * Worth asking (4 Oct 2026, .assistantaskallqa.mjs): a draft is not ready
+ * while a field its page shows is neither filled nor left empty on purpose.
+ * The stand-in leaves them all empty on purpose unless a case says
+ * otherwise, so the checks below go on measuring what they were written for.
+ */
+const LEFT_EMPTY = ["invoiceNo", "reference", "loginEmail", "userNames", "boughtFor", "invoice", "employeeCode", "designation", "employmentType", "department"];
 let answer = null;
 const asked = [];
 const stub = http.createServer((req, res) => {
@@ -141,7 +148,7 @@ const stub = http.createServer((req, res) => {
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", () => {
     asked.push(JSON.parse(raw || "{}"));
-    const input = answer ?? { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
+    const input = answer ? { skipped: LEFT_EMPTY, ...answer } : { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
     res.writeHead(200, { "content-type": "application/json", "request-id": "req_confirmqa" });
     res.end(
       JSON.stringify({

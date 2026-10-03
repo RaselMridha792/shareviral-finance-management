@@ -36,6 +36,7 @@ import {
   type AiKnowledge,
   type AiMistake,
   type AiIntakeRequest,
+  type AiInvoiceReading,
   type AiDataAccess,
   type AiKeyResult,
   type AiMessage,
@@ -63,6 +64,7 @@ import { geminiModel } from "./gemini";
 import { GeminiError, explainGeminiError } from "./gemini-errors";
 import {
   claudeModel,
+  type DocumentMime,
   type ModelCallResult,
   type ModelTool,
   type TurnModel,
@@ -80,7 +82,9 @@ import {
   partOf,
   partsDrafting,
   renderAppMap,
+  renderWorthAsking,
   screenOf,
+  worthAskingFor,
 } from "./app-map";
 import {
   NAME_FIELDS,
@@ -95,17 +99,29 @@ import {
   categoryMatches,
   checkDraft,
   claimsItIsDone,
+  fieldLabel,
   knowsField,
   nameOf,
   namesIn,
+  namesListed,
   planLabels,
   plansNamed,
   tidyDraft,
   underHeading,
   type NameMatch,
   type NameMatches,
+  type PeopleMatches,
   type PlanOnFile,
 } from "./draft-check";
+import { readInvoicePaper } from "./invoice-reading";
+import {
+  SKIP_LINE,
+  askingLead,
+  askingLines,
+  openFieldsOf,
+  skipsAll,
+  stillAsked,
+} from "./worth-asking";
 import {
   areaOf,
   claimOn,
@@ -140,6 +156,7 @@ import {
   appSettings,
   categories,
   subscriptions,
+  teamMembers,
   users,
 } from "../../db/schema";
 
@@ -747,6 +764,12 @@ export class AiIntakeService {
       if (found) attachments.push(found);
     }
     const attachmentIds = attachments.map((attachment) => attachment.id);
+    /** A plan's invoice attached in the chat: what was read off it (4 Oct). */
+    const invoice = attachments.find(
+      (attachment) => attachment.kind === "invoice",
+    )?.invoice;
+    /** Left empty on purpose on an earlier turn, or on the card. */
+    const skippedBefore = new Set(input.skipped ?? []);
 
     /**
      * The recent part of the conversation, oldest dropped rather than refused.
@@ -780,6 +803,7 @@ export class AiIntakeService {
         corrections,
         input.target,
         this.carried(input.target, input.draft, plans),
+        [...skippedBefore],
         attachments.length === 1
           ? {
               described: this.attachments.describe(attachments[0]),
@@ -857,22 +881,36 @@ export class AiIntakeService {
           continue;
         }
 
+        /*
+         * Left empty on purpose: what was skipped before, what the model
+         * heard skipped now, and — when the answer to the list is just
+         * "skip" — every field it asked (4 Oct 2026).
+         */
+        const skipped = new Set([...skippedBefore, ...skippedOf(answer.input)]);
+        const skipRest = Boolean(
+          asked.lastAnswer?.includes(SKIP_LINE) && skipsAll(said),
+        );
+
         const settled = await this.settle(reply, {
           accountNames: context.accounts.map((account) => account.name),
           draftOpen,
           plans,
           refusal,
           said,
+          skipped,
+          skipRest,
+          invoice,
         });
         // Which model answered goes on the conversation with the answer, so
         // a mistake marked on it later says whose it was (A2b). A plan for
-        // Import cannot be made of a Doc's paragraphs: it would put a button
-        // on the card that stages rows of text as money.
+        // Import cannot be made of a Doc's paragraphs, or of an invoice: it
+        // would put a button on the card that stages rows of text as money.
         // Nor of several tabs or sheets at once: a plan is for one file, and
         // its card would not say which.
         return {
           ...settled,
-          ...(attachments.length > 1 || attachments[0]?.kind === "text"
+          ...(attachments.length > 1 ||
+          (attachments[0] && attachments[0].kind !== "table")
             ? { importPlan: null }
             : {}),
           model: modelId,
@@ -924,6 +962,17 @@ export class AiIntakeService {
     buffer: Buffer,
   ): Promise<{ headers: string[]; rows: RawRow[] }> {
     return readPdfStatement(this.client(await this.route()), buffer);
+  }
+
+  /**
+   * Reads a plan's invoice for its number, date, seller and total
+   * (4 Oct 2026), with the default model, as a PDF statement is read.
+   */
+  async readInvoice(
+    buffer: Buffer,
+    mimeType: DocumentMime,
+  ): Promise<AiInvoiceReading> {
+    return readInvoicePaper(this.client(await this.route()), buffer, mimeType);
   }
 
   /**
@@ -1426,8 +1475,9 @@ Both are records of AI tools and subscriptions, and both show on that page.
 - If the tool they name is under PLANS ON FILE, "kinlam", "bill dilam" and
   "renew korlam" all most likely mean this month's payment for it. Ask which
   it is rather than adding a second plan.
-- An upgrade, a pause, a cancellation, or who is on a plan: you cannot draft
-  these. Say they are done from the plan's row.
+- An upgrade, a pause, a cancellation, or who is on a plan already on file:
+  you cannot draft these. Say they are done from the plan's row. Who is on a
+  NEW plan is userNames on its draft.
 
 The currency is BDT unless the person says otherwise.
 
@@ -1477,6 +1527,18 @@ FIELDS THAT COME IN PAIRS
 The list above shows each field on its own, so it cannot show these. Each one
 below is refused at save time even though both fields read as optional.
 ${pairedFields()}
+
+WORTH ASKING
+Fields Save does not need but the record's page shows: left empty, each reads
+"N/A" there, and the owner wants them filled. The app asks for every one still
+empty, in the same message as what Save needs. Fill whatever they tell you,
+under these keys:
+${renderWorthAsking()}
+On a plan, userNames is the people on the team who use it, by name, a comma
+between two; the app finds each on Team. The invoice is a file and cannot be
+typed: attached, it arrives below as INVOICE ATTACHED, and its number goes in
+invoiceNo exactly as read. Never put a value in one of these that they did
+not give you.
 
 MANY RECORDS AT ONCE
 When somebody has a file — or a message — holding several records of the SAME
@@ -1564,13 +1626,18 @@ Never use one to fill in a field on a plain payment.
 ${context.plans.join("\n") || "(none yet)"}
 
 HOW TO ASK
-Say in a few words what you understood, then ask for ONE missing thing, in a
-short sentence: "EXPROVIA theke 5,000 taka, internet bill — kon category te
-jabe?" Do not list everything you still need; it reads like a form and they
-will stop.
+Once you know which record it is, everything still open is asked in ONE
+message: the owner's rule, so they can answer all of it at once. You do not
+write the list. Put in nextQuestion one short sentence of what you understood,
+in their register, with no question in it: "EXPROVIA theke 5,000 taka,
+internet bill." The app writes the list under it: every field Save still
+needs, then every WORTH ASKING field still empty.
+They answer in one message. Take every answer in it. If they say skip, nai,
+lagbe na or khali rakho about a field, leave it out of 'draft' and put its key
+in 'skipped': it is left empty on purpose and not asked again.
 If what they said could be more than one account, category or person, do not
 pick one. Name the ones it could be, exactly as the books have them, and ask
-which.
+which: that one question on its own, before the rest.
 Never invent a value to fill a gap. An amount you were not told is the single
 most damaging thing you can produce here — leave it missing and ask.
 usdRate is one of these, and it is the easiest to get wrong: you know roughly
@@ -1594,8 +1661,10 @@ nextQuestion and summary out.`;
     corrections: string,
     target?: AiTarget,
     draft?: Record<string, unknown>,
+    /** Left empty on purpose: not asked about again (4 Oct 2026). */
+    skipped: string[] = [],
     attachment?:
-      | { described: string; kind: "table" | "text" }
+      | { described: string; kind: "table" | "text" | "invoice" }
       | {
           described: string;
           kind: "tabs";
@@ -1618,8 +1687,19 @@ ${barred.length ? `Their role cannot save: ${barred.join(", ")}. Do not draft th
 ${corrections}
 
 ${
-  attachment?.kind === "text"
+  attachment?.kind === "invoice"
     ? `${attachment.described}
+
+THE PLAN'S INVOICE
+This file was attached as the invoice for the plan being drafted. When a new
+plan (subscription) is confirmed, the file becomes that plan's invoice;
+nothing else is done with it, and for any other record it is attached to
+nothing: say so if they seem to expect otherwise. Use what was read off it
+only for invoiceNo. If its total or its date differ from what they told you,
+say so in your sentence; do not change their figures yourself.
+`
+    : attachment?.kind === "text"
+      ? `${attachment.described}
 
 WORKING FROM A DOCUMENT
 Answer from the text above, and read_attachment for the rest of it. A
@@ -1628,14 +1708,14 @@ want records made from it, draft them as usual: one record, or several of the
 same kind at once (MANY RECORDS AT ONCE). Every figure exactly as the document
 writes it; whatever it does not say, ask.
 `
-    : attachment?.kind === "tabs"
-      ? `${attachment.described}
+      : attachment?.kind === "tabs"
+        ? `${attachment.described}
 
 The totals above were computed from the file, not by you.
 
 ${partsSection(attachment.count, attachment.part)}`
-      : attachment
-        ? `${attachment.described}
+        : attachment
+          ? `${attachment.described}
 
 WORKING FROM A FILE
 Answer from the summary and the two file tools. The totals were computed from
@@ -1673,11 +1753,12 @@ with what it would become, the duplicates flagged, and can undo the whole batch
 afterwards.
 One row, or a handful they read out to you, is different — draft that as usual.
 `
-        : ""
+          : ""
 }
 ${target ? `They are recording: ${target}. Stay on it unless they clearly change subject.` : "Work out which one they mean. If it is genuinely ambiguous, set clarification and ask."}
 
-${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(draft, null, 2)}\nKeep these unless they correct one.` : ""}`;
+${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(draft, null, 2)}\nKeep these unless they correct one.` : ""}
+${skipped.length ? `Left empty on purpose: ${skipped.join(", ")}. Do not ask about these again; fill one in only if they now give it.` : ""}`;
   }
 
   /** Trust nothing from the model: shape it, or drop it. */
@@ -1780,6 +1861,12 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       refusal: Refusal | null;
       /** What the person typed last. */
       said: string;
+      /** Fields left empty on purpose, this turn or before (4 Oct 2026). */
+      skipped: ReadonlySet<string>;
+      /** The answer to the list was "skip": every field it asked is skipped. */
+      skipRest: boolean;
+      /** A plan's invoice attached in the chat: what was read off it. */
+      invoice: AiInvoiceReading | undefined;
     },
   ): Promise<AiIntakeReply> {
     const { accountNames, draftOpen, plans, refusal } = books;
@@ -1868,11 +1955,28 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
           ? "out"
           : undefined;
     const tidy = tidyDraft(reply.draft);
+    // A plan's invoice number, read off the invoice attached in the chat,
+    // when the model left it out (4 Oct 2026). Read, not guessed: the
+    // reading leaves a number it could not make out empty.
+    if (target === "subscription" && books.invoice?.number && !tidy.invoiceNo) {
+      tidy.invoiceNo = books.invoice.number;
+    }
     const matches: NameMatches = {};
     for (const { field, said: name } of namesIn(target, tidy)) {
       matches[field.name] = await this.named(field, name, way, plans);
     }
-    const checked = checkDraft(target, tidy, matches, accountNames, plans);
+    const people =
+      target === "subscription" && tidy.userNames
+        ? await this.peopleNamed(namesListed(tidy.userNames))
+        : {};
+    const checked = checkDraft(
+      target,
+      tidy,
+      matches,
+      accountNames,
+      plans,
+      people,
+    );
 
     /*
      * A plan renews once a month, and its endpoint refuses a second renewal.
@@ -1927,42 +2031,93 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
       .map(nameOf)
       .filter((field) => knowsField(target, field))
       .filter((field) => !(field in checked.draft));
-    const missingFields = [
+    const missing = [
       ...new Set([...checked.problems.map((p) => p.field), ...asked]),
     ];
 
-    if (!missingFields.length) {
+    /*
+     * Every field still open, asked at once (4 Oct 2026): what Save needs,
+     * then what the page shows and the owner expects filled. A field left
+     * empty on purpose stays on the card, marked, and is not asked again;
+     * "skip" as the whole answer to the list leaves every one it asked.
+     */
+    const worth = worthAskingFor(target);
+    let open = openFieldsOf({
+      target,
+      draft: checked.draft,
+      problems: checked.problems,
+      missing,
+      worth,
+      skipped: books.skipped,
+      invoiceGiven: books.invoice !== undefined,
+      labelOf: fieldLabel,
+      askFor: (field) => askFor(field, target),
+    });
+    if (books.skipRest) {
+      open = open.map((field) =>
+        field.required ? field : { ...field, skipped: true },
+      );
+    }
+    const asking = stillAsked(open);
+    const settled: AiIntakeReply = {
+      ...reply,
+      draft: checked.draft,
+      // What Save needs. What is merely worth asking is in `open`.
+      missingFields: open
+        .filter((field) => field.required)
+        .map((field) => field.field),
+      open,
+      clarification: null,
+    };
+    const heard = !draftOpen && notes.length ? `${notes.join(" ")} ` : "";
+
+    // A choice between real names is asked on its own: the rest may hang on
+    // which one it is.
+    const choice = checked.problems.find(
+      (problem) =>
+        problem.choice &&
+        !open.some((field) => field.field === problem.field && field.skipped),
+    );
+    if (choice) {
       return {
-        ...reply,
-        draft: checked.draft,
-        missingFields,
+        ...settled,
+        nextQuestion: `${heard}${choice.question}`,
+        summary: null,
+      };
+    }
+
+    // Ready. What was left empty on purpose is marked so on the card.
+    if (!asking.length) {
+      return {
+        ...settled,
         nextQuestion: null,
-        clarification: null,
         summary: [...notes, AI_DRAFT_READY_LINE].join(" "),
       };
     }
 
-    // Its own question, in the person's own register, when it has one. The
-    // code's otherwise: about the first thing the schema refused.
-    const own = reply.nextQuestion ?? reply.clarification;
-    const coded =
-      checked.problems[0]?.question ?? askFor(missingFields[0], target);
-    // With no question of its own, what it did say may be the answer to
-    // something asked along the way. It is kept, ahead of the question —
-    // unless it says the thing is done.
+    // Its own sentence, in the person's own register, when it has one, and
+    // the list under it. With none, what it did say may be the answer to
+    // something asked along the way: kept, ahead of the list — unless it
+    // says the thing is done.
+    //
+    // With nothing Save needs left, a question of its own is no lead for the
+    // list: it is "save kore dibo?", or the one-at-a-time habit asking what
+    // the list asks anyway. A sentence of what it understood still is.
+    const needsMore = asking.some((field) => field.required);
+    const own = [reply.nextQuestion, reply.clarification].find(
+      (text): text is string =>
+        typeof text === "string" &&
+        !claimsItIsDone(text, true) &&
+        (needsMore || !text.trim().endsWith("?")),
+    );
     const aside =
       !own && reply.summary && !claimsItIsDone(reply.summary, true)
         ? `${reply.summary} `
         : "";
-    const heard = !draftOpen && notes.length ? `${notes.join(" ")} ` : "";
+    const lead = own ?? `${aside}${askingLead(asking)}`;
     return {
-      ...reply,
-      draft: checked.draft,
-      missingFields,
-      nextQuestion: `${heard}${
-        own && !claimsItIsDone(own, true) ? own : `${aside}${coded}`
-      }`,
-      clarification: null,
+      ...settled,
+      nextQuestion: `${heard}${lead}\n${askingLines(asking)}`,
       summary: null,
     };
   }
@@ -2613,7 +2768,19 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
         .limit(50)
     ).map((account) => account.name);
 
-    const checked = checkDraft(target, tidy, matches, accountNames, plans);
+    const people =
+      target === "subscription" && tidy.userNames
+        ? await this.peopleNamed(namesListed(tidy.userNames))
+        : {};
+
+    const checked = checkDraft(
+      target,
+      tidy,
+      matches,
+      accountNames,
+      plans,
+      people,
+    );
     if (checked.problems.length) {
       throw new BadRequestException(
         `Not saved. ${checked.problems.map((problem) => problem.question).join(" ")}`,
@@ -2621,6 +2788,34 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
     }
 
     return { body: checked.body, draft: checked.draft };
+  }
+
+  /**
+   * Who on Team each name could be (4 Oct 2026): the one spelled exactly so,
+   * or else every one whose name contains it. Among the people working or on
+   * leave — the ones the Add subscription form offers to put on a plan.
+   */
+  private async peopleNamed(names: string[]): Promise<PeopleMatches> {
+    const found: PeopleMatches = {};
+    for (const name of names.slice(0, 20)) {
+      const rows = await this.db.client
+        .select({ id: teamMembers.id, name: teamMembers.fullName })
+        .from(teamMembers)
+        .where(
+          and(
+            isNull(teamMembers.deletedAt),
+            inArray(teamMembers.status, ["active", "on_leave"]),
+            ilike(teamMembers.fullName, `%${name}%`),
+          ),
+        )
+        .orderBy(asc(teamMembers.fullName))
+        .limit(12);
+      const exact = rows.filter(
+        (row) => row.name.trim().toLowerCase() === name.toLowerCase(),
+      );
+      found[name.toLowerCase()] = exact.length ? exact : rows;
+    }
+    return found;
   }
 
   /**
@@ -2759,6 +2954,21 @@ FILE 1 to FILE ${count}, in the ${whole}'s order. Each was read and counted on i
 `;
 }
 
+/**
+ * The fields the model heard left empty on purpose (4 Oct 2026): keys only,
+ * as many as a form has. What is not text is read as not said.
+ */
+function skippedOf(raw: Record<string, unknown>): string[] {
+  return Array.isArray(raw.skipped)
+    ? raw.skipped
+        .filter(
+          (key): key is string =>
+            typeof key === "string" && /^[A-Za-z]{1,64}$/.test(key),
+        )
+        .slice(0, 40)
+    : [];
+}
+
 function takeString(
   source: Record<string, unknown>,
   key: string,
@@ -2887,6 +3097,12 @@ const REPLY_SCHEMA = {
     clarification: {
       type: "string",
       description: "Ask this when you cannot tell what they are recording.",
+    },
+    skipped: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "The keys of fields they said to leave empty — skip, nai, lagbe na. Each is left out of 'draft' and not asked again.",
     },
     batch: {
       type: "object",

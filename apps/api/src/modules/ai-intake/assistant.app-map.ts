@@ -81,6 +81,18 @@ export const ASSISTANT_MAP = [
           "Reads the file into rows and totals, for the Assistant to answer from. An Excel workbook of several sheets is read sheet by sheet, each counted on its own with a card of its own, an empty sheet shown as empty. A workbook whose rows are all on one sheet is read as that sheet, one card, its empty sheets named under it. Nothing enters the books.",
       },
       {
+        name: "Attach the invoice",
+        on: "/assistant",
+        opens:
+          "the paperclip with a picture, or with a PDF while a plan is the draft; or Attach on the draft card's Invoice line",
+        saves: ["POST /ai/attachments/invoice"],
+        fields: {
+          file: "a PDF or a picture (PNG, JPG, WebP) of the invoice, up to 5 MB",
+        },
+        onSave:
+          "Reads the invoice's number, date, seller and total off it, for the Assistant to fill in the plan's invoice number. The file stays in the browser and becomes the plan's invoice when the plan is confirmed, as the Add subscription form attaches one. Nothing enters the books.",
+      },
+      {
         name: "Paste a Google link",
         on: "/assistant",
         opens:

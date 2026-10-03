@@ -5,6 +5,7 @@ import {
   NAME_FIELDS,
   TARGET_SCHEMAS,
   forTheModel,
+  isStandIn,
   nameFieldsFor,
   type NameField,
 } from "./field-reference";
@@ -63,11 +64,23 @@ export type PlanOnFile = {
 
 export type NameMatches = Partial<Record<NameField["name"], NameMatch[]>>;
 
+/**
+ * The people on Team each name in a plan's `userNames` could be, by the
+ * name as it was said, in lower case (4 Oct 2026).
+ */
+export type PeopleMatches = Record<string, NameMatch[]>;
+
 export type DraftProblem = {
   /** The draft's own key for it: `categoryName`, never `categoryId`. */
   field: string;
   /** Asked when the model has no question of its own. */
   question: string;
+  /**
+   * A choice between real names — two accounts called alike, two people of
+   * one name — or between a renewal and a new plan. Asked on its own, before
+   * anything else (4 Oct 2026): the rest of the list can wait for it.
+   */
+  choice?: boolean;
 };
 
 export type CheckedDraft = {
@@ -130,6 +143,18 @@ export function tidyDraft(
   const out: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(draft)) {
+    // A list of names, sent as one: "Rasel, Nizam" is how the card holds it.
+    if (
+      Array.isArray(value) &&
+      value.every((item) => typeof item === "string")
+    ) {
+      const joined = value
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join(", ");
+      if (joined) out[key] = joined;
+      continue;
+    }
     if (typeof value !== "string" && typeof value !== "number") {
       if (typeof value === "boolean") out[key] = String(value);
       continue;
@@ -364,11 +389,17 @@ export function checkDraft(
   accountNames: string[],
   /** The plans on file: a new plan is held against them, a renewal offered them. */
   plans: PlanOnFile[] = [],
+  /** Who on Team each name in a plan's `userNames` could be. */
+  people: PeopleMatches = {},
 ): CheckedDraft {
   const schema = TARGET_SCHEMAS[target];
   const fields = nameFieldsFor(target);
   const draft: Record<string, string> = { ...tidy };
   const problems = new Map<string, string>();
+  /** The problems that are a choice between real names, asked on their own. */
+  const choices = new Set<string>();
+  /** The people a plan's `userNames` were found to be, in the order said. */
+  const onPlan: NameMatch[] = [];
   const notes: string[] = [];
   const found: Partial<Record<NameField["name"], NameMatch>> = {};
   /** A transfer still short of an account: its description is not asked for. */
@@ -404,6 +435,10 @@ export function checkDraft(
     }
 
     delete draft[field.name];
+    // Several real names, or a plan that is not on file: which record this
+    // is hangs on the answer — a renewal of one on file, or a new plan — so
+    // nothing else is worth asking until it is given.
+    if (candidates.length || field.kind === "plan") choices.add(field.name);
     problems.set(
       field.name,
       candidates.length
@@ -472,6 +507,7 @@ export function checkDraft(
         (plan) => draft.planName && sameName(plan.planName, draft.planName),
       );
       if (!draft.planName) {
+        choices.add("planName");
         problems.set(
           "planName",
           `${draft.toolName} is on file already: ${onFile}. Is this a renewal, or a new plan? If it is new, which plan is it?`,
@@ -485,6 +521,45 @@ export function checkDraft(
           `${sameTool[0].toolName} is on file already: ${onFile}. If this is its renewal, say so. If that plan was changed to this one, that is an Upgrade, on the plan's row. Otherwise this is added as a second plan.`,
         );
       }
+    }
+  }
+
+  /*
+   * Who is on a plan, by name (4 Oct 2026): each found on Team, as an
+   * account's name is found among the accounts. One name two people share is
+   * a choice, asked on its own; a name nobody has is asked again. The ones
+   * found stay on the card, as Team spells them.
+   */
+  if (target === "subscription" && draft.userNames) {
+    const unclear: string[] = [];
+    const nobody: string[] = [];
+    for (const said of namesListed(draft.userNames)) {
+      const candidates = people[said.toLowerCase()] ?? [];
+      if (candidates.length === 1) {
+        if (!onPlan.some((person) => person.id === candidates[0].id)) {
+          onPlan.push(candidates[0]);
+        }
+      } else if (candidates.length) {
+        unclear.push(
+          `"${said}" could be ${listed(candidates.map((c) => c.name))}.`,
+        );
+      } else {
+        nobody.push(said);
+      }
+    }
+    if (onPlan.length) {
+      draft.userNames = onPlan.map((person) => person.name).join(", ");
+    } else {
+      delete draft.userNames;
+    }
+    if (unclear.length) {
+      choices.add("userNames");
+      problems.set("userNames", `${unclear.join(" ")} Which one?`);
+    } else if (nobody.length) {
+      problems.set(
+        "userNames",
+        `There is nobody on Team called ${listed(nobody.map((name) => `"${name}"`))}. Who did you mean? Or say skip.`,
+      );
     }
   }
 
@@ -619,6 +694,13 @@ export function checkDraft(
   const body = (): Record<string, unknown> => {
     const sent: Record<string, unknown> = { ...draft };
     for (const field of NAME_FIELDS) delete sent[field.name];
+    // The people on a plan, by their ids on Team.
+    if (target === "subscription") {
+      delete sent.userNames;
+      if (onPlan.length) {
+        sent.users = onPlan.map((person) => ({ teamMemberId: person.id }));
+      }
+    }
     for (const field of fields) {
       const match = found[field.name];
       if (match) sent[field.id] = match.id;
@@ -697,7 +779,11 @@ export function checkDraft(
   return {
     draft,
     problems: [...problems.entries()]
-      .map(([field, question]) => ({ field, question }))
+      .map(([field, question]) =>
+        choices.has(field)
+          ? { field, question, choice: true }
+          : { field, question },
+      )
       .sort((a, b) => askOrder(a.field) - askOrder(b.field)),
     notes,
     body: body(),
@@ -740,8 +826,18 @@ export function nameOf(key: string): string {
 export function knowsField(target: AiTarget, field: string): boolean {
   return (
     field in TARGET_SCHEMAS[target].shape ||
-    nameFieldsFor(target).some((known) => known.name === field)
+    nameFieldsFor(target).some((known) => known.name === field) ||
+    isStandIn(target, field)
   );
+}
+
+/** "Rasel, Nizam and Tania": each name once, in the order said. */
+export function namesListed(text: string): string[] {
+  const names = text
+    .split(/\s*(?:,|;|\n|\band\b|&|\bar\b|\bo\b)\s*/i)
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return [...new Set(names)];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -881,7 +977,18 @@ const LABELS: Record<string, string> = {
   costUsd: "Price in dollars",
   costBdt: "Price in taka",
   startDate: "Start date",
+  // As the plan's row heads them.
+  userNames: "User Name",
+  loginEmail: "Login accounts",
+  boughtFor: "User Department",
+  invoiceNo: "Invoice no.",
+  reference: "Reference",
 };
+
+/** A field as the page heads it: "USD rate", "Login accounts". */
+export function fieldLabel(field: string): string {
+  return labelOf(field);
+}
 
 function labelOf(field: string): string {
   const named = LABELS[field];

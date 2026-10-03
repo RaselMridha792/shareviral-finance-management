@@ -99,39 +99,17 @@ export const aiApi = {
   clearChats: () =>
     apiFetch<{ deleted: number }>("/ai/chats", { method: "DELETE" }),
 
+  /** Attaching a spreadsheet or a PDF statement: see `uploadFor`. */
+  attach: (file: File): Promise<AiAttachment[]> =>
+    uploadFor("/ai/attachments", file),
+
   /**
-   * Attaching a file.
-   *
-   * Multipart, so this cannot go through `apiFetch` — setting a JSON
-   * content-type would strip the boundary the server needs to find the file.
-   * The cookie and the CSRF header still travel.
-   *
-   * A list: the file, or every sheet of an Excel workbook that has several,
-   * an attachment each, in the workbook's order (A3c).
+   * A plan's invoice, a PDF or a picture (4 Oct 2026): read on the server
+   * for its number, and kept as that reading. The file itself is not kept
+   * there: the page holds it, and uploads it to the plan on Confirm.
    */
-  attach: async (file: File): Promise<AiAttachment[]> => {
-    const body = new FormData();
-    body.append("file", file);
-
-    const response = await fetch(`${API_BASE_URL}/ai/attachments`, {
-      method: "POST",
-      headers: { "X-Requested-With": "finance-web" },
-      credentials: "include",
-      body,
-    });
-
-    if (!response.ok) {
-      const problem = (await response.json().catch(() => null)) as {
-        message?: string;
-      } | null;
-      throw new ApiError(
-        problem?.message ?? "That file could not be read.",
-        response.status,
-      );
-    }
-
-    return response.json() as Promise<AiAttachment[]>;
-  },
+  attachInvoice: (file: File): Promise<AiAttachment[]> =>
+    uploadFor("/ai/attachments/invoice", file),
 
   /**
    * A Google Sheet, Doc or Drive file, read by its link (A3). The server
@@ -186,3 +164,35 @@ export const aiApi = {
       ...json({ chatId, row }),
     }),
 };
+
+/**
+ * A file sent to be read: one upload, or every sheet of an Excel workbook
+ * that has several, an attachment each, in the workbook's order (A3c).
+ *
+ * Multipart, so this cannot go through `apiFetch` — setting a JSON
+ * content-type would strip the boundary the server needs to find the file.
+ * The cookie and the CSRF header still travel.
+ */
+async function uploadFor(path: string, file: File): Promise<AiAttachment[]> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "X-Requested-With": "finance-web" },
+    credentials: "include",
+    body,
+  });
+
+  if (!response.ok) {
+    const problem = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new ApiError(
+      problem?.message ?? "That file could not be read.",
+      response.status,
+    );
+  }
+
+  return response.json() as Promise<AiAttachment[]>;
+}

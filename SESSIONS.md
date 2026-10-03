@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 155 | **The Assistant asks about every field at once: what Save needs, then every column the page shows as "N/A" — Login accounts, User Name, User Department, Invoice, Reference on a plan; "skip" leaves one empty; an invoice attached in the chat becomes the plan's invoice** | **built** — piece 1 of the brief of 4 Oct; **the owner tries it on the live site: the messages are in #155.** Next is piece 2 (B3's code: what it spends) |
 | 154 | **Sign-in: Cloudflare Turnstile before the password** | **on, live, 4 Oct** — the owner made the widget `SFM finance sign-in` (app.hellonizam.com, Managed), set both keys on the server and signed in through it ("Success — you are verified"). How to switch it off is in STATUS.md |
 | 153 | **HR Requests: approving a spend asks "pay it now?" — Pay now opens the payment, Pay later puts it on a new To pay tab** | **built** — the brief of 3 Oct; **the owner tries it on the live site: the steps are in #153.** Pushed after 0483bf9 (Turnstile, -12) and B3's schema (-ab), one push at a time |
 | 152 | **Schema: what the Assistant spends — `ai_usage`, a row per model call, and `app_settings.ai_monthly_limit_usd`** | **done** — pushed alone, the schema half of B3. The owner's answers: the limit is in dollars of estimated cost, one for the whole company. **Next: the B3 code** (recording, the report, the limit, the usage panel); what it needs is in the brief |
@@ -132,6 +133,141 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 155. The Assistant asks about every field at once — 4 Oct 2026
+
+`docs/briefs/2026-10-04-assistant-asks-everything-and-b3.md`, **piece 1**. The
+owner had the Assistant buy a Claude plan; it was saved, and its row on AI
+tools and subscriptions read "N/A" for Invoice, Reference, Login accounts,
+User name and User department. Nobody had been asked: *"sobgula field somporke
+ekebarei jigges kore ney."* No schema, permission or deploy change.
+
+**The owner's two answers (asked this session):** shared code is approved
+for both pieces (`packages/shared/src/ai.ts`, `apps/web/src/lib/ai.ts`; only
+the Assistant's screens read either). And **Confirm and save stays off until
+each field is answered or left empty on purpose** — the other choice was to
+let Confirm through with them empty.
+
+**What the owner now has:**
+
+- **One message, all of it.** Once it is known which record it is, the reply
+  is the model's one sentence and, under it, a line for every field still
+  open: what Save needs first, then what the page shows, by the page's own
+  heading, then "Answer them all in one message. Say skip for any you want
+  left empty." The list is written by the code (`worth-asking.ts`), not the
+  model, so it cannot leave one out.
+- **Asked on its own, as before:** a choice between real names (two
+  accounts or two people called alike), a tool already on file ("renewal or
+  new plan?"), and a renewal of a plan that is not on file.
+- **"Skip"** — said of a field in the answer (the model returns it in
+  `skipped`), "Leave empty" on the card, or "skip" / "nai" / "baki gula
+  skip" as the whole answer to the list — leaves it empty on purpose. It is
+  carried from turn to turn (`skipped` on the request) and never asked again.
+  "nai" after any other question skips nothing.
+- **Worth asking, per form, in the app map** (`AppForm.worthAsking`):
+  - a new plan: Login accounts (`loginEmail`), User Name (who on Team uses
+    it, `userNames`, found on Team by name and saved as the plan's
+    `users`), User Department (`boughtFor`), Invoice (the file), Reference;
+    the invoice's number only when the file is attached and it could not be
+    read off it;
+  - a payment, a receipt and a transfer: the ledger's Invoice and Reference;
+  - a new person: Employee ID, Designation, Employment type, Department;
+  - a renewal, a vendor, a challan: nothing — their pages show none of
+    theirs empty.
+- **The draft card is the whole form**: what was filled, plus an empty box
+  for every open field with its question under it and **Leave empty**
+  beside it (gone once something is typed). The header says "Still to
+  answer: …" by the page's headings. Confirm waits for all of them.
+- **An invoice attached in the chat** — a picture always, a PDF while a new
+  plan is the draft — is read by the model for its number, date, seller and
+  total (`invoice-reading.ts`, `POST /ai/attachments/invoice`), shown as an
+  Invoice card, and its number goes in `invoiceNo` (by the code, if the
+  model leaves it out). The file itself stays in the browser and is
+  uploaded to the plan on Confirm through the plan's own upload (`POST
+  /files/subscription/:id`, kind invoice), as the Add subscription form
+  does; the chat then says "The invoice is attached to it." The card's
+  Invoice line can attach it too. Reopened from History, the reading is
+  there but the file is not, and the card asks for it again.
+
+**Where it differs from the brief:**
+
+- The plan's **Invoice column shows only an attached invoice file**
+  (`invoice_no` is not drawn there — the owner's "Invoice a sudhu upload"),
+  so the file is what is asked for, and the number only when it cannot be
+  read. The invoice number is still searched and kept.
+- **User Department is `boughtFor`**, not a team member's department: that
+  is what the column prints.
+- Website and Notes are not asked: neither is a column on the register.
+- The server does not hold the worth-asking fields at Confirm: empty optional
+  fields are a valid record, and the card's button is the gate the owner
+  chose.
+- A PDF attached before any plan is drafted is still read as a statement.
+
+**Proved** (stand-in model, the real pages on `next dev`, the built API):
+
+- `.assistantaskallqa.mjs` (new) **53/53**:
+  - API: the five by their headings; Save's fields first, then the five; two
+    people of one name asked alone; a name nobody on Team has asked again in
+    the list; skip on one; skip carried; "skip" as the whole answer; "nai"
+    to another question skips nothing; a picture read as the invoice and
+    handed to the model as an image; its number into `invoiceNo`; a PDF
+    with no readable number: the number asked; a CSV refused; an invoice
+    refused by Import; a payment's Invoice and Reference; a person's four.
+  - Confirm through the API: the plan holds the answers, and the person
+    found on Team is on it.
+  - The page: the list in the chat; the card with the four empty boxes and
+    the Invoice line, Confirm off, "Still to answer: Login accounts, User
+    Name, User Department, Invoice, Reference"; the invoice attached with the
+    paperclip, its card, its number in the box; the answers; Confirm; the
+    upload (201); **the plan's row with no N/A in the five columns**. A
+    second plan with Reference skipped in the chat: **N/A under Reference
+    alone**. A payment's card: one box typed, Leave empty on the other,
+    Confirm on; the skip carried by the next message. 390px: nothing
+    sideways. No page error.
+- The earlier harnesses, one at a time: `.assistantdraftqa` 57/57,
+  `.assistantmapqa` 103/103, `.assistantconfirmqa` 60/60,
+  `.assistantwindowqa` 33/33 (`SKIP_SWEEP=1`), `.assistantlearnqa` 81/81,
+  `.assistantexcelqa` 35/35, `.assistantlinkqa` 60/60, `.assistantoriginqa`
+  31/31, `.assistantsettingsqa` 51/51, `.assistantemptyqa` 26/26.
+  - Four of them (draft, map, confirm, window) now have their stand-in
+    leave every worth-asking field empty unless a case says otherwise
+    (`LEFT_EMPTY`), and seven checks that read the one-question wording read
+    the list.
+  - Learn and Excel failed once in the batch with a 500 and a page that
+    would not load; both pass alone. The dev watcher was rebuilding
+    `apps/api/dist` mid-run. **Run the API harnesses with no watcher writing
+    to dist.**
+- Unit tests: `worth-asking.spec.ts` (30), `invoice-reading.spec.ts` (3),
+  two in `app-map.spec.ts`. The four CI steps green, each on its own exit
+  code: lint has its 2 old warnings; tests are API 435 (up 35) and shared
+  386.
+- `.assistantbar.mjs` gains **O1** and **O2**, the owner's case for the live
+  model. Not run: no key locally.
+
+**For the owner — on the live site, after the deploy.** Reload first.
+
+| # | Type this | What should come back |
+|---|---|---|
+| 1 | `Claude Max subscription kinlam aaj, $100, <your card's name> theke, rate 122` | One reply with a line each for **Login accounts, User Name, User Department, Invoice, Reference**, and "Say skip for any you want left empty". The card shows those as empty boxes; **Confirm and save is grey** |
+| 2 | Press the paperclip and attach the invoice (a PDF or a screenshot) | An **Invoice** card: its number, seller and total as read. On the draft card the Invoice line shows the file's name and the number is in "Invoice no." |
+| 3 | `login ops@shareviral.cash, user <a name from Team>, department Engineering, reference skip` | Login, User Name and Department filled on the card, Reference marked **Left empty**. Nothing more asked; Confirm can be pressed |
+| 4 | Press **Confirm and save** | "Saved — a new plan … **The invoice is attached to it.**" |
+| 5 | Open AI tools and subscriptions | That row: Login accounts, User Name, User Department filled; Invoice shows **View**; Reference **N/A** (it was skipped) |
+| 6 | New chat: `courier bill 500 taka dilam <account> theke, office supplies, rate 122` | The list asks **Invoice** and **Reference**; type `skip` alone: the draft is ready |
+| 7 | New chat: `Rasel ke team e add koro, joined 1 Oct` (any name) | The list asks Employee ID, Designation, Employment type, Department with what the form needs |
+
+What must **not** happen: a value in any of the five that nobody said; the
+same field asked twice after "skip"; Confirm on before each line is answered
+or left empty.
+
+**What the owner has to decide:** nothing for piece 1. Easy to change: the
+payment forms asking Invoice and Reference every time (they may be enough
+work to want only on plans), and a picture always read as an invoice.
+
+**Seen, not touched:**
+- AI tools and subscriptions logs a React duplicate-key warning (`none`) on
+  every load (the dev overlay counts 12 issues). Not this piece's.
+- `sheet-new.png` is still modified in the working copy. Not this session's.
 
 ## 154. Sign-in: Cloudflare Turnstile before the password — 3 Oct 2026
 

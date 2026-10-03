@@ -8,11 +8,15 @@ import {
   AI_ATTACHMENT_EXTENSIONS,
   AI_ATTACHMENT_MAX_BYTES,
   AI_DOC_SUFFIX,
+  AI_INVOICE_SUFFIX,
   AI_MAX_ATTACHMENTS,
+  AI_PAPER_EXTENSIONS,
   type AiAttachment,
   type AiAttachmentColumn,
+  type AiInvoiceReading,
   findGoogleLinks,
   isDocAttachment,
+  isInvoiceAttachment,
   isPdfAttachment,
 } from "@finance/shared";
 import { and, eq, max } from "drizzle-orm";
@@ -30,7 +34,17 @@ import {
 } from "../connections/google-files";
 import type { RawRow } from "../imports/row-parser";
 import { readWorkbook, type WorkbookSheet } from "../imports/spreadsheet";
-import type { ModelTool } from "./model-turn";
+import { sniffMime } from "../files/sniff";
+import type { DocumentMime, ModelTool } from "./model-turn";
+
+/** The invoice's reading, a line a fact, in the order the card shows them. */
+const INVOICE_FIELDS: Array<[keyof AiInvoiceReading, string]> = [
+  ["number", "Number"],
+  ["date", "Date"],
+  ["seller", "Seller"],
+  ["total", "Total"],
+  ["currency", "Currency"],
+];
 
 /**
  * The whole file is kept, up to what the import pipeline itself accepts.
@@ -99,6 +113,10 @@ export const AI_ATTACHMENT_TOOL_NAMES = AI_ATTACHMENT_TOOLS.map((t) => t.name);
  * its tools are exactly as they were.
  */
 export function attachmentToolsFor(attachments: AiAttachment[]): ModelTool[] {
+  // An invoice is told whole in the prompt; there is nothing more to read.
+  if (attachments.every((attachment) => attachment.kind === "invoice")) {
+    return [];
+  }
   const tools = attachments.some((attachment) => attachment.kind === "table")
     ? AI_ATTACHMENT_TOOLS
     : AI_ATTACHMENT_TOOLS.filter((tool) => tool.name === "read_attachment");
@@ -188,6 +206,49 @@ export class AiAttachmentsService {
       ];
     }
     return this.keepSheets(file.originalname, sheets, actor);
+  }
+
+  /**
+   * A plan's invoice, a PDF or a picture (4 Oct 2026): read for its number,
+   * its date, the seller and the total, and kept as that reading. The file
+   * stays with the browser, which uploads it to the plan on Confirm.
+   *
+   * What the bytes are is decided by the bytes, as the files module decides
+   * (`sniffMime`), not by the name: a picture renamed .pdf is read as the
+   * picture it is, and anything else is refused before a model is asked.
+   */
+  async uploadInvoice(
+    file: { originalname: string; buffer: Buffer },
+    actor: AuthenticatedUser,
+    read: (buffer: Buffer, mimeType: DocumentMime) => Promise<AiInvoiceReading>,
+  ): Promise<AiAttachment[]> {
+    const mimeType = sniffMime(file.buffer);
+    if (
+      mimeType !== "application/pdf" &&
+      mimeType !== "image/png" &&
+      mimeType !== "image/jpeg" &&
+      mimeType !== "image/webp"
+    ) {
+      throw new BadRequestException(
+        `An invoice is read from a PDF or a picture (${AI_PAPER_EXTENSIONS.join(", ")}).`,
+      );
+    }
+
+    const reading = await read(file.buffer, mimeType);
+    const [saved] = await this.db.client
+      .insert(aiAttachments)
+      .values({
+        userId: actor.id,
+        filename: `${file.originalname}${AI_INVOICE_SUFFIX}`,
+        headers: ["Field", "Value"],
+        rows: INVOICE_FIELDS.flatMap(([key]) =>
+          reading[key] ? [{ Field: key, Value: reading[key] }] : [],
+        ),
+        totalRows: 1,
+      })
+      .returning();
+
+    return [toDto(saved)];
   }
 
   /**
@@ -526,6 +587,7 @@ export class AiAttachmentsService {
    */
   describe(attachment: AiAttachment, number?: number): string {
     if (attachment.kind === "text") return this.describeDoc(attachment);
+    if (attachment.kind === "invoice") return describeInvoice(attachment);
 
     // One of several (a Sheet's tabs, A3b; a workbook's sheets, A3c):
     // numbered, so the tools can be told which.
@@ -827,6 +889,24 @@ function placeOf(name: string): number {
  * What one of several files is: a Google Sheet's "tab" (A3b) or an Excel
  * workbook's "sheet" (A3c), from its name. The model is told in that word.
  */
+/**
+ * A plan's invoice, as the model is told it: what was read off it, and what
+ * becomes of the file (4 Oct 2026).
+ */
+function describeInvoice(attachment: AiAttachment): string {
+  const reading = attachment.invoice;
+  const lines = INVOICE_FIELDS.flatMap(([key, label]) =>
+    reading?.[key] ? [`${label}: ${reading[key]}`] : [],
+  );
+  return [
+    `INVOICE ATTACHED: ${attachment.name}`,
+    ...(lines.length ? lines : ["Nothing on it could be read clearly."]),
+    reading?.number
+      ? "Its number was read off it: put it in invoiceNo exactly as above."
+      : "Its number could not be read off it: ask for invoiceNo, or leave it empty if they say skip.",
+  ].join("\n");
+}
+
 export function sheetOrTab(name: string): "tab" | "sheet" {
   return PLACE.exec(name)?.[1] === "sheet" ? "sheet" : "tab";
 }
@@ -845,6 +925,30 @@ function toDto(row: {
    * words themselves and the card can show how it begins. A column summary
    * of paragraphs would say nothing, so it carries only the count.
    */
+  if (isInvoiceAttachment(row.filename)) {
+    const read = (key: keyof AiInvoiceReading) => {
+      const found = row.rows.find((one) => one.Field === key)?.Value;
+      return typeof found === "string" && found ? found : null;
+    };
+    return {
+      id: row.id,
+      name: row.filename.slice(0, -AI_INVOICE_SUFFIX.length),
+      kind: "invoice",
+      invoice: {
+        number: read("number"),
+        date: read("date"),
+        seller: read("seller"),
+        total: read("total"),
+        currency: read("currency"),
+      },
+      rowCount: 0,
+      storedRows: 0,
+      columns: [],
+      sample: [],
+      importBatchId: null,
+    };
+  }
+
   if (isDocAttachment(row.filename)) {
     const opening: RawRow[] = [];
     let used = 0;

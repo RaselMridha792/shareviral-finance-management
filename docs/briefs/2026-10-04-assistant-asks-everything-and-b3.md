@@ -58,6 +58,10 @@ subscriptions.ts`) never come up:
    - Add the owner's case to `.assistantbar.mjs` for the live model.
    - **For the owner, on live:** the exact messages, and what should come back.
 
+**Done: SESSIONS #155.** The owner's answers that session: shared code
+approved for both pieces, and Confirm stays off until each field is
+answered or left empty on purpose.
+
 ---
 
 ## Piece 2. B3, the code: what it spends

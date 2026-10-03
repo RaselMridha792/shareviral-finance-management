@@ -135,6 +135,13 @@ if (!PLAIN || !TOOLING) throw new Error("The local books need a plain money-out 
 // Each request takes the next line of the script; the last one is held, so a
 // request sent twice, or a model that will not change its answer, gets the
 // same thing again.
+/**
+ * Worth asking (4 Oct 2026, .assistantaskallqa.mjs): a draft is not ready
+ * while a field its page shows is neither filled nor left empty on purpose.
+ * The stand-in leaves them all empty on purpose unless a case says
+ * otherwise, so the checks below go on measuring what they were written for.
+ */
+const LEFT_EMPTY = ["invoiceNo", "reference", "loginEmail", "userNames", "boughtFor", "invoice", "employeeCode", "designation", "employmentType", "department"];
 let script = [];
 const asked = [];
 const stub = http.createServer((req, res) => {
@@ -143,7 +150,7 @@ const stub = http.createServer((req, res) => {
   req.on("end", () => {
     asked.push(JSON.parse(raw || "{}"));
     const line = (script.length > 1 ? script.shift() : script[0]) ?? { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
-    const use = line.tool ? { name: line.tool, input: line.input ?? {} } : { name: "answer", input: line };
+    const use = line.tool ? { name: line.tool, input: line.input ?? {} } : { name: "answer", input: { skipped: LEFT_EMPTY, ...line } };
     res.writeHead(200, { "content-type": "application/json", "request-id": "req_mapqa" });
     res.end(
       JSON.stringify({
@@ -368,7 +375,7 @@ try {
   const renew = await turn("mapqa claude renew korlam aaj", { area: "subscriptions", target: "subscription_payment", draft: { subscriptionName: "mapqa claude", txnDate: today, categoryName: TOOLING.name, advanceRenewal: false }, missingFields: [] });
   check("a renewal is a kind of record the app takes", renew.status === 200 && renew.body?.target === "subscription_payment", `${renew.status} ${renew.body?.target}`);
   check("the plan's own price and card are on the draft, to be checked", renew.body?.draft?.usdAmount === "100.00" && renew.body?.draft?.accountName === CARD.name && renew.body?.draft?.subscriptionName === "MAPQA Claude", JSON.stringify(renew.body?.draft));
-  check("the rate is asked for, with the plan's own offered and not taken", JSON.stringify(renew.body?.missingFields) === '["usdRate"]' && renew.body?.nextQuestion === "What rate was this renewal charged at? The plan's own is 122.5." && !("usdRate" in (renew.body?.draft ?? {})), shown(renew.body));
+  check("the rate is asked for, with the plan's own offered and not taken", JSON.stringify(renew.body?.missingFields) === '["usdRate"]' && (renew.body?.nextQuestion ?? "").includes("• USD rate — What rate was this renewal charged at? The plan's own is 122.5.") && !("usdRate" in (renew.body?.draft ?? {})), shown(renew.body));
   check("a category and the renewal switch are not the model's to set", !("categoryName" in renew.body.draft) && !("advanceRenewal" in renew.body.draft), Object.keys(renew.body?.draft ?? {}).join(", "));
 
   const renewReady = await turn("121.75", { area: "subscriptions", target: "subscription_payment", draft: { subscriptionName: "MAPQA Claude", txnDate: today, usdRate: 121.75 }, missingFields: [] }, { carried: { target: "subscription_payment", draft: renew.body?.draft } });

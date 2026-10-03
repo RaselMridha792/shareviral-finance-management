@@ -58,17 +58,23 @@ export interface ModelConversation {
 }
 
 export type DocumentRequest = {
-  pdf: Buffer;
+  /** A PDF, or a picture of a paper (a plan's invoice, 4 Oct 2026). */
+  file: Buffer;
+  mimeType: DocumentMime;
   instruction: string;
   /** The one tool the reading has to come back through. */
   tool: ModelTool;
   maxTokens: number;
 };
 
+/** What a document handed to the model may be. */
+export type DocumentMime =
+  "application/pdf" | "image/png" | "image/jpeg" | "image/webp";
+
 export interface TurnModel {
   converse(request: TurnRequest): ModelConversation;
   /**
-   * A PDF, read into one call of `tool`. `input` is null when the model did
+   * A PDF or a picture, read into one call of `tool`. `input` is null when the model did
    * not call it; `truncated` is true when it ran out of room, in which case
    * whatever it did produce is not to be trusted as the whole document.
    */
@@ -157,14 +163,23 @@ export function claudeModel(client: ClaudeClient, model: string): TurnModel {
             {
               role: "user",
               content: [
-                {
-                  type: "document",
-                  source: {
-                    type: "base64",
-                    media_type: "application/pdf",
-                    data: request.pdf.toString("base64"),
-                  },
-                },
+                request.mimeType === "application/pdf"
+                  ? {
+                      type: "document",
+                      source: {
+                        type: "base64",
+                        media_type: "application/pdf",
+                        data: request.file.toString("base64"),
+                      },
+                    }
+                  : {
+                      type: "image",
+                      source: {
+                        type: "base64",
+                        media_type: request.mimeType,
+                        data: request.file.toString("base64"),
+                      },
+                    },
                 { type: "text", text: request.instruction },
               ],
             },

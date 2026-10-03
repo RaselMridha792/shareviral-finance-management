@@ -1,6 +1,6 @@
 import { createCategorySchema, createTransactionSchema } from "@finance/shared";
 
-import { appPart } from "../../common/app-map";
+import { appPart, INVOICE_AND_REFERENCE } from "../../common/app-map";
 
 /**
  * Expenses has no endpoints of its own: its screens read the ledger
@@ -72,6 +72,7 @@ export const EXPENSES_MAP = [
         onSave: `${EXPENSE_SAVE} Shows on this heading's page.`,
         permission: "transactions.write",
         draft: "transaction_out",
+        worthAsking: INVOICE_AND_REFERENCE,
       },
       {
         name: "Record a movement",
@@ -83,6 +84,7 @@ export const EXPENSES_MAP = [
         onSave: `${EXPENSE_SAVE} Shows on Other expenses.`,
         permission: "transactions.write",
         draft: "transaction_out",
+        worthAsking: INVOICE_AND_REFERENCE,
       },
       {
         name: "Add a category",

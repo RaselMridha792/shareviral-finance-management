@@ -3,6 +3,8 @@
 import {
   AI_TARGET_SHOWS_ON,
   findGoogleLinks,
+  isPaperImage,
+  isPdfAttachment,
   type AiAttachment,
   type AiAvailability,
   type AiBatch,
@@ -26,6 +28,7 @@ import type { RowResult } from "@/components/assistant/batch-card";
 import { labelFor } from "@/components/assistant/draft-card";
 import { ApiError } from "@/lib/api-client";
 import { aiApi } from "@/lib/ai";
+import { uploadSubscriptionFile } from "@/lib/subscriptions";
 
 /**
  * What actually went wrong, rather than that something did.
@@ -154,6 +157,24 @@ function useConversation() {
    * page show the same choice.
    */
   const [chatModel, setChatModel] = useState<AiModel | null>(null);
+  /**
+   * A plan's invoice, attached in the chat or on the card (4 Oct 2026). The
+   * server keeps only what was read off it; the file stays here, above both
+   * views, and is uploaded to the plan when the plan is confirmed — the Add
+   * subscription form's own upload. Gone with a reload, and then asked for
+   * again on the card.
+   */
+  const [invoiceFile, setInvoiceFile] = useState<{
+    attachmentId: string;
+    file: File;
+  } | null>(null);
+  const [attachingInvoice, setAttachingInvoice] = useState(false);
+  /**
+   * "Leave empty" on the card, by field: true leaves it empty on purpose,
+   * false asks it after all. Over what the answer marked; sent with the next
+   * turn, so a field left empty is not asked about again (4 Oct 2026).
+   */
+  const [leaveEmpty, setLeaveEmpty] = useState<Record<string, boolean>>({});
 
   /* ---------------------------------------------------------------------- */
   /*  The floating window                                                    */
@@ -265,6 +286,8 @@ function useConversation() {
     setBatchResults({});
     setSavedOn(null);
     setChatModel(null);
+    setInvoiceFile(null);
+    setLeaveEmpty({});
   }
 
   async function openChat(id: string) {
@@ -284,12 +307,27 @@ function useConversation() {
       setAttachments(chat.attachments);
       // An API from before B2 sends no model: the default, as it was then.
       setChatModel(chat.model ?? null);
+      // The invoice's file was never kept on the server: asked for again.
+      setInvoiceFile(null);
+      setLeaveEmpty({});
     } catch {
       setError("That conversation could not be opened.");
     }
   }
 
   async function attach(file: File) {
+    /*
+     * A plan's invoice (4 Oct 2026): a picture always, and a PDF while a
+     * new plan is the draft on the table. Any other PDF is a statement, read
+     * into rows as before.
+     */
+    if (
+      isPaperImage(file.name) ||
+      (isPdfAttachment(file.name) && reply?.target === "subscription")
+    ) {
+      await attachInvoice(file);
+      return;
+    }
     setAttaching(true);
     setError(null);
     try {
@@ -298,6 +336,34 @@ function useConversation() {
       setError(explain(caught, "That file could not be read."));
     } finally {
       setAttaching(false);
+    }
+  }
+
+  /**
+   * The invoice, from the paperclip or from the card's Invoice line: read
+   * for its number on the server, and held here for Confirm. A number read
+   * off it goes into the card's box when the draft has none yet.
+   */
+  async function attachInvoice(file: File) {
+    setAttaching(true);
+    setAttachingInvoice(true);
+    setError(null);
+    try {
+      const read = await aiApi.attachInvoice(file);
+      setAttachments(read);
+      const paper = read.find((one) => one.kind === "invoice");
+      if (paper) {
+        setInvoiceFile({ attachmentId: paper.id, file });
+        const number = paper.invoice?.number;
+        if (number && !reply?.draft.invoiceNo) {
+          setEdits((current) => ({ invoiceNo: number, ...current }));
+        }
+      }
+    } catch (caught) {
+      setError(explain(caught, "That invoice could not be read."));
+    } finally {
+      setAttaching(false);
+      setAttachingInvoice(false);
     }
   }
 
@@ -313,6 +379,21 @@ function useConversation() {
     for (const file of going) {
       await aiApi.detach(file.id).catch(() => undefined);
     }
+    // The invoice goes with its reading.
+    if (going.some((file) => file.id === invoiceFile?.attachmentId)) {
+      setInvoiceFile(null);
+    }
+  }
+
+  /** Every field left empty on purpose, on the answer or on the card. */
+  function skippedFields(): string[] {
+    return (reply?.open ?? [])
+      .filter((field) => leaveEmpty[field.field] ?? field.skipped)
+      .map((field) => field.field);
+  }
+
+  function setSkip(field: string, on: boolean) {
+    setLeaveEmpty((current) => ({ ...current, [field]: on }));
   }
 
   async function sendToImport(attachment: AiAttachment) {
@@ -409,10 +490,13 @@ function useConversation() {
         chatId: chatId ?? undefined,
         attachmentIds: files.length ? files.map((file) => file.id) : undefined,
         model,
+        skipped: skippedFields(),
       });
 
       setReply(result);
       setEdits({});
+      // What was left empty is on the answer now, marked.
+      setLeaveEmpty({});
       // A new answer means a new set of rows. Carrying the last batch's
       // struck-out lines or its results onto it would strike out whichever
       // rows happened to share those positions.
@@ -523,12 +607,31 @@ function useConversation() {
 
     try {
       const saved = await aiApi.confirm(chatId, edited);
+
+      /*
+       * The plan's invoice, uploaded to the plan just saved, as the Add
+       * subscription form uploads one after its own save (4 Oct 2026). The
+       * plan is in the books by now: a refused upload is said, and the plan
+       * is not reported as lost.
+       */
+      let said = saved.said;
+      if (saved.target === "subscription" && invoiceFile) {
+        try {
+          await uploadSubscriptionFile(saved.id, invoiceFile.file, "invoice");
+          said = `${said} The invoice is attached to it.`;
+          setInvoiceFile(null);
+        } catch (caught) {
+          setError(
+            `The plan is saved, but the invoice did not upload: ${
+              caught instanceof ApiError ? caught.message : "try it again"
+            }. Attach it from Edit on the plan's row.`,
+          );
+        }
+      }
+
       // What was saved, and the page it now shows on: the owner's complaint
       // was a record that showed on one page and not on its own.
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", content: saved.said },
-      ]);
+      setMessages((current) => [...current, { role: "assistant", content: said }]);
       if (watching.current === 0) setUnseen(true);
       setSavedOn(saved.showsOn);
       setReply(null);
@@ -577,6 +680,11 @@ function useConversation() {
     edits,
     chatModel,
     setChatModel,
+    invoiceFile,
+    attachingInvoice,
+    attachInvoice,
+    leaveEmpty,
+    setSkip,
     loadChats,
     startNew,
     openChat,

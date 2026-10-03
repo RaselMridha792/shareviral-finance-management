@@ -70,6 +70,46 @@ export const SUBSCRIPTIONS_MAP = [
           "Adds the plan. If it is active, its first payment then leaves its account on the start date, under the AI tools heading; if that payment is refused, the plan stays and Renew takes it.",
         permission: "vendors.write",
         draft: "subscription",
+        // The five columns of a plan's row that read "N/A" when nobody fills
+        // them — the owner's list, 4 Oct 2026. User Department is
+        // `boughtFor`; User Name is who is on the plan. The invoice is a
+        // paper on this form ("Invoice a sudhu upload"): its column shows
+        // the file and nothing else, so the file is what is asked for, and
+        // the number only when it could not be read off it.
+        worthAsking: [
+          {
+            field: "loginEmail",
+            shows: "Login accounts",
+            ask: "the email (or account) the plan is signed in with",
+          },
+          {
+            field: "userNames",
+            shows: "User Name",
+            ask: "who on the team uses it — names as Team has them",
+          },
+          {
+            field: "boughtFor",
+            shows: "User Department",
+            ask: "which department it is for",
+          },
+          {
+            field: "invoice",
+            shows: "Invoice",
+            ask: "attach it here, a PDF or a picture",
+            file: true,
+          },
+          {
+            field: "invoiceNo",
+            shows: "Invoice no.",
+            ask: "it could not be read off the invoice — what is it?",
+            onlyWith: "invoice",
+          },
+          {
+            field: "reference",
+            shows: "Reference",
+            ask: "the card or bank statement's reference for the charge",
+          },
+        ],
       },
       {
         name: "Edit",

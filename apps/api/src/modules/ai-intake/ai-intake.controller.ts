@@ -21,6 +21,7 @@ import {
   aiIntakeRequestSchema,
   aiLinkSchema,
   isDocAttachment,
+  isInvoiceAttachment,
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
@@ -160,6 +161,28 @@ export class AiIntakeController {
   }
 
   /**
+   * A plan's invoice, a PDF or a picture (4 Oct 2026): read for its number,
+   * date, seller and total, and kept as that reading for the conversation.
+   * The file itself stays in the browser, which uploads it to the plan when
+   * the plan is confirmed — the Add subscription form's own upload.
+   */
+  @Post("attachments/invoice")
+  @HttpCode(200)
+  @RequirePermission("ai.use")
+  @UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: AI_ATTACHMENT_MAX_BYTES } }),
+  )
+  uploadInvoice(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("Choose the invoice to attach");
+    return this.attachments.uploadInvoice(file, actor, (buffer, mimeType) =>
+      this.ai.readInvoice(buffer, mimeType),
+    );
+  }
+
+  /**
    * A Google Sheet, Doc or Drive file, by the link somebody pasted (A3).
    *
    * The chat sends the link here before the message, so the file is on the
@@ -213,6 +236,12 @@ export class AiIntakeController {
     if (isDocAttachment(attachment.filename)) {
       throw new BadRequestException(
         "A document cannot be staged for Import. Ask the Assistant to draft the records in it instead.",
+      );
+    }
+    // Nor an invoice: it is a paper for a plan, kept as what was read off it.
+    if (isInvoiceAttachment(attachment.filename)) {
+      throw new BadRequestException(
+        "An invoice cannot be staged for Import. It becomes the plan's invoice when the plan is confirmed.",
       );
     }
 

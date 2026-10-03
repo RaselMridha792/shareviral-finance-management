@@ -29,9 +29,12 @@ import {
   partOf,
   partsDrafting,
   renderAppMap,
+  renderWorthAsking,
   screenOf,
+  worthAskingFor,
 } from "./app-map";
 import { AI_TOOL_DEFINITIONS } from "./ai-tools";
+import { isStandIn } from "./field-reference";
 
 const MODULES = path.join(__dirname, "..");
 const PAGES = path.join(__dirname, "../../../../web/src/app/(dashboard)");
@@ -273,6 +276,61 @@ describe("every page and every form is on the map (A2b)", () => {
         ]);
       }
     }
+  });
+
+  /*
+   * What is worth asking (4 Oct 2026) is asked of the person and shown on
+   * the card, so a key nobody can save is a question with no answer.
+   */
+  it("asks as worth asking only what the drafted form can save", () => {
+    for (const { form } of allForms()) {
+      if (!form.worthAsking?.length) continue;
+      expect([form.name, form.draft !== undefined]).toEqual([form.name, true]);
+      const fields = fieldsOf(form).map((field) => field.name);
+      const keys = form.worthAsking.map((one) => one.field);
+      for (const one of form.worthAsking) {
+        const saved =
+          fields.includes(one.field) ||
+          isStandIn(form.draft!, one.field) ||
+          (one.file === true && form.draft === "subscription");
+        expect([form.name, one.field, saved]).toEqual([
+          form.name,
+          one.field,
+          true,
+        ]);
+        // Never one Save needs: that is asked anyway.
+        const required = fieldsOf(form).find(
+          (field) => field.name === one.field,
+        )?.required;
+        expect([form.name, one.field, required === true]).toEqual([
+          form.name,
+          one.field,
+          false,
+        ]);
+        if (one.onlyWith) {
+          expect([one.field, keys.includes(one.onlyWith)]).toEqual([
+            one.field,
+            true,
+          ]);
+        }
+      }
+    }
+  });
+
+  it("asks a new plan about the five columns the owner found reading N/A", () => {
+    const shows = worthAskingFor("subscription").map((one) => one.shows);
+    expect(shows).toEqual(
+      expect.arrayContaining([
+        "Invoice",
+        "Reference",
+        "Login accounts",
+        "User Name",
+        "User Department",
+      ]),
+    );
+    expect(renderWorthAsking()).toContain(
+      'subscription: loginEmail ("Login accounts")',
+    );
   });
 
   it("gives every kind of draft the form whose endpoint saves it", () => {

@@ -54,6 +54,30 @@ export const TEAM_MAP = [
           "Adds the person to Team. Current salary, or else an employee's joining salary, becomes their pay from the joining date, which the salary sheet reads. A photo, CV or appointment letter chosen on the form uploads after, onto their page. An employee ID somebody already has is refused.",
         permission: "team.write",
         draft: "team_member",
+        // The four columns of Team that read "N/A" for somebody added
+        // without them (4 Oct 2026).
+        worthAsking: [
+          {
+            field: "employeeCode",
+            shows: "Employee ID",
+            ask: "their employee ID",
+          },
+          {
+            field: "designation",
+            shows: "Designation",
+            ask: "their designation",
+          },
+          {
+            field: "employmentType",
+            shows: "Employment type",
+            ask: "onsite, remote, hybrid or contractual",
+          },
+          {
+            field: "department",
+            shows: "Department",
+            ask: "their department",
+          },
+        ],
       },
       {
         name: "Edit person",

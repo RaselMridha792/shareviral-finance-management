@@ -80,7 +80,8 @@ export async function readPdfStatement(
   buffer: Buffer,
 ): Promise<{ headers: string[]; rows: RawRow[] }> {
   const read = await model.readDocument({
-    pdf: buffer,
+    file: buffer,
+    mimeType: "application/pdf",
     instruction: INSTRUCTION,
     tool: TRANSCRIBE_TOOL,
     maxTokens: MAX_OUTPUT_TOKENS,

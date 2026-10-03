@@ -297,6 +297,19 @@ export function Conversation({
                 edits={assistant.edits}
                 onEdit={assistant.edit}
                 onConfirm={(edited) => void assistant.confirm(edited)}
+                leaveEmpty={assistant.leaveEmpty}
+                onSkip={assistant.setSkip}
+                invoice={
+                  assistant.invoiceFile
+                    ? { name: assistant.invoiceFile.file.name }
+                    : null
+                }
+                invoiceLost={
+                  !assistant.invoiceFile &&
+                  attachments.some((file) => file.kind === "invoice")
+                }
+                attachingInvoice={assistant.attachingInvoice}
+                onAttachInvoice={(file) => void assistant.attachInvoice(file)}
               />
             ) : null}
           </div>

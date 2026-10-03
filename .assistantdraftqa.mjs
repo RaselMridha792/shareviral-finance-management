@@ -122,6 +122,13 @@ const shared = (() => {
 /* ------------------------------------------------------------------------ */
 
 // Held, not queued: a request the client sends twice gets the same answer.
+/**
+ * Worth asking (4 Oct 2026, .assistantaskallqa.mjs): a draft is not ready
+ * while a field its page shows is neither filled nor left empty on purpose.
+ * The stand-in leaves them all empty on purpose unless a case says
+ * otherwise, so the checks below go on measuring what they were written for.
+ */
+const LEFT_EMPTY = ["invoiceNo", "reference", "loginEmail", "userNames", "boughtFor", "invoice", "employeeCode", "designation", "employmentType", "department"];
 let answer = null;
 const asked = [];
 const stub = http.createServer((req, res) => {
@@ -129,7 +136,7 @@ const stub = http.createServer((req, res) => {
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", () => {
     asked.push(JSON.parse(raw || "{}"));
-    const input = answer ?? { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
+    const input = answer ? { skipped: LEFT_EMPTY, ...answer } : { draft: {}, missingFields: [], summary: "(the harness gave no answer)" };
     res.writeHead(200, { "content-type": "application/json", "request-id": "req_draftqa" });
     res.end(
       JSON.stringify({
@@ -212,11 +219,12 @@ try {
   });
   check("the turn answers", owner.status === 200, String(owner.status));
   check("it is not ready: the category is missing, by the code's finding", JSON.stringify(owner.body?.missingFields) === '["categoryName"]', JSON.stringify(owner.body?.missingFields));
-  check("the reply is a question about the category", owner.body?.nextQuestion === "Which category is this under?", shown(owner.body));
+  // Since 4 Oct every open field is asked at once, a line each (worth-asking.ts).
+  check("the reply asks for the category, in the list", (owner.body?.nextQuestion ?? "").includes("• Category — Which category is this under?"), shown(owner.body));
   check("the model's \"record korechi\" is not shown anywhere", !CLAIM.test(JSON.stringify([owner.body?.summary, owner.body?.nextQuestion, owner.body?.clarification])), JSON.stringify(owner.body?.summary));
   check("the figures are text, as the card holds them", owner.body?.draft?.amount === "100000" && owner.body?.draft?.usdRate === "121.5", JSON.stringify(owner.body?.draft));
   const [storedChat] = await q(`select messages, reply from ai_chats where id = $1`, [owner.body?.chatId]);
-  check("the saved conversation carries the question, not the claim", storedChat?.messages?.at(-1)?.content === "Which category is this under?" && !CLAIM.test(JSON.stringify(storedChat)), JSON.stringify(storedChat?.messages?.at(-1)));
+  check("the saved conversation carries the question, not the claim", (storedChat?.messages?.at(-1)?.content ?? "").includes("• Category — Which category is this under?") && !CLAIM.test(JSON.stringify(storedChat)), JSON.stringify(storedChat?.messages?.at(-1)));
 
   const fixed = await turn("office er", {
     target: "transaction_out",
@@ -282,7 +290,7 @@ try {
     draft: { amount: "50", fromAccountName: FROM.name, toAccountName: FROM.name, txnDate: today, usdRate: "121.5" },
     missingFields: [],
   });
-  check("the same account on both sides is asked about", sameSide.body?.missingFields?.[0] === "toAccountName" && /^Both sides are/.test(sameSide.body?.nextQuestion ?? ""), shown(sameSide.body));
+  check("the same account on both sides is asked about", sameSide.body?.missingFields?.[0] === "toAccountName" && /• To account — Both sides are/.test(sameSide.body?.nextQuestion ?? ""), shown(sameSide.body));
 
   /* ------------------------------------------------------------------ */
   console.log("\nC. A name is looked up, not taken on trust");
@@ -330,7 +338,7 @@ try {
     missingFields: ["usdRate"],
     nextQuestion: ownQuestion,
   });
-  check("the model's own question is kept, in the person's own words", asks.body?.nextQuestion === ownQuestion, shown(asks.body));
+  check("the model's own question is kept, in the person's own words, the list under it", (asks.body?.nextQuestion ?? "").startsWith(`${ownQuestion}\n• USD rate — `), shown(asks.body));
   const lies = await turn("50 taka pathao", {
     target: "transfer",
     draft: { amount: "50", fromAccountName: FROM.name, toAccountName: TO.name, txnDate: today },
@@ -348,7 +356,7 @@ try {
     missingFields: [],
     summary: `${FROM.name} te ekhon taka ache.`,
   });
-  check("an answer given along the way is kept, ahead of the code's question", aside.body?.nextQuestion === `${FROM.name} te ekhon taka ache. What was the USD rate that day? Every entry that moves money carries one.`, shown(aside.body));
+  check("an answer given along the way is kept, ahead of the code's question", aside.body?.nextQuestion === `${FROM.name} te ekhon taka ache. To finish this, I still need:\n• USD rate — What was the USD rate that day? Every entry that moves money carries one.\n\nAnswer them all in one message.`, shown(aside.body));
   const table = await turn("ei duita vendor add koro", {
     draft: {},
     missingFields: [],
@@ -432,7 +440,7 @@ try {
   await shot("draft-not-ready");
   check("the owner's draft: the page asks for the category", text.includes("Which category is this under?"), text.slice(-300).replace(/\n/g, " | "));
   check("\"record korechi\" is nowhere on the page", !/record korechi/i.test(text));
-  check("the card says what is still needed, in the form's word", /Still needed: Category/.test(drawn?.head ?? ""), drawn?.head);
+  check("the card says what is still needed, in the form's word", /Still to answer: Category/.test(drawn?.head ?? ""), drawn?.head);
   check("and offers no Confirm and save", drawn?.saveDisabled === true, String(drawn?.saveDisabled));
 
   await page.goto(`${WEB}/assistant`, { waitUntil: "networkidle0", timeout: 120000 });

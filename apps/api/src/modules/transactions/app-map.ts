@@ -6,7 +6,7 @@ import {
   voidTransactionSchema,
 } from "@finance/shared";
 
-import { appPart } from "../../common/app-map";
+import { appPart, INVOICE_AND_REFERENCE } from "../../common/app-map";
 
 /**
  * The ledger's three ways in: an entry, money arriving, and a transfer.
@@ -54,6 +54,7 @@ export const TRANSACTIONS_MAP = [
           "Records a money-in entry under a money-in category; a bank charge becomes its own money-out row. Refused in a locked month. Shows on All transactions and Cash In. On screen, money in is recorded with Add cash.",
         permission: "transactions.write",
         draft: "transaction_in",
+        worthAsking: INVOICE_AND_REFERENCE,
       },
       {
         name: "Edit",
@@ -199,6 +200,7 @@ export const TRANSACTIONS_MAP = [
           "Writes two linked entries with no category: out of the From account, into the To account. A bank charge is its own row on the From account. Refused in a locked month, or below zero on the From account.",
         permission: "transactions.write",
         draft: "transfer",
+        worthAsking: INVOICE_AND_REFERENCE,
       },
       {
         // The controller validates with `updateTransferSchema`, which it does

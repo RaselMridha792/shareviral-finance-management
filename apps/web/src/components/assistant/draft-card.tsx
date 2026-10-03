@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  AI_PAPER_EXTENSIONS,
   formatMoney,
   type AiIntakeReply,
+  type AiOpenField,
   type AiTarget,
 } from "@finance/shared";
-import { CircleAlert, LoaderCircle } from "lucide-react";
-import type { FormEvent } from "react";
+import { Check, CircleAlert, LoaderCircle, Paperclip } from "lucide-react";
+import { useRef, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -107,6 +109,11 @@ const FIELD_LABELS_ON: Partial<Record<AiTarget, Record<string, string>>> = {
   subscription: {
     chargeUsd: "Vendor's charge (USD)",
     accountName: "Paid from",
+    // As the plan's row heads them (4 Oct 2026): the columns the owner
+    // found reading "N/A".
+    boughtFor: "User Department",
+    loginEmail: "Login accounts",
+    userNames: "User Name",
   },
   subscription_payment: {
     txnDate: "Date it was charged",
@@ -174,6 +181,9 @@ function figureOf(
   return null;
 }
 
+/** The papers a plan's invoice may be: what the plan's own upload takes. */
+const INVOICE_ACCEPT = [".pdf", ...AI_PAPER_EXTENSIONS].join(",");
+
 /**
  * The draft, as an editable form, sitting in the conversation where it was
  * produced.
@@ -183,6 +193,13 @@ function figureOf(
  * cannot correct. Nothing is written until Confirm and save is pressed (A4);
  * the server then checks the boxes again and saves them the way the record's
  * own form does, as this person.
+ *
+ * The whole form (4 Oct 2026): beside what the Assistant filled in, every
+ * field still open shows as an empty box — what Save needs, and what the
+ * record's page shows and reads "N/A" without (the owner: "sobgula field
+ * somporke ekebarei jigges kore ney"). Each is filled in here or in the chat,
+ * or left empty on purpose, before Confirm and save can be pressed: the
+ * owner's choice, the same day.
  */
 export function DraftCard({
   reply,
@@ -190,6 +207,12 @@ export function DraftCard({
   edits = {},
   onEdit,
   onConfirm,
+  leaveEmpty = {},
+  onSkip,
+  invoice = null,
+  invoiceLost = false,
+  attachingInvoice = false,
+  onAttachInvoice,
 }: {
   reply: AiIntakeReply;
   saving: boolean;
@@ -201,25 +224,109 @@ export function DraftCard({
   edits?: Record<string, string>;
   onEdit?: (field: string, value: string) => void;
   onConfirm: (draft: Record<string, string>) => void;
+  /** "Leave empty" pressed or taken back on the card, by field. */
+  leaveEmpty?: Record<string, boolean>;
+  onSkip?: (field: string, on: boolean) => void;
+  /** The plan's invoice, held by the page for Confirm. */
+  invoice?: { name: string } | null;
+  /** An invoice was read earlier, but its file is no longer held. */
+  invoiceLost?: boolean;
+  attachingInvoice?: boolean;
+  onAttachInvoice?: (file: File) => void;
 }) {
-  const ready = reply.missingFields.length === 0;
+  const picker = useRef<HTMLInputElement>(null);
   const entries = Object.entries(reply.draft).filter(
     ([, value]) => value !== null && value !== undefined && value !== "",
   );
   const figure = figureOf(reply.draft);
+
+  /*
+   * What is still open. An answer from before 4 Oct carries no list; what
+   * it still needed is all of it then.
+   */
+  const open: AiOpenField[] =
+    reply.open ??
+    reply.missingFields.map((field) => ({
+      field,
+      label: labelFor(field, reply.target),
+      ask: "",
+      required: true,
+    }));
+  const valueOf = (field: string) =>
+    (edits[field] ?? String(reply.draft[field] ?? "")).trim();
+  const leftEmpty = (field: AiOpenField) =>
+    leaveEmpty[field.field] ?? Boolean(field.skipped);
+
+  const empty = open.filter(
+    (field) =>
+      !field.file &&
+      !entries.some(([key]) => key === field.field),
+  );
+  // A box the page filled itself: an invoice's number read on the card.
+  const extra = Object.keys(edits).filter(
+    (key) =>
+      !entries.some(([filled]) => filled === key) &&
+      !open.some((field) => field.field === key),
+  );
+  const paper: AiOpenField | null =
+    open.find((field) => field.file) ??
+    (invoice || invoiceLost
+      ? {
+          field: "invoice",
+          label: "Invoice",
+          ask: "attach it here, a PDF or a picture",
+          required: false,
+          file: true,
+        }
+      : null);
+
+  // In the order they were asked, the invoice where the list has it.
+  const pending = [
+    ...open.filter((field) => field.file || empty.includes(field)),
+    ...(paper && !open.includes(paper) ? [paper] : []),
+  ].filter((field) =>
+    field.file
+      ? !invoice && !leftEmpty(field)
+      : !valueOf(field.field) && (field.required || !leftEmpty(field)),
+  );
+  const ready = pending.length === 0;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const draft: Record<string, string> = {};
     for (const [key, value] of data.entries()) {
-      const text = String(value).trim();
+      if (typeof value !== "string") continue;
+      const text = value.trim();
       if (text) draft[key] = text;
     }
     onConfirm(draft);
   }
 
   if (!entries.length) return null;
+
+  /** "Leave empty", for a field Save does not need and nobody has filled. */
+  const skipButton = (field: AiOpenField) =>
+    field.required || !onSkip || (!field.file && valueOf(field.field)) ? null : (
+      <button
+        type="button"
+        aria-pressed={leftEmpty(field)}
+        onClick={() => onSkip(field.field, !leftEmpty(field))}
+        className={
+          leftEmpty(field)
+            ? "inline-flex cursor-pointer items-center gap-1 rounded-full bg-(--sv-violet-tint) px-2 py-0.5 text-[11.5px] font-extrabold text-(--sv-violet-ink)"
+            : "inline-flex cursor-pointer items-center gap-1 py-0.5 text-[11.5px] font-extrabold text-link underline decoration-link/40 underline-offset-2 hover:decoration-link"
+        }
+      >
+        {leftEmpty(field) ? (
+          <>
+            <Check className="size-3" /> Left empty
+          </>
+        ) : (
+          "Leave empty"
+        )}
+      </button>
+    );
 
   return (
     // A container, so two columns follow the card's own width rather than
@@ -231,13 +338,9 @@ export function DraftCard({
         <p className="text-xs text-muted-foreground">
           {ready
             ? "Check every line, then confirm."
-            : // The model names what it still needs by the schema key, so this
-              // read "Still needed: vendorName" — the database talking, in the
-              // one line asking a person for help. Same words as the labels on
-              // the boxes below, which is where they will go to answer it.
-              `Still needed: ${reply.missingFields
-                .map((field) => labelFor(field, reply.target))
-                .join(", ")}`}
+            : // By the page's own headings, the same words as the boxes below,
+              // which is where they will go to answer it.
+              `Still to answer: ${pending.map((field) => field.label).join(", ")}`}
         </p>
       </div>
 
@@ -270,6 +373,93 @@ export function DraftCard({
               )}
             </Field>
           ))}
+
+          {extra.map((key) => (
+            <Field key={key} label={labelFor(key, reply.target)}>
+              <Input
+                name={key}
+                defaultValue={edits[key]}
+                onChange={(event) => onEdit?.(key, event.target.value)}
+              />
+            </Field>
+          ))}
+
+          {/* Open: empty until it is answered, here or in the chat. */}
+          {empty.map((field) => (
+            <Field
+              key={field.field}
+              label={field.label}
+              required={field.required}
+              hint={
+                <span
+                  data-open-field={field.field}
+                  className="flex flex-wrap items-baseline gap-x-2"
+                >
+                  <span>{field.ask}</span>
+                  {skipButton(field)}
+                </span>
+              }
+            >
+              <Input
+                name={field.field}
+                defaultValue={edits[field.field] ?? ""}
+                placeholder={leftEmpty(field) ? "Left empty" : undefined}
+                onChange={(event) => onEdit?.(field.field, event.target.value)}
+              />
+            </Field>
+          ))}
+
+          {/* The invoice is a paper, not a box: attached here or in the chat,
+              and uploaded to the plan once the plan is saved. Not a Field:
+              a label round a file input opens the picker on any click in it. */}
+          {paper ? (
+            <div className="flex flex-col gap-1.5" data-open-field="invoice">
+              <span className="text-[13px] font-extrabold">{paper.label}</span>
+              <input
+                ref={picker}
+                type="file"
+                accept={INVOICE_ACCEPT}
+                className="hidden"
+                aria-label="Attach the invoice"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onAttachInvoice?.(file);
+                  event.target.value = "";
+                }}
+              />
+              <div className="flex min-h-11 flex-wrap items-center gap-2">
+                {invoice ? (
+                  <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-surface-muted px-3 py-1 text-sm">
+                    <Paperclip className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{invoice.name}</span>
+                  </span>
+                ) : null}
+                {onAttachInvoice ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={attachingInvoice}
+                    onClick={() => picker.current?.click()}
+                  >
+                    {attachingInvoice ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="size-4" />
+                    )}
+                    {invoice ? "Another file" : "Attach the invoice"}
+                  </Button>
+                ) : null}
+              </div>
+              <span className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-(--sv-muted)">
+                {invoice
+                  ? "Attached to the plan when you confirm."
+                  : invoiceLost
+                    ? "Read earlier, but the file is not kept in the chat: attach it again."
+                    : paper.ask}
+                {invoice ? null : skipButton(paper)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {figure ? (
@@ -288,14 +478,19 @@ export function DraftCard({
             type="submit"
             variant="primary"
             disabled={!ready || saving}
-            title={ready ? undefined : "Something is still missing"}
+            title={
+              ready
+                ? undefined
+                : "Fill in each empty line, or press Leave empty on it"
+            }
           >
             {saving ? <LoaderCircle className="size-4 animate-spin" /> : null}
             Confirm and save
           </Button>
           {ready ? null : (
             <span className="text-xs text-muted-foreground">
-              Answer the question above first
+              Answer above, or fill in the empty lines here — Leave empty on
+              any you do not have
             </span>
           )}
         </div>

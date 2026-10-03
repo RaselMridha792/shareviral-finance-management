@@ -493,8 +493,42 @@ export const aiIntakeRequestSchema = z.strictObject({
    * the conversation goes on following it.
    */
   model: aiModelSchema.optional(),
+  /**
+   * The fields left empty on purpose (4 Oct 2026): said "skip" in the chat,
+   * or ticked "Leave empty" on the card. Carried between turns, as the draft
+   * is, so a field once skipped is not asked about again.
+   */
+  skipped: z.array(z.string().trim().min(1).max(64)).max(40).optional(),
 });
 export type AiIntakeRequest = z.infer<typeof aiIntakeRequestSchema>;
+
+/**
+ * A field the draft card shows empty, to be filled in or left empty
+ * (4 Oct 2026).
+ *
+ * The owner had a plan saved through the Assistant and found Invoice,
+ * Reference, Login accounts, User name and User department reading "N/A" on
+ * its page; nobody had been asked about any of them. "Sobgula field somporke
+ * ekebarei jigges kore ney." So each form the Assistant drafts says, in the
+ * app's map, which of its optional fields the page shows and the owner
+ * expects filled, and they are asked all at once with whatever Save still
+ * needs. Each is answered, or left empty on purpose, before Confirm and save
+ * (the owner's choice, the same day).
+ */
+export type AiOpenField = {
+  /** The draft's own key: "loginEmail", "userNames", "invoice". */
+  field: string;
+  /** The page's own heading for it: "Login accounts". */
+  label: string;
+  /** What is asked for it, in a few words. */
+  ask: string;
+  /** Save needs it. Otherwise it is worth asking, and may be left empty. */
+  required: boolean;
+  /** Attached rather than typed: a plan's invoice. */
+  file?: boolean;
+  /** Left empty on purpose: said "skip", and not asked about again. */
+  skipped?: boolean;
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Attaching a file                                                           */
@@ -541,6 +575,46 @@ export const AI_DOC_SUFFIX = ".gdoc";
 export function isDocAttachment(filename: string): boolean {
   return filename.toLowerCase().endsWith(AI_DOC_SUFFIX);
 }
+
+/**
+ * A plan's invoice, attached in the chat as a picture or a PDF (4 Oct 2026).
+ *
+ * Read by the model on arrival for its number, its date, the seller and the
+ * total, and kept as that reading, not as rows. The file itself stays in the
+ * browser and becomes the plan's invoice on Confirm and save, uploaded as the
+ * Add subscription form uploads one. A picture is only ever read this way; a
+ * PDF is read this way while a plan is the draft on the table, and as a
+ * statement otherwise.
+ */
+export const AI_PAPER_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"] as const;
+
+export function isPaperImage(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return AI_PAPER_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
+/**
+ * What an invoice's reading is kept under, as `.gdoc` marks a Doc: no file
+ * can be uploaded with this ending, so the name alone says what a stored row
+ * is.
+ */
+export const AI_INVOICE_SUFFIX = ".invoice";
+
+export function isInvoiceAttachment(filename: string): boolean {
+  return filename.toLowerCase().endsWith(AI_INVOICE_SUFFIX);
+}
+
+/** What was read off an invoice. Null where it is not printed, or not clear. */
+export type AiInvoiceReading = {
+  number: string | null;
+  /** YYYY-MM-DD. */
+  date: string | null;
+  seller: string | null;
+  /** As printed, digits and a decimal point. */
+  total: string | null;
+  /** "USD", "BDT". */
+  currency: string | null;
+};
 
 /* -------------------------------------------------------------------------- */
 /*  A Google link pasted into the chat (A3)                                    */
@@ -678,9 +752,12 @@ export type AiAttachment = {
    * `table` for a spreadsheet, a CSV, a PDF statement or a Google Sheet:
    * columns and rows. `text` for a Google Doc: its paragraphs, in order, under
    * the one column "Text". A text attachment has no totals and cannot go to
-   * Import.
+   * Import. `invoice` for a plan's invoice (4 Oct 2026): what was read off
+   * it, in `invoice`; it cannot go to Import either.
    */
-  kind: "table" | "text";
+  kind: "table" | "text" | "invoice";
+  /** Set on an invoice: what was read off it. */
+  invoice?: AiInvoiceReading;
   /**
    * Rows in the file. Zero for an empty tab of a Sheet read whole (A3b): it
    * is kept, and shown as empty, so that no tab goes missing unsaid.
@@ -833,7 +910,18 @@ export type AiIntakeReply = {
    * schema its Save will use before it is sent (draft-check.ts).
    */
   missingFields: string[];
-  /** The one question to ask next, or null when nothing is missing. */
+  /**
+   * Every field the card shows empty (4 Oct 2026): what Save still needs,
+   * then what the page shows and the owner expects filled, with those left
+   * empty on purpose marked. Confirm and save waits until each is filled in
+   * or left empty on purpose.
+   */
+  open?: AiOpenField[];
+  /**
+   * What is asked next, or null when nothing is. Once the kind of record is
+   * known, every open field at once, as a short list (4 Oct 2026); a choice
+   * between real names (two accounts called alike) on its own.
+   */
   nextQuestion: string | null;
   /**
    * An answer to something that was asked — or, under a draft that is ready,

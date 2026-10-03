@@ -378,7 +378,8 @@ describe("geminiModel: a PDF", () => {
 
   const read = (id = MODEL) =>
     model(id).readDocument({
-      pdf: Buffer.from("%PDF-1.4 test"),
+      file: Buffer.from("%PDF-1.4 test"),
+      mimeType: "application/pdf",
       instruction: "Transcribe.",
       tool: TOOL,
       maxTokens: 32_000,

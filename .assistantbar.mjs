@@ -45,6 +45,10 @@
  *   L. empty sheets do not count, 3 Oct 2026 (A3d) — Sheet1 of rows and two
  *      empty sheets arrive as one file: the empty ones said to be empty,
  *      Sheet1's total; everything said, a plan for Import as one file has
+ *   O. every field asked at once, 4 Oct 2026          — a plan with all Save
+ *      needs: the five N/A columns asked in one message, none made up; the
+ *      five answered at once, two of them "nai" and "skip": all taken, the
+ *      two left empty and not asked again
  *   M. every mistake the owner recorded, 2 Oct 2026 on  — read from
  *      .assistantbar.mistakes.json (A2b: "every mistake becomes a test").
  *      The mistakes are marked on the live site; "Download as test cases"
@@ -161,6 +165,13 @@ const READY = "Draft ready — check every line, then press Confirm and save. No
 const [team] = await q(
   `select count(*)::int as everyone, count(*) filter (where status in ('active', 'on_leave'))::int as current
      from team_members where deleted_at is null`,
+);
+// Somebody on Team, by a name only they have, for the plan's User Name (O2).
+const [someone] = await q(
+  `select full_name from team_members t
+    where deleted_at is null and status in ('active', 'on_leave')
+      and not exists (select 1 from team_members o where o.id <> t.id and o.deleted_at is null and o.full_name ilike '%' || t.full_name || '%')
+    order by created_at limit 1`,
 );
 
 // A plan on file, for the renewal case: put there directly, with no payment
@@ -287,12 +298,15 @@ async function talk(lines, files) {
   let chatId;
   for (const line of lines) {
     messages.push({ role: "user", content: line });
+    // What was left empty on purpose goes back, as the page sends it (O2).
+    const skipped = (reply?.open ?? []).filter((field) => field.skipped).map((field) => field.field);
     const res = await call("POST", "/ai/turn", {
       messages,
       ...(reply?.target ? { target: reply.target } : {}),
       ...(reply?.draft ? { draft: reply.draft } : {}),
       ...(chatId ? { chatId } : {}),
       ...(attachmentIds.length ? { attachmentIds } : {}),
+      ...(skipped.length ? { skipped } : {}),
     });
     if (res.status !== 200) return { failed: `${res.status} ${res.body?.message ?? ""}`.trim(), messages };
     reply = res.body;
@@ -1112,6 +1126,61 @@ CASES.push(
         claimsDone(said) ? "said it was done" : null,
       ].filter(Boolean);
       return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named the Assistant's settings", said };
+    },
+  },
+);
+
+/*
+ * O. Every field asked at once, 4 Oct 2026
+ * (docs/briefs/2026-10-04-assistant-asks-everything-and-b3.md, piece 1). The
+ * owner had the Assistant buy a Claude plan; its row then read "N/A" for
+ * Invoice, Reference, Login accounts, User name and User department, and
+ * nobody had asked. The list itself is the app's, so what is held here is
+ * the model's half: nothing invented for any of the five, the answers taken
+ * in one go, and "skip" heard as skip.
+ */
+const PLAN_ASKED = ["Login accounts", "User Name", "User Department", "Invoice", "Reference"];
+CASES.push(
+  {
+    id: "O1", runs: LIGHT, name: "'Claude Max kinlam' with all Save needs - every one of the five asked at once, none made up",
+    run: async () => {
+      const { reply, failed } = await talk([`Claude Max subscription kinlam aaj, $100, ${BANK} theke, rate 122.`]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const open = (reply.open ?? []).filter((field) => !field.skipped).map((field) => field.label);
+      const wrong = [
+        reply.target === "subscription" ? null : `drafted ${reply.target}`,
+        PLAN_ASKED.every((label) => open.includes(label)) ? null : `asked only ${open.join(", ") || "nothing"}`,
+        PLAN_ASKED.every((label) => said.includes(`• ${label}`)) ? null : "the list is not in the reply",
+        ...["loginEmail", "userNames", "boughtFor", "invoiceNo", "reference"].map((field) => (reply.draft[field] ? `made up ${field}: ${reply.draft[field]}` : null)),
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "the five, at once", said };
+    },
+  },
+  {
+    id: "O2", runs: LIGHT, name: "the five answered in one message, two of them 'nai'/'skip' - all taken, the two left empty, nothing asked again",
+    run: async () => {
+      if (!someone) return { error: "nobody on the local Team to put on the plan" };
+      const { reply, failed } = await talk([
+        `Claude Max subscription kinlam aaj, $100, ${BANK} theke, rate 122.`,
+        `login ops@shareviral.cash, user ${someone.full_name}, department Engineering, invoice nai, reference skip`,
+      ]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const left = (reply.open ?? []).filter((field) => field.skipped).map((field) => field.field).sort();
+      const asked = (reply.open ?? []).filter((field) => !field.skipped).map((field) => field.label);
+      const wrong = [
+        reply.target === "subscription" ? null : `drafted ${reply.target}`,
+        same(reply.draft.loginEmail, "ops@shareviral.cash") ? null : `login ${reply.draft.loginEmail}`,
+        same(reply.draft.userNames, someone.full_name) ? null : `user ${reply.draft.userNames}`,
+        same(reply.draft.boughtFor, "Engineering") ? null : `department ${reply.draft.boughtFor}`,
+        JSON.stringify(left) === JSON.stringify(["invoice", "reference"]) ? null : `left empty: ${left.join(", ") || "nothing"}`,
+        asked.length ? `still asked ${asked.join(", ")}` : null,
+        reply.draft.reference || reply.draft.invoiceNo ? "filled a field it was told to skip" : null,
+        claimsDone(said) ? "said it was recorded" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "all taken, two left empty", said };
     },
   },
 );

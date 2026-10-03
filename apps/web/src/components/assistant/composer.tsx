@@ -2,6 +2,7 @@
 
 import {
   AI_ATTACHMENT_EXTENSIONS,
+  AI_PAPER_EXTENSIONS,
   AI_MODEL_LABELS,
   AI_MODEL_SHORT,
   type AiDataAccess,
@@ -291,7 +292,10 @@ export function Composer({
             <input
               ref={picker}
               type="file"
-              accept={AI_ATTACHMENT_EXTENSIONS.join(",")}
+              // A picture is only ever a plan's invoice (4 Oct 2026).
+              accept={[...AI_ATTACHMENT_EXTENSIONS, ...AI_PAPER_EXTENSIONS].join(
+                ",",
+              )}
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -305,7 +309,7 @@ export function Composer({
               onClick={() => picker.current?.click()}
               disabled={attaching}
               aria-label="Attach a spreadsheet"
-              title="Attach a CSV, Excel or PDF file for it to read. A Google Sheet, Doc or Drive file: paste its link in the message."
+              title="Attach a CSV, Excel or PDF file for it to read, or a plan's invoice (a PDF or a picture). A Google Sheet, Doc or Drive file: paste its link in the message."
               className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {attaching ? (

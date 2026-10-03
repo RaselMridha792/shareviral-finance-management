@@ -73,6 +73,42 @@ export type AppForm = {
   permission?: Permission;
   /** The kind of record the Assistant drafts for this form, if it drafts one. */
   draft?: AiTarget;
+  /**
+   * The optional fields this form's page shows, which read "N/A" there
+   * when nobody fills them, and which the owner expects asked (4 Oct 2026).
+   * Only on a form the Assistant drafts. See `WorthAsking`.
+   */
+  worthAsking?: readonly WorthAsking[];
+};
+
+/**
+ * One field the Assistant asks about though Save does not need it.
+ *
+ * The owner had a plan saved through the Assistant and found five columns
+ * of its row reading "N/A": nobody had asked about them, because the
+ * Assistant asked only for what the schema requires. "Sobgula field somporke
+ * ekebarei jigges kore ney." Each form says here which of its optional
+ * fields the page shows, by the page's own heading, so the Assistant asks
+ * them all at once with what is still required, and the card shows them
+ * empty until they are filled or left empty on purpose.
+ *
+ * `field` is the draft's key: a key of the form's schema, or one of the few
+ * the draft has in place of one (`userNames` for a plan's `users`, and
+ * `invoice`, the file). `ai-intake/app-map.spec.ts` holds that to be so.
+ */
+export type WorthAsking = {
+  field: string;
+  /** The page's own heading for it, as the person will look for it. */
+  shows: string;
+  /** What is asked, in a few words: "the email the plan is signed in with". */
+  ask: string;
+  /** Attached rather than typed: a plan's invoice. */
+  file?: true;
+  /**
+   * Asked only once this other field has been given: an invoice's number,
+   * when the invoice is attached and its number could not be read off it.
+   */
+  onlyWith?: string;
 };
 
 /**
@@ -146,6 +182,24 @@ export type AppPart = {
   };
   claims?: AppClaim;
 };
+
+/**
+ * The pair every ledger table ends with — Invoice, then Reference — which
+ * read "N/A" on a row that has neither a number nor a paper. The same two on
+ * every form that writes such a row, so they are written once.
+ */
+export const INVOICE_AND_REFERENCE: readonly WorthAsking[] = [
+  {
+    field: "invoiceNo",
+    shows: "Invoice",
+    ask: "the bill's number, if there is one",
+  },
+  {
+    field: "reference",
+    shows: "Reference",
+    ask: "the bank's or the card's transaction id for it",
+  },
+];
 
 /** Written out so each module's file reads as data and is checked as it is typed. */
 export function appPart(part: AppPart): AppPart {

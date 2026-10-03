@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   FileText,
   LoaderCircle,
+  Receipt,
   TableProperties,
   X,
 } from "lucide-react";
@@ -71,6 +72,9 @@ export function AttachmentCard({
 
   if (attachment.kind === "text") {
     return <DocumentCard attachment={attachment} onRemove={onRemove} />;
+  }
+  if (attachment.kind === "invoice") {
+    return <InvoiceCard attachment={attachment} onRemove={onRemove} />;
   }
 
   return (
@@ -221,6 +225,60 @@ export function AttachmentCard({
  * document's paragraphs are not entries, and the records in it come back as
  * drafts to check.
  */
+/**
+ * A plan's invoice (4 Oct 2026): what was read off it, so the number can be
+ * checked against the paper before it goes on the plan. The file itself is
+ * the page's, and is attached to the plan when the plan is confirmed.
+ */
+function InvoiceCard({
+  attachment,
+  onRemove,
+}: {
+  attachment: AiAttachment;
+  onRemove?: () => void;
+}) {
+  const read = attachment.invoice;
+  const facts = [
+    read?.number ? `No. ${read.number}` : "Its number could not be read",
+    read?.seller,
+    read?.date,
+    read?.total
+      ? `${read.currency ? `${read.currency} ` : ""}${read.total}`
+      : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="rounded-xl border border-border bg-surface">
+      <div className="flex items-start gap-3 px-4 py-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+          <Receipt className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold tracking-tight">
+            {attachment.name}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Invoice · {facts.join(" · ")}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            It becomes the plan&rsquo;s invoice when the plan is confirmed.
+          </p>
+        </div>
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove this file"
+            className="cursor-pointer rounded-lg p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function DocumentCard({
   attachment,
   onRemove,

@@ -1,6 +1,6 @@
-import { AI_TARGET_LABELS, type AiTarget } from "@finance/shared";
+import { AI_TARGETS, AI_TARGET_LABELS, type AiTarget } from "@finance/shared";
 
-import type { AppForm, AppPart } from "../../common/app-map";
+import type { AppForm, AppPart, WorthAsking } from "../../common/app-map";
 import { ACCOUNTS_MAP } from "../accounts/app-map";
 import { BANK_ADVICES_MAP } from "../bank-advices/app-map";
 import { BANK_STATEMENT_MAP } from "../bank-statements/app-map";
@@ -216,6 +216,38 @@ export function partOf(key: string | null | undefined): AppPart | null {
  */
 export function partsDrafting(target: AiTarget): AppPart[] {
   return APP_MAP.filter((part) => part.assistant.drafts.includes(target));
+}
+
+/**
+ * What is worth asking on a kind of draft (4 Oct 2026): the optional fields
+ * its form's page shows, from every form that drafts it, each once.
+ */
+export function worthAskingFor(target: AiTarget): WorthAsking[] {
+  const seen = new Set<string>();
+  return allForms()
+    .filter(({ form }) => form.draft === target)
+    .flatMap(({ form }) => form.worthAsking ?? [])
+    .filter((asked) => !seen.has(asked.field) && seen.add(asked.field));
+}
+
+/**
+ * Worth asking, written out for the prompt: a line a kind of draft, the
+ * fields by their keys with the page's heading for each.
+ */
+export function renderWorthAsking(): string {
+  return AI_TARGETS.flatMap((target) => {
+    const asked = worthAskingFor(target);
+    return asked.length
+      ? [
+          `  ${target}: ${asked
+            .map(
+              (one) =>
+                `${one.field} ("${one.shows}"${one.file ? ", a file attached in the chat, never typed" : ""}${one.onlyWith ? `, only when ${one.onlyWith} is given and this could not be read off it` : ""})`,
+            )
+            .join(", ")}`,
+        ]
+      : [];
+  }).join("\n");
 }
 
 /** The screen to send somebody to for a part: its first, if it has one. */
