@@ -9,9 +9,7 @@ import type { CategoryNode } from "@/lib/masters";
 import { AppearancePanel } from "./appearance-panel";
 import { CategoriesPanel } from "./categories-panel";
 import { CompanyPanel } from "./company-panel";
-import { AssistantPanel } from "./assistant-panel";
 import { AuditPanel } from "./audit-panel";
-import { ConnectionsPanel } from "./connections-panel";
 import { EmailPanel } from "./email-panel";
 import { NotificationsPanel } from "./notifications-panel";
 import { SecurityPanel } from "./security-panel";
@@ -99,8 +97,10 @@ export function SettingsScreen({
       ) : null}
       {tab === "audit" && canReadAudit ? <AuditPanel /> : null}
       {tab === "trashed" ? <TrashPanel /> : null}
-      {tab === "assistant" && canWriteSettings ? <AssistantPanel /> : null}
-      {tab === "connections" && canWriteSettings ? <ConnectionsPanel /> : null}
+      {/* No Assistant or Connections section: both are the Assistant's own
+          settings now, behind the gear on its chat (B2, 3 Oct 2026), and
+          `?tab=assistant` and `?tab=connections` open that page
+          (app/(dashboard)/settings/page.tsx). */}
       {tab === "email" && canWriteSettings ? <EmailPanel /> : null}
       {tab === "notifications" && canWriteSettings ? (
         <NotificationsPanel />

@@ -5,6 +5,7 @@ import {
   makeAiRuleSchema,
   setAiInstructionsSchema,
   setAiKeySchema,
+  setGoogleKeySchema,
   updateAiSettingsSchema,
 } from "@finance/shared";
 
@@ -15,23 +16,32 @@ export const ASSISTANT_MAP = [
   appPart({
     key: "assistant",
     name: "AI Assistant",
-    modules: ["ai-intake"],
+    // The Google Cloud key reaches Gemini, and Claude when it is set to go
+    // that way, and reads the files whose links are pasted in the chat: it
+    // is set up in the Assistant's settings (B2).
+    modules: ["ai-intake", "connections"],
     purpose:
       "This conversation. It drafts a record for the person to check and save, answers questions about what is recorded, and reads a file somebody attaches, or a Google Sheet, Doc or Drive file whose link they paste. It saves nothing itself: a draft is saved when the person presses Confirm and save on its card.",
     keeps: [
       "The conversations, each person's own.",
       "Its mistakes: what somebody corrected on a draft before saving, and answers somebody marked wrong, with why. Both are shown to it on later turns; the owner can make one a rule.",
+      "Its settings: the model new chats start with, the way Claude is reached, the Anthropic key and the Google Cloud key, how much it may read, and the owner's instructions. Each conversation keeps the model picked for it in the chat.",
     ],
     screens: [
       {
         href: "/assistant",
         name: "AI Assistant",
-        does: "The chat, its history and the draft cards. Under its latest answer, This was wrong says why it was not right. Which model answers, and the owner's instructions for it, are under Settings, Assistant.",
+        does: "The chat, its history and the draft cards. Under its latest answer, This was wrong says why it was not right. Which model answers this conversation is picked in the message box, beside Send; the conversation keeps it. The default, and the owner's instructions, are in the Assistant's settings, behind the gear.",
+      },
+      {
+        href: "/assistant/settings",
+        name: "Assistant settings",
+        does: "The model new chats start with and the way Claude is reached, the Anthropic key (when Claude goes that way) and the Google Cloud key with the address to share files with, how much it may read, the owner's instructions and its recent mistakes. The Super Admin changes them. The CFO reads them and changes nothing, and sees no key and no Google address.",
       },
       {
         href: "/assistant/knowledge",
         name: "What the Assistant knows",
-        does: "The map of the app it is given: every part, its screens and forms, and what it may do in each. For a Super Admin also the owner's rules and its recent mistakes, each of which can be made a rule.",
+        does: "The map of the app it is given: every part, its screens and forms, and what it may do in each, with the owner's rules and its recent mistakes above it. A Super Admin can make a mistake a rule.",
       },
     ],
     forms: [
@@ -41,7 +51,7 @@ export const ASSISTANT_MAP = [
         opens: "the box at the bottom of the chat, Send",
         saves: ["POST /ai/turn"],
         onSave:
-          "Sends the conversation to the model and shows its answer: a question, a reply, or a draft card. The exchange is kept in the person's history. Nothing is recorded in the books.",
+          "Sends the conversation to the model picked in the box beside Send, and shows its answer: a question, a reply, or a draft card. The exchange is kept in the person's history, with the model if one was picked, so opening it again brings that model back. Nothing is recorded in the books.",
       },
       {
         name: "Confirm and save",
@@ -123,7 +133,8 @@ export const ASSISTANT_MAP = [
       {
         name: "Make this a rule",
         on: "/assistant/knowledge",
-        opens: "beside a mistake on the list, Super Admin only",
+        opens:
+          "beside a mistake on the list, here or in the Assistant's settings, Super Admin only",
         saves: ["POST /ai/mistakes/:id/rule"],
         schema: makeAiRuleSchema,
         permission: "settings.write",
@@ -134,7 +145,8 @@ export const ASSISTANT_MAP = [
       {
         name: "Remove from the list",
         on: "/assistant/knowledge",
-        opens: "beside a mistake on the list, Super Admin only",
+        opens:
+          "beside a mistake on the list, here or in the Assistant's settings, Super Admin only",
         saves: ["DELETE /ai/mistakes/:id"],
         permission: "settings.write",
         onSave:
@@ -142,8 +154,8 @@ export const ASSISTANT_MAP = [
       },
       {
         name: "Instructions for the Assistant",
-        on: "/settings",
-        opens: "Settings, Assistant section: Save the instructions",
+        on: "/assistant/settings",
+        opens: "the Instructions card: Save the instructions, Super Admin only",
         saves: ["PUT /ai/instructions"],
         schema: setAiInstructionsSchema,
         permission: "settings.write",
@@ -153,8 +165,9 @@ export const ASSISTANT_MAP = [
       },
       {
         name: "Anthropic API key",
-        on: "/settings",
-        opens: "Settings, Assistant section: Save the key",
+        on: "/assistant/settings",
+        opens:
+          "the Anthropic API key card, shown while Claude goes through the Anthropic key: Save the key, Super Admin only",
         saves: ["POST /ai/key"],
         schema: setAiKeySchema,
         permission: "settings.write",
@@ -163,8 +176,8 @@ export const ASSISTANT_MAP = [
       },
       {
         name: "Remove",
-        on: "/settings",
-        opens: "Settings, Assistant section, beside the stored Anthropic key",
+        on: "/assistant/settings",
+        opens: "the Anthropic API key card, beside the stored key",
         saves: ["DELETE /ai/key"],
         permission: "settings.write",
         onSave:
@@ -172,18 +185,56 @@ export const ASSISTANT_MAP = [
       },
       {
         name: "Which model answers",
-        on: "/settings",
+        on: "/assistant/settings",
         opens:
-          "Settings, Assistant section: the route, the model and how much it may read; the model also from the picker in the chat",
+          "the Model card: the model new chats start with and the way Claude goes; the What leaves the building card: how much it may read. Super Admin only",
         saves: ["PATCH /ai/settings"],
         schema: updateAiSettingsSchema,
         permission: "settings.write",
         fields: {
-          provider: "the Anthropic key, or Google Cloud",
+          model:
+            "the default, for a new chat and for a chat nobody switched; a conversation's own is picked in the chat",
+          provider:
+            "the way Claude goes: the Anthropic key, or Google Cloud. Gemini always goes through Google Cloud",
           dataAccess: "whether it may look up the books at all",
         },
         onSave:
-          "Changes it for everybody from their next message. Every change is in What changed.",
+          "Changes it for everybody from their next message, except in a conversation whose model was picked in the chat. Every change is in What changed.",
+      },
+      {
+        name: "Connect",
+        on: "/assistant/settings",
+        opens:
+          "The Assistant's settings, Google Cloud card, Super Admin only: paste the key or Choose the .json file, then Connect (Replace the key once one is saved)",
+        saves: ["POST /connections/google/key"],
+        schema: setGoogleKeySchema,
+        fields: {
+          serviceAccount:
+            "the whole service-account JSON file Google downloads",
+        },
+        onSave:
+          "Checks the key with Google, then stores it encrypted; it is never shown again. The card then shows the address to share Sheets and Docs with. Refused when it is not a service-account key or Google turns it down.",
+        permission: "settings.write",
+      },
+      {
+        name: "Remove the Google Cloud key?",
+        on: "/assistant/settings",
+        opens:
+          "The Assistant's settings, Google Cloud card: Remove, beside Test once a key is saved",
+        saves: ["DELETE /connections/google/key"],
+        onSave:
+          "Deletes the key. Shared Sheets and Docs can no longer be read, and Gemini can no longer be picked. Claude, if it went through Google Cloud, goes back to the Anthropic key, and a Gemini default becomes Claude.",
+        permission: "settings.write",
+      },
+      {
+        name: "Test",
+        on: "/assistant/settings",
+        opens:
+          "The Assistant's settings, Google Cloud card: Test, beside Copy address once a key is saved",
+        saves: ["POST /connections/google/test"],
+        onSave:
+          "Changes nothing. Asks Google, with the saved key, whether Claude on Vertex AI, Gemini, Sheets, Docs and Drive answer, and lists each as ready or why not.",
+        permission: "settings.write",
       },
     ],
     recordedBy: [],
@@ -192,7 +243,7 @@ export const ASSISTANT_MAP = [
       drafts: [],
       reads: [],
       otherwise:
-        "I cannot change my own settings, my model or the instructions I am given. A Super Admin does that under Settings, Assistant. What I know about the app, my rules and my recent mistakes are on What the Assistant knows.",
+        "I cannot change my own settings or the instructions I am given. A Super Admin does that in the Assistant's settings, behind the gear on this page. The model answering this conversation can be picked in the message box, beside Send. What I know about the app, my rules and my recent mistakes are on What the Assistant knows.",
     },
   }),
 ];

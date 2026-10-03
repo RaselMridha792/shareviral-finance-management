@@ -56,7 +56,7 @@ const PROBE_ID = "sfm-connection-check";
 type GoogleReply = { status: number; body: Record<string, unknown> | null };
 
 /**
- * Settings → Connections: the Google Cloud service account (#131).
+ * The Google Cloud service account (#131), in the Assistant's settings.
  *
  * The key goes in sealed and never comes out. Everything this returns is the
  * client email and the project — what Google prints on its own console, and
@@ -165,17 +165,21 @@ export class ConnectionsService {
   }
 
   /**
-   * Removes the key, and — if the assistant was going through Google — sends
-   * it back to the Anthropic key. Left on Google with no key it would be off
-   * for everybody, with a setting the screen no longer offers.
+   * Removes the key, and — if Claude was going through Google — sends it back
+   * to the Anthropic key. Left on Google with no key it would be off for
+   * everybody, with a setting the screen no longer offers.
    *
-   * A model only Google Cloud reaches goes back with it: Gemini on an
-   * Anthropic key is a pair nothing could answer.
+   * A default only Google Cloud reaches goes back with it: Gemini goes no
+   * other way (B2: the route follows the model), so a Gemini default with no
+   * Google key is an Assistant nothing could answer. A Gemini since taken
+   * off the list is still a Gemini.
    */
   async clearGoogleKey(actor: AuthenticatedUser): Promise<GoogleConnection> {
     const stored = (await this.row())?.model;
     const model = AI_MODELS.find((offered) => offered === stored);
-    const stranded = Boolean(model && !aiModelGoesWith(model, "anthropic"));
+    const stranded = model
+      ? !aiModelGoesWith(model, "anthropic")
+      : Boolean(stored && isGeminiModel(stored));
 
     await this.audit.mutate({
       action: "settings_change",

@@ -320,7 +320,7 @@ try {
     [seal("sk-ant-linkqa-0000000000000000000000"), admin.id],
   );
   const noKey = await call("POST", "/ai/attachments/link", { url: SHEET_URL });
-  check("with no Google key: refused, saying where the key goes", noKey.status === 400 && /needs the Google Cloud key.*Settings → Connections/.test(noKey.body?.message ?? ""), `${noKey.status} ${noKey.body?.message}`);
+  check("with no Google key: refused, saying where the key goes", noKey.status === 400 && /needs the Google Cloud key.*in the Assistant's settings/.test(noKey.body?.message ?? ""), `${noKey.status} ${noKey.body?.message}`);
   check("…and Google was not asked", googleAsked.length === 0, String(googleAsked.length));
 
   await q(`update app_settings set google_service_account = $1, google_key_set_at = now(), google_key_set_by = $2 where id = 1`, [seal(JSON.stringify(KEY)), admin.id]);

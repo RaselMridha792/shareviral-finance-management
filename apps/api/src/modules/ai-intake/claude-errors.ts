@@ -34,7 +34,7 @@ export function explainClaudeError(
 
   if (provider === "anthropic") {
     return error.status === 401
-      ? "Anthropic rejected the API key. A Super Admin can replace it under Settings."
+      ? "Anthropic rejected the API key. A Super Admin can replace it in the Assistant's settings."
       : error.status === 403 ||
           /identity verification/i.test(error.message ?? "")
         ? "Anthropic needs the account verified before it will answer. Whoever owns the key can do that at console.anthropic.com; nothing needs changing here."
@@ -56,14 +56,14 @@ export function explainClaudeError(
       return (
         "Google refused the service-account key" +
         (cause ? ` (${cause})` : "") +
-        ". It may have been deleted or disabled in Google Cloud; a Super Admin can add a new one under Settings → Connections."
+        ". It may have been deleted or disabled in Google Cloud; a Super Admin can add a new one in the Assistant's settings."
       );
     }
     return "Could not reach Google Cloud. Try again in a moment.";
   }
 
   if (error.status === 401) {
-    return "Google refused the service-account key. A Super Admin can add a new one under Settings → Connections.";
+    return "Google refused the service-account key. A Super Admin can add a new one in the Assistant's settings.";
   }
   if (error.status === 403) {
     if (/SERVICE_DISABLED|has not been used|is disabled/i.test(message)) {

@@ -22,8 +22,9 @@ import {
   aiIntakeRequestSchema,
   aiModelFrom,
   aiModelGoesWith,
-  aiModelProviderProblem,
   aiModelsFor,
+  aiModelsOpen,
+  aiRouteFor,
   findGoogleLinks,
   isDocAttachment,
   isGeminiModel,
@@ -58,14 +59,60 @@ describe("which model goes which way", () => {
   it("offers Claude either way", () => {
     assert.equal(aiModelGoesWith("claude-opus-5", "anthropic"), true);
     assert.equal(aiModelGoesWith("claude-opus-5", "vertex"), true);
-    assert.equal(aiModelProviderProblem("claude-opus-5", "vertex"), null);
+  });
+});
+
+describe("the route follows the model (B2)", () => {
+  it("sends Gemini through Google Cloud, whichever way Claude is set to go", () => {
+    for (const model of AI_MODELS.filter(isGeminiModel)) {
+      for (const claudeRoute of AI_PROVIDERS) {
+        assert.equal(aiRouteFor(model, claudeRoute), "vertex", model);
+      }
+    }
   });
 
-  it("says in words why a pair nothing could answer is refused", () => {
-    for (const model of AI_MODELS.filter(isGeminiModel)) {
-      assert.match(
-        aiModelProviderProblem(model, "anthropic") ?? "",
-        /is reached through Google Cloud, not through Anthropic key/,
+  it("sends Claude the way the settings say", () => {
+    for (const claudeRoute of AI_PROVIDERS) {
+      assert.equal(aiRouteFor("claude-opus-5", claudeRoute), claudeRoute);
+    }
+  });
+
+  it("never sends a model a way it cannot go", () => {
+    for (const model of AI_MODELS) {
+      for (const claudeRoute of AI_PROVIDERS) {
+        assert.ok(aiModelGoesWith(model, aiRouteFor(model, claudeRoute)));
+      }
+    }
+  });
+
+  it("offers in the chat every model whose route has its key, in order", () => {
+    const gemini = AI_MODELS.filter(isGeminiModel);
+    const both = { anthropic: true, google: true };
+    assert.deepEqual(aiModelsOpen("anthropic", both), [...AI_MODELS]);
+    assert.deepEqual(aiModelsOpen("vertex", both), [...AI_MODELS]);
+    // The Anthropic key alone: Claude, and no Gemini.
+    assert.deepEqual(
+      aiModelsOpen("anthropic", { anthropic: true, google: false }),
+      ["claude-opus-5"],
+    );
+    // The Google key alone, Claude set to the Anthropic key: Gemini only.
+    assert.deepEqual(
+      aiModelsOpen("anthropic", { anthropic: false, google: true }),
+      gemini,
+    );
+    // Claude through Google Cloud needs no Anthropic key, only Google's.
+    assert.deepEqual(
+      aiModelsOpen("vertex", { anthropic: false, google: true }),
+      [...AI_MODELS],
+    );
+    assert.deepEqual(
+      aiModelsOpen("vertex", { anthropic: true, google: false }),
+      [],
+    );
+    for (const claudeRoute of AI_PROVIDERS) {
+      assert.deepEqual(
+        aiModelsOpen(claudeRoute, { anthropic: false, google: false }),
+        [],
       );
     }
   });
@@ -107,37 +154,28 @@ describe("which Gemini is offered", () => {
 });
 
 describe("what a stored model is read as", () => {
-  it("is itself, when it is offered and can be reached that way", () => {
-    for (const provider of AI_PROVIDERS) {
-      for (const model of aiModelsFor(provider)) {
-        assert.equal(aiModelFrom(model, provider), model);
-      }
-    }
+  it("is itself, when it is offered", () => {
+    for (const model of AI_MODELS) assert.equal(aiModelFrom(model), model);
   });
 
-  it("is Claude when the row is empty, or names nothing known", () => {
-    for (const provider of AI_PROVIDERS) {
-      assert.equal(aiModelFrom(null, provider), "claude-opus-5");
-      assert.equal(aiModelFrom(undefined, provider), "claude-opus-5");
-      assert.equal(aiModelFrom("claude-haiku-4-5", provider), "claude-opus-5");
-    }
-  });
-
-  it("is Claude for a Gemini on the Anthropic key, listed or not", () => {
-    assert.equal(aiModelFrom("gemini-2.5-pro", "anthropic"), "claude-opus-5");
-    assert.equal(aiModelFrom("gemini-1.5-pro", "anthropic"), "claude-opus-5");
+  it("is nothing when the row is empty, or names nothing known", () => {
+    // For a chat: the default. For the settings: the model offered first.
+    assert.equal(aiModelFrom(null), null);
+    assert.equal(aiModelFrom(undefined), null);
+    assert.equal(aiModelFrom(""), null);
+    assert.equal(aiModelFrom("claude-haiku-4-5"), null);
   });
 
   it("is the Gemini offered first for a Gemini taken off the list, not Claude", () => {
-    // What the live row will hold once 2.5 Pro is taken out of AI_MODELS.
-    assert.equal(aiModelFrom("gemini-1.5-pro", "vertex"), AI_GEMINI_DEFAULT);
+    // What a row will hold once 2.5 Pro is taken out of AI_MODELS.
+    assert.equal(aiModelFrom("gemini-1.5-pro"), AI_GEMINI_DEFAULT);
   });
 });
 
 describe("updateAiSettingsSchema", () => {
-  it("takes a model and a provider that go together", () => {
+  it("takes any default model with either route for Claude (B2)", () => {
     for (const provider of AI_PROVIDERS) {
-      for (const model of aiModelsFor(provider)) {
+      for (const model of AI_MODELS) {
         assert.equal(
           updateAiSettingsSchema.safeParse({ model, provider }).success,
           true,
@@ -438,5 +476,25 @@ describe("the files a turn reads (A3b)", () => {
 
   it("still takes the one file a page loaded before A3b sends", () => {
     assert.equal(turn({ attachmentId: id(1) }).success, true);
+  });
+});
+
+describe("the model a turn carries (B2)", () => {
+  const turn = (extra: Record<string, unknown>) =>
+    aiIntakeRequestSchema.safeParse({
+      messages: [{ role: "user", content: "courier ke 500 taka dilam" }],
+      ...extra,
+    });
+
+  it("takes any model offered, or none (the default)", () => {
+    for (const model of AI_MODELS) {
+      assert.equal(turn({ model }).success, true, model);
+    }
+    assert.equal(turn({}).success, true);
+  });
+
+  it("refuses a model nobody offers", () => {
+    assert.equal(turn({ model: "gemini-9-ultra" }).success, false);
+    assert.equal(turn({ model: "" }).success, false);
   });
 });

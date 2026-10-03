@@ -27,7 +27,8 @@
  *      Save checks;
  *   I. the page: This was wrong under an answer; What the Assistant knows,
  *      with the rules, the mistakes and Make this a rule for the Super Admin
- *      and the map alone for the CFO; Settings, Assistant; a phone's width.
+ *      and the rules and mistakes to read for the CFO (B2); the Assistant's
+ *      settings; a phone's width.
  *
  *     npm run build --workspace @finance/api     (this runs the BUILT api)
  *     node .assistantlearnqa.mjs                 (needs the web on :3000)
@@ -534,18 +535,24 @@ try {
   check("the search keeps the parts that mention it", filtered.includes("Bank Advice") && !filtered.includes("Invoice Builder"), filtered.join(", ").slice(0, 200));
   check("no page error", page.errors.length === 0, page.errors.slice(0, 2).join(" | "));
 
+  // The Assistant's own settings since B2 (3 Oct 2026); the old address
+  // still opens them.
   await page.goto(`${WEB}/settings?tab=assistant`, { waitUntil: "networkidle0", timeout: 120000 });
   await page.waitForFunction(() => document.body.innerText.includes("Its recent mistakes"), { timeout: 30000 }).catch(() => undefined);
   shown = await text(page);
-  check("Settings, Assistant lists the mistakes too, below the instructions", shown.indexOf("Instructions for the Assistant") > -1 && shown.indexOf("Its recent mistakes") > shown.indexOf("Instructions for the Assistant"));
+  check("the Assistant's settings list the mistakes too, beside the instructions", new URL(page.url()).pathname === "/assistant/settings" && shown.indexOf("Instructions for the Assistant") > -1 && shown.indexOf("Its recent mistakes") > shown.indexOf("Instructions for the Assistant"));
   check("with the way to What the Assistant knows", await page.evaluate(() => [...document.querySelectorAll("a")].some((a) => a.getAttribute("href") === "/assistant/knowledge")));
 
   const cfoPage = await openAs(cfo);
   await cfoPage.goto(`${WEB}/assistant/knowledge`, { waitUntil: "networkidle0", timeout: 120000 });
+  await cfoPage.waitForFunction(() => document.body.innerText.includes("Its recent mistakes"), { timeout: 30000 }).catch(() => undefined);
   shown = await text(cfoPage);
   await shot(cfoPage, "knowledge-cfo");
   check("the CFO sees the map", shown.includes("The map of the app") && shown.includes("AI tools and subscriptions"));
-  check("and neither the rules nor the mistakes", !shown.includes("Your rules") && !shown.includes("Its recent mistakes"));
+  // B2, the owner (3 Oct 2026): the CFO reads the rules and the mistakes,
+  // and changes nothing.
+  const cfoButtons = await cfoPage.evaluate(() => [...document.querySelectorAll("button, a")].filter((b) => /Make this a rule|Change them|^Remove$/.test(b.textContent.trim())).length);
+  check("and reads the owner's rules and the mistakes, with nothing to change them", shown.includes("The owner's rules") && shown.includes("Its recent mistakes") && !shown.includes("Your rules") && cfoButtons === 0, String(cfoButtons));
   check("no page error for the CFO", cfoPage.errors.length === 0, cfoPage.errors.slice(0, 2).join(" | "));
 
   const phone = await openAs(admin, 390);

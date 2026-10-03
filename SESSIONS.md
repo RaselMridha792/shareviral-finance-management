@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 151 | **The Assistant's own settings behind a gear on the chat and its window; the CFO reads them; the picker beside Send for both roles, a model for each conversation; the route follows the model** | **built** — piece B2's code; **the owner tries it on the live site: the list is in #151.** Next is B3 (token accounting), its schema alone first |
 | 150 | **Permissions: the CFO reads what is behind the Assistant's settings — the instructions and the mistakes — and changes nothing; the key's hint goes to the Super Admin alone** | **done** — pushed alone, B2's permission change. **Next: the B2 code** (the settings icon, the page, the model picker) |
 | 149 | **Schema: each conversation with the Assistant keeps its own model — `ai_chats.model`** | **done** — pushed alone, the schema half of B2, from the owner's answer "each chat its own". **Next: B2's permission change, alone** (the CFO reads the settings and instructions, changes nothing; in the brief), **then the B2 code** |
 | 148 | **The Assistant's message box: no stray ring inside it when it has the focus** | **done** — the owner's report from the live site, 3 Oct |
@@ -128,6 +129,181 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 151. The Assistant's own settings, and a model for each conversation — 3 Oct 2026
+
+`docs/briefs/2026-10-02-assistant-powerful.md`, **piece B2, its code**, after
+#149 (schema) and #150 (permissions). The owner's three answers are in the
+brief. No schema, permission or deploy change in this push.
+
+**What the owner now has:**
+
+- **A gear on the Assistant.** On the page it sits at the top of the history
+  list, beside New chat (on a phone, in the top strip). In the floating
+  window it is in the header. It opens **Assistant settings**
+  (`/assistant/settings`).
+- **Assistant settings, as the Super Admin sees it:**
+  - **Model**: "New chats start with" (the default), and "Claude goes
+    through" (Anthropic key or Google Cloud). Under them, "In the chat's
+    picker now" lists by name every model that can be reached.
+  - **Anthropic API key**: shown only while Claude goes through the
+    Anthropic key, as the brief asked.
+  - **Google Cloud**: the old Connections card. It has the key, Test, the
+    address to share files with, and the setup steps folded under it.
+  - **What leaves the building** (how much it may read), the
+    **instructions**, **its recent mistakes** with Make this a rule, and
+    **What it cannot do**.
+- **The CFO sees the same page and changes nothing.** One line says so. It
+  shows the default, Claude's route, the reach, the instructions and the
+  mistakes as lists. There is no control, no button, no key card, no hint
+  and no Google address. What the Assistant knows now shows the CFO the
+  owner's rules and the mistakes too, without Make this a rule or Change
+  them.
+- **The picker beside Send**, for the Super Admin and the CFO alike, lists
+  every model that has a working route now: Opus 5 and the three Geminis
+  when both keys are stored.
+  - A pick holds for that conversation, as the owner chose. New chat goes
+    back to the default. Opening the conversation from History brings its
+    model back.
+  - A conversation nobody switched keeps nothing, and follows the default.
+  - The pick no longer changes anybody's default. Before this, the picker
+    was the Super Admin's and wrote the default.
+- **The route follows the model.** Gemini always goes through Google Cloud.
+  Claude goes the way the settings say, so Claude on the Anthropic key with
+  Gemini as the default is now allowed; before, that pair was refused.
+- **Settings has no Assistant or Connections section.** Both addresses,
+  `/settings?tab=assistant` and `?tab=connections`, open the new page.
+- **Sentences that sent people to "Settings → Connections" or "Settings,
+  Assistant"** now say "the Assistant's settings". That covers the
+  not-switched-on reasons, the key and link errors, Google's retirement
+  note and the app map the model reads.
+
+**How it is built:**
+
+- `packages/shared/src/ai.ts` (approved for B2):
+  - `aiRouteFor(model, claudeRoute)` and `aiModelsOpen(claudeRoute, keys)`
+    are new.
+  - `aiModelFrom(stored)` no longer takes a route. It returns null for "the
+    default", and an unlisted Gemini is read as Gemini 3.8 Flash.
+  - `aiModelProviderProblem` is gone: the pair it refused is allowed now.
+  - A turn may carry `model`, `AiChat` returns `model`, and
+    `AiAvailability` gains `models`.
+- API, `ai-intake.service.ts`:
+  - `route(asked)` picks the model and its way. A picked model with no key
+    on its route is refused with a 400 that names the missing key, before
+    any model is asked and before anything is kept.
+  - The Assistant is off while the **default** cannot answer, even if
+    another model could. A chat should never quietly go to a model nobody
+    chose.
+  - A Gemini default needs the Google key. The audit summary says "default
+    model" and "way to Claude".
+- API, other files:
+  - `ai-chats.service.ts` keeps `ai_chats.model` only when a turn names a
+    model.
+  - `connections.service.ts`: removing the Google key also turns an
+    unlisted Gemini default into Claude.
+  - App map: `/assistant/settings` is on it. The settings forms and the
+    three Google Cloud forms moved to the Assistant's part, with the
+    `connections` module.
+- Web, three files moved under `components/assistant/` (git renames):
+  - `assistant-settings.tsx`, the page (it was Settings' Assistant panel).
+  - `google-connection.tsx` (it was the Connections panel).
+  - `assistant-instructions.tsx`, which gains `readOnly`.
+  - `AssistantMistakes` gains `readOnly` too.
+- Web, the conversation:
+  - The provider holds `chatModel`, sends it with each turn, sets it from
+    History and clears it on New chat.
+  - A pick whose model can no longer be reached shows the default and sends
+    nothing, and the conversation keeps its own model.
+- Web, Settings: the two sections, their panels and badges are gone, and
+  `settings/page.tsx` redirects (308) the two old tabs.
+- Nothing under `components/ui` or `lib` changed.
+
+**Proved:**
+
+- `.assistantsettingsqa.mjs` (new, committed like the other Assistant
+  harnesses) **51/51**. It runs its own built API with a stand-in model, and
+  the real pages on `next dev`. It stores a made-up Google key so Gemini is
+  offered, and never asks Gemini anything.
+  - **API:** the list of four, and the same for the CFO with no hint. A turn
+    with no model is kept with none. A Gemini default beside Claude on the
+    Anthropic key is allowed. A turn to the picked Opus is kept and comes
+    back. An unlisted Gemini chat reads as 3.8 Flash. With no Google key, a
+    picked Gemini is a 400 in words, nothing is asked, nothing is kept, the
+    default is refused and the list is Opus alone.
+  - **Chat:** the four, on the default. A pick is sent, asked of Claude and
+    kept. New chat is back on the default. History brings Opus back, and
+    its next turn too. A chat nobody switched is on the default. The rail's
+    gear works.
+  - **Settings, Super Admin:** the three choices. The Anthropic box goes
+    when Claude is set to Google Cloud and comes back. The Google card and
+    its address. The list by name. The default saved. 0px sideways at 1440.
+    With no Google key, the Geminis and Google Cloud are disabled.
+  - **CFO:** the four, a pick kept, nobody's default changed. Settings read
+    only: 0 selects, textareas or inputs, no button, no key, hint or Google
+    address. The rules and the mistakes on What the Assistant knows, with no
+    button.
+  - **Old addresses:** both open the page. The rail lists neither. `?tab=`
+    with an odd value does not redirect.
+  - **HR** gets no-access. On a **phone** the gear is on screen and nothing
+    goes sideways. The **window's gear** opens the page and puts the window
+    away. It leaves nothing behind, and app_settings is as it was.
+- Earlier harnesses, run one at a time (four were updated to B2's rules):
+  - `.assistantwindowqa.mjs` 33/33 (`SKIP_SWEEP=1`).
+  - `.assistantlearnqa.mjs` 81/81. Its "the CFO sees neither the rules nor
+    the mistakes" is now "reads both, no button".
+  - `.assistantmapqa.mjs` 103/103 and `.assistantlinkqa.mjs` 60/60. The link
+    harness's expected sentence changed.
+  - `.connectionsqa.mjs` 64/64. The pair rule and the labels changed.
+  - `.assistantconfirmqa.mjs` 60/60 and `.assistantemptyqa.mjs` 26/26.
+  - `.rolecheck.mjs`: all as before.
+  - `node .sweep.mjs`: the same numbers as #147.
+- Unit tests: `ai-model-route.spec.ts` (new, 14) and shared `ai.test.ts`.
+- build:shared, typecheck, lint (its 2 old warnings) and tests (API 384, up
+  14; shared 386) pass, each on its own exit code.
+- `.assistantbar.mjs` gains N1 and N2, the two questions below. They are not
+  run: there is no key locally.
+
+**Not proved:** the real models, and what live's settings row holds.
+
+**For the owner — on the live site, after the deploy.** **Reload first.**
+
+| # | Do this | What should happen |
+|---|---|---|
+| 1 | Open the Assistant | A gear at the top of the history list, beside New chat. Press it: **Assistant settings** |
+| 2 | Look at the Model card | "New chats start with", "Claude goes through", and under them the models the chat can offer, by name. If Claude goes through Google Cloud there, set it to **Anthropic key** (Google gave no quota for Claude) |
+| 3 | Back to the chat; open the picker beside Send | Opus 5 and the three Geminis |
+| 4 | Pick Gemini 3.8 Flash, type `amader total team member kotojon?` | An answer, from Gemini. The count must match the Team screen |
+| 5 | New chat | The picker is back on your default |
+| 6 | History → open the chat from step 4 | The picker shows Gemini 3.8 again |
+| 7 | Type `tomar model ta kivabe change korbo? Gemini try korte chai.` | It names the picker in the message box. It must **not** say "Settings, Assistant", and it drafts nothing |
+| 8 | Type `Google Cloud er key ta kothay add korbo?` | It names the Assistant's settings, the gear. It must **not** say "Settings → Connections" |
+| 9 | Open `/settings?tab=assistant` (an old link) | Assistant settings opens. The Settings list has no Assistant or Connections |
+| 10 | On any page, open the round button, press the gear in the window | Assistant settings opens |
+| 11 | Sign in as the CFO | The same page, read only: no key, no Google address, no button. The picker in the chat works |
+
+**What the owner has to decide:** nothing for B2. These choices were made
+here and are easy to change:
+- the settings are a page, not a panel over the chat;
+- a model picked and never sent is not kept; it is kept with the first
+  message sent;
+- while the default cannot answer, the Assistant is off even if another
+  model could;
+- the CFO's "Not switched on" card has no link to the settings.
+
+**Next:** B3, token accounting. Its schema change goes out alone first. The
+usage panel on the right of the chat (B2's last bullet) needs B3's figures,
+so it is built with B3. A5 still waits for the samples in `F:\boss-samples\`.
+
+**Seen, not touched:**
+- `apps/web/src/lib/connections.ts` and `packages/shared/src/connections.ts`
+  still say "Settings → Connections" in a comment. Both are shared code and
+  were not approved for this piece, and only a comment is wrong.
+- `sheet-new.png` is still modified in the working copy. It is not this
+  session's.
+- The local API on :4001 was an old build with no watcher (since 19:08). I
+  restarted it on this build (`node --enable-source-maps dist/main` in
+  `apps/api`, logs in `.dev-api.log` and `.dev-api.err.log`, git-ignored).
 
 ## 150. Permissions: the CFO reads the Assistant's settings and changes nothing — 3 Oct 2026
 

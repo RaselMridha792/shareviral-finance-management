@@ -26,15 +26,24 @@ import { ApiError } from "@/lib/api-client";
 import { connectionsApi } from "@/lib/connections";
 
 /**
- * Settings → Connections: the Google Cloud service account (#131).
+ * The Google Cloud service account (#131), a card of the Assistant's
+ * settings since B2 (3 Oct 2026); it was Settings → Connections.
  *
- * One key for two jobs — Claude or Gemini through Vertex AI, when the
- * Assistant is set to go that way, and reading the Sheets and Docs shared
- * with the account.
+ * One key for two jobs — Gemini, and Claude when it is set to go that way,
+ * through Vertex AI; and reading the Sheets and Docs shared with the account.
  * The key goes one way, in: what comes back is the client email, which is the
- * address files are shared with, and the project.
+ * address files are shared with, and the project. The Super Admin's alone:
+ * the CFO's view of the settings does not draw this card, and the API
+ * refuses them its reads.
+ *
+ * `onChanged` is told when a key is saved or removed, so the page can read
+ * again which models the chat may offer.
  */
-export function ConnectionsPanel() {
+export function GoogleConnection({
+  onChanged,
+}: {
+  onChanged?: () => Promise<void> | void;
+}) {
   const router = useRouter();
   const [google, setGoogle] = useState<GoogleConnection | null>(null);
   const [text, setText] = useState("");
@@ -71,6 +80,7 @@ export function ConnectionsPanel() {
       }
       setText("");
       setSaved(true);
+      await onChanged?.();
       router.refresh();
     } catch (caught) {
       setError(
@@ -91,6 +101,7 @@ export function ConnectionsPanel() {
     try {
       setGoogle(await connectionsApi.clearGoogleKey());
       setConfirming(false);
+      await onChanged?.();
       router.refresh();
     } catch (caught) {
       setError(
@@ -136,20 +147,12 @@ export function ConnectionsPanel() {
   const configured = Boolean(google?.configured);
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        A Google Cloud service account does two things here: it reaches the
-        Assistant&apos;s model, Claude or Gemini, through Vertex AI, when the
-        Assistant is set to go that way, and it reads the Google Sheets and Docs
-        you share with it. It can only read what was shared, and it cannot
-        change anything.
-      </p>
-
+    <>
       <Card>
         <CardHeader
           title="Google Cloud"
           icon={GoogleLogoIcon}
-          description="One service-account key, for the Assistant's model and for shared files."
+          description="One service-account key: Gemini, and Claude when it goes this way, through Vertex AI; and the Google Sheets, Docs and Drive files shared with it, which it can read and never change."
           action={
             configured ? (
               <Badge tone="positive">
@@ -314,6 +317,58 @@ export function ConnectionsPanel() {
               </Button>
             </div>
           </form>
+
+          {/* Open until a key is saved: the steps are what somebody needs
+              before then, and a reference afterwards. */}
+          <details
+            open={!configured}
+            className="rounded-xl border border-border"
+          >
+            <summary className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 text-sm font-bold select-none">
+              <ListNumbersIcon weight="duotone" size={17} />
+              Setting it up in Google Cloud
+            </summary>
+            <div className="border-t border-border px-3.5 py-3">
+              <ol className="flex max-w-2xl list-decimal flex-col gap-2 pl-5 text-sm text-muted-foreground">
+                <li>
+                  <strong>Create a project</strong> and attach billing to it.
+                </li>
+                <li>
+                  <strong>Enable the APIs:</strong> Vertex AI, Google Sheets,
+                  Google Docs and Google Drive.
+                </li>
+                <li>
+                  <strong>Enable the model.</strong> Gemini needs no enabling.
+                  For Claude, in Vertex AI → Model Garden, find Claude Opus 5
+                  and enable it, accepting the terms.
+                </li>
+                <li>
+                  <strong>Create a service account</strong> under IAM → Service
+                  accounts, with the role &ldquo;Vertex AI User&rdquo;.
+                </li>
+                <li>
+                  <strong>Make its key:</strong> Keys → Add key → JSON. Paste
+                  that file above. If Google will not make a key, the
+                  organisation policy &ldquo;Disable service account key
+                  creation&rdquo; is on for the project and has to be relaxed.
+                </li>
+                <li>
+                  <strong>Share files</strong> with the address shown above once
+                  the key is saved, as Viewer. The app sees nothing that was not
+                  shared with it.
+                </li>
+              </ol>
+              <a
+                href="https://console.cloud.google.com/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                Open the Google Cloud console
+                <ExternalLink className="size-3.5" />
+              </a>
+            </div>
+          </details>
         </CardBody>
       </Card>
 
@@ -323,58 +378,10 @@ export function ConnectionsPanel() {
         destructive
         confirmLabel="Remove"
         pending={pending}
-        body="Shared Sheets and Docs can no longer be read. If the Assistant goes through Google Cloud, it goes back to the Anthropic key, and to Claude."
+        body="Shared Sheets and Docs can no longer be read, and Gemini can no longer be picked. Claude, if it goes through Google Cloud, goes back to the Anthropic key, and a Gemini default becomes Claude."
         onConfirm={() => void remove()}
         onCancel={() => setConfirming(false)}
       />
-
-      <Card>
-        <CardHeader
-          title="Setting it up in Google Cloud"
-          icon={ListNumbersIcon}
-          description="Once, in the console. The key is the only thing that comes here."
-        />
-        <CardBody>
-          <ol className="flex max-w-2xl list-decimal flex-col gap-2 pl-5 text-sm text-muted-foreground">
-            <li>
-              <strong>Create a project</strong> and attach billing to it.
-            </li>
-            <li>
-              <strong>Enable the APIs:</strong> Vertex AI, Google Sheets, Google
-              Docs and Google Drive.
-            </li>
-            <li>
-              <strong>Enable the model.</strong> In Vertex AI → Model Garden,
-              find Claude Opus 5 and enable it, accepting the terms. Gemini
-              needs no enabling.
-            </li>
-            <li>
-              <strong>Create a service account</strong> under IAM → Service
-              accounts, with the role &ldquo;Vertex AI User&rdquo;.
-            </li>
-            <li>
-              <strong>Make its key:</strong> Keys → Add key → JSON. Paste that
-              file above. If Google will not make a key, the organisation policy
-              &ldquo;Disable service account key creation&rdquo; is on for the
-              project and has to be relaxed.
-            </li>
-            <li>
-              <strong>Share files</strong> with the address shown above once the
-              key is saved, as Viewer. The app sees nothing that was not shared
-              with it.
-            </li>
-          </ol>
-          <a
-            href="https://console.cloud.google.com/"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            Open the Google Cloud console
-            <ExternalLink className="size-3.5" />
-          </a>
-        </CardBody>
-      </Card>
-    </div>
+    </>
   );
 }

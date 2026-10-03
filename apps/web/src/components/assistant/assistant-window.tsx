@@ -7,8 +7,10 @@ import {
   LoaderCircle,
   Maximize2,
   Minus,
+  Settings,
   SquarePen,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
@@ -141,6 +143,17 @@ export function AssistantWindow() {
                 </button>
               </>
             ) : null}
+            {/* The Assistant's own settings (B2). A page of its own, so the
+                window steps aside for it as it does for any page of the
+                Assistant's; the conversation waits behind the launcher. */}
+            <Link
+              href="/assistant/settings"
+              aria-label="Assistant settings"
+              title="Assistant settings: the model, its keys, how much it may read, its rules"
+              className={HEADER_BUTTON}
+            >
+              <Settings className="size-4" />
+            </Link>
             <button
               type="button"
               onClick={() => {

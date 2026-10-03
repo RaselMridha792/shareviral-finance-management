@@ -3,7 +3,6 @@ import {
   createUserSchema,
   lockBooksSchema,
   resetPasswordSchema,
-  setGoogleKeySchema,
   themeSchema,
   typographySchema,
   updateCategorySchema,
@@ -36,10 +35,9 @@ export const SETTINGS_MAP = [
       "fx",
       "email",
       "notifications",
-      "connections",
     ],
     purpose:
-      "How the app itself is set up: the company's details and number formats, its colours and type, the expense headings and their sub-categories, the salary tax policy, each person's own sign-in, the people who can sign in and their roles, the log of what changed, what was trashed, the Assistant, the Google Cloud connection, email and notifications, and locking a period's books.",
+      "How the app itself is set up: the company's details and number formats, its colours and type, the expense headings and their sub-categories, the salary tax policy, each person's own sign-in, the people who can sign in and their roles, the log of what changed, what was trashed, email and notifications, and locking a period's books. The Assistant's own settings, and the Google Cloud connection, are on the Assistant's settings page.",
     keeps: [
       "A category: an expense or income heading, and the sub-categories under it. A payment is filed against a sub-category.",
       "Who can sign in, and as which role.",
@@ -50,7 +48,7 @@ export const SETTINGS_MAP = [
       {
         href: "/settings",
         name: "Settings",
-        does: "Sections: Company & formatting, Appearance, Categories, Salary TDS, Your sign-in, People who can sign in, What changed, Trashed, Assistant, Connections, Email, Notifications.",
+        does: "Sections: Company & formatting, Appearance, Categories, Salary TDS, Your sign-in, People who can sign in, What changed, Trashed, Email, Notifications. The Assistant and Connections sections moved to the Assistant's settings (3 Oct 2026); their old addresses open it.",
       },
     ],
     forms: [
@@ -453,43 +451,6 @@ export const SETTINGS_MAP = [
         saves: ["POST /notifications/read-all"],
         onSave:
           "Marks every unread notification of the person's own as read, and the bell's count clears. Nobody else's bell changes.",
-      },
-
-      /* --- Connections ------------------------------------------------------ */
-      {
-        name: "Connect",
-        on: "/settings",
-        opens:
-          "Settings, Connections section: paste the key or Choose the .json file, then Connect (Replace the key once one is saved)",
-        saves: ["POST /connections/google/key"],
-        schema: setGoogleKeySchema,
-        fields: {
-          serviceAccount:
-            "the whole service-account JSON file Google downloads",
-        },
-        onSave:
-          "Checks the key with Google, then stores it encrypted; it is never shown again. The card then shows the address to share Sheets and Docs with. Refused when it is not a service-account key or Google turns it down.",
-        permission: "settings.write",
-      },
-      {
-        name: "Remove the Google Cloud key?",
-        on: "/settings",
-        opens:
-          "Settings, Connections section: Remove, beside Test once a key is saved",
-        saves: ["DELETE /connections/google/key"],
-        onSave:
-          "Deletes the key. Shared Sheets and Docs can no longer be read, and an Assistant set to Google Cloud goes back to the Anthropic key and Claude.",
-        permission: "settings.write",
-      },
-      {
-        name: "Test",
-        on: "/settings",
-        opens:
-          "Settings, Connections section: Test, beside Copy address once a key is saved",
-        saves: ["POST /connections/google/test"],
-        onSave:
-          "Changes nothing. Asks Google, with the saved key, whether Claude on Vertex AI, Gemini, Sheets, Docs and Drive answer, and lists each as ready or why not.",
-        permission: "settings.write",
       },
 
       /* --- Your sign-in: each person's own two-step sign-in ---------------- */

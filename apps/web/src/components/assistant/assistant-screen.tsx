@@ -1,7 +1,8 @@
 "use client";
 
 import { type AiAvailability } from "@finance/shared";
-import { History, PictureInPicture2, SquarePen } from "lucide-react";
+import { History, PictureInPicture2, Settings, SquarePen } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { useAssistant } from "@/components/assistant/assistant-provider";
@@ -62,6 +63,7 @@ export function AssistantScreen({
           onOpen={open}
           onDelete={(id) => void assistant.removeChat(id)}
           onPopOut={assistant.shrink}
+          settings
         />
       </aside>
 
@@ -105,6 +107,14 @@ export function AssistantScreen({
           >
             <PictureInPicture2 className="size-4" />
           </button>
+          <Link
+            href="/assistant/settings"
+            aria-label="Assistant settings"
+            title="Assistant settings"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+          >
+            <Settings className="size-4" />
+          </Link>
           <button
             type="button"
             onClick={startNew}

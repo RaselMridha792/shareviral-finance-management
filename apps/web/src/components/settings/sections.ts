@@ -7,8 +7,6 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimpl
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent";
-import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
-import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { UserCircleGearIcon } from "@phosphor-icons/react/dist/ssr/UserCircleGear";
@@ -18,8 +16,8 @@ import { UserCircleGearIcon } from "@phosphor-icons/react/dist/ssr/UserCircleGea
  *
  * One list for two readers: the Settings sidebar draws it as its nav, and the
  * screen draws the chosen one's header from it. The ids are the ones
- * `/settings?tab=` has always taken — the Assistant screen links to
- * `?tab=assistant` — so the handoff's own names for them were not adopted.
+ * `/settings?tab=` has always taken — links in notes and bookmarks name
+ * them — so the handoff's own names for them were not adopted.
  *
  * A `permission` hides the section from the nav; the screen refuses to draw
  * the panel as well, and the API refuses the calls. Hidden here is
@@ -45,8 +43,6 @@ export type SettingsSectionId =
   | "users"
   | "audit"
   | "trashed"
-  | "assistant"
-  | "connections"
   | "email"
   | "notifications"
   | "appearance";
@@ -139,27 +135,12 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       "Deleted rows wait here until somebody restores or empties them.",
     group: "Data",
   },
-  {
-    id: "assistant",
-    label: "Assistant",
-    icon: RobotIcon,
-    hint: "Anthropic or Google Cloud",
-    description: "The optional assistant that fills forms from a sentence.",
-    group: "Integrations",
-    permission: "settings.write",
-  },
-  // The Google Cloud service account (#131): Claude through Vertex AI, and
-  // the Sheets and Docs shared with it. Super Admin's, like the Anthropic key.
-  {
-    id: "connections",
-    label: "Connections",
-    icon: PlugsConnectedIcon,
-    hint: "Google Cloud",
-    description:
-      "Outside services the app reaches with a key — Google Cloud for Claude, Sheets and Docs.",
-    group: "Integrations",
-    permission: "settings.write",
-  },
+  /*
+   * No Assistant or Connections here since B2 (3 Oct 2026): the owner asked
+   * for the Assistant's settings on the chat itself, the way ChatGPT and
+   * Claude keep theirs. Both are /assistant/settings, and their old
+   * `?tab=` addresses open it.
+   */
   {
     id: "email",
     label: "Email",

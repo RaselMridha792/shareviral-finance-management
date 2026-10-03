@@ -49,13 +49,17 @@ function modelName(model: string | null): string | null {
  *   - Remove: for a lesson that was itself wrong.
  *
  * This list is the "training" the owner asked for, in a form they can read
- * and control. Super Admin's, as the instructions are.
+ * and control. Read by the CFO too (#150), each only about a part their
+ * role may read; `readOnly` is their view (B2), with neither button — the
+ * API refuses the CFO both anyway.
  */
 export function AssistantMistakes({
   onRuled,
+  readOnly = false,
 }: {
   /** Told the instructions as they now stand, after a rule was added. */
   onRuled?: (instructions: AiInstructions) => void;
+  readOnly?: boolean;
 }) {
   const [mistakes, setMistakes] = useState<AiMistake[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +116,11 @@ export function AssistantMistakes({
       <CardHeader
         title="Its recent mistakes"
         icon={WarningCircleIcon}
-        description="Drafts somebody corrected before saving, and answers marked This was wrong. The Assistant is shown these on later turns. Make one a rule to keep it in your instructions, or remove one that was not a mistake."
+        description={
+          readOnly
+            ? "Drafts somebody corrected before saving, and answers marked This was wrong. The Assistant is shown these on later turns. A Super Admin can make one a rule, or remove one that was not a mistake."
+            : "Drafts somebody corrected before saving, and answers marked This was wrong. The Assistant is shown these on later turns. Make one a rule to keep it in your instructions, or remove one that was not a mistake."
+        }
         action={
           mistakes?.length ? (
             <Button
@@ -154,6 +162,7 @@ export function AssistantMistakes({
           <MistakeRow
             key={mistake.id}
             mistake={mistake}
+            readOnly={readOnly}
             onRuled={(instructions) => {
               onRuled?.(instructions);
               void load();
@@ -172,10 +181,12 @@ export function AssistantMistakes({
 
 function MistakeRow({
   mistake,
+  readOnly,
   onRuled,
   onRemoved,
 }: {
   mistake: AiMistake;
+  readOnly: boolean;
   onRuled: (instructions: AiInstructions) => void;
   onRemoved: () => void;
 }) {
@@ -249,7 +260,7 @@ function MistakeRow({
         </dd>
       </dl>
 
-      {ruling ? (
+      {readOnly ? null : ruling ? (
         <form onSubmit={makeRule} className="flex flex-col gap-2">
           <label
             htmlFor={`rule-${mistake.id}`}

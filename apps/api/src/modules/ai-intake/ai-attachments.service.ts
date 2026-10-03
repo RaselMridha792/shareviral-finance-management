@@ -166,7 +166,7 @@ export class AiAttachmentsService {
     const pdf = isPdfAttachment(file.originalname);
     if (pdf && !readPdf) {
       throw new BadRequestException(
-        "Reading a PDF needs the assistant switched on. A Super Admin can add an API key under Settings.",
+        "Reading a PDF needs the assistant switched on. A Super Admin can add a key in the Assistant's settings.",
       );
     }
 
@@ -287,7 +287,8 @@ export class AiAttachmentsService {
   /**
    * A Google Sheet, Doc or Drive file, by the link somebody pasted (A3).
    *
-   * Read with the service account from Settings → Connections, then kept
+   * Read with the Google Cloud service account from the Assistant's
+   * settings, then kept
    * exactly as an upload is: a Sheet's tab as rows, a file in Drive through
    * `upload` itself, a Doc as its paragraphs. From here on nothing can tell a
    * link from an upload except a Doc's name.
@@ -325,7 +326,7 @@ export class AiAttachmentsService {
     const account = openServiceAccount(settings?.sealed);
     if (!account) {
       throw new BadRequestException(
-        "Reading a Google link needs the Google Cloud key, which a Super Admin adds under Settings → Connections. Until then, download the file and attach it.",
+        "Reading a Google link needs the Google Cloud key, which a Super Admin adds in the Assistant's settings. Until then, download the file and attach it.",
       );
     }
 

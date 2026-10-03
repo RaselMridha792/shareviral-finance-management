@@ -1,5 +1,8 @@
 /**
  * #131 — Settings → Connections, and the Assistant through Google Cloud.
+ * Since B2 (3 Oct 2026) both are the Assistant's own settings
+ * (/assistant/settings): the old addresses still open them, and the setting
+ * is Claude's route, Gemini going through Google Cloud whichever it says.
  *
  *   A. the API, with no key: who may ask; every malformed paste refused with
  *      a sentence and nothing stored; a well-formed key Google has never
@@ -158,15 +161,17 @@ try {
   check("…and nothing was stored", (await stored()).google_service_account === null);
 
   const vertexNoKey = await admin("PATCH", "/ai/settings", { provider: "vertex" });
-  check("Google Cloud cannot be chosen with no key: 400 in words", vertexNoKey.status === 400 && /Connections first/.test(vertexNoKey.body?.message ?? ""), vertexNoKey.body?.message);
+  check("Google Cloud cannot be chosen with no key: 400 in words", vertexNoKey.status === 400 && /Add the Google Cloud key first, under Google Cloud in the Assistant's settings/.test(vertexNoKey.body?.message ?? ""), vertexNoKey.body?.message);
   check("…and the row still says anthropic", (await stored()).ai_provider === "anthropic");
   const badProvider = await admin("PATCH", "/ai/settings", { provider: "openai" });
   check("a provider that is not offered: 400", badProvider.status === 400, String(badProvider.status));
 
   const geminiAlone = await admin("PATCH", "/ai/settings", { model: GEMINI });
-  check("Gemini while the assistant is on the Anthropic key: 400 in words", geminiAlone.status === 400 && /is reached through Google Cloud, not through Anthropic key/.test(geminiAlone.body?.message ?? ""), `${geminiAlone.status} ${geminiAlone.body?.message}`);
+  // B2 (3 Oct 2026): the route follows the model, so Gemini is refused for
+  // the missing Google key, not for the way Claude goes.
+  check("Gemini with no Google key: 400 in words", geminiAlone.status === 400 && /^Gemini 3\.8 Flash goes through Google Cloud\. Add the Google Cloud key first/.test(geminiAlone.body?.message ?? ""), `${geminiAlone.status} ${geminiAlone.body?.message}`);
   const geminiPair = await admin("PATCH", "/ai/settings", { model: GEMINI, provider: "anthropic" });
-  check("…and the two sent together: the same 400", geminiPair.status === 400 && /is reached through Google Cloud/.test(geminiPair.body?.message ?? ""), `${geminiPair.status} ${geminiPair.body?.message}`);
+  check("…and with Claude on the Anthropic key sent beside it: the same 400", geminiPair.status === 400 && /goes through Google Cloud\. Add the Google Cloud key first/.test(geminiPair.body?.message ?? ""), `${geminiPair.status} ${geminiPair.body?.message}`);
   check("…and the row still says Claude", (await stored()).ai_model === "claude-opus-5");
   const badModel = await admin("PATCH", "/ai/settings", { model: "gemini-9-ultra" });
   check("a model that is not offered: 400", badModel.status === 400, String(badModel.status));
@@ -234,9 +239,12 @@ try {
   const again = await admin("PATCH", "/ai/settings", { model: GEMINI });
   check("…and the first Gemini is chosen again", again.status === 200 && (await stored()).ai_model === GEMINI, `${again.status}`);
 
+  // B2: the setting is Claude's route. Gemini stays the default whichever
+  // way Claude goes, as it goes through Google Cloud regardless.
   const backAlone = await admin("PATCH", "/ai/settings", { provider: "anthropic" });
-  check("back to the Anthropic key while on Gemini, alone: 400 in words", backAlone.status === 400 && /is reached through Google Cloud, not through Anthropic key/.test(backAlone.body?.message ?? ""), `${backAlone.status} ${backAlone.body?.message}`);
-  check("…and the row has not moved", (await stored()).ai_provider === "vertex" && (await stored()).ai_model === GEMINI);
+  check("Claude to the Anthropic key while the default is Gemini: taken, and the Gemini default stays", backAlone.status === 200 && (await stored()).ai_provider === "anthropic" && (await stored()).ai_model === GEMINI, `${backAlone.status} ${backAlone.body?.message ?? ""}`);
+  const backToGoogle = await admin("PATCH", "/ai/settings", { provider: "vertex" });
+  check("…and back through Google Cloud", backToGoogle.status === 200 && (await stored()).ai_provider === "vertex" && (await stored()).ai_model === GEMINI, String(backToGoogle.status));
 
   /* ------------------------------------------------------------------ */
   console.log("\nC. The pages");
@@ -244,11 +252,9 @@ try {
     const { page, context } = await open(users.super_admin, "/settings?tab=connections");
     const seen = await textOf(page);
     check("the card shows the address to share files with, and the project", seen.includes(KEY.client_email) && seen.includes(KEY.project_id));
-    const rail = await page.evaluate(() => {
-      const a = [...document.querySelectorAll("a")].find((x) => x.href.includes("tab=connections"));
-      return a ? a.innerText.replace(/\s+/g, " ").trim() : null;
-    });
-    check("the rail has Connections, with its badge", Boolean(rail) && /Connections/.test(rail) && /On/.test(rail), rail);
+    // B2: Connections left Settings; its old address opens the Assistant's
+    // own settings, where the Google Cloud card now is.
+    check("the old address opens the Assistant's settings", new URL(page.url()).pathname === "/assistant/settings", page.url());
     await clickText(page, "Test");
     await page.waitForFunction(() => document.body.innerText.includes("Claude on Vertex AI."), { timeout: 60000 });
     const lines = await page.evaluate(() => [...document.querySelectorAll("main li strong")].map((s) => s.textContent));
@@ -259,28 +265,28 @@ try {
   {
     const { page, context } = await open(users.super_admin, "/settings?tab=assistant");
     const select = await page.evaluate(() => {
-      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Reach the model through"));
+      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Claude goes through"));
       const s = label?.querySelector("select");
       return s ? { value: s.value, options: [...s.options].map((o) => `${o.value}:${o.disabled}`) } : null;
     });
-    check("Assistant: the choice reads Google Cloud, both offered", select?.value === "vertex" && select.options.join() === "anthropic:false,vertex:false", JSON.stringify(select));
+    check("Assistant: Claude's way reads Google Cloud, both offered", select?.value === "vertex" && select.options.join() === "anthropic:false,vertex:false", JSON.stringify(select));
     const said = await textOf(page);
-    check("…the Anthropic card says it is not in use, and the data warning names Google and Gemini", /Not in use while the assistant goes through Google Cloud/.test(said) && /sent to Google Cloud \(Gemini on Vertex AI\)/.test(said));
+    check("…no Anthropic key box while Claude goes through Google Cloud, and the data warning names Google and Gemini", !/Anthropic API key/.test(said) && /with the default, Google Cloud \(Gemini on Vertex AI\)/.test(said));
 
     const modelOf = () =>
       page.evaluate(() => {
-        const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Which model answers"));
+        const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("New chats start with"));
         const s = label?.querySelector("select");
         return s ? { value: s.value, options: [...s.options].map((o) => o.value) } : { text: label?.parentElement?.innerText ?? null };
       });
     const offered = await modelOf();
-    check("…and through Google Cloud Claude and the three Geminis are offered, Gemini chosen", offered.value === GEMINI && offered.options?.join() === THROUGH_GOOGLE, JSON.stringify(offered));
+    check("…and as the default Claude and the three Geminis are offered, Gemini chosen", offered.value === GEMINI && offered.options?.join() === THROUGH_GOOGLE, JSON.stringify(offered));
     await shot(page, "assistant-vertex");
 
     // What the screen says under each Gemini, chosen on the screen itself.
     const pick = async (value, words) => {
       await page.evaluate((v) => {
-        const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Which model answers"));
+        const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("New chats start with"));
         const s = label.querySelector("select");
         Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, v);
         s.dispatchEvent(new Event("change", { bubbles: true }));
@@ -294,18 +300,19 @@ try {
     await shot(page, "assistant-vertex-preview");
     check("…and the first Gemini is chosen again, with no error on the screen", (await pick(GEMINI, "Google's model, through Google Cloud only. On trial")) && !(await page.evaluate(() => Boolean(document.querySelector('[role="alert"]')))));
 
-    // Back to the Anthropic key from the screen: the model goes with it.
+    // Claude to the Anthropic key from the screen (B2): the Gemini default
+    // stays, and the Anthropic key box comes.
     await page.evaluate(() => {
-      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Reach the model through"));
+      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Claude goes through"));
       const s = label.querySelector("select");
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, "anthropic");
       s.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await page.waitForFunction(() => document.body.innerText.includes("Needed for the assistant, and nothing else."), { timeout: 30000 });
+    await page.waitForFunction(() => document.body.innerText.includes("How Claude is reached while it goes through the Anthropic key"), { timeout: 30000 });
     const moved = await stored();
-    check("choosing the Anthropic key on the screen takes the model back to Claude with it", moved.ai_provider === "anthropic" && moved.ai_model === "claude-opus-5", JSON.stringify({ provider: moved.ai_provider, model: moved.ai_model }));
-    const alone = await modelOf();
-    check("…and with the Anthropic key there is one model, and no picker", !alone.options && /Opus 5/.test(alone.text ?? "") && !/Gemini/.test(alone.text ?? ""), JSON.stringify(alone));
+    check("Claude to the Anthropic key on the screen: saved, the Gemini default left as it was", moved.ai_provider === "anthropic" && moved.ai_model === GEMINI, JSON.stringify({ provider: moved.ai_provider, model: moved.ai_model }));
+    const still = await modelOf();
+    check("…and the default still offers Claude and the three Geminis", still.value === GEMINI && still.options?.join() === THROUGH_GOOGLE, JSON.stringify(still));
     check("…with no error on the screen", !(await page.evaluate(() => Boolean(document.querySelector('[role="alert"]')))));
     await context.close();
   }
@@ -342,16 +349,16 @@ try {
   {
     const { page, context } = await open(users.super_admin, "/settings?tab=assistant");
     const options = await page.evaluate(() => {
-      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Reach the model through"));
+      const label = [...document.querySelectorAll("label")].find((l) => l.textContent.includes("Claude goes through"));
       return [...(label?.querySelector("select")?.options ?? [])].map((o) => `${o.value}:${o.disabled}`);
     });
-    check("with no key, the Assistant offers Google Cloud disabled", options.join() === "anthropic:false,vertex:true", options.join());
+    check("with no key, Claude cannot be sent through Google Cloud", options.join() === "anthropic:false,vertex:true", options.join());
     await context.close();
   }
   {
     const { page, context } = await open(users.cfo, "/settings?tab=connections");
     const seen = await page.evaluate(() => ({ rail: [...document.querySelectorAll("a")].some((a) => a.href.includes("tab=connections")), panel: document.body.innerText.includes("Paste the JSON key") }));
-    check("the CFO has no Connections on the rail and no panel", !seen.rail && !seen.panel, JSON.stringify(seen));
+    check("the CFO has no Connections on the rail, and no Google Cloud card in the settings it reads", !seen.rail && !seen.panel, JSON.stringify(seen));
     await context.close();
   }
   {

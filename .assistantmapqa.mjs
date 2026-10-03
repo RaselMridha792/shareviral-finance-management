@@ -618,7 +618,7 @@ try {
   check("a second renewal in the month is not offered: the app's own rule is asked about first", /This plan was already renewed that month: TXN-[\w-]+/.test(text) && /A plan renews once a month/.test(text) && drawn?.saveDisabled === true, `${String(drawn?.saveDisabled)} ${text.slice(-300).replace(/\n/g, " | ")}`);
   check("and nothing more is in the ledger for it", (await q(`select count(*)::int as n from transactions where subscription_id = $1`, [CLAUDE]))[0].n === 1);
 
-  await page.goto(`${WEB}/settings?tab=assistant`, { waitUntil: "networkidle0", timeout: 120000 });
+  await page.goto(`${WEB}/assistant/settings`, { waitUntil: "networkidle0", timeout: 120000 });
   await page.waitForSelector('textarea[name="instructions"]', { timeout: 60000 });
   await page.waitForFunction(() => document.querySelector('textarea[name="instructions"]')?.value.length > 0, { timeout: 60000 });
   const box = () =>
@@ -630,7 +630,7 @@ try {
     });
   let instructions = await box();
   await shot("instructions");
-  check("Settings → Assistant shows the instructions as they are stored", instructions.value === `${RULE}\nMAPQA rule two.` && /Instructions for the Assistant/.test(await page.evaluate(() => document.body.innerText)), instructions.value.slice(0, 80));
+  check("the Assistant's settings show the instructions as they are stored", instructions.value === `${RULE}\nMAPQA rule two.` && /Instructions for the Assistant/.test(await page.evaluate(() => document.body.innerText)), instructions.value.slice(0, 80));
   check("with the count, who saved them, and Save waiting for a change", new RegExp(`${instructions.value.length} of 4,000 characters`).test(instructions.text) && instructions.text.includes(`Last saved by ${admin.full_name}`) && instructions.saveDisabled === true, instructions.text.slice(-200).replace(/\n/g, " | "));
   await page.click('textarea[name="instructions"]');
   await page.keyboard.down("Control");

@@ -2,15 +2,14 @@
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import {
-  aiModelsFor,
+  AI_MODELS,
   type AiAttachment,
   type AiAvailability,
   type AiDataAccess,
-  type AiModel,
 } from "@finance/shared";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   AttachmentCard,
@@ -22,8 +21,7 @@ import { Composer } from "@/components/assistant/composer";
 import { DraftCard } from "@/components/assistant/draft-card";
 import { MarkWrong } from "@/components/assistant/mark-wrong";
 import { Welcome } from "@/components/assistant/welcome";
-import { useCan, useSession } from "@/components/auth/session-provider";
-import { aiApi } from "@/lib/ai";
+import { useSession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -83,7 +81,6 @@ export function Conversation({
   compact?: boolean;
 }) {
   const user = useSession();
-  const canConfigure = useCan("settings.write");
   const assistant = useAssistant();
   const {
     messages,
@@ -100,13 +97,21 @@ export function Conversation({
 
   const configured = availability.configured;
   /**
-   * The model picked in this view; until then, the one Settings names. Held
-   * here rather than above the pages: a choice is saved to Settings, and the
-   * next view reads Settings afresh, so a change made in Settings meanwhile
-   * is not hidden behind an old one.
+   * Which model answers (B2): the one picked for this conversation, while it
+   * can still be reached, else the default in the Assistant's settings. The
+   * picker lists every model with a working route right now, for anybody who
+   * may use the Assistant, and a pick holds for this conversation only —
+   * nobody's default changes. A conversation picked for a model that can no
+   * longer be reached shows, and is sent, the default, and keeps its own
+   * for when the model is back.
    */
-  const [choice, setChoice] = useState<AiModel | null>(null);
-  const model = choice ?? availability.model ?? "claude-opus-5";
+  const fallback = availability.model ?? AI_MODELS[0];
+  const models = availability.models?.length ? availability.models : [fallback];
+  const picked =
+    assistant.chatModel && models.includes(assistant.chatModel)
+      ? assistant.chatModel
+      : null;
+  const model = picked ?? fallback;
   const dataAccess: AiDataAccess =
     availability.dataAccess && availability.dataAccess !== "off"
       ? availability.dataAccess
@@ -130,17 +135,6 @@ export function Conversation({
     const el = scroller.current;
     if (el && messages.length) el.scrollTop = el.scrollHeight;
   }, [messages, reply, thinking, reading]);
-
-  async function changeModel(next: AiModel) {
-    const previous = model;
-    setChoice(next);
-    try {
-      await aiApi.updateSettings({ model: next });
-    } catch {
-      setChoice(previous);
-      assistant.setError("Could not change the model.");
-    }
-  }
 
   /**
    * The Sheet, when the files are its tabs, or the workbook, when they are
@@ -323,12 +317,11 @@ export function Conversation({
       <Composer
         value={assistant.input}
         onChange={assistant.setInput}
-        onSend={() => void assistant.send()}
+        onSend={() => void assistant.send(picked ?? undefined)}
         thinking={thinking || reading}
         model={model}
-        models={aiModelsFor(availability.provider ?? "anthropic")}
-        onModelChange={(next) => void changeModel(next)}
-        canChangeModel={canConfigure}
+        models={models}
+        onModelChange={assistant.setChatModel}
         dataAccess={dataAccess}
         onAttach={(file) => void assistant.attach(file)}
         attaching={assistant.attaching}

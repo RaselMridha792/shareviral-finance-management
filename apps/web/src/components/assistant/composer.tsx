@@ -51,10 +51,10 @@ const OTHER_LANG: Record<SpeechLang, SpeechLang> = {
  *
  * The model sits in here rather than in Settings because it is a property of
  * the answer being asked for, not of the installation — the person about to
- * type a long, rambling entry is the one who knows it is worth Opus. Changing
- * it is still a Super Admin's call and still writes an audit row; everybody
- * else sees which model is answering, which is the part that matters when the
- * reply is disappointing.
+ * type a long, rambling entry is the one who knows it is worth Opus. Since B2
+ * (3 Oct 2026) a pick here holds for this conversation alone, for anybody who
+ * may use the Assistant; the default for new chats is the Super Admin's, in
+ * the Assistant's settings.
  */
 export function Composer({
   value,
@@ -64,7 +64,6 @@ export function Composer({
   model,
   models,
   onModelChange,
-  canChangeModel,
   dataAccess,
   onAttach,
   attaching,
@@ -77,10 +76,10 @@ export function Composer({
   onSend: () => void;
   thinking: boolean;
   model: AiModel;
-  /** The models the way chosen in Settings can reach. */
+  /** Every model with a working route right now (B2). */
   models: AiModel[];
+  /** A pick for this conversation alone. */
   onModelChange: (model: AiModel) => void;
-  canChangeModel: boolean;
   dataAccess: AiDataAccess;
   onAttach: (file: File) => void;
   attaching: boolean;
@@ -365,14 +364,15 @@ export function Composer({
             ) : null}
 
             {/* A picker with one option is a control that does nothing. It
-                comes back on its own if a second model is ever offered. */}
-            {canChangeModel && models.length > 1 ? (
+                comes back on its own once a second model can be reached. */}
+            {models.length > 1 ? (
               <div className="relative">
                 <label className="sr-only" htmlFor="assistant-model">
-                  Which model answers
+                  Which model answers this conversation
                 </label>
                 <select
                   id="assistant-model"
+                  title="Which model answers this conversation. The conversation keeps it."
                   value={model}
                   onChange={(event) =>
                     onModelChange(event.target.value as AiModel)
@@ -394,7 +394,7 @@ export function Composer({
             ) : (
               <span
                 className="px-2.5 text-xs font-medium text-muted-foreground"
-                title="Only a Super Admin can change which model answers"
+                title="The one model that can be reached now. A Super Admin adds the keys for more in the Assistant's settings."
               >
                 {AI_MODEL_SHORT[model]}
               </span>
@@ -405,7 +405,7 @@ export function Composer({
               title={
                 lookups
                   ? "It can look up figures from your books, within what your role may see."
-                  : "It can fill in forms but cannot read the ledger. A Super Admin can widen this in Settings."
+                  : "It can fill in forms but cannot read the ledger. A Super Admin can widen this in the Assistant's settings."
               }
             >
               {lookups ? (

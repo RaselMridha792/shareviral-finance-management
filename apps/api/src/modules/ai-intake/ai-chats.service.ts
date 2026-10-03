@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
+  aiModelFrom,
   chatTitleFrom,
   type AiChat,
   type AiChatSummary,
   type AiIntakeReply,
   type AiMessage,
+  type AiModel,
   type AiSaved,
 } from "@finance/shared";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -68,6 +70,9 @@ export class AiChatsService {
       messages: row.messages,
       reply: (row.reply as AiIntakeReply | null) ?? null,
       attachments: await this.attachments.forChat(row.id, actor),
+      // Read as the list stands today: a model since taken off it is read as
+      // its successor, or as nothing, which is the default.
+      model: aiModelFrom(row.model),
     };
   }
 
@@ -77,19 +82,25 @@ export class AiChatsService {
    *
    * Returns the id either way, so the browser learns which conversation it is
    * in from the reply rather than having to create one first.
+   *
+   * `model` is the one picked for it in the chat (B2), and only then: a turn
+   * that names none leaves the column as it was, so a conversation nobody
+   * switched goes on following the default.
    */
   async record(
     chatId: string | undefined,
     messages: AiMessage[],
     reply: AiIntakeReply,
     actor: AuthenticatedUser,
+    model?: AiModel,
   ): Promise<string> {
     const now = new Date();
+    const picked = model ? { model } : {};
 
     if (chatId) {
       const [updated] = await this.db.client
         .update(aiChats)
-        .set({ messages, reply, updatedAt: now })
+        .set({ messages, reply, ...picked, updatedAt: now })
         .where(and(eq(aiChats.id, chatId), eq(aiChats.userId, actor.id)))
         .returning({ id: aiChats.id });
 
@@ -106,6 +117,7 @@ export class AiChatsService {
         title: chatTitleFrom(first),
         messages,
         reply,
+        ...picked,
         createdAt: now,
         updatedAt: now,
       })

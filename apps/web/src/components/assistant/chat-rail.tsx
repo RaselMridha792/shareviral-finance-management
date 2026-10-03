@@ -5,6 +5,7 @@ import {
   BookOpen,
   MessageSquarePlus,
   PictureInPicture2,
+  Settings,
   Trash2,
   X,
 } from "lucide-react";
@@ -45,6 +46,7 @@ export function ChatRail({
   onDelete,
   onClose,
   onPopOut,
+  settings = false,
   className,
 }: {
   chats: AiChatSummary[];
@@ -59,6 +61,11 @@ export function ChatRail({
    * the page it was opened from (B4).
    */
   onPopOut?: () => void;
+  /**
+   * Only on the Assistant page: the gear to the Assistant's own settings
+   * (B2). The window has its own, in its header.
+   */
+  settings?: boolean;
   className?: string;
 }) {
   const groups = ORDER.map((bucket) => ({
@@ -87,6 +94,16 @@ export function ChatRail({
           >
             <PictureInPicture2 className="size-4" />
           </button>
+        ) : null}
+        {settings ? (
+          <Link
+            href="/assistant/settings"
+            aria-label="Assistant settings"
+            title="Assistant settings: the model, its keys, how much it may read, its rules"
+            className="cursor-pointer rounded-lg p-2 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Settings className="size-4" />
+          </Link>
         ) : null}
         {onClose ? (
           <button

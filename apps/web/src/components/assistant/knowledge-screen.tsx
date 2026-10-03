@@ -48,8 +48,10 @@ function matches(part: AiKnowledgePart, query: string): boolean {
  * ache and kon forms ta kivabe kaj kore" — and to be able to see why it
  * answered as it did. This page is what it is told, from the same map the
  * prompt is written from: every part, its screens, its forms with the fields
- * their Save checks, and what it may do there. For a Super Admin, the
- * owner's rules and its recent mistakes sit above the map.
+ * their Save checks, and what it may do there. The owner's rules and its
+ * recent mistakes sit above the map: for the Super Admin to act on, and for
+ * the CFO to read (B2, the owner, 3 Oct 2026; the API opened both reads to
+ * them in #150).
  *
  * Under /assistant, which is a full-window room rather than a padded column
  * (main-region.tsx), so this page brings its own scroll and padding.
@@ -61,7 +63,6 @@ export function KnowledgeScreen({ knowledge }: { knowledge: AiKnowledge }) {
   const [rulesError, setRulesError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canConfigure) return;
     let alive = true;
     aiApi
       .instructions()
@@ -80,7 +81,7 @@ export function KnowledgeScreen({ knowledge }: { knowledge: AiKnowledge }) {
     return () => {
       alive = false;
     };
-  }, [canConfigure]);
+  }, []);
 
   const parts = useMemo(
     () => knowledge.parts.filter((part) => matches(part, query.trim())),
@@ -110,62 +111,65 @@ export function KnowledgeScreen({ knowledge }: { knowledge: AiKnowledge }) {
           }
         />
 
-        {canConfigure ? (
-          <>
-            <Card>
-              <CardHeader
-                title="Your rules"
-                icon={ListChecksIcon}
-                description="Your instructions for the Assistant, read with every message after the map below. They can say where a thing belongs; they cannot give anybody a permission."
-                action={
-                  <Link
-                    href="/settings?tab=assistant"
-                    className="text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
-                  >
-                    Change them
-                  </Link>
-                }
-              />
-              <CardBody>
-                {rulesError ? (
-                  <p role="alert" className="text-sm text-negative">
-                    {rulesError}
+        <Card>
+          <CardHeader
+            title={canConfigure ? "Your rules" : "The owner's rules"}
+            icon={ListChecksIcon}
+            description={
+              canConfigure
+                ? "Your instructions for the Assistant, read with every message after the map below. They can say where a thing belongs; they cannot give anybody a permission."
+                : "The owner's instructions for the Assistant, read with every message after the map below. They can say where a thing belongs; they cannot give anybody a permission. Only a Super Admin can change them."
+            }
+            action={
+              canConfigure ? (
+                <Link
+                  href="/assistant/settings"
+                  className="text-[13.5px] font-extrabold text-(--sv-violet-ink) transition-colors hover:text-(--sv-ink)"
+                >
+                  Change them
+                </Link>
+              ) : null
+            }
+          />
+          <CardBody>
+            {rulesError ? (
+              <p role="alert" className="text-sm text-negative">
+                {rulesError}
+              </p>
+            ) : rules === null ? (
+              <p className="text-sm text-muted-foreground">Reading…</p>
+            ) : rules.instructions ? (
+              <>
+                <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-[14px] leading-relaxed">
+                  {rules.instructions
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean)
+                    .map((line, index) => (
+                      <li key={index} className="wrap-break-word">
+                        {line}
+                      </li>
+                    ))}
+                </ol>
+                {rules.setAt ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Last changed
+                    {rules.setBy ? ` by ${rules.setBy}` : ""} on{" "}
+                    {formatDate(rules.setAt.slice(0, 10))}.
                   </p>
-                ) : rules === null ? (
-                  <p className="text-sm text-muted-foreground">Reading…</p>
-                ) : rules.instructions ? (
-                  <>
-                    <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-[14px] leading-relaxed">
-                      {rules.instructions
-                        .split("\n")
-                        .map((line) => line.trim())
-                        .filter(Boolean)
-                        .map((line, index) => (
-                          <li key={index} className="wrap-break-word">
-                            {line}
-                          </li>
-                        ))}
-                    </ol>
-                    {rules.setAt ? (
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Last changed
-                        {rules.setBy ? ` by ${rules.setBy}` : ""} on{" "}
-                        {formatDate(rules.setAt.slice(0, 10))}.
-                      </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No rules yet. Make one from a mistake below, or write them
-                    under Settings, Assistant.
-                  </p>
-                )}
-              </CardBody>
-            </Card>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {canConfigure
+                  ? "No rules yet. Make one from a mistake below, or write them in the Assistant's settings."
+                  : "No rules yet."}
+              </p>
+            )}
+          </CardBody>
+        </Card>
 
-            <AssistantMistakes onRuled={setRules} />
-          </>
-        ) : null}
+        <AssistantMistakes readOnly={!canConfigure} onRuled={setRules} />
 
         <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
           <div>

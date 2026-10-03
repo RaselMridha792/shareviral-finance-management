@@ -167,13 +167,18 @@ before Save is offered — and the line under a ready draft is the app's own.
 It reads files: an uploaded CSV, Excel or PDF, and — since 2 Oct 2026 — a
 Google Sheet, Doc or Drive file whose link is pasted into the message. The
 chat reads the link before the message goes, with the read-only service
-account from Settings → Connections: a Sheet's tab as rows, a Doc as its
+account from the Assistant's settings: a Sheet's tab as rows, a Doc as its
 paragraphs, a file in Drive as if it had been uploaded. A file not shared
 with the account is refused with the address to share it with. A folder or
 a picture is not read yet.
 
-Switched on from **Settings → Assistant**: a Super Admin pastes an Anthropic
-key and the screen becomes available, with no redeploy. The key is checked
+Switched on from **the Assistant's settings** (`/assistant/settings`, the
+gear on the chat and in its window; Settings → Assistant and → Connections
+until 3 Oct 2026, whose addresses now open it): a Super Admin pastes an
+Anthropic key, or the Google Cloud key, and the screen becomes available,
+with no redeploy. The CFO reads those settings and changes nothing. Each
+conversation keeps the model picked for it in the chat; the route follows the
+model — Gemini through Google Cloud, Claude the way the settings say. The key is checked
 against Anthropic before it is saved, sealed with AES-256-GCM before it is
 stored, kept out of the audit trail, and never returned to a browser — the
 panel shows only its last four characters.
@@ -1064,7 +1069,7 @@ date (May 2026, `RECORDS_START`). Still open as far as SESSIONS.md records:
    built. Is provident fund or a salary advance also needed?
 3. **A sample of the current Excel** — so the import column mapping matches it
    rather than being guessed at.
-4. **An Anthropic API key** — paste it into Settings → Assistant to switch the
+4. **An Anthropic API key** — paste it into the Assistant's settings to switch the
    assistant on. Everything else works without it.
 
 ## The architecture document (2026-08-18)

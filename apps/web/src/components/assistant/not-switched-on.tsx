@@ -50,10 +50,10 @@ export function NotSwitchedOn({
       </p>
       {canConfigure ? (
         <Link
-          href="/settings?tab=assistant"
+          href="/assistant/settings"
           className="relative mt-1 inline-flex h-[42px] items-center gap-[7px] rounded-lg bg-(--sv-violet) px-4 text-[14px] font-extrabold text-white transition hover:-translate-y-px"
         >
-          Add an API key
+          Add a key
           <ArrowRightIcon weight="duotone" size={16} />
         </Link>
       ) : null}

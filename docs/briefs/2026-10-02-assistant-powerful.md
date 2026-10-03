@@ -103,17 +103,20 @@ Until then, do Part B in this order:
      (`GET /ai/mistakes`, each only about a part the reader may read). The
      key's hint, its date and who set it now go only to `settings.write`:
      the CFO is sent them null, so the page has nothing to hide.
-   - **The next piece is the B2 code.** The web still reads the
-     instructions and the mistakes only for `settings.write`
-     (`knowledge-screen.tsx`'s `canConfigure`); the CFO's read-only view is
-     the B2 code's to draw.
+   - **The B2 code is built: SESSIONS #151.** `/assistant/settings`
+     behind the gear on the chat and in the window; the CFO's read-only
+     view there and on What the Assistant knows; the chat's picker for
+     both roles, held per conversation; the route following the model;
+     the old Settings tabs redirecting. **Next is B3** (token accounting),
+     its schema change alone first. The usage panel on the right of the
+     chat (B2's last bullet) needs B3's figures, so it is built with B3.
 3. **Shared code is approved** for `packages/shared/src/ai.ts`: availability
    lists every model that has a working route now, and a turn carries the
    chat's model. Only the Assistant's own screens and its settings read
    these.
 
-Found while reading the code (#149). These are suggestions, not the owner's
-decisions:
+Found while reading the code (#149). These were suggestions, and #151 built
+both as written:
 - **The route follows the model.** Gemini goes only through Google Cloud.
   Claude goes the way the settings' route says, so `app_settings.ai_provider`
   becomes Claude's route. The Anthropic key box shows only when that route

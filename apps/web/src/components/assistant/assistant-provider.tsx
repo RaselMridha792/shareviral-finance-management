@@ -9,6 +9,7 @@ import {
   type AiChatSummary,
   type AiIntakeReply,
   type AiMessage,
+  type AiModel,
 } from "@finance/shared";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -144,6 +145,15 @@ function useConversation() {
    * window. A new answer is a new draft, and starts clean.
    */
   const [edits, setEdits] = useState<Record<string, string>>({});
+  /**
+   * The model picked for this conversation in the chat (B2, the owner,
+   * 3 Oct 2026: each conversation its own). Null: nobody switched it, and
+   * it follows the default in the Assistant's settings. Sent with each turn
+   * and kept on the conversation by the server, so opening it again from
+   * History brings it back. Here, above both views, so the window and the
+   * page show the same choice.
+   */
+  const [chatModel, setChatModel] = useState<AiModel | null>(null);
 
   /* ---------------------------------------------------------------------- */
   /*  The floating window                                                    */
@@ -254,6 +264,7 @@ function useConversation() {
     setDropped(new Set());
     setBatchResults({});
     setSavedOn(null);
+    setChatModel(null);
   }
 
   async function openChat(id: string) {
@@ -271,6 +282,8 @@ function useConversation() {
       setDropped(new Set());
       setBatchResults(savedRows(chat.reply?.batch));
       setAttachments(chat.attachments);
+      // An API from before B2 sends no model: the default, as it was then.
+      setChatModel(chat.model ?? null);
     } catch {
       setError("That conversation could not be opened.");
     }
@@ -340,7 +353,11 @@ function useConversation() {
     }
   }
 
-  async function send() {
+  /**
+   * `model` is the conversation's own, as the view that sends it can reach
+   * it now; undefined leaves the conversation on the default.
+   */
+  async function send(model?: AiModel) {
     const text = input.trim();
     if (!text || thinking || reading) return;
 
@@ -391,6 +408,7 @@ function useConversation() {
         draft: reply?.draft,
         chatId: chatId ?? undefined,
         attachmentIds: files.length ? files.map((file) => file.id) : undefined,
+        model,
       });
 
       setReply(result);
@@ -557,6 +575,8 @@ function useConversation() {
     savedCount,
     savedOn,
     edits,
+    chatModel,
+    setChatModel,
     loadChats,
     startNew,
     openChat,

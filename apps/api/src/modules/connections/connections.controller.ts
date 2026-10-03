@@ -10,7 +10,8 @@ import { ZodBody } from "../../common/pipes/zod-validation.pipe";
 import { ConnectionsService } from "./connections.service";
 
 /**
- * Settings → Connections.
+ * The Google Cloud key, in the Assistant's settings (B2; it was Settings →
+ * Connections until 3 Oct 2026).
  *
  * `settings.write` throughout, which is Super Admin alone: the key spends the
  * company's money on Google and reads whatever is shared with it, the same

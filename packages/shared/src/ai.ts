@@ -271,17 +271,22 @@ export const AI_MODEL_RETIRING: Partial<
 };
 
 /**
- * How the assistant reaches its model: an Anthropic key, or Google Cloud.
+ * How the assistant reaches Claude: an Anthropic key, or Google Cloud.
  *
  * The owner, 1 Oct 2026: Anthropic would not answer until the account's
  * identity was verified, and the owner's NID did not get through. Through
  * Google Cloud (Vertex AI) it is the same model and the same assistant; the
- * billing and the checks are Google's. The key for that is the service account
- * under Settings → Connections, which also reads shared Sheets and Docs.
+ * billing and the checks are Google's. The key for that is the service
+ * account in the Assistant's settings, which also reads shared Sheets and
+ * Docs.
  *
  * 2 Oct 2026: Google then gave the project a quota of zero for Claude, and
  * would not raise it. Gemini answers on the same project and the same key, so
- * it is offered through this provider too — see AI_MODEL_PROVIDERS.
+ * it is offered through Google Cloud too — see AI_MODEL_PROVIDERS.
+ *
+ * 3 Oct 2026 (B2): the route follows the model. Gemini goes through Google
+ * Cloud and no other way, so the one choice left to make is Claude's, and
+ * `app_settings.ai_provider` is that: Claude's route. See `aiRouteFor`.
  */
 export const AI_PROVIDERS = ["anthropic", "vertex"] as const;
 export const aiProviderSchema = z.enum(AI_PROVIDERS);
@@ -294,9 +299,9 @@ export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
 
 export const AI_PROVIDER_DETAIL: Record<AiProvider, string> = {
   anthropic:
-    "Straight to Anthropic, with the API key below. Anthropic bills it and runs its own account checks.",
+    "Claude goes straight to Anthropic, with the API key below. Anthropic bills it and runs its own account checks.",
   vertex:
-    "Through Vertex AI, with the service account under Settings → Connections. Google bills it; the assistant is the same, with Claude or with Gemini.",
+    "Claude goes through Vertex AI, with the Google Cloud key below. Google bills it, and the project needs a quota for Claude. Gemini always goes this way.",
 };
 
 /**
@@ -324,51 +329,55 @@ export function aiModelsFor(provider: AiProvider): AiModel[] {
 }
 
 /**
- * What a stored model is read as, reached this way.
+ * The way a model goes (B2, 3 Oct 2026): the route follows the model.
  *
- * The column has no check of its own, and the list above changes: a model
+ * Gemini through Google Cloud, always. Claude the way the Assistant's
+ * settings say, which is what `app_settings.ai_provider` now holds. Picking a
+ * model in the chat therefore needs no trip to the settings to change a
+ * route first.
+ */
+export function aiRouteFor(
+  model: AiModel,
+  claudeRoute: AiProvider,
+): AiProvider {
+  return isGeminiModel(model) ? "vertex" : claudeRoute;
+}
+
+/** Which keys the server holds, each the credential of one route. */
+export type AiKeys = { anthropic: boolean; google: boolean };
+
+/**
+ * Every model that has a working route right now, in the order offered: the
+ * chat's picker. A route works when its key is stored. Whether Google has
+ * given the project a quota for Claude cannot be known without asking it,
+ * so Claude through Google Cloud is listed once the key is there, and a
+ * refusal is explained in words when it comes (claude-errors.ts).
+ */
+export function aiModelsOpen(claudeRoute: AiProvider, keys: AiKeys): AiModel[] {
+  return AI_MODELS.filter((model) =>
+    aiRouteFor(model, claudeRoute) === "vertex" ? keys.google : keys.anthropic,
+  );
+}
+
+/**
+ * What a stored model is read as: the settings' default, or a chat's own.
+ * Null when it names nothing: for a chat, "the default"; for the settings,
+ * the model offered first.
+ *
+ * The columns have no check of their own, and the list above changes: a model
  * comes out when Google retires it, or when it invents. A stored Gemini that
  * is no longer listed is read as the Gemini offered first, and not as Claude.
  * Google gave this project no quota for Claude, so falling back to Claude
  * there would be an assistant that cannot answer at all.
- */
-export function aiModelFrom(
-  stored: string | null | undefined,
-  provider: AiProvider,
-): AiModel {
-  const offered = AI_MODELS.find((model) => model === stored);
-  if (offered && aiModelGoesWith(offered, provider)) return offered;
-  if (
-    stored &&
-    !offered &&
-    isGeminiModel(stored) &&
-    aiModelGoesWith(AI_GEMINI_DEFAULT, provider)
-  ) {
-    return AI_GEMINI_DEFAULT;
-  }
-  return aiModelsFor(provider)[0];
-}
-
-/**
- * Why a model and a provider cannot be chosen together, in words.
  *
- * Asked by the service rather than written into `updateAiSettingsSchema`: a
- * change usually names one of the two, and only the service knows the stored
- * other. It also answers with this sentence as the message, where a schema
- * refusal reads "Validation failed".
+ * The route no longer narrows it (B2): the route follows the model, so a
+ * Gemini is a Gemini whichever way Claude is set to go.
  */
-export function aiModelProviderProblem(
-  model: AiModel,
-  provider: AiProvider,
-): string | null {
-  if (aiModelGoesWith(model, provider)) return null;
-  return `${AI_MODEL_LABELS[model]} is reached through ${AI_MODEL_PROVIDERS[
-    model
-  ]
-    .map((way) => AI_PROVIDER_LABELS[way])
-    .join(
-      " or ",
-    )}, not through ${AI_PROVIDER_LABELS[provider]}. Change the two together.`;
+export function aiModelFrom(stored: string | null | undefined): AiModel | null {
+  const offered = AI_MODELS.find((model) => model === stored);
+  if (offered) return offered;
+  if (stored && isGeminiModel(stored)) return AI_GEMINI_DEFAULT;
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -417,8 +426,10 @@ export type AiInstructions = {
 
 export const updateAiSettingsSchema = z
   .strictObject({
+    /** The default: what a new chat, and a chat nobody switched, is put to. */
     model: aiModelSchema.optional(),
     dataAccess: aiDataAccessSchema.optional(),
+    /** Claude's route (B2). Gemini goes through Google Cloud whatever it says. */
     provider: aiProviderSchema.optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to change" });
@@ -475,6 +486,13 @@ export const aiIntakeRequestSchema = z.strictObject({
     .optional(),
   /** One file, as a page loaded before A3b still sends it. */
   attachmentId: z.string().uuid().optional(),
+  /**
+   * The model this conversation is held with, when somebody picked one in
+   * the chat (B2, the owner, 3 Oct 2026: each conversation its own). Kept on
+   * the conversation. Omitted: the default in the Assistant's settings, and
+   * the conversation goes on following it.
+   */
+  model: aiModelSchema.optional(),
 });
 export type AiIntakeRequest = z.infer<typeof aiIntakeRequestSchema>;
 
@@ -706,6 +724,11 @@ export type AiChat = AiChatSummary & {
    * in the Sheet's own order.
    */
   attachments: AiAttachment[];
+  /**
+   * The model picked for it in the chat, which opening it again brings back
+   * (B2). Null: nobody switched it, so it follows the default.
+   */
+  model: AiModel | null;
 };
 
 /** The first thing said, trimmed to something readable in a list. */
@@ -1025,16 +1048,24 @@ export type AiAvailability = {
   setBy?: string | null;
   /** True when it came from the environment rather than Settings. */
   fromEnvironment?: boolean;
+  /** The default: what a new chat, and a chat nobody switched, is put to. */
   model?: AiModel;
   dataAccess?: AiDataAccess;
   /**
-   * Which way Claude is reached. `keyHint` and the two beside it always
-   * describe the Anthropic key, whichever is chosen — the Google one is
-   * described by Settings → Connections.
+   * Which way Claude is reached (B2: the route follows the model, and
+   * Gemini always goes through Google Cloud). `keyHint` and the three beside
+   * it always describe the Anthropic key, whichever is chosen — the Google
+   * one is described by its own card in the Assistant's settings.
    */
   provider?: AiProvider;
   /** Whether a Google Cloud key is stored, so the choice can be offered. */
   googleKeySet?: boolean;
+  /**
+   * Every model with a working route right now, in the order offered: the
+   * chat's picker (B2). Anybody who may use the Assistant may pick one for
+   * the conversation they are in.
+   */
+  models?: AiModel[];
 };
 
 /**

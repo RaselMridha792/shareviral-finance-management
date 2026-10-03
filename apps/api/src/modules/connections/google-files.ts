@@ -125,7 +125,7 @@ export async function googleReadToken(
     }
   }
   throw new GoogleFileProblem(
-    "Google refused the service-account key. A Super Admin can check it under Settings → Connections.",
+    "Google refused the service-account key. A Super Admin can check it in the Assistant's settings.",
   );
 }
 
@@ -431,7 +431,7 @@ class Reader {
     }
     if (reply.status === 401) {
       return new GoogleFileProblem(
-        "Google refused the service-account key. A Super Admin can check it under Settings → Connections.",
+        "Google refused the service-account key. A Super Admin can check it in the Assistant's settings.",
       );
     }
     if (
@@ -441,7 +441,7 @@ class Reader {
       )
     ) {
       return new GoogleFileProblem(
-        `The ${api} is not switched on in the Google Cloud project. A Super Admin enables it under APIs & Services, then presses Test under Settings → Connections.`,
+        `The ${api} is not switched on in the Google Cloud project. A Super Admin enables it under APIs & Services, then presses Test on Google Cloud in the Assistant's settings.`,
       );
     }
     if (reply.status === 403 || reply.status === 404) {

@@ -88,7 +88,7 @@ export function explainGeminiError(
     return "Could not reach Google Cloud. Try again in a moment.";
   }
   if (error.kind === "key" || error.status === 401) {
-    return `Google refused the service-account key (${said(error.message)}). It may have been deleted or disabled in Google Cloud; a Super Admin can add a new one under Settings → Connections.`;
+    return `Google refused the service-account key (${said(error.message)}). It may have been deleted or disabled in Google Cloud; a Super Admin can add a new one in the Assistant's settings.`;
   }
 
   const message = error.message;
@@ -108,7 +108,7 @@ export function explainGeminiError(
     // not bring it back: the way out is the model that replaced it.
     const retiring = AI_MODEL_RETIRING[context.model as AiModel];
     return retiring
-      ? `${missing} Google retires it ${retiring.when}. If that is why, a Super Admin can choose ${AI_MODEL_LABELS[retiring.successor]} under Settings → Assistant.`
+      ? `${missing} Google retires it ${retiring.when}. If that is why, pick ${AI_MODEL_LABELS[retiring.successor]} in the chat, and a Super Admin can make it the default in the Assistant's settings.`
       : `${missing} Check it in Vertex AI → Model Garden, then try again.`;
   }
   if (error.status === 429) {

@@ -1078,6 +1078,45 @@ CASES.push(
 );
 
 /*
+ * B2, 3 Oct 2026: the Assistant's settings left the app's Settings for its
+ * own page, behind the gear on the chat, and the model is picked for each
+ * conversation in the message box. Asked where either is done, it must name
+ * those, and never the sections that are gone.
+ */
+CASES.push(
+  {
+    id: "N1", runs: LIGHT, name: "'tomar model kivabe change korbo?' - the picker beside Send, this conversation; never Settings, Assistant",
+    run: async () => {
+      const { reply, failed } = await talk(["tomar model ta kivabe change korbo? Gemini try korte chai."]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        /message box|beside send|picker|composer/i.test(said) ? null : "did not name the picker in the message box",
+        /settings,\s*assistant|settings\s*→\s*assistant|settings\s*>\s*assistant/i.test(said) ? "named the old Settings, Assistant" : null,
+        reply.target || reply.batch ? `drafted ${reply.target ?? "a table"}` : null,
+        claimsDone(said) ? "said it was done" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named the picker", said };
+    },
+  },
+  {
+    id: "N2", runs: LIGHT, name: "'Google Cloud key kothay add korbo?' - the Assistant's settings; never Settings, Connections",
+    run: async () => {
+      const { reply, failed } = await talk(["Google Cloud er key ta kothay add korbo?"]);
+      if (failed) return { error: failed };
+      const said = textOf(reply);
+      const wrong = [
+        /assistant'?s settings|assistant settings|gear/i.test(said) ? null : "did not name the Assistant's settings",
+        /settings\s*(→|>|,)\s*connections/i.test(said) ? "named the old Settings, Connections" : null,
+        reply.target || reply.batch ? `drafted ${reply.target ?? "a table"}` : null,
+        claimsDone(said) ? "said it was done" : null,
+      ].filter(Boolean);
+      return { pass: !wrong.length, note: wrong.length ? wrong.join("; ") : "named the Assistant's settings", said };
+    },
+  },
+);
+
+/*
  * M. The owner's recorded mistakes, each run again (A2b). What was asked is
  * kept with its digits masked ("…"), so a figure-shaped mistake is better
  * written by hand in its `expect`; the routing and the wording ones are what

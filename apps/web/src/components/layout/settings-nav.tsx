@@ -15,10 +15,8 @@ import {
   type SettingsSection,
   type SettingsSectionId,
 } from "@/components/settings/sections";
-import { aiApi } from "@/lib/ai";
 import { emailApi, trashApi } from "@/lib/api-client";
 import { auditApi } from "@/lib/audit";
-import { connectionsApi } from "@/lib/connections";
 import { usersApi } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { useRailCompact } from "@/components/layout/sidebar-state";
@@ -48,8 +46,7 @@ const BADGE_TONES: Record<Badge["tone"], string> = {
 
 /**
  * The counts and states beside a section's name: how many people can sign in,
- * how long the trail is, what is in the trash, whether the assistant and the
- * mail are switched on.
+ * how long the trail is, what is in the trash, whether the mail is sending.
  *
  * Each is asked for only when this reader may open the section, and each is
  * on its own — one that fails leaves its section without a badge rather than
@@ -89,30 +86,6 @@ function useBadges(role: Role | undefined) {
         put("trashed", count(kinds.reduce((sum, kind) => sum + kind.count, 0))),
       )
       .catch(() => {});
-    if (allowed("assistant"))
-      aiApi
-        .availability()
-        .then((status) =>
-          put(
-            "assistant",
-            status.configured
-              ? { text: "On", tone: "positive" }
-              : { text: "Off", tone: "off" },
-          ),
-        )
-        .catch(() => {});
-    if (allowed("connections"))
-      connectionsApi
-        .google()
-        .then((google) =>
-          put(
-            "connections",
-            google.configured
-              ? { text: "On", tone: "positive" }
-              : { text: "Off", tone: "off" },
-          ),
-        )
-        .catch(() => {});
     if (allowed("email"))
       emailApi
         .status()

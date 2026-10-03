@@ -26,8 +26,15 @@ import { formatDate } from "@/lib/utils";
  * anybody a permission: the look-ups and the saves still run as the person
  * asking. That is said on the card, because the box would otherwise read as
  * a place to switch things on.
+ *
+ * `readOnly` is the CFO's (B2, the owner, 3 Oct 2026): the rules as a list,
+ * and no box. The API refuses the CFO a save anyway.
  */
-export function AssistantInstructions() {
+export function AssistantInstructions({
+  readOnly = false,
+}: {
+  readOnly?: boolean;
+}) {
   const [stored, setStored] = useState<AiInstructions | null>(null);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -60,7 +67,8 @@ export function AssistantInstructions() {
   const length = text.replace(/\r\n?/g, "\n").trim().length;
   const over = length > AI_INSTRUCTIONS_MAX;
   const changed =
-    stored !== null && text.replace(/\r\n?/g, "\n").trim() !== stored.instructions;
+    stored !== null &&
+    text.replace(/\r\n?/g, "\n").trim() !== stored.instructions;
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +94,51 @@ export function AssistantInstructions() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (readOnly) {
+    const rules = (stored?.instructions ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return (
+      <Card>
+        <CardHeader
+          title="Instructions for the Assistant"
+          icon={ListChecksIcon}
+          description="The owner's rules, in the owner's words. It reads them with every message, after the app's own map of itself. A rule cannot give anybody a permission."
+        />
+        <CardBody className="flex flex-col gap-3">
+          {error ? (
+            <p role="alert" className="text-sm text-negative">
+              {error}
+            </p>
+          ) : stored === null ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" />
+              Reading them…
+            </p>
+          ) : rules.length ? (
+            <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-[14px] leading-relaxed">
+              {rules.map((line, index) => (
+                <li key={index} className="wrap-break-word">
+                  {line}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">No rules yet.</p>
+          )}
+          {stored?.setAt ? (
+            <p className="text-xs text-muted-foreground">
+              Last changed{stored.setBy ? ` by ${stored.setBy}` : ""} on{" "}
+              {formatDate(stored.setAt.slice(0, 10))}. Only a Super Admin can
+              change them.
+            </p>
+          ) : null}
+        </CardBody>
+      </Card>
+    );
   }
 
   return (
@@ -155,7 +208,9 @@ export function AssistantInstructions() {
               variant="primary"
               disabled={pending || over || !changed}
             >
-              {pending ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              {pending ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : null}
               Save the instructions
             </Button>
             <span className="text-xs text-muted-foreground">

@@ -11,13 +11,16 @@ import {
   AI_BATCH_MAX_ROWS,
   AI_DRAFT_READY_LINE,
   AI_INSTRUCTIONS_MAX,
+  AI_MODELS,
+  AI_MODEL_LABELS,
   AI_PROVIDER_LABELS,
   AI_TARGETS,
   AI_TARGET_LABELS,
   AI_TARGET_PERMISSION,
   BILLING_CYCLE_LABELS,
   aiModelFrom,
-  aiModelProviderProblem,
+  aiModelsOpen,
+  aiRouteFor,
   hasPermission,
   isGeminiModel,
   payableUsd,
@@ -198,6 +201,21 @@ const BATCH_LINE =
 const PLAN_LINE =
   "Ready to stage. Send to Import shows every row before anything is recorded.";
 
+/**
+ * Why a model cannot answer right now: its route's key is missing (B2: the
+ * route follows the model). Said to whoever asked, so it names who can fix
+ * it and where.
+ */
+function unreachable(model: AiModel, claudeRoute: AiProvider): string {
+  const where = "A Super Admin can add one in the Assistant's settings.";
+  if (isGeminiModel(model)) {
+    return `${AI_MODEL_LABELS[model]} goes through Google Cloud, and no Google Cloud key has been added. ${where}`;
+  }
+  return claudeRoute === "vertex"
+    ? `Claude is set to go through Google Cloud, and no Google Cloud key has been added. ${where}`
+    : `Claude is set to go through an Anthropic key, and none has been added. ${where}`;
+}
+
 @Injectable()
 export class AiIntakeService {
   private readonly log = new Logger(AiIntakeService.name);
@@ -223,9 +241,13 @@ export class AiIntakeService {
     fromEnvironment: boolean;
     setAt: Date | null;
     setBy: string | null;
+    /** The default: what a new chat, and a chat nobody switched, is put to. */
     model: AiModel;
     dataAccess: AiDataAccess;
-    /** Which way Claude is reached, and — for Google — with what, and where. */
+    /**
+     * Which way Claude is reached (B2: Gemini goes through Google Cloud
+     * whatever this says), and — for Google — with what, and where.
+     */
     provider: AiProvider;
     google: ServiceAccount | null;
     region: string;
@@ -252,9 +274,10 @@ export class AiIntakeService {
     const dataAccess = (row?.dataAccess ?? "full") as AiDataAccess;
     const provider: AiProvider =
       row?.provider === "vertex" ? "vertex" : "anthropic";
-    // A model this app does not offer, or one that cannot be reached this way
-    // (the column has no check of its own), is read as one that can answer.
-    const model = aiModelFrom(row?.model, provider);
+    // A model this app does not offer (the column has no check of its own)
+    // is read as the one offered first. The route no longer narrows it: it
+    // follows the model.
+    const model = aiModelFrom(row?.model) ?? AI_MODELS[0];
     const route = {
       provider,
       google: openServiceAccount(row?.google),
@@ -286,7 +309,10 @@ export class AiIntakeService {
     };
   }
 
-  /** Model, data access and the way to Claude. No key is touched here. */
+  /**
+   * The default model, data access and Claude's route. No key is touched
+   * here.
+   */
   async updateSettings(input: UpdateAiSettingsInput, actor: AuthenticatedUser) {
     const stored = await this.storedKey();
 
@@ -294,18 +320,19 @@ export class AiIntakeService {
     // everybody on one click. The screen does not offer it; this is the rule.
     if (input.provider === "vertex" && !stored.google) {
       throw new BadRequestException(
-        "Add the Google Cloud key under Settings → Connections first.",
+        "Add the Google Cloud key first, under Google Cloud in the Assistant's settings.",
       );
     }
 
-    // Gemini through an Anthropic key is not a thing that exists. Whichever
-    // of the two was not sent is the stored one, so the row never holds a
-    // pair nothing could answer.
-    const problem = aiModelProviderProblem(
-      input.model ?? stored.model,
-      input.provider ?? stored.provider,
-    );
-    if (problem) throw new BadRequestException(problem);
+    // The same for a default nothing could answer. The route follows the
+    // model (B2), so Gemini on its own needs the Google key, whichever way
+    // Claude goes; Claude needs its own route's key only to be used, and its
+    // route is chosen beside it.
+    if (input.model && isGeminiModel(input.model) && !stored.google) {
+      throw new BadRequestException(
+        `${AI_MODEL_LABELS[input.model]} goes through Google Cloud. Add the Google Cloud key first, under Google Cloud in the Assistant's settings.`,
+      );
+    }
 
     await this.audit.mutate({
       action: "settings_change",
@@ -314,10 +341,10 @@ export class AiIntakeService {
       summary:
         "Changed the assistant's " +
         [
-          input.model ? "model to " + input.model : null,
+          input.model ? "default model to " + input.model : null,
           input.dataAccess ? "data access to " + input.dataAccess : null,
           input.provider
-            ? "way to the model to " + AI_PROVIDER_LABELS[input.provider]
+            ? "way to Claude to " + AI_PROVIDER_LABELS[input.provider]
             : null,
         ]
           .filter(Boolean)
@@ -422,11 +449,40 @@ export class AiIntakeService {
     return this.instructions();
   }
 
+  /** Every model with a working route right now: the chat's picker (B2). */
+  private openModels(
+    stored: Awaited<ReturnType<AiIntakeService["storedKey"]>>,
+  ): AiModel[] {
+    return aiModelsOpen(stored.provider, {
+      anthropic: Boolean(stored.key),
+      google: Boolean(stored.google),
+    });
+  }
+
+  /**
+   * The model a turn is put to, and the way it goes (B2): the one picked for
+   * the conversation in the chat, else the default. The route follows the
+   * model. A model picked that cannot be reached now is refused in words,
+   * never swapped for another: the person chose it.
+   */
+  private async route(asked?: AiModel) {
+    const stored = await this.storedKey();
+    if (asked && !this.openModels(stored).includes(asked)) {
+      throw new BadRequestException(
+        `${unreachable(asked, stored.provider)} Pick another model in the chat.`,
+      );
+    }
+    const model = asked ?? stored.model;
+    return { ...stored, model, provider: aiRouteFor(model, stored.provider) };
+  }
+
   async availability(actor: AuthenticatedUser): Promise<AiAvailability> {
     const stored = await this.storedKey();
+    const models = this.openModels(stored);
     const route = {
       provider: stored.provider,
       googleKeySet: Boolean(stored.google),
+      models,
     };
 
     // The Anthropic key's own description, whichever way Claude is reached:
@@ -445,14 +501,12 @@ export class AiIntakeService {
           }
         : { keyHint: null, setAt: null, setBy: null, fromEnvironment: false };
 
-    const unavailable =
-      stored.provider === "vertex"
-        ? stored.google
-          ? null
-          : "The assistant is set to reach Claude through Google Cloud, and no Google Cloud key has been added. A Super Admin can add one under Settings → Connections. Everything the assistant would do can be done on the ordinary forms."
-        : stored.key
-          ? null
-          : "No API key has been set, so the assistant cannot run. A Super Admin can add one under Settings. Everything the assistant would do can be done on the ordinary forms.";
+    // Off while the default cannot answer, even when another model could:
+    // the default is the one the owner chose, and a chat that quietly went
+    // to a model nobody picked is the kind of surprise this app avoids.
+    const unavailable = models.includes(stored.model)
+      ? null
+      : `${unreachable(stored.model, stored.provider)} Everything the assistant would do can be done on the ordinary forms.`;
 
     if (unavailable) {
       return {
@@ -594,10 +648,15 @@ export class AiIntakeService {
      *
      * Through Google Cloud the same holds, in Google's terms — see
      * claude-errors.ts.
+     *
+     * The conversation's own model, when one was picked in the chat (B2);
+     * a model that cannot be reached is refused here, before anything is
+     * asked of anybody.
      */
-    const reply = await this.think(input, actor).catch(
-      async (error: unknown) => {
-        const { provider, model, region } = await this.storedKey();
+    const route = await this.route(input.model);
+    const reply = await this.think(input, actor, route).catch(
+      (error: unknown) => {
+        const { provider, model, region } = route;
 
         if (error instanceof GeminiError) {
           // Google's own words, every time, whether or not they could be
@@ -631,8 +690,12 @@ export class AiIntakeService {
       ? [...input.messages, { role: "assistant", content: said }]
       : [...input.messages];
 
+    // A model picked in the chat stays with the conversation, so opening it
+    // again from History brings it back. Not picked: the column is left as
+    // it was, and a conversation nobody switched goes on following the
+    // default.
     const chatId = await this.chats
-      .record(input.chatId, messages, reply, actor)
+      .record(input.chatId, messages, reply, actor, input.model)
       .catch((error: unknown) => {
         // History is a convenience. Losing it must never cost somebody the
         // answer they just waited for.
@@ -656,9 +719,10 @@ export class AiIntakeService {
   private async think(
     input: AiIntakeRequest,
     actor: AuthenticatedUser,
+    route: Awaited<ReturnType<AiIntakeService["route"]>>,
   ): Promise<AiIntakeReply> {
-    const model = await this.model();
-    const { dataAccess, instructions, model: modelId } = await this.storedKey();
+    const model = this.client(route);
+    const { dataAccess, instructions, model: modelId } = route;
     const plans = await this.plans();
     const context = await this.context(plans);
     // After the cache breakpoint, deliberately: a new correction landing must
@@ -848,7 +912,8 @@ export class AiIntakeService {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Reads a PDF statement into rows, using the key and model from Settings.
+   * Reads a PDF statement into rows, using the key and the default model
+   * from the Assistant's settings.
    *
    * Public because the upload endpoint needs it and this class owns the key.
    * It reads a file somebody handed over and writes nothing, so it is not
@@ -858,25 +923,28 @@ export class AiIntakeService {
   async readPdf(
     buffer: Buffer,
   ): Promise<{ headers: string[]; rows: RawRow[] }> {
-    return readPdfStatement(await this.model(), buffer);
+    return readPdfStatement(this.client(await this.route()), buffer);
   }
 
   /**
-   * Built per call rather than cached: the key can change from Settings at any
-   * moment, and a cached client would go on using the old one until a restart.
+   * Built per call rather than cached: the key can change in the settings at
+   * any moment, and a cached client would go on using the old one until a
+   * restart.
    *
-   * Through Google Cloud when Settings says so (#131): the same requests, sent
-   * to Vertex AI with the Connections service account. There the model
-   * decides who is asked — Claude, or Gemini (2 Oct 2026), each through its
-   * own adapter and with nothing else different.
+   * The route follows the model (B2): Gemini through Google Cloud, Claude the
+   * way the settings say (#131) — the same requests, sent to Vertex AI with
+   * the Google Cloud service account, or to Anthropic with its key. Each
+   * model through its own adapter, with nothing else different.
    */
-  private async model(): Promise<TurnModel> {
-    const { key, provider, google, region, model } = await this.storedKey();
+  private client(
+    route: Awaited<ReturnType<AiIntakeService["route"]>>,
+  ): TurnModel {
+    const { key, provider, google, region, model } = route;
 
     if (provider === "vertex") {
       if (!google) {
         throw new ServiceUnavailableException(
-          "The assistant is set to reach Claude through Google Cloud, and no Google Cloud key has been added. A Super Admin can add one under Settings → Connections, or use the ordinary form.",
+          `${unreachable(model, route.provider)} Or use the ordinary form.`,
         );
       }
       return isGeminiModel(model)
@@ -886,7 +954,7 @@ export class AiIntakeService {
 
     if (!key) {
       throw new ServiceUnavailableException(
-        "The assistant is not switched on. A Super Admin can add an API key under Settings, or use the ordinary form.",
+        `${unreachable(model, route.provider)} Or use the ordinary form.`,
       );
     }
     return claudeModel(new Anthropic({ apiKey: key }), model);
@@ -2271,7 +2339,7 @@ ${draft && Object.keys(draft).length ? `Already understood:\n${JSON.stringify(dr
 
     if (next.length > AI_INSTRUCTIONS_MAX) {
       throw new BadRequestException(
-        `The instructions would be ${next.length.toLocaleString("en-US")} characters, over the ${AI_INSTRUCTIONS_MAX.toLocaleString("en-US")} they may hold. Shorten or remove a rule under Settings, Assistant first.`,
+        `The instructions would be ${next.length.toLocaleString("en-US")} characters, over the ${AI_INSTRUCTIONS_MAX.toLocaleString("en-US")} they may hold. Shorten or remove a rule in the Assistant's settings first.`,
       );
     }
 

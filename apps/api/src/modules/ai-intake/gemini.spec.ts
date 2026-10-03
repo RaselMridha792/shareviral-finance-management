@@ -518,7 +518,7 @@ describe("Gemini's refusals, in words", () => {
         context,
       ),
     ).toBe(
-      'gemini-2.5-pro is not available to this Google Cloud project in the "global" region. Google retires it between 16 and 20 October 2026. If that is why, a Super Admin can choose Gemini 3.8 Flash under Settings → Assistant.',
+      `gemini-2.5-pro is not available to this Google Cloud project in the "global" region. Google retires it between 16 and 20 October 2026. If that is why, pick Gemini 3.8 Flash in the chat, and a Super Admin can make it the default in the Assistant's settings.`,
     );
   });
 

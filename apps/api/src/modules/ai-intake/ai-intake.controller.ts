@@ -164,7 +164,7 @@ export class AiIntakeController {
    *
    * The chat sends the link here before the message, so the file is on the
    * conversation by the time the model sees it. Read with the service account
-   * from Settings → Connections; what comes back is an attachment like any
+   * from the Assistant's settings; what comes back is an attachment like any
    * other, and belongs to whoever pasted the link. A list of them: one, or
    * every tab of a Sheet whose link names none (A3b).
    */
