@@ -3,6 +3,10 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { LAUNCHER_ROOM } from "@/components/assistant/assistant-window";
+import { useCan } from "@/components/auth/session-provider";
+import { cn } from "@/lib/utils";
+
 /**
  * Every screen is a document in a padded column — except the assistant, which
  * is a room.
@@ -17,6 +21,12 @@ const FULL_BLEED = ["/assistant"];
 export function MainRegion({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const fullBleed = FULL_BLEED.some((route) => pathname.startsWith(route));
+  /*
+   * The Assistant's launcher sits at the foot of every page for those who may
+   * use it (B4). The column ends that much lower, so a page scrolled to its
+   * end never has its last button under the launcher.
+   */
+  const launcher = useCan("ai.use");
 
   if (fullBleed) {
     // min-h-0 so a flex child may scroll instead of pushing the page taller.
@@ -36,7 +46,12 @@ export function MainRegion({ children }: { children: ReactNode }) {
      * of figures would otherwise stretch across a width nobody reads at.
      * Phones keep a 16px gutter rather than 24.
      */
-    <main className="w-full max-w-[1920px] flex-1 self-center p-[clamp(16px,2vw,24px)]">
+    <main
+      className={cn(
+        "w-full max-w-[1920px] flex-1 self-center p-[clamp(16px,2vw,24px)]",
+        launcher && LAUNCHER_ROOM,
+      )}
+    >
       {/*
         Nothing follows the last block. A rate caption used to close every
         screen but the dashboard — "Dollar figures are approximate, translated

@@ -187,10 +187,19 @@ function figureOf(
 export function DraftCard({
   reply,
   saving,
+  edits = {},
+  onEdit,
   onConfirm,
 }: {
   reply: AiIntakeReply;
   saving: boolean;
+  /**
+   * What has been typed over, by field, kept above the card so it survives
+   * the card being drawn again in the other view (B4): the floating window
+   * expanded to the page, or the page shrunk back to the window.
+   */
+  edits?: Record<string, string>;
+  onEdit?: (field: string, value: string) => void;
   onConfirm: (draft: Record<string, string>) => void;
 }) {
   const ready = reply.missingFields.length === 0;
@@ -213,7 +222,10 @@ export function DraftCard({
   if (!entries.length) return null;
 
   return (
-    <div className="rounded-xl border border-border bg-surface shadow-e1">
+    // A container, so two columns follow the card's own width rather than
+    // the screen's: in the floating window (B4) a wide screen still holds a
+    // narrow card.
+    <div className="@container rounded-xl border border-border bg-surface shadow-e1">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold tracking-tight">The draft</h2>
         <p className="text-xs text-muted-foreground">
@@ -230,21 +242,27 @@ export function DraftCard({
       </div>
 
       <form onSubmit={submit} className="flex flex-col gap-4 p-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 @lg:grid-cols-2">
           {entries.map(([key, value]) => (
             <Field
               key={key}
               label={labelFor(key, reply.target)}
               className={
-                String(value).length > 60 ? "sm:col-span-2" : undefined
+                String(value).length > 60 ? "@lg:col-span-2" : undefined
               }
             >
               {String(value).length > 60 ? (
-                <Textarea name={key} defaultValue={String(value)} rows={2} />
+                <Textarea
+                  name={key}
+                  defaultValue={edits[key] ?? String(value)}
+                  onChange={(event) => onEdit?.(key, event.target.value)}
+                  rows={2}
+                />
               ) : (
                 <Input
                   name={key}
-                  defaultValue={String(value)}
+                  defaultValue={edits[key] ?? String(value)}
+                  onChange={(event) => onEdit?.(key, event.target.value)}
                   className={
                     key.toLowerCase().includes("amount") ? "col-amount" : ""
                   }
@@ -259,8 +277,8 @@ export function DraftCard({
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
             <span>
               Read the {figure.what} back before saving:{" "}
-              <strong className="num">{figure.shown}</strong>. A misheard
-              figure looks exactly like a correct one.
+              <strong className="num">{figure.shown}</strong>. A misheard figure
+              looks exactly like a correct one.
             </span>
           </p>
         ) : null}

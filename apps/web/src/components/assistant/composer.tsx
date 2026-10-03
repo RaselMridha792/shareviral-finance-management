@@ -70,6 +70,7 @@ export function Composer({
   attaching,
   attachedName,
   onDetach,
+  compact = false,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -85,6 +86,12 @@ export function Composer({
   attaching: boolean;
   attachedName: string | null;
   onDetach: () => void;
+  /**
+   * The floating window's (B4): tighter, the keyboard hint dropped and the
+   * look-up chip an icon, so the row of controls fits a 400px window on one
+   * line.
+   */
+  compact?: boolean;
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -215,7 +222,12 @@ export function Composer({
     : "";
 
   return (
-    <div className="shrink-0 border-t border-border bg-background px-4 pt-3 pb-4">
+    <div
+      className={cn(
+        "shrink-0 border-t border-border bg-background",
+        compact ? "px-3 pt-2.5 pb-3" : "px-4 pt-3 pb-4",
+      )}
+    >
       <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
         {/* Above the box, not inside it: the one thing on this screen that
             must not be scrolled past. */}
@@ -398,7 +410,9 @@ export function Composer({
               ) : (
                 <EyeOff className="size-3.5" />
               )}
-              {lookups ? "Can look things up" : "Names only"}
+              <span className={compact ? "sr-only" : undefined}>
+                {lookups ? "Can look things up" : "Names only"}
+              </span>
             </span>
 
             <button
@@ -422,7 +436,7 @@ export function Composer({
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
           {/* The keyboard half is meaningless on a phone, and wrapping it onto
               a second line costs room the composer needs more. */}
-          <span className="hidden sm:inline">
+          <span className={compact ? "hidden" : "hidden sm:inline"}>
             Enter sends · Shift + Enter for a new line ·{" "}
           </span>
           Nothing reaches the books until you press Confirm and save

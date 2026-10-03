@@ -1,6 +1,8 @@
 import { appearanceCss } from "@finance/shared";
 import { redirect } from "next/navigation";
 
+import { AssistantProvider } from "@/components/assistant/assistant-provider";
+import { AssistantWindow } from "@/components/assistant/assistant-window";
 import { IdleTimeout } from "@/components/auth/idle-timeout";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { MainRegion } from "@/components/layout/main-region";
@@ -77,13 +79,22 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
               to time out, and a countdown there would be nonsense.
             */}
             <IdleTimeout />
-            <div className="flex min-h-dvh">
-              <Sidebar />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <Topbar />
-                <MainRegion>{children}</MainRegion>
+            {/*
+              The Assistant's conversation lives here, above the pages, so the
+              floating window and the Assistant page are one conversation and
+              a navigation does not end it (B4). The window draws itself only
+              for those who may use the Assistant.
+            */}
+            <AssistantProvider>
+              <div className="flex min-h-dvh">
+                <Sidebar />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <Topbar />
+                  <MainRegion>{children}</MainRegion>
+                </div>
               </div>
-            </div>
+              <AssistantWindow />
+            </AssistantProvider>
           </ToastProvider>
         </RateProvider>
       </SettingsProvider>

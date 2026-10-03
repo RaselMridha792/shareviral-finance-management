@@ -1,7 +1,13 @@
 "use client";
 
 import type { AiChatSummary } from "@finance/shared";
-import { BookOpen, MessageSquarePlus, Trash2, X } from "lucide-react";
+import {
+  BookOpen,
+  MessageSquarePlus,
+  PictureInPicture2,
+  Trash2,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -38,6 +44,7 @@ export function ChatRail({
   onOpen,
   onDelete,
   onClose,
+  onPopOut,
   className,
 }: {
   chats: AiChatSummary[];
@@ -47,6 +54,11 @@ export function ChatRail({
   onDelete: (id: string) => void;
   /** Only passed on the mobile drawer, where the rail needs a way out. */
   onClose?: () => void;
+  /**
+   * Only on the Assistant page: the page made a floating window again, over
+   * the page it was opened from (B4).
+   */
+  onPopOut?: () => void;
   className?: string;
 }) {
   const groups = ORDER.map((bucket) => ({
@@ -65,6 +77,17 @@ export function ChatRail({
           <MessageSquarePlus className="size-4 shrink-0 text-primary" />
           New chat
         </button>
+        {onPopOut ? (
+          <button
+            type="button"
+            onClick={onPopOut}
+            aria-label="Open as a window"
+            title="Open as a window over the page you came from"
+            className="cursor-pointer rounded-lg p-2 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <PictureInPicture2 className="size-4" />
+          </button>
+        ) : null}
         {onClose ? (
           <button
             type="button"
