@@ -12,8 +12,10 @@ except from its backup. Read the whole brief before writing anything.
 > role hobe: delence@shareviral.cash, admin access tar dorkar nai apatoto"
 
 The four answers (AskUserQuestion, 4 Oct):
-1. **Sign-ins: remove every existing login and create all of them new.** That includes
-   `rasel.exprovia@gmail.com`, the HR login, and the test logins.
+1. **Sign-ins: remove every existing login and create all of them new, except the HR
+   portal's login.** That covers `rasel.exprovia@gmail.com` and the test logins.
+   **Changed by the owner the same day: "hr er connection vanga jabena tar login
+   thakuk"** — the HR link must not break, so the HR portal's login stays.
 2. **Keep the categories, the TDS slabs and Settings.** That covers company details,
    appearance, the Anthropic, Google and Resend keys, the Assistant's settings and the
    owner's instructions.
@@ -55,7 +57,14 @@ nobody else.
 `clean-for-production.sh` does, so that a table added later is emptied by default rather
 than kept by mistake. Name the kept ones.
 
-**Users:** the three new sign-ins stay. Every other user is removed.
+**Users:** the three new sign-ins stay, and so does **the HR portal's login**. Every
+other user is removed.
+- Find which user the HR portal signs in as: the `hr` role, used by the portal's doors.
+- If more than one user has the `hr` role, list them in the report and let the owner
+  name the portal's. Never guess.
+- Its sessions (`refresh_tokens`) are emptied with everyone's, so the portal signs in
+  again on its next call. Its password does not change, so that works as before. Check
+  it after the wipe: send one request from the HR portal and see it arrive.
 - Tables pointing at `users`: `two-factor`, `files`, the four `ai_*` tables. Check that
   every foreign key to `users` is in an emptied table or is ON DELETE SET NULL before
   you delete anybody.
@@ -98,16 +107,14 @@ the real money.
    emptied (answer 4), the three users kept, and nothing kept that should go.
 4. **The owner runs `--wipe`**, then `./deploy/sweep-orphan-files.sh` (report) and, after
    reading it, `--delete`, so the bytes of the removed files go.
-5. **The HR portal.** It signs in to this app with its own HR login (`hrbudget.submit`
-   and the pay-change and one-off doors: "the HR portal's login"), and that login is
-   removed with the rest (answer 1). Until a new HR login exists and the HR portal's
-   own server holds its new password, nothing from HR reaches finance.
-   - Ask the owner which email the HR portal's new login should use.
-   - The owner creates it, role HR, and puts its password into the HR portal's server
-     environment themselves (never in chat).
-   - **The HR portal's own requests** still point at finance records that are now gone
-     (answer 4). The HR portal's session has to reset its side too. Write a short note
-     the owner can paste to it.
+5. **The HR portal.** Its login stays (answer 1, as changed), so the link holds.
+   - **But its requests in finance are emptied (answer 4)**, so the HR portal's own
+     records point at finance rows that are gone: its pay changes, one-offs, budgets and
+     spends.
+   - Its hourly poll will get nothing back for those ids.
+   - Write a short note the owner can paste to the HR portal's session: what was reset
+     in finance, and that the HR side should reset or close those requests too, so that
+     nothing waits on finance for ever.
 6. **SESSIONS:** what was emptied (with the counts the report gave), what was kept, where
    the dump is, and what the owner enters next:
    - opening balances;
