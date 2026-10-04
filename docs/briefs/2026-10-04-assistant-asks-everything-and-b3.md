@@ -97,3 +97,10 @@ build:
 Piece 1 first: it is what the owner saw go wrong. Then piece 2. Each piece is its own
 commit and push, with a SESSIONS entry and the owner's live steps. Before pushing, check
 with the owner that no other session's push is in flight: one deploy at a time.
+
+## The owner's decisions after both pieces went live (4 Oct)
+
+1. **The monthly limit is $30**, estimated cost, Claude and Gemini together. The owner
+   sets it in the Assistant's settings → What it spends. Its 80% warning comes at $24.
+2. **Invoice and Reference stay asked on every payment and transfer**, not only on a plan.
+   "skip" answers both.
