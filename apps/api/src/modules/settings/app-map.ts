@@ -233,12 +233,12 @@ export const SETTINGS_MAP = [
         schema: createUserSchema,
         fields: {
           role: "super_admin, ceo, hr or cfo: what they may see and change",
-          password:
-            "their first password, at least 12 characters, handed over once",
-          mustChangePassword: "always on from this form",
+          password: "their password, at least 12 characters, handed over once",
+          mustChangePassword:
+            "always off from this form: the Super Admin sets everyone's password and nobody is asked to choose their own (the owner, 4 Oct 2026)",
         },
         onSave:
-          "Creates an Active sign-in; at first sign-in they must choose their own password. Refused when the email is already used, by a live sign-in or by one in Trashed.",
+          "Creates an Active sign-in with the password the Super Admin typed; it is the one they keep. Refused when the email is already used, by a live sign-in or by one in Trashed.",
         permission: "users.manage",
       },
       {
@@ -276,10 +276,10 @@ export const SETTINGS_MAP = [
         fields: {
           newPassword:
             "at least 12 characters; suggested on screen, handed over once",
-          mustChangePassword: "always on from this form",
+          mustChangePassword: "always off from this form, as on Add someone",
         },
         onSave:
-          "Replaces their password, lifts any lockout and ends every session they have; they must choose their own at their next sign-in.",
+          "Replaces their password, lifts any lockout and ends every session they have; the new password is the one they keep.",
         permission: "users.manage",
       },
 

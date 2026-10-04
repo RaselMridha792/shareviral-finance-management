@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 157 | **People who can sign in: no "must change password" — the Super Admin sets everyone's password, and it is the one they keep** | **done** — the owner, 4 Oct, from the live list |
 | 156 | **What the Assistant spends: a row for every call to a model, a price table in the code, the report in its settings, the usage panel beside the chat, and the company's monthly limit — a warning at 80%, a stop at 100%** | **built** — piece 2 of the brief of 4 Oct (B3's code; its schema was #152); **the owner tries it on the live site: the steps are in #156** |
 | 155 | **The Assistant asks about every field at once: what Save needs, then every column the page shows as "N/A" — Login accounts, User Name, User Department, Invoice, Reference on a plan; "skip" leaves one empty; an invoice attached in the chat becomes the plan's invoice** | **built** — piece 1 of the brief of 4 Oct; **the owner tries it on the live site: the messages are in #155.** Next is piece 2 (B3's code: what it spends) |
 | 154 | **Sign-in: Cloudflare Turnstile before the password** | **on, live, 4 Oct** — the owner made the widget `SFM finance sign-in` (app.hellonizam.com, Managed), set both keys on the server and signed in through it ("Success — you are verified"). How to switch it off is in STATUS.md |
@@ -134,6 +135,34 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 157. The Super Admin sets everyone's password — 4 Oct 2026
+
+The owner, with the new sign-ins made for real use: *"must change password ei text ta
+soriye daw. user ke nijer password reset korte hobena alada kore. sob super admin nijei
+dibe"* … *"user er oikhan theke error message ta soriye daw"*.
+
+The flag was only ever a label. Nothing enforces it:
+- the sign-in reads it, but never routes anybody to a change;
+- there is no self-service change (#126's question about building one is now answered:
+  **not wanted**).
+
+What changed (`users-panel.tsx`, and the map in `settings/app-map.ts`):
+- **The list no longer shows "must change password"** on any row, older rows that carry
+  the flag included.
+- **Add someone and Set a new password send `mustChangePassword: false`.** The password
+  the Super Admin types is the one the person keeps, and both drawers' hints say so.
+- **The Assistant's map says the same**, so it does not tell anybody to expect a
+  change.
+- **The column stays.** Rows already flagged keep the value, which nothing reads for
+  anything. No schema change.
+
+**Proved:**
+- A page check, 7/7, local: the hints; the POST bodies (`false` on both); the stored
+  flag; the list with a flagged row and no label; clean-up.
+- The four CI steps are green: tests 448 + 386.
+
+**For the owner:** reload People who can sign in. No row says "must change password".
 
 ## 156. What the Assistant spends — 4 Oct 2026
 

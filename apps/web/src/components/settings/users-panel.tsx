@@ -14,7 +14,6 @@ import {
 import { Check, Copy, LoaderCircle } from "lucide-react";
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/ssr/UserPlus";
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import {
   useCallback,
   useEffect,
@@ -151,8 +150,8 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
         <span className="font-medium text-foreground">
           Settings &rarr; What changed
         </span>{" "}
-        — an audit trail that forgets who did something is not one. For
-        somebody who has merely left,{" "}
+        — an audit trail that forgets who did something is not one. For somebody
+        who has merely left,{" "}
         <span className="font-medium text-foreground">deactivate instead</span>:
         it closes the door just as firmly and is one click to undo.
       </p>
@@ -337,16 +336,6 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                               · you
                             </span>
                           ) : null}
-                          {user.mustChangePassword ? (
-                            <span className="flex items-center gap-1 text-[12px] font-extrabold text-(--sv-warn)">
-                              <WarningCircleIcon
-                                size={13}
-                                weight="duotone"
-                                className="flex-none"
-                              />
-                              must change password
-                            </span>
-                          ) : null}
                         </span>
                       </span>
                     </td>
@@ -401,7 +390,9 @@ export function UsersPanel({ initialUsers }: { initialUsers: UserDto[] }) {
                       // using is a locked door with the key inside, and the
                       // server refusing it afterwards is a worse way to find
                       // that out than the button never being live.
-                      onDelete={user.id === me.id ? undefined : () => del.ask(user)}
+                      onDelete={
+                        user.id === me.id ? undefined : () => del.ask(user)
+                      }
                       extra={
                         <RowButton
                           onClick={() => setResetting(user)}
@@ -566,7 +557,7 @@ function PasswordField({
       label={label}
       required
       error={error}
-      hint="At least 12 characters. Hand this over once — they must change it when they first sign in."
+      hint="At least 12 characters. Hand this over once — it is the password they keep."
     >
       <div className="flex gap-2">
         <Input
@@ -680,7 +671,9 @@ function CreateUserForm({
         fullName: String(data.get("fullName") ?? "").trim(),
         role: String(data.get("role")) as Role,
         password: String(data.get("password") ?? ""),
-        mustChangePassword: true,
+        /* The Super Admin sets everyone's password and nobody is asked to
+           choose their own (the owner, 4 Oct 2026). */
+        mustChangePassword: false,
       });
       await onSaved();
     } catch (caught) {
@@ -860,7 +853,8 @@ function ResetPasswordForm({
     try {
       await usersApi.resetPassword(user.id, {
         newPassword: String(data.get("newPassword") ?? ""),
-        mustChangePassword: true,
+        // As on Add someone: the password set here is the one they keep.
+        mustChangePassword: false,
       });
       await onSaved();
     } catch (caught) {
@@ -884,9 +878,8 @@ function ResetPasswordForm({
       {user ? (
         <form id="user-pw" onSubmit={onSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
-            Every session for {user.email} ends the moment this is saved, and
-            they will be asked to choose their own password when they next sign
-            in.
+            Every session for {user.email} ends the moment this is saved. The
+            password set here is the one they keep.
           </p>
           <PasswordField
             name="newPassword"
