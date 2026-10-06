@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 159 | **Reset for real data: `deploy/reset-keep-team-and-accounts.sh` — keeps the team, accounts, categories, TDS slabs, Settings and four sign-ins; empties everything else** | **built, proved on a copy, not run on live** — the brief of 4 Oct, step 1. **The owner runs the report on the server and reads it with a session before `--wipe`: the steps are in #159** |
 | 158 | **Sign-in: the HR portal's server gets past the captcha with the shared secret (`x-hr-secret`), for an HR account only** | **built** — the brief of 4 Oct, an auth change pushed alone. **The captcha stays off on live until the HR portal sends the header too**; then the owner puts it back and checks the three things in #158 |
 | 157 | **People who can sign in: no "must change password" — the Super Admin sets everyone's password, and it is the one they keep** | **done** — the owner, 4 Oct, from the live list |
 | 156 | **What the Assistant spends: a row for every call to a model, a price table in the code, the report in its settings, the usage panel beside the chat, and the company's monthly limit — a warning at 80%, a stop at 100%** | **built** — piece 2 of the brief of 4 Oct (B3's code; its schema was #152); **the owner tries it on the live site: the steps are in #156** |
@@ -136,6 +137,122 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 159. The reset for real data: the script — 7 Oct 2026
+
+The brief: `docs/briefs/2026-10-04-reset-for-real-data.md`, step 1. An ops script only,
+pushed alone. **Nothing on live has been touched.**
+
+`deploy/reset-keep-team-and-accounts.sh` — report by default; `--wipe` does it.
+
+- **Kept whole:** `team_members`, `team_socials`, `team_ereturns`, `accounts`,
+  `categories`, `tax_policies`, `tax_policy_bands`, `app_settings` (keys and all),
+  `schema_migrations`.
+  - `team_socials` and `team_ereturns` were not named in the brief. They are the
+    team's own data (a person's social links, their yearly tax return and its
+    receipt), so they stay under "team e users data sobgula thakuk". The report
+    shows them as kept; the owner can still say no before `--wipe`.
+- **Kept in part:** `users` — the four sign-ins only (finance@ Super Admin, yeasin@
+  CFO, delence@ CEO, hr-portal@ hr); `user_two_factor` and `recovery_codes` — those
+  four's rows; `files` — rows on a kept record (`settings_id` or `team_member_id`,
+  read from the constraints), i.e. a team member's documents and the company's
+  logo and signatures.
+- **Emptied:** every other table in `information_schema`, so a later table is
+  emptied by default. That covers vendors and plans (answer 3), salary history and
+  every HR request (answer 4), all sessions, audit, notifications, the Assistant's
+  chats and usage.
+- **How:** a gzipped `pg_dump` first, in `backup.sh`'s format so `restore.sh` takes
+  it as-is (`backups/before-reset-<Dhaka time>.sql.gz`; `backup.sh`'s pruning only
+  matches `sfm_*`, so it is never deleted by age). It is checked: gzip readable, ≥10
+  `CREATE TABLE`, the "dump complete" line. Then **one transaction**: one `TRUNCATE`,
+  no CASCADE.
+  - `files` has to be in that statement, because it points at transactions, payroll
+    and the rest. `team_ereturns` points at `files`, so it has to be too. Both are
+    copied aside and put back inside the transaction.
+  - Then every kept row naming a removed person is cleared. That is any uuid column
+    on a kept table ending `_by`, or with a foreign key to `users`. All of them are
+    nullable today, so all become NULL. A NOT NULL one would get the new Super
+    Admin.
+  - Then the other users are **deleted**. If a foreign key ever refuses that, a
+    plpgsql fallback marks them the trash's way instead (`deleted_at`, `deleted_by`,
+    a reason, `disabled`, `token_version + 1`), and the summary says which way it
+    went.
+- **Guards:** `--wipe` refuses unless all four sign-ins exist, are active, are not in
+  the trash and have the expected role. It asks for `RESET` to be typed. Any failed
+  query stops the script (`set -e` plus an ERR trap). The first run showed why: a
+  bad `ORDER BY` printed "none" for the columns to clear and carried on.
+
+**Proved on a throwaway copy, not on Neon.** On Neon `finance@` is a CFO and every
+harness signs in with the old test logins, so wiping Neon would have broken the dev
+database for every other session.
+- What was done: a Postgres 17 container under a scratch compose project, loaded
+  with a `pg_dump` of Neon, with live-like fixtures added. Those were the four
+  sign-ins; 2FA and recovery rows for a kept and a removed user; a social; an
+  e-return with its receipt; a settings signature; salary history; three waiting
+  HR requests; `schema_migrations`.
+- The script ran unchanged, from a copy beside that compose file:
+  - **Report:** 39 users → 4 kept; files 14 → 13 kept; vendors 2, plans 10;
+    HR waiting 3 (2 pay changes, 1 budget); 15 kept columns naming removed people.
+  - **Guards:** a wrong role on yeasin@ → refused. Answering "nope" → refused.
+    Fingerprints identical after both.
+  - **Wipe:** dump 1.2M, 44 tables. Every emptied table 0. **Every kept row
+    byte-identical except the cleared name columns** (md5 of each table minus
+    those columns, before vs after). 0 kept rows naming a removed user. The
+    e-return still linked to its receipt. The kept 2FA row is finance@'s.
+    `audit_logs_id_seq` restarted at 1.
+  - **The dump restored** into a fresh database with the old data back (39 users,
+    8 transactions, 2 vendors, 8,572 audit rows).
+  - **The app on the wiped copy** (API :4011 + web :3011): signed in through the
+    real form as finance@. Team showed the 4 people; Accounts showed the 3
+    accounts at their opening balances. No API errors.
+  - **Sign-ins:** hr-portal@ signed in (role hr, its permissions intact).
+    superadmin@ → 401.
+- Container, volume and the Neon copy are deleted.
+- The four CI steps: build:shared, typecheck, lint, test (460) — each exit 0.
+
+**Found on the way — the HR portal will see its requests as "never sent".**
+`readStatuses` (`hr-requests/request-rows.ts`) leaves out ids finance does not have,
+and the HR portal reads that gap as "never sent". After the wipe that is every
+request it holds, so it may send old requests again into the empty finance. Hence
+the order below: the HR side closes its requests **before** the wipe.
+
+**Left for the owner, in this order** (step 2 is already done):
+1. Paste the note below to the HR portal's session. Let it close its side first.
+2. On the server, after this deploy lands:
+   `cd /opt/sfm/deploy && ./reset-keep-team-and-accounts.sh` (report only). Send
+   the output to a session and read it together. Check:
+   - vendors and plans emptied (answer 3 — say now if the vendors should stay);
+   - salaries emptied;
+   - the HR-waiting count (4 on 7 Oct);
+   - the four sign-ins kept;
+   - `team_socials` and `team_ereturns` kept.
+3. `./reset-keep-team-and-accounts.sh --wipe`, type `RESET`.
+4. `./sweep-orphan-files.sh` → read → `./sweep-orphan-files.sh --delete`.
+5. Sign in again as finance@. Send one request from the HR portal and see it arrive
+   in HR Requests. After the next hourly poll, no old request should have come back.
+6. Enter the real data:
+   - each account's real opening balance and date (Accounts → edit);
+   - the salaries;
+   - the vendors and their plans.
+
+**The note for the HR portal's session:**
+
+> Finance (app.hellonizam.com) is being reset for real data. What it means for you:
+> - **Your login stays.** `hr-portal@shareviral.cash` keeps its password and the
+>   `x-hr-secret` path past the captcha. Its session ends, so your next call signs in
+>   again. Nothing to change there.
+> - **Everything you have sent is deleted on the finance side.** That is pay changes,
+>   one-off amounts, budget periods and budget spends, in every state (waiting,
+>   decided, paid). Finance's salary history and payroll runs go too.
+> - **The team stays.** Team members, their ids, bank details and documents are
+>   untouched.
+> - **Finance's status polls leave out ids it does not have, and you read that gap
+>   as "never sent".** After the reset every request you hold will look never-sent.
+>   Close them on your side (closed, not re-sendable, with a note like "finance
+>   reset 7 Oct"), so none is sent again and none waits on finance for ever. Please
+>   do it **before** the owner runs the wipe.
+> - Anything HR still wants should be sent again as new once the owner says the
+>   real data is in.
 
 ## 158. The HR portal's server signs in past the captcha — 6 Oct 2026
 
