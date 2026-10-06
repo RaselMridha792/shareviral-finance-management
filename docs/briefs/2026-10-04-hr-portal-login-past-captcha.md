@@ -27,6 +27,18 @@ In the meantime, the owner switches the captcha **off** (removes `TURNSTILE_SECR
 recreates `api`) to restore the link. The captcha stays off until this ships and the HR
 portal has done its half.
 
+**State on 6 Oct 2026, 21:24:**
+- The captcha is off on live.
+- The HR portal signs in as **hr-portal@shareviral.cash** (role `hr`, active), and its
+  Settings → Finance check says "It worked".
+- Before that, the audit log showed its sign-ins refused as "(human check refused)",
+  which is exactly the failure this brief removes.
+
+When the api is recreated on the server, use
+`IMAGE_TAG=$(cat .deployed) COMPOSE_PROFILES=local-db docker compose up -d --no-build api`.
+A bare `up -d api` asks for `:latest`, which the deploy prunes, so compose builds a new image
+on the box. That happened on 6 Oct.
+
 ## The decision (finance's)
 
 **A shared-secret header, valid for an HR-role account only.**
