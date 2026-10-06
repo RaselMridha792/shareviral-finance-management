@@ -29,6 +29,20 @@ The four answers (AskUserQuestion, 4 Oct):
 5 Sep, `permissions.ts`). Read this as: only Super Admin, CFO and CEO for now, and
 nobody else.
 
+**State on 7 Oct 2026**, before this is started:
+- **The HR portal signs in as `hr-portal@shareviral.cash`** (shown as "Hr Application",
+  role `hr`). That is the login to keep.
+  - It was created on 6 Oct, after the captcha cut the old link.
+  - Any other `hr`-role user is old: list it in the report and remove it.
+- **Step 2 below is done.** The three new sign-ins exist, and the owner works as
+  `finance@shareviral.cash`.
+- **The captcha is on (#158).** The portal gets past it with `x-hr-secret`, which needs
+  nothing from this reset.
+  - Do not turn on a second factor for the portal's login.
+  - Do not change its password: the HR portal keeps a sealed copy of it.
+- **HR Requests had 4 waiting** on 7 Oct. Answer 4 empties them. Count them in the
+  report so the owner sees them go.
+
 ## What stays, and what goes
 
 **Kept, as they are:**

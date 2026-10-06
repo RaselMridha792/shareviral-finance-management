@@ -192,6 +192,16 @@ Measured:
    captcha. The audit log should show the HR portal's sign-ins as "(server, past the
    captcha)".
 
+**Done on live, 7 Oct 2026** (the planning session, with the owner):
+- The HR portal's half went live as its `778d8b9`.
+- The captcha went back on at 02:47; the container check said `captcha ON`.
+- The HR portal's check at 02:48 said "It worked". The audit log reads "Hr Application
+  signed in (server, past the captcha)".
+- Two token-less sign-ins to a made-up email, one with no header and one with a wrong
+  header, both got a 401 and were audited as "(human check refused)".
+- A person in a private window saw the captcha and signed in.
+- Still to see: one real request from the HR portal arriving in HR Requests.
+
 ## 157. The Super Admin sets everyone's password — 4 Oct 2026
 
 The owner, with the new sign-ins made for real use: *"must change password ei text ta
