@@ -254,6 +254,34 @@ the order below: the HR side closes its requests **before** the wipe.
 > - Anything HR still wants should be sent again as new once the owner says the
 >   real data is in.
 
+**Run on live, 7 Oct 2026, 03:54** (the owner, read with the planning session):
+- **The report** matched the brief:
+  - one sign-in removed, `rasel.exprovia@gmail.com`; the four stayed;
+  - vendors 0, plans 3, salary history 19;
+  - HR waiting 4 (all spends).
+- **`--wipe`:**
+  - the dump is `/opt/sfm/deploy/backups/before-reset-2026-10-07_0354.sql.gz`
+    (376K, 44 tables);
+  - everything was emptied in one transaction, and the removed sign-in was deleted
+    outright, with no fallback needed.
+- **What is there now:**
+  - users 4;
+  - team_members 18;
+  - accounts 4, every opening balance 0.00;
+  - categories 70;
+  - tax_policies 1 and bands 6;
+  - app_settings 1;
+  - files 52;
+  - every other table 0.
+- **The sweep:**
+  - all 52 kept files are on disk;
+  - 152 orphaned files are listed: the reset's 12 plus older ones;
+  - the owner was given a tar of the whole uploads folder into `backups/` before
+    `--delete`.
+- **Still open:**
+  - the HR portal closing its side;
+  - the owner entering opening balances, salaries, vendors and plans.
+
 ## 158. The HR portal's server signs in past the captcha — 6 Oct 2026
 
 The brief: `docs/briefs/2026-10-04-hr-portal-login-past-captcha.md`. The HR portal
