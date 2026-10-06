@@ -1,4 +1,12 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { Injectable, Logger } from "@nestjs/common";
+
+/**
+ * What the HR portal's server sends with its sign-in in place of a token.
+ * It has no browser, so it cannot solve the check (brief 2026-10-04).
+ */
+export const HR_SECRET_HEADER = "x-hr-secret";
 
 /** Cloudflare's own; TURNSTILE_VERIFY_URL exists so "unreachable" can be tested. */
 export const SITEVERIFY_URL =
@@ -38,6 +46,25 @@ export class CaptchaService {
   /** Read per call, so a test or a recreated container is never half-on. */
   get enabled(): boolean {
     return Boolean(secretKey());
+  }
+
+  /**
+   * Whether this sign-in carries the secret the HR portal's server shares
+   * with this one — our `HR_WEBHOOK_SECRET`, its `FINANCE_WEBHOOK_SECRET`.
+   *
+   * Only half of the decision: the caller lets it past the check and then
+   * accepts it for an HR account alone (auth.service.ts). False whenever the
+   * secret is unset, or one the webhook itself would refuse to use, so no
+   * header is ever accepted against an empty or a weak value.
+   *
+   * Both sides are hashed first, so `timingSafeEqual` always has two buffers
+   * of the same length and the comparison gives away neither the secret's
+   * length nor how much of it matched. Neither value is logged.
+   */
+  isHrServer(header: string | string[] | undefined): boolean {
+    const secret = hrSecret();
+    if (!secret || typeof header !== "string" || !header) return false;
+    return timingSafeEqual(digest(header), digest(secret));
   }
 
   /**
@@ -100,6 +127,16 @@ export class CaptchaService {
 function secretKey(): string | undefined {
   // Compose names the variable even when it is empty, so "" means off too.
   return process.env.TURNSTILE_SECRET_KEY?.trim() || undefined;
+}
+
+/** The webhook's own rule (hr-webhook.service.ts): 16 or more visible characters. */
+function hrSecret(): string | undefined {
+  const secret = process.env.HR_WEBHOOK_SECRET?.trim();
+  return secret && /^[\x21-\x7e]{16,}$/.test(secret) ? secret : undefined;
+}
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
 }
 
 function verifyUrl(): string {

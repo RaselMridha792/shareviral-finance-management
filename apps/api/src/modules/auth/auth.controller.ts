@@ -23,6 +23,7 @@ import {
   type TwoFactorPasswordAndCodeInput,
   type VerifySecondStepInput,
 } from "./auth.schemas";
+import { HR_SECRET_HEADER } from "./captcha.service";
 import type { IssuedTokens } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
 
@@ -62,7 +63,11 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.auth.login(body, clientOf(request));
+    const result = await this.auth.login(
+      body,
+      clientOf(request),
+      request.headers[HR_SECRET_HEADER],
+    );
 
     // No session on this branch, and nothing to set one from - the union has
     // no `tokens` here, so a cookie cannot be written by accident.

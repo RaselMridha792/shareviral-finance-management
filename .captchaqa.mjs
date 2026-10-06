@@ -37,12 +37,25 @@ const SENTENCE = "Email or password is incorrect";
 
 const email = "captchaqa@demo.sharevirals.test";
 const password = "captcha-qa-" + crypto.randomBytes(8).toString("hex");
-await db.query("delete from users where email = $1", [email]);
-await db.query(
-  `insert into users (email, full_name, password_hash, role, status)
-   values ($1, 'Captcha QA', $2, 'cfo', 'active')`,
-  [email, await bcrypt.hash(password, 4)],
-);
+/* The HR portal's server (brief 2026-10-04): an HR account, and a Super Admin
+   whose right password must not get past the check with the same secret. */
+const hrEmail = "captchaqa-hr@demo.sharevirals.test";
+const adminEmail = "captchaqa-admin@demo.sharevirals.test";
+const HR_SECRET = "hr-secret-" + crypto.randomBytes(12).toString("hex");
+const ALL = [email, hrEmail, adminEmail];
+await db.query("delete from users where email = any($1)", [ALL]);
+const hash = await bcrypt.hash(password, 4);
+for (const [address, name, role] of [
+  [email, "Captcha QA", "cfo"],
+  [hrEmail, "Captcha QA HR", "hr"],
+  [adminEmail, "Captcha QA Admin", "super_admin"],
+]) {
+  await db.query(
+    `insert into users (email, full_name, password_hash, role, status)
+     values ($1, $2, $3, $4, 'active')`,
+    [address, name, hash, role],
+  );
+}
 const started = new Date();
 
 let failures = 0;
@@ -51,23 +64,30 @@ function check(label, ok, detail = "") {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
 }
 
-async function login(port, body) {
+async function login(port, body, extraHeaders = {}) {
   const t = Date.now();
   const res = await fetch(`http://localhost:${port}/api/auth/login`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-requested-with": "finance-web" },
+    headers: { "content-type": "application/json", "x-requested-with": "finance-web", ...extraHeaders },
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, message: json.message, ms: Date.now() - t };
 }
 
-async function account() {
+async function account(address = email) {
   const { rows } = await db.query(
     "select failed_login_count, locked_until from users where email = $1",
-    [email],
+    [address],
   );
   return rows[0];
+}
+
+async function unlock() {
+  await db.query(
+    "update users set failed_login_count = 0, locked_until = null where email = any($1)",
+    [ALL],
+  );
 }
 
 async function withApi(port, extra, fn) {
@@ -151,10 +171,98 @@ const logE = await withApi(4015, { TURNSTILE_SECRET_KEY: PASS, TURNSTILE_VERIFY_
   check("refused with the sentence", r.status === 401 && r.message === SENTENCE, `${r.status} ${r.message}`);
 });
 
+/*
+ * The HR portal's server: no browser, so no token — the shared secret in
+ * x-hr-secret instead, for an HR account only. The failing test secret, so
+ * anything that did reach Cloudflare would be refused. HR_WEBHOOK_URL empty,
+ * so nothing is ever sent anywhere.
+ */
+const hrRight = { email: hrEmail, password };
+const adminRight = { email: adminEmail, password };
+const header = { "x-hr-secret": HR_SECRET };
+const SERVER = {
+  TURNSTILE_SECRET_KEY: FAIL,
+  HR_WEBHOOK_SECRET: HR_SECRET,
+  HR_WEBHOOK_URL: "",
+};
+
+console.log("\nF. check on, the HR portal's secret (4016)");
+const logF = await withApi(4016, SERVER, async () => {
+  const r = await login(4016, hrRight, header);
+  check("HR account, right secret, no token -> 200", r.status === 200, `${r.status} ${r.message ?? ""}`);
+
+  const a = await login(4016, adminRight, header);
+  check("Super Admin's right password, same secret -> 401, the sentence", a.status === 401 && a.message === SENTENCE, `${a.status} ${a.message}`);
+  const counted = await account(adminEmail);
+  check("...and it counts like a wrong password", counted.failed_login_count === 1, `count ${counted.failed_login_count}`);
+  const c = await login(4016, right, header);
+  check("a CFO's right password, same secret -> 401, the sentence", c.status === 401 && c.message === SENTENCE, `${c.status} ${c.message}`);
+
+  const none = await login(4016, hrRight);
+  check("HR account, no header, no token -> 401, the sentence", none.status === 401 && none.message === SENTENCE, `${none.status} ${none.message}`);
+  const wrong = await login(4016, hrRight, { "x-hr-secret": HR_SECRET.slice(0, -1) + "x" });
+  check("HR account, a wrong secret -> 401, the sentence", wrong.status === 401 && wrong.message === SENTENCE, `${wrong.status} ${wrong.message}`);
+  const empty = await login(4016, hrRight, { "x-hr-secret": "" });
+  check("HR account, an empty header -> 401, the sentence", empty.status === 401 && empty.message === SENTENCE, `${empty.status} ${empty.message}`);
+  const notCounted = await account(hrEmail);
+  check("...refused at the check, so not counted", notCounted.failed_login_count === 0, `count ${notCounted.failed_login_count}`);
+
+  const bad = await login(4016, { email: hrEmail, password: "wrong" }, header);
+  check("HR account, right secret, wrong password -> 401, the sentence", bad.status === 401 && bad.message === SENTENCE, `${bad.status} ${bad.message}`);
+  check("...and it counts", (await account(hrEmail)).failed_login_count === 1);
+  for (let i = 0; i < 4; i++) await login(4016, { email: hrEmail, password: "wrong" }, header);
+  const locked = await account(hrEmail);
+  check("five wrong passwords with the secret lock the HR account", locked.locked_until !== null, `locked ${locked.locked_until}`);
+  const after = await login(4016, hrRight, header);
+  check("...and then its right password waits", after.status === 401 && /Too many attempts/.test(after.message ?? ""), `${after.status} ${after.message}`);
+  await unlock();
+});
+
+console.log("\nG. check on, our copy of the secret unset (4017)");
+const logG = await withApi(4017, { ...SERVER, HR_WEBHOOK_SECRET: "" }, async () => {
+  const r = await login(4017, hrRight, header);
+  check("HR account with the header -> 401, the sentence", r.status === 401 && r.message === SENTENCE, `${r.status} ${r.message}`);
+  const s = await login(4017, hrRight, { "x-hr-secret": "" });
+  check("...and with an empty one", s.status === 401 && s.message === SENTENCE, `${s.status} ${s.message}`);
+});
+
+console.log("\nH. check off (4018): the header changes nothing");
+const logH = await withApi(4018, { ...SERVER, TURNSTILE_SECRET_KEY: "" }, async () => {
+  const a = await login(4018, adminRight, header);
+  check("Super Admin with the header -> 200, as before", a.status === 200, `${a.status} ${a.message ?? ""}`);
+  const w = await login(4018, hrRight, { "x-hr-secret": "wrong" });
+  check("HR account with a wrong header -> 200, as before", w.status === 200, `${w.status} ${w.message ?? ""}`);
+  const r = await login(4018, hrRight, header);
+  check("HR account with the right header -> 200", r.status === 200, `${r.status} ${r.message ?? ""}`);
+  await unlock();
+});
+
 console.log("\nLogs and audit");
-const logs = logB + logC + logD + logE;
+const logs = logB + logC + logD + logE + logF + logG + logH;
 check("no log line carries the test secret", !logs.includes(PASS) && !logs.includes(FAIL));
 check("no log line carries the token", !logs.includes(DUMMY));
+check("no log line carries the HR portal's secret", !logs.includes(HR_SECRET));
+const { rows: leaked } = await db.query(
+  "select count(*)::int as n from audit_logs where occurred_at >= $1 and audit_logs::text like $2",
+  [started, `%${HR_SECRET}%`],
+);
+check("no audit row carries the HR portal's secret", leaked[0].n === 0, `${leaked[0].n} rows`);
+const { rows: hrAudit } = await db.query(
+  "select summary from audit_logs where occurred_at >= $1 and summary like 'Captcha QA HR signed in%' order by occurred_at",
+  [started],
+);
+check(
+  "the HR sign-in past the check says so; the one with the check off does not",
+  hrAudit.length === 3 &&
+    hrAudit[0].summary === "Captcha QA HR signed in (server, past the captcha)" &&
+    hrAudit.slice(1).every((r) => r.summary === "Captcha QA HR signed in"),
+  hrAudit.map((r) => r.summary).join(" | "),
+);
+const { rows: adminAudit } = await db.query(
+  "select summary from audit_logs where occurred_at >= $1 and summary like $2",
+  [started, `%${adminEmail}%not an HR account%`],
+);
+check("the Super Admin's refusal is in the audit log", adminAudit.length === 1, `${adminAudit.length} rows`);
 for (const line of logs.split(/\r?\n/).filter((l) => /CaptchaService/.test(l))) {
   console.log("     " + line.replace(/\x1b\[[0-9;]*m/g, "").slice(0, 220));
 }
@@ -164,7 +272,7 @@ const { rows: audit } = await db.query(
 ).catch((e) => ({ rows: [{ summary: "ERR " + e.message }] }));
 check("each refusal is in the audit log", audit.length >= 12, `${audit.length} rows`);
 
-await db.query("delete from users where email = $1", [email]);
+await db.query("delete from users where email = any($1)", [ALL]);
 await db.end();
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

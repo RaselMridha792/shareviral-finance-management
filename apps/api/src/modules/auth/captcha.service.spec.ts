@@ -11,6 +11,7 @@ import { CaptchaService, SITEVERIFY_URL } from "./captcha.service";
 
 const SECRET = "0x-test-secret-that-is-not-real";
 const TOKEN = "a-token-cloudflare-handed-the-browser";
+const HR_SECRET = "a-shared-secret-of-thirty-two-ch";
 
 function answer(status: number, body: unknown) {
   return Promise.resolve(
@@ -25,6 +26,7 @@ const realFetch = global.fetch;
 const saved = {
   secret: process.env.TURNSTILE_SECRET_KEY,
   url: process.env.TURNSTILE_VERIFY_URL,
+  hr: process.env.HR_WEBHOOK_SECRET,
 };
 let fetchMock: jest.Mock;
 let logs: string[];
@@ -33,6 +35,7 @@ let errors: string[];
 beforeEach(() => {
   process.env.TURNSTILE_SECRET_KEY = SECRET;
   delete process.env.TURNSTILE_VERIFY_URL;
+  process.env.HR_WEBHOOK_SECRET = HR_SECRET;
   fetchMock = jest.fn(() => answer(200, { success: true }));
   global.fetch = fetchMock;
   logs = [];
@@ -55,6 +58,7 @@ afterAll(() => {
   for (const [name, value] of [
     ["TURNSTILE_SECRET_KEY", saved.secret],
     ["TURNSTILE_VERIFY_URL", saved.url],
+    ["HR_WEBHOOK_SECRET", saved.hr],
   ] as const) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
@@ -196,6 +200,48 @@ describe("CaptchaService", () => {
       const written = logs.join("\n");
       expect(written).not.toContain(SECRET);
       expect(written).not.toContain(TOKEN);
+    });
+  });
+
+  /*
+   * The HR portal's server, which has no browser (brief 2026-10-04). Only
+   * whether the header matches is decided here; that it opens the way for an
+   * HR account alone is the login's, and .captchaqa.mjs measures that.
+   */
+  describe("the HR portal's secret", () => {
+    it("accepts the shared secret exactly", () => {
+      expect(captcha.isHrServer(HR_SECRET)).toBe(true);
+    });
+
+    it.each([
+      ["missing", undefined],
+      ["empty", ""],
+      ["wrong in its last character", "a-shared-secret-of-thirty-two-cX"],
+      ["a prefix of it", HR_SECRET.slice(0, 16)],
+      ["longer than it", HR_SECRET + "x"],
+      ["sent twice", [HR_SECRET, HR_SECRET]],
+    ])("refuses a header that is %s", (_, header) => {
+      expect(captcha.isHrServer(header)).toBe(false);
+    });
+
+    it.each([
+      ["unset", undefined],
+      ["empty, as compose names it", ""],
+      ["shorter than the webhook allows", "short-secret"],
+      ["carrying a space", "a shared secret of thirty-two ch"],
+    ])("accepts no header when our secret is %s", (_, value) => {
+      if (value === undefined) delete process.env.HR_WEBHOOK_SECRET;
+      else process.env.HR_WEBHOOK_SECRET = value;
+      expect(captcha.isHrServer(value)).toBe(false);
+      expect(captcha.isHrServer("")).toBe(false);
+      expect(captcha.isHrServer(undefined)).toBe(false);
+    });
+
+    it("never asks Cloudflare, and writes nothing to a log", () => {
+      captcha.isHrServer(HR_SECRET);
+      captcha.isHrServer("wrong");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(logs).toEqual([]);
     });
   });
 });

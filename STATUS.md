@@ -1202,9 +1202,24 @@ portal's. The code step does not ask again.
 - **It fails closed.** No token, a bad one, or no answer from Cloudflare
   within 5 s: refused, with the same "Email or password is incorrect". A
   refused check never counts toward the five-wrong-passwords lockout.
+- **The HR portal's server** has no browser, so it cannot answer the box. It
+  sends `x-hr-secret` with its sign-in instead: the secret both servers
+  already hold (our `HR_WEBHOOK_SECRET`, its `FINANCE_WEBHOOK_SECRET`).
+  Compared in constant time, never logged, and accepted only while the check
+  is on and only for a **role `hr`** account — a Super Admin's or CFO's right
+  password with the same header is refused with the wrong-password sentence
+  and counted like one. A missing or wrong header is the ordinary path. Such a
+  sign-in is audited as "signed in (server, past the captcha)". The lockout
+  still applies. **If a second factor is ever turned on for the HR portal's
+  account (hr-portal@shareviral.cash), the portal cannot answer it and the
+  HR link stops** — leave that account without one. Rotating
+  `HR_WEBHOOK_SECRET` means rotating the HR portal's copy at the same time,
+  or its sign-ins fail as soon as the captcha is on.
 - **Switching it off** if Cloudflare is down and nobody can sign in: delete
   the `TURNSTILE_SECRET_KEY` line from `/opt/sfm/deploy/.env`, then
-  `COMPOSE_PROFILES=local-db docker compose up -d api`. That alone lets
+  `IMAGE_TAG=$(cat .deployed) COMPOSE_PROFILES=local-db docker compose up -d --no-build api`
+  (a bare `up -d api` asks for `:latest`, which the deploy prunes, and
+  builds on the box). That alone lets
   people in: when the box cannot verify, Sign in goes without a token and
   the server decides. The box stays on the page until `TURNSTILE_SITE_KEY`
   comes off too and `web` is recreated.

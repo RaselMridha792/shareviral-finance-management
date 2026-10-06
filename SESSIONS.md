@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 158 | **Sign-in: the HR portal's server gets past the captcha with the shared secret (`x-hr-secret`), for an HR account only** | **built** — the brief of 4 Oct, an auth change pushed alone. **The captcha stays off on live until the HR portal sends the header too**; then the owner puts it back and checks the three things in #158 |
 | 157 | **People who can sign in: no "must change password" — the Super Admin sets everyone's password, and it is the one they keep** | **done** — the owner, 4 Oct, from the live list |
 | 156 | **What the Assistant spends: a row for every call to a model, a price table in the code, the report in its settings, the usage panel beside the chat, and the company's monthly limit — a warning at 80%, a stop at 100%** | **built** — piece 2 of the brief of 4 Oct (B3's code; its schema was #152); **the owner tries it on the live site: the steps are in #156** |
 | 155 | **The Assistant asks about every field at once: what Save needs, then every column the page shows as "N/A" — Login accounts, User Name, User Department, Invoice, Reference on a plan; "skip" leaves one empty; an invoice attached in the chat becomes the plan's invoice** | **built** — piece 1 of the brief of 4 Oct; **the owner tries it on the live site: the messages are in #155.** Next is piece 2 (B3's code: what it spends) |
@@ -135,6 +136,61 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 158. The HR portal's server signs in past the captcha — 6 Oct 2026
+
+The brief: `docs/briefs/2026-10-04-hr-portal-login-past-captcha.md`. The HR portal
+signs in like a person (`POST /api/auth/login`), but it has no browser, so once the
+captcha (#154) went on every one of its sign-ins was refused as "(human check
+refused)" and nothing reached finance. The captcha has been off on live since.
+
+What changed — auth only, travels alone:
+- `captcha.service.ts`: `isHrServer(header)` — the `x-hr-secret` header against our
+  `HR_WEBHOOK_SECRET`, both hashed to SHA-256 and compared with `timingSafeEqual`, so
+  the buffers are always the same length and nothing about the secret's length leaks.
+  False when the secret is unset, or one the webhook itself would refuse (under 16
+  visible characters). A header sent twice is refused.
+- `auth.service.ts` `login`: when the captcha is **on** and the header matches, the
+  Turnstile check is skipped. The password check runs as normal; then, **if the
+  account is not role `hr`**, it is refused with "Email or password is incorrect" and
+  counted like a wrong password. A missing or wrong header is the ordinary path. With
+  the captcha **off** the header changes nothing.
+- The header goes to `login` as its own argument, not inside `ClientInfo`, because
+  `ClientInfo` is written to the session's row. It is never logged or audited.
+- Audit: a sign-in through the header reads "… signed in (server, past the captcha)";
+  a non-HR account refused this way reads "Failed sign-in for … (server, past the
+  captcha: not an HR account)".
+- Lockout and the second factor stay. STATUS.md (the Turnstile section) now says:
+  never turn on a second factor for hr-portal@shareviral.cash, and rotate both copies
+  of the secret together. Its recreate command now carries `IMAGE_TAG` and
+  `--no-build`, as the brief asked.
+- `HR_WEBHOOK_SECRET` already reaches the `api` container (`docker-compose.yml`), so
+  **no deploy configuration changed** and the owner sets nothing new.
+
+Measured:
+- `.captchaqa.mjs`, against the built API, three new sections (F, G, H) beside the
+  old five — all pass. With the captcha on (Cloudflare's always-fail test secret):
+  the HR account with the right header and no token → 200; a Super Admin's and a
+  CFO's right password with the same header → 401, the sentence, counted; the HR
+  account with no header, a wrong one or an empty one → 401, not counted; five wrong
+  passwords with the header lock the HR account. Our secret unset → the header is
+  refused. Captcha off → everybody signs in as before, header or not. No log line and
+  no audit row carries the secret; the audit wording is checked.
+- `captcha.service.spec.ts`: 12 new unit tests for the comparison.
+- `.loginqa.mjs` 58/58, `.sessionqa.mjs` 15/15.
+- The four CI steps: shared build, typecheck, lint, test (460 + 386) — each exit 0.
+
+**Left for the owner, in this order:**
+1. Paste the brief's last section ("The HR portal's half") to the HR portal's session.
+   Until it ships, keep the captcha **off** — turning it on before then cuts the link
+   again.
+2. Once both halves are live, put `TURNSTILE_SECRET_KEY` back in
+   `/opt/sfm/deploy/.env` (typed in the server terminal), then
+   `IMAGE_TAG=$(cat .deployed) COMPOSE_PROFILES=local-db docker compose up -d --no-build api`.
+3. Check: the HR portal's Settings → Finance check is green; one request sent from the
+   HR portal arrives in HR Requests; a person signing in to finance still sees the
+   captcha. The audit log should show the HR portal's sign-ins as "(server, past the
+   captcha)".
 
 ## 157. The Super Admin sets everyone's password — 4 Oct 2026
 

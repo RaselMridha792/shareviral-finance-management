@@ -83,10 +83,29 @@ export class AuthService {
     private readonly captcha: CaptchaService,
   ) {}
 
-  async login(input: LoginInput, client: ClientInfo): Promise<LoginResult> {
+  /**
+   * `hrSecret` is the `x-hr-secret` header, kept apart from `client` because
+   * that is written to the session's row; this must never be stored or logged.
+   */
+  async login(
+    input: LoginInput,
+    client: ClientInfo,
+    hrSecret?: string | string[],
+  ): Promise<LoginResult> {
     // One message for every failure. Distinguishing "no such account" from
     // "wrong password" tells an attacker which emails are registered.
     const invalid = new UnauthorizedException("Email or password is incorrect");
+
+    /*
+     * The HR portal's server signs in with no browser, so it cannot answer
+     * the check; it sends the secret both servers already share instead
+     * (brief 2026-10-04). Only while the check is on — off, the header
+     * changes nothing — and only for an HR account, which is decided after
+     * the password below. A missing or wrong header is simply the ordinary
+     * path: the check is asked for, and refuses without a token.
+     */
+    const pastCaptcha =
+      this.captcha.enabled && this.captcha.isHrServer(hrSecret);
 
     /*
      * The human check, before anything about the account is looked at — so a
@@ -97,7 +116,10 @@ export class AuthService {
      * or Cloudflare unreachable. Not asked again at the code step — whoever
      * reaches that has already passed it.
      */
-    if (!(await this.captcha.verify(input.captchaToken, client.ip))) {
+    if (
+      !pastCaptcha &&
+      !(await this.captcha.verify(input.captchaToken, client.ip))
+    ) {
       await this.audit.log({
         action: "login_failed",
         entityTable: "users",
@@ -160,6 +182,28 @@ export class AuthService {
       throw invalid;
     }
 
+    /*
+     * The secret opens the way past the check for the HR portal's own
+     * account and nobody else's. A leaked secret then buys no captcha-free
+     * sign-in to a Super Admin or a CFO: the right password is refused with
+     * the wrong-password sentence and counted like one. After the password,
+     * not before, so the time it takes says nothing about the account's role.
+     */
+    if (pastCaptcha && record.role !== "hr") {
+      await this.registerFailure(record.id, record.failedLoginCount);
+      await this.audit.log({
+        action: "login_failed",
+        entityTable: "users",
+        entityId: record.id,
+        summary: `Failed sign-in for ${record.email} (server, past the captcha: not an HR account)`,
+        module: "auth",
+        actorUserId: record.id,
+        actorRole: record.role,
+      });
+      throw invalid;
+    }
+    const how = pastCaptcha ? " (server, past the captcha)" : "";
+
     await this.db.client
       .update(users)
       .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() })
@@ -183,7 +227,7 @@ export class AuthService {
         action: "login",
         entityTable: "users",
         entityId: record.id,
-        summary: `${record.fullName} passed the password, second step pending`,
+        summary: `${record.fullName} passed the password, second step pending${how}`,
         module: "auth",
         actorUserId: record.id,
         actorRole: record.role,
@@ -201,7 +245,7 @@ export class AuthService {
       action: "login",
       entityTable: "users",
       entityId: record.id,
-      summary: `${record.fullName} signed in`,
+      summary: `${record.fullName} signed in${how}`,
       module: "auth",
       actorUserId: record.id,
       actorRole: record.role,
