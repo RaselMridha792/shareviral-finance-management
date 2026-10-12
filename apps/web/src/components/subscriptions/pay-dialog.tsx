@@ -7,6 +7,7 @@ import { useState, type FormEvent } from "react";
 import { BankChargeField } from "@/components/ledger/bank-charge-field";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
+import { BooksMonthField } from "@/components/ledger/books-month-field";
 import { DateInput, Field, Input, MoneyInput } from "@/components/ui/field";
 import { ApiError, subscriptionsApi } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
@@ -99,6 +100,8 @@ export function PayDialog({
     try {
       await subscriptionsApi.pay(plan.id, {
         txnDate: String(data.get("txnDate") ?? ""),
+        /* The month's books it belongs to; blank is the month it was charged. */
+        booksMonth: String(data.get("booksMonth") ?? "") || undefined,
         /*
          * Sent only when there IS one. Blank still means "use the plan's
          * price", which is what the hint promises and what the server does.
@@ -142,13 +145,16 @@ export function PayDialog({
       description="Records this cycle's payment as a real expense against the card — the balance moves. A plan renews once a month."
     >
       <form id="pay-form" onSubmit={onSubmit} className="flex flex-col gap-4">
-        <Field
-          label="Date it was charged"
-          required
-          hint="The day the card was actually debited, not today by default"
-        >
-          <DateInput name="txnDate" required />
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Date it was charged"
+            required
+            hint="The day the card was actually debited, not today by default"
+          >
+            <DateInput name="txnDate" required />
+          </Field>
+          <BooksMonthField />
+        </div>
 
         {/*
           Dollars, then the rate, then the taka the two come to.

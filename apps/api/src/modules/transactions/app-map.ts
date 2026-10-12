@@ -7,6 +7,7 @@ import {
 } from "@finance/shared";
 
 import { appPart, INVOICE_AND_REFERENCE } from "../../common/app-map";
+import { BOOKS_MONTH_MEANS } from "./books-month";
 
 /**
  * The ledger's three ways in: an entry, money arriving, and a transfer.
@@ -49,6 +50,7 @@ export const TRANSACTIONS_MAP = [
           originalAmount:
             "the dollars sent, when it came from abroad; fxRate with it",
           senderAccountName: "who sent it",
+          booksMonth: BOOKS_MONTH_MEANS,
         },
         onSave:
           "Records a money-in entry under a money-in category; a bank charge becomes its own money-out row. Refused in a locked month. Shows on All transactions and Cash In. On screen, money in is recorded with Add cash.",
@@ -65,6 +67,8 @@ export const TRANSACTIONS_MAP = [
         fields: {
           chargeAmount:
             "rewrites the bank charge; 0.00 takes it off, absent leaves it",
+          booksMonth:
+            "the month's books it belongs to; null: the month of its date, absent leaves it. Its bank charge follows",
         },
         onSave:
           "Changes the entry in place. The account and the direction never change: that is a void and a new entry. Refused on a voided entry, half a transfer, a locked month, or if the account would go below zero.",
@@ -123,6 +127,7 @@ export const TRANSACTIONS_MAP = [
           senderAccountName:
             "who sent it, e.g. ShareViral Corp; on screen, Sender",
           chargeAmount: "the bank's cut in taka, or chargeUsd in dollars",
+          booksMonth: BOOKS_MONTH_MEANS,
         },
         onSave:
           "Records a money-in entry with no category, the rate and the dollars sent beside it; a bank charge becomes its own money-out row. Refused in a locked month. Shows here and on All transactions.",
@@ -136,6 +141,8 @@ export const TRANSACTIONS_MAP = [
         schema: updateTransactionSchema,
         fields: {
           chargeAmount: "rewrites the bank charge; 0.00 takes it off",
+          booksMonth:
+            "the month's books it belongs to; null: the month of its date, absent leaves it",
         },
         onSave:
           "Corrects the receipt in place: date, amount, description, bank charge, sender, note. The account never changes, and the dollars sent and the rate stay as first recorded. Refused on a voided entry or in a locked month.",
@@ -195,6 +202,7 @@ export const TRANSACTIONS_MAP = [
           usdRate: "taka per dollar on the day; on both halves",
           chargeAmount: "the bank's fee in taka, a row on the From account",
           chargeUsd: "or that fee in dollars; never both",
+          booksMonth: `${BOOKS_MONTH_MEANS}; both halves and the charge share it`,
         },
         onSave:
           "Writes two linked entries with no category: out of the From account, into the To account. A bank charge is its own row on the From account. Refused in a locked month, or below zero on the From account.",
@@ -218,6 +226,8 @@ export const TRANSACTIONS_MAP = [
           chargeUsd: "or that fee in dollars; never both",
           description: "required; what it was for",
           paymentMethod: "required; how it moved; on screen, Method",
+          booksMonth:
+            "the month's books both halves belong to, as the 1st; empty: the month of the date",
         },
         onSave:
           "Rewrites both halves and the bank charge together; an empty box means none. The accounts never change: that is a void and a new transfer. Refused on a voided transfer, in a locked month, or below zero on either account.",

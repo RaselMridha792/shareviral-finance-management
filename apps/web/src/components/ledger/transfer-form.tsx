@@ -15,6 +15,7 @@ import {
 } from "@/components/ledger/bank-charge-field";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
+import { BooksMonthField } from "@/components/ledger/books-month-field";
 import {
   DateInput,
   Field,
@@ -193,6 +194,9 @@ export function TransferForm({
       /* What a new transfer and a correction both send. */
       const common = {
         txnDate: String(data.get("txnDate")),
+        /* Both halves and the charge share it. Empty is the date's month —
+           on a correction too, which sends the whole form every time. */
+        booksMonth: String(data.get("booksMonth") ?? "") || undefined,
         amount: String(data.get("amount")),
         /* On the FROM account, where a transfer charge is taken. An empty box
            on a correction takes an existing charge off. */
@@ -321,13 +325,19 @@ export function TransferForm({
         onSubmit={onSubmit}
         className="flex flex-col gap-4"
       >
-        <Field label="Date" required error={fieldErrors.txnDate}>
-          <DateInput
-            name="txnDate"
-            required
-            defaultValue={transfer?.txnDate ?? todayInDhaka()}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Date" required error={fieldErrors.txnDate}>
+            <DateInput
+              name="txnDate"
+              required
+              defaultValue={transfer?.txnDate ?? todayInDhaka()}
+            />
+          </Field>
+          <BooksMonthField
+            defaultValue={transfer?.booksMonth}
+            error={fieldErrors.booksMonth}
           />
-        </Field>
+        </div>
 
         <div className="flex items-end gap-2">
           <Field

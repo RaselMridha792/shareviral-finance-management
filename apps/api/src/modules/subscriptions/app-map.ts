@@ -6,6 +6,7 @@ import {
 import { appPart } from "../../common/app-map";
 // A file of its own with no imports from this app: no cycle through here.
 import { paySubscriptionSchema } from "../transactions/pay-subscription.schema";
+import { BOOKS_MONTH_MEANS } from "../transactions/books-month";
 
 /**
  * The part the owner's complaint was about (2 Oct 2026): told to buy an AI
@@ -147,6 +148,7 @@ export const SUBSCRIPTIONS_MAP = [
           categoryId: "blank: the AI tools heading",
           chargeUsd: "the bank's fee in dollars, written as its own row",
           advanceRenewal: "move the renewal date on a cycle; on by default",
+          booksMonth: BOOKS_MONTH_MEANS,
         },
         onSave:
           "Records a money-out entry on the plan's card, tied to the plan and filed under the AI tools heading, and moves the renewal date on. Refused if already renewed that month, in a locked month, or below zero.",

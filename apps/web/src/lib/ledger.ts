@@ -18,6 +18,8 @@ export type TransactionDto = {
   id: string;
   refNo: string;
   txnDate: string;
+  /** The month it belongs to when not its date's; null is the date's. */
+  booksMonth: string | null;
   direction: TxnDirection;
   amount: string;
   signedAmount: string;
@@ -112,6 +114,8 @@ export type TransferRowDto = {
   /** That cut's dollars, when it was given in dollars. */
   chargeUsd: string | null;
   txnDate: string;
+  /** Shared by both halves; null is the month of the date. */
+  booksMonth: string | null;
   amount: string;
   description: string;
   reference: string | null;
@@ -322,6 +326,8 @@ export const ledgerApi = {
  */
 export type UpdateTransferInput = {
   txnDate: string;
+  /** Empty: the month of the date. */
+  booksMonth?: string;
   amount: string;
   usdRate: string;
   usdAmount?: string;

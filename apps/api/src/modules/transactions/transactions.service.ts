@@ -61,6 +61,7 @@ import {
 } from "./expense-overview";
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
+import { storedBooksMonth } from "./books-month";
 import { nextRefNo } from "./ref-no";
 import { renewalInMonth } from "./renewal-in-month";
 
@@ -100,6 +101,8 @@ export type TransactionDto = {
   id: string;
   refNo: string;
   txnDate: string;
+  /** The month it belongs to when not its date's; null means the date's. */
+  booksMonth: string | null;
   direction: "in" | "out";
   amount: string;
   signedAmount: string;
@@ -182,6 +185,8 @@ export type TransferRow = {
   /** That cut's dollars, when it was given in dollars. */
   chargeUsd: string | null;
   txnDate: string;
+  /** Shared by both halves; null means the month of the date. */
+  booksMonth: string | null;
   amount: string;
   description: string;
   reference: string | null;
@@ -808,7 +813,8 @@ export class TransactionsService {
     },
     actor: AuthenticatedUser,
   ) {
-    await this.settings.assertPeriodOpen(input.txnDate);
+    const booksMonth = storedBooksMonth(input.txnDate, input.booksMonth);
+    await this.settings.assertPeriodOpen(input.txnDate, booksMonth);
     await this.assertAccountExists(input.accountId);
     if (input.categoryId) {
       await this.assertCategoryMatchesDirection(
@@ -844,6 +850,7 @@ export class TransactionsService {
               accountId: input.accountId,
               direction: input.direction,
               txnDate: input.txnDate,
+              booksMonth,
               amount: input.amount,
               categoryId: input.categoryId,
               vendorId,
@@ -991,6 +998,9 @@ export class TransactionsService {
          */
         fxRate: transactions.fxRate,
         usdRate: transactions.usdRate,
+        /* A charge belongs to its entry's month, whatever the forms send:
+           read off the parent row, which every caller has already written. */
+        booksMonth: transactions.booksMonth,
       })
       .from(transactions)
       .where(eq(transactions.id, input.parentId))
@@ -1105,6 +1115,7 @@ export class TransactionsService {
           amount: amountText,
           ...dollars,
           txnDate: input.txnDate,
+          booksMonth: parent?.booksMonth ?? null,
           accountId: input.accountId,
           description,
           categoryId,
@@ -1122,6 +1133,7 @@ export class TransactionsService {
       // Always out. A charge on a wire ARRIVING is still money the bank took.
       direction: "out",
       txnDate: input.txnDate,
+      booksMonth: parent?.booksMonth ?? null,
       amount: amountText,
       ...dollars,
       categoryId,
@@ -1198,6 +1210,7 @@ export class TransactionsService {
       {
         direction: "in",
         txnDate: input.txnDate,
+        booksMonth: input.booksMonth,
         accountId: input.accountId,
         amount: input.amount,
         /* A wire arriving is charged too, and the charge is money leaving.
@@ -1272,9 +1285,24 @@ export class TransactionsService {
       );
     }
 
-    // Both the date it currently sits on and the date it would move to.
-    await this.settings.assertPeriodOpen(existing.txnDate);
-    if (input.txnDate) await this.settings.assertPeriodOpen(input.txnDate);
+    /*
+     * The month it belongs to after this edit: the one asked for, or the one
+     * it has, judged against the date it will have. A date moved into the
+     * books month's own month leaves nothing to store; a date moved before
+     * the books month is refused, as on a new entry.
+     */
+    const nextBooksMonth = storedBooksMonth(
+      input.txnDate ?? existing.txnDate,
+      input.booksMonth !== undefined ? input.booksMonth : existing.booksMonth,
+    );
+
+    // Both the date it currently sits on and the date it would move to — and
+    // both books months, so nothing moves into or out of a closed one.
+    await this.settings.assertPeriodOpen(existing.txnDate, existing.booksMonth);
+    await this.settings.assertPeriodOpen(
+      input.txnDate ?? existing.txnDate,
+      nextBooksMonth,
+    );
 
     if (input.categoryId) {
       await this.assertCategoryMatchesDirection(
@@ -1312,6 +1340,7 @@ export class TransactionsService {
           .update(transactions)
           .set({
             ...(input.txnDate ? { txnDate: input.txnDate } : {}),
+            booksMonth: nextBooksMonth,
             ...(input.amount ? { amount: input.amount } : {}),
             ...(input.categoryId ? { categoryId: input.categoryId } : {}),
             ...(vendorId !== undefined ? { vendorId } : {}),
@@ -1383,6 +1412,28 @@ export class TransactionsService {
           });
         }
 
+        /*
+         * The charge's books month follows its entry's even when the body
+         * says nothing about the charge — unlike its date above, there is no
+         * reason a charge should ever sit in another month's books than the
+         * entry it was taken on.
+         */
+        if (nextBooksMonth !== existing.booksMonth) {
+          await tx
+            .update(transactions)
+            .set({
+              booksMonth: nextBooksMonth,
+              updatedAt: new Date(),
+              updatedBy: actor.id,
+            })
+            .where(
+              and(
+                eq(transactions.chargeForId, id),
+                isNull(transactions.deletedAt),
+              ),
+            );
+        }
+
         await watch.assert(tx);
       },
     });
@@ -1429,6 +1480,8 @@ export class TransactionsService {
     id: string,
     input: {
       txnDate: string;
+      /** The month it belongs to; absent is the month of the date. */
+      booksMonth?: string;
       amount?: string;
       accountId?: string;
       /* Optional, and resolved when absent — the drawers stopped asking for it
@@ -1626,6 +1679,7 @@ export class TransactionsService {
       {
         direction: "out",
         txnDate: input.txnDate,
+        booksMonth: input.booksMonth,
         accountId,
         amount,
         categoryId,
@@ -2011,6 +2065,7 @@ export class TransactionsService {
           usdAmount: transactions.originalAmount,
           usdRate: transactions.usdRate,
           txnDate: transactions.txnDate,
+          booksMonth: transactions.booksMonth,
           amount: transactions.amount,
           description: transactions.description,
           reference: transactions.reference,
@@ -2101,7 +2156,9 @@ export class TransactionsService {
     options: { createdVia?: ClaimedOrigin } = {},
   ) {
     const createdVia = options.createdVia ?? "manual";
-    await this.settings.assertPeriodOpen(input.txnDate);
+    // One books month for the pair, and the charge reads it off the out half.
+    const booksMonth = storedBooksMonth(input.txnDate, input.booksMonth);
+    await this.settings.assertPeriodOpen(input.txnDate, booksMonth);
     // Both sides, before either row is written.
     await this.assertAccountExists(input.fromAccountId);
     await this.assertAccountExists(input.toAccountId);
@@ -2145,6 +2202,7 @@ export class TransactionsService {
             accountId: input.fromAccountId,
             direction: "out",
             txnDate: input.txnDate,
+            booksMonth,
             amount: input.amount,
             description: input.description,
             reference: input.reference,
@@ -2172,6 +2230,7 @@ export class TransactionsService {
           accountId: input.toAccountId,
           direction: "in",
           txnDate: input.txnDate,
+          booksMonth,
           amount: input.amount,
           description: input.description,
           reference: input.reference,
@@ -2226,6 +2285,8 @@ export class TransactionsService {
     id: string,
     input: {
       txnDate: string;
+      /** Absent: the month of the date — the whole correction, every time. */
+      booksMonth?: string;
       amount: string;
       usdRate: string;
       usdAmount?: string;
@@ -2268,8 +2329,9 @@ export class TransactionsService {
       );
     }
 
-    await this.settings.assertPeriodOpen(existing.txnDate);
-    await this.settings.assertPeriodOpen(input.txnDate);
+    const booksMonth = storedBooksMonth(input.txnDate, input.booksMonth);
+    await this.settings.assertPeriodOpen(existing.txnDate, existing.booksMonth);
+    await this.settings.assertPeriodOpen(input.txnDate, booksMonth);
 
     const watch = await overdraftWatch(this.db.client, [
       out.accountId,
@@ -2303,6 +2365,7 @@ export class TransactionsService {
           .update(transactions)
           .set({
             txnDate: input.txnDate,
+            booksMonth,
             amount: input.amount,
             usdRate: input.usdRate,
             ...dollars,
@@ -2466,6 +2529,7 @@ const projection = {
   id: transactions.id,
   refNo: transactions.refNo,
   txnDate: transactions.txnDate,
+  booksMonth: transactions.booksMonth,
   direction: transactions.direction,
   amount: transactions.amount,
   signedAmount: transactions.signedAmount,
@@ -2558,6 +2622,14 @@ function describeUpdate(
   }
   if (input.txnDate && input.txnDate !== existing.txnDate) {
     parts.push(`date ${existing.txnDate} → ${input.txnDate}`);
+  }
+  if (
+    input.booksMonth !== undefined &&
+    input.booksMonth !== existing.booksMonth
+  ) {
+    parts.push(
+      `books month ${existing.booksMonth?.slice(0, 7) ?? "the date's"} → ${input.booksMonth?.slice(0, 7) ?? "the date's"}`,
+    );
   }
   if (input.description && input.description !== existing.description) {
     parts.push(`description changed`);

@@ -16,6 +16,7 @@ import {
   type ChargeCurrency,
 } from "@/components/ledger/bank-charge-field";
 import { FileManager } from "@/components/files/file-manager";
+import { BooksMonthField } from "@/components/ledger/books-month-field";
 import { CategorySelect } from "@/components/ledger/category-select";
 import { Drawer } from "@/components/ui/drawer";
 import { useToast } from "@/components/ui/toast";
@@ -406,6 +407,9 @@ export function TransactionForm({
       const row = transaction
         ? await ledgerApi.update(transaction.id, {
             txnDate: text("txnDate"),
+            // Empty is the month of the date, so it is sent as null — an
+            // emptied box has to be able to undo a month chosen before.
+            booksMonth: text("booksMonth") ?? null,
             amount: text("amount"),
             categoryId: text("categoryId"),
             // No vendorName: the form no longer collects one. Left out rather
@@ -442,6 +446,7 @@ export function TransactionForm({
         : await ledgerApi.create({
             direction,
             txnDate: String(data.get("txnDate")),
+            booksMonth: text("booksMonth"),
             accountId: String(data.get("accountId")),
             amount: String(data.get("amount")),
             categoryId: String(data.get("categoryId")),
@@ -648,6 +653,10 @@ export function TransactionForm({
                 onCreated={onCategoryCreated}
               />
             </Field>
+            <BooksMonthField
+              defaultValue={transaction?.booksMonth}
+              error={fieldErrors.booksMonth}
+            />
           </div>
 
           <Field label="Description" required error={fieldErrors.description}>

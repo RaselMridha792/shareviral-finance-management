@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import {
   amountSchema,
+  booksMonthSchema,
   CHARGE_TWICE_MESSAGE,
   chargeStatedOnce,
   createTransactionSchema,
@@ -61,6 +62,8 @@ const uuidSchema = z.string().uuid("Not a valid id");
  */
 const updateTransferFields = z.strictObject({
   txnDate: isoDateSchema,
+  /** Absent: the month of the date, like every other box left empty here. */
+  booksMonth: booksMonthSchema.optional(),
   amount: amountSchema.refine((v) => Number(v) > 0, {
     message: "The amount must be more than zero",
   }),

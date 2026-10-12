@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/field";
 import { AttachClip, useStoredPapers } from "@/components/files/attach-clip";
 import { FileManager } from "@/components/files/file-manager";
+import { BooksMonthField } from "@/components/ledger/books-month-field";
 import {
   BankChargeField,
   type ChargeCurrency,
@@ -505,6 +506,8 @@ export function CashInForm({
     try {
       const payload = {
         txnDate: String(data.get("txnDate")),
+        // The funding that arrived 9 June for May's books.
+        booksMonth: text("booksMonth"),
         // The bank's number for the transfer, as against `invoiceNo`, which is
         // ours. The sheet calls this one the Transaction ID.
         reference: text("reference"),
@@ -553,6 +556,8 @@ export function CashInForm({
       const row = transaction
         ? await ledgerApi.update(transaction.id, {
             txnDate: payload.txnDate,
+            // Null when emptied, so a month chosen before can be undone.
+            booksMonth: payload.booksMonth ?? null,
             reference: payload.reference,
             invoiceNo: payload.invoiceNo,
             description: payload.description,
@@ -694,6 +699,10 @@ export function CashInForm({
                 defaultValue={transaction?.txnDate ?? todayInDhaka()}
               />
             </Field>
+            <BooksMonthField
+              defaultValue={transaction?.booksMonth}
+              error={fieldErrors.booksMonth}
+            />
           </div>
 
           {/* Two reference numbers, side by side because the paperwork has both

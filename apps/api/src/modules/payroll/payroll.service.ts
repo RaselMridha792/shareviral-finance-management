@@ -55,6 +55,7 @@ import {
 } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { TaxPolicyService } from "../tds/tax-policy.service";
+import { monthOf } from "../transactions/books-month";
 import { nextRefNos } from "../transactions/ref-no";
 import { assertNothingBlocks } from "../hr-requests/blocking";
 import { HrWebhookService } from "../hr-webhook/hr-webhook.service";
@@ -971,7 +972,17 @@ export class PayrollService {
       throw new BadRequestException("This run has already been paid.");
     }
 
-    await this.settings.assertPeriodOpen(input.paymentDate);
+    /*
+     * The run's own month, when it was paid in a later one: May's salaries
+     * paid on 12 June are May's books, and nobody is asked (the brief of
+     * 13 Oct 2026). A run paid in its own month stores nothing. A run paid
+     * BEFORE its month — July's on 30 June — stays in the payment's month:
+     * a later books month is the one thing an entry may not have.
+     */
+    const period = firstDayOf(run.periodYear, run.periodMonth);
+    const booksMonth = period < monthOf(input.paymentDate) ? period : null;
+
+    await this.settings.assertPeriodOpen(input.paymentDate, booksMonth);
 
     const [account] = await this.db.client
       .select({ id: accounts.id, name: accounts.name })
@@ -1030,6 +1041,7 @@ export class PayrollService {
               accountId: input.accountId,
               direction: "out",
               txnDate: input.paymentDate,
+              booksMonth,
               amount: totalNet,
               categoryId: salaryCategoryId,
               description: `Salary — ${run.label}`,
@@ -1064,6 +1076,7 @@ export class PayrollService {
                 accountId: input.accountId,
                 direction: "out",
                 txnDate: input.paymentDate,
+                booksMonth,
                 amount: line.netAmount,
                 categoryId: salaryCategoryId,
                 teamMemberId: line.teamMemberId,

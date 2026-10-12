@@ -9,6 +9,8 @@ import {
 import {
   ACCOUNT_TYPE_LABELS,
   BILLING_CYCLE_HABIT_LABELS,
+  booksMonthLabel,
+  booksMonthOf,
   EDUCATION_LEVEL_LABELS,
   EMPLOYMENT_STATUS_LABELS,
   ENGAGEMENT_LABELS,
@@ -2128,6 +2130,16 @@ function transactionColumns() {
       key: "date",
       kind: "date" as const,
       value: (r: TransactionDto) => r.txnDate,
+    },
+    {
+      /* The month's books it counts in: its own when it has one, otherwise
+         the date's — filled on every row, so the sheet can be sorted by it. */
+      header: "Books month",
+      key: "booksMonth",
+      kind: "text" as const,
+      width: 16,
+      value: (r: TransactionDto) =>
+        booksMonthLabel(booksMonthOf(r.txnDate, r.booksMonth)),
     },
     {
       header: "Ref",

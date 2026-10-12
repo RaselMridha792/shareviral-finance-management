@@ -1,6 +1,6 @@
 "use client";
 
-import { PAYMENT_METHOD_LABELS } from "@finance/shared";
+import { MONTH_NAMES, PAYMENT_METHOD_LABELS } from "@finance/shared";
 import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
 import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/ssr/Paperclip";
@@ -64,6 +64,7 @@ export function TransactionTable({
   showAccount = true,
   showBalance = false,
   showType = false,
+  showBooksMonth = false,
   showPaymentMethod = false,
   emptyMessage = "Nothing recorded yet.",
 }: {
@@ -112,6 +113,12 @@ export function TransactionTable({
   showBalance?: boolean;
   /** Cash In / Cash Out as its own column, for the all-transactions view. */
   showType?: boolean;
+  /**
+   * A small "May books" under the date of a row that belongs to another
+   * month's books than its date's. On for All transactions, which filters by
+   * the date and so is where the two months can disagree on screen.
+   */
+  showBooksMonth?: boolean;
   /**
    * Its own column instead of a line under the description. On where every row
    * is an expense and how it was paid is what people scan for.
@@ -341,6 +348,17 @@ export function TransactionTable({
                   <SerialCell n={serial(page, index)} />
                   <td>
                     <Dated>{formatDate(row.txnDate)}</Dated>
+                    {showBooksMonth &&
+                    row.booksMonth &&
+                    row.booksMonth.slice(0, 7) !== row.txnDate.slice(0, 7) ? (
+                      <Badge
+                        tone="primary"
+                        className="mt-1 ml-[23px] flex w-fit px-2 py-0 text-[11px]"
+                      >
+                        {MONTH_NAMES[Number(row.booksMonth.slice(5, 7)) - 1]}{" "}
+                        books
+                      </Badge>
+                    ) : null}
                   </td>
 
                   {/*

@@ -632,6 +632,8 @@ export const subscriptionsApi = {
        */
       chargeUsd?: string;
       advanceRenewal?: boolean;
+      /** The month it belongs to; absent is the month of the date. */
+      booksMonth?: string;
     },
   ) =>
     apiFetch<{ id: string; refNo: string }>(`/subscriptions/${id}/pay`, {

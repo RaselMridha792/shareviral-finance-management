@@ -3,6 +3,7 @@ import { boolish } from "./patch.ts";
 
 import { amountSchema, isoDateSchema } from "./masters.ts";
 import { paginationQuerySchema } from "./pagination.ts";
+import { MONTH_NAMES } from "./periods.ts";
 
 /**
  * The ledger contract. One definition serving the API, the web forms, the Excel
@@ -136,10 +137,47 @@ export function chargeStatedOnce(body: {
   return !(chargeGiven(body.chargeAmount) && chargeGiven(body.chargeUsd));
 }
 
+/**
+ * The month an entry belongs to, when that is not the month of its date.
+ *
+ * The boss closes a month's books in the next one: May's salaries paid on
+ * 12 June are May's. `txn_date` stays the day the money moved; this says
+ * which month's books it sits in. Always the 1st of a month, and absent or
+ * null meaning "the month of the date" — so an entry that belongs to its own
+ * month carries nothing.
+ *
+ * A later month than the date's is refused by the API with
+ * `BOOKS_MONTH_LATER_MESSAGE`, not here: an update may not carry the date it
+ * is checked against, and one rule in one place is what keeps two doors from
+ * disagreeing.
+ */
+export const booksMonthSchema = isoDateSchema.refine((v) => v.endsWith("-01"), {
+  message: "Pick a month",
+});
+
+export const BOOKS_MONTH_LATER_MESSAGE =
+  "An entry cannot belong to a month after the one it is dated in.";
+
+/** The month an entry counts in, as its 1st: its own, or its date's. */
+export function booksMonthOf(
+  txnDate: string,
+  booksMonth: string | null | undefined,
+): string {
+  return booksMonth || `${txnDate.slice(0, 7)}-01`;
+}
+
+/** "May 2026", from any ISO date in the month. */
+export function booksMonthLabel(isoDate: string): string {
+  const [year, month] = isoDate.split("-").map(Number);
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
 export const createTransactionSchema = z
   .strictObject({
     direction: txnDirectionSchema,
     txnDate: isoDateSchema,
+    /** The month it belongs to; absent is the month of `txnDate`. */
+    booksMonth: booksMonthSchema.optional(),
     accountId: z.string().uuid("Choose an account"),
     amount: amountSchema.refine((v) => Number(v) > 0, {
       message: "The amount must be more than zero",
@@ -331,6 +369,8 @@ const recordCashInFields = z.strictObject({
   /* Or in dollars, on a dollar account — see `chargeStatedOnce`. */
   chargeUsd: amountSchema.optional(),
   txnDate: isoDateSchema,
+  /** The month it belongs to — the funding that arrived 9 June for May. */
+  booksMonth: booksMonthSchema.optional(),
 
   /** The bank's reference for the wire — what a query about it would quote. */
   reference: optionalText(120),
@@ -410,6 +450,11 @@ export type RecordCashInInput = z.infer<typeof recordCashInSchema>;
 export const updateTransactionSchema = z
   .strictObject({
     txnDate: isoDateSchema.optional(),
+    /**
+     * Absent leaves it alone; null puts the entry back in the month of its
+     * date. Its bank charge follows either way.
+     */
+    booksMonth: booksMonthSchema.nullable().optional(),
     amount: amountSchema.optional(),
     /**
      * The bank's cut, rewritten to match.
@@ -470,6 +515,8 @@ export type VoidTransactionInput = z.infer<typeof voidTransactionSchema>;
 export const transferSchema = z
   .strictObject({
     txnDate: isoDateSchema,
+    /** One books month for both halves and the charge. */
+    booksMonth: booksMonthSchema.optional(),
     /* The bank's cut, as its own row under Bank charges — on the account the
        money LEAVES, because that is where a transfer charge is taken. Same
        field and the same meaning as on every other entry; the owner asked for

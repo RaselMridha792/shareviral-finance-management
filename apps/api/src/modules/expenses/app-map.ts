@@ -1,6 +1,7 @@
 import { createCategorySchema, createTransactionSchema } from "@finance/shared";
 
 import { appPart, INVOICE_AND_REFERENCE } from "../../common/app-map";
+import { BOOKS_MONTH_MEANS } from "../transactions/books-month";
 
 /**
  * Expenses has no endpoints of its own: its screens read the ledger
@@ -20,6 +21,7 @@ const EXPENSE_FIELDS = {
   chargeAmount: "the bank's charge, saved as its own Bank charges row",
   withheldTaxAmount:
     "tax we withheld before paying; needs billAmount, the gross bill",
+  booksMonth: BOOKS_MONTH_MEANS,
 };
 
 const EXPENSE_SAVE =

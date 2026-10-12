@@ -282,13 +282,26 @@ export class SettingsService {
   /**
    * Throws when `date` falls inside a closed period.
    * Every money-writing service calls this before saving.
+   *
+   * `booksMonth`, when the entry belongs to another month than its date's:
+   * that month is checked too, so May's books once closed cannot gain an
+   * entry dated in June, nor lose one. Its 1st is what is compared — a month
+   * any part of which is closed counts as closed.
    */
-  async assertPeriodOpen(date: IsoDate): Promise<void> {
+  async assertPeriodOpen(
+    date: IsoDate,
+    booksMonth?: IsoDate | null,
+  ): Promise<void> {
     const settings = await this.get();
     const locked = settings.booksLockedThrough;
     if (locked && date <= locked) {
       throw new ForbiddenException(
         `The books are closed through ${locked}. Ask a Super Admin to reopen them to change anything dated ${date}.`,
+      );
+    }
+    if (locked && booksMonth && booksMonth <= locked) {
+      throw new ForbiddenException(
+        `The books are closed through ${locked}. Ask a Super Admin to reopen them to change anything that belongs to ${booksMonth.slice(0, 7)}.`,
       );
     }
   }

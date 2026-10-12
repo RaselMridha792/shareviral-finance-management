@@ -1,5 +1,6 @@
 import {
   amountSchema,
+  booksMonthSchema,
   CHARGE_TWICE_MESSAGE,
   chargeStatedOnce,
 } from "@finance/shared";
@@ -16,6 +17,12 @@ export const paySubscriptionFields = z.object({
   txnDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date it was charged"),
+  /**
+   * The month this renewal belongs to, when it is not the month it was
+   * charged in. Absent is the month of the date. The once-a-month rule still
+   * counts by the date: it is about the card being charged twice.
+   */
+  booksMonth: booksMonthSchema.optional(),
   /** Blank means the plan's own price. */
   amount: z.string().trim().optional(),
   /** Blank means the card on the plan. */

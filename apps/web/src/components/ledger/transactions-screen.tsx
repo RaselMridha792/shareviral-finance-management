@@ -224,6 +224,9 @@ export function TransactionsScreen({
             // Both directions appear here, so which one a row is has to be
             // readable rather than inferred from a colour.
             showType
+            // The date filter stays the date's; a row counted in another
+            // month's books says so under its date.
+            showBooksMonth
             emptyMessage={
               Object.keys(filters).length
                 ? "Nothing matches these filters."

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 162 | **The month an entry belongs to, written: `booksMonth` on every door, payroll and bank charges taking it by themselves, "Belongs to month" on the forms, the Assistant's map, the Excel column, the "May books" mark** | **done** — piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. No total changed. **Next: piece 3** (the month views read it) |
 | 161 | **Schema: the month an entry belongs to — `transactions.books_month` (NULL = the month of the date), its first-of-month check, `account_month_notes`, and the payroll backfill** | **done** — piece 1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, and applied on the local database. **Next: piece 2** (writing it: the API, the forms, payroll and fees taking it automatically) |
 | 160 | **The boss's sheet, imported by hand on the local database: the May tab, checked figure by figure against the sheet; and the brief for a books month and a Bank status page** | **local only, nothing on live** — the owner checks May in the local app; then pieces 1–4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The local (Neon) database was emptied on 12 Oct, at the owner's word: every harness login is gone — read #160 before running a harness** |
 | 159 | **Reset for real data: `deploy/reset-keep-team-and-accounts.sh` — keeps the team, accounts, categories, TDS slabs, Settings and four sign-ins; empties everything else** | **built, proved on a copy, not run on live** — the brief of 4 Oct, step 1. **The owner runs the report on the server and reads it with a session before `--wipe`: the steps are in #159** |
@@ -139,6 +140,81 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 162. The month an entry belongs to, written — 13 Oct 2026
+
+Piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **Writing only: nothing reads
+`books_month` for a total yet, so no figure on any screen moved.** That is piece 3.
+
+**Shared code, asked first.** The owner approved both:
+- `packages/shared/src/transactions.ts`: `booksMonth` (optional, the 1st of a month) on
+  `createTransactionSchema`, `recordCashInSchema`, `transferSchema`, and on
+  `updateTransactionSchema` as nullable (null puts it back in the date's month). Also
+  `booksMonthSchema`, `BOOKS_MONTH_LATER_MESSAGE`, `booksMonthOf()` and `booksMonthLabel()`.
+  It reaches All transactions, an account's register, the expense category pages, Other
+  expenses, Cash In, Money Transfer and the Assistant's Confirm and save. Absent changes nothing.
+- The form field is **not** in `components/ui`: it is `components/ledger/books-month-field.tsx`,
+  built from the existing `Field` and `Select`. `lib/ledger.ts` and `lib/api-client.ts` gained
+  the field on their types only.
+
+**The rule, in one place:** `apps/api/src/modules/transactions/books-month.ts`,
+`storedBooksMonth()`. A month earlier than the date's month is stored. The date's own month is
+stored as null, so only an entry that really belongs elsewhere carries a value. A later month
+is refused with the brief's sentence. `settings.assertPeriodOpen(date, booksMonth)` checks both
+months, so nothing can join a closed books month or leave one.
+
+**What writes it:**
+- **The API:** the general create, cash-in, transfer, pay-subscription, the transaction
+  update, and the transfer update. The transfer update sends the whole form every time, so
+  "absent" there means the date's month.
+- **Bank charges** read it off their parent row in `writeBankCharge`, on every path. An edit
+  that changes the books month moves the charge too, even when the body says nothing about
+  the charge.
+- **Payroll `pay`:** a run paid in a later month than its period is the period's, without
+  asking. A run paid *before* its month (July's on 30 June) stays in the payment's month,
+  because a later books month is not allowed. That case is not in the brief, so the owner
+  should confirm it.
+- **The once-a-month renewal rule still counts by the charge date,** on purpose: it guards
+  against a card being charged twice.
+
+**The forms:** "Belongs to month" sits beside or under Date on the expense form (Other
+expenses, the category pages, a register and All transactions, add and edit), Cash In (add
+and edit), Money Transfer (new and edit) and Renew. It starts on "From the date", and the hint
+names that month ("June 2026, from the date"). It lists only the twelve months before the
+date's month, and follows the date as it changes. On an edit it reopens on the stored month.
+The Upgrade drawer and a plan's first payment on Add subscription do not have it; they were
+not on the brief's list.
+
+**Also:**
+- **The Assistant's map** describes `booksMonth` on every form that takes it (one wording,
+  `BOOKS_MONTH_MEANS`), and payroll's Pay says the run's month is taken automatically.
+- **The Excel export** has a "Books month" column after Date, filled on every row ("May 2026").
+- **All transactions** shows a small "May books" pill under the date of any row whose books
+  month differs. This is behind `showBooksMonth` on `TransactionTable`, which only All
+  transactions turns on. The register and the category pages are unchanged.
+
+**Measured on a docker copy of Neon, not Neon**, because the checks write entries and use up
+reference numbers:
+- `.booksmonthqa.mjs` (new; it requires `BM_DB` and has no default): **33/33**. It covers
+  create, refusals, edits, the charge following, Cash In, a transfer and its correction,
+  a renewal, closed books both ways, a September run paid on 5 Oct (21 rows, all September),
+  and the export column.
+- A browser pass, with the web built against the copy: **19/19**. The mark shows on the
+  salary rows. Each form shows the field and the right hint. Editing through All
+  transactions, Money Transfer and Cash In, and saving a Renew, wrote the month to the
+  database, and reopening an edit shows it.
+
+Build, typecheck, lint and test all green (460 tests).
+
+**Left as found:** the dev servers on :3000 and :4001 belong to another session and were not
+touched. A second `next dev` cannot run in the same folder, so the browser pass used
+`next build` plus `next start` on :3091. `.next` was then rebuilt with the normal settings.
+
+**Not done, noticed:** a record's popup (row click) does not show the books month yet. It is a
+one-line addition to `transaction-details.tsx` if the owner wants it.
+
+**Next: piece 3**, in its own session: the month views read `booksMonthOf` / a single SQL
+helper. Only then does May stop reading ৳0.
 
 ## 161. Schema: the month an entry belongs to — 13 Oct 2026
 

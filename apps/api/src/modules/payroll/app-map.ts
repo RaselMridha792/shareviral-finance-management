@@ -162,7 +162,7 @@ export const PAYROLL_MAP = [
           usdRate: "taka per dollar that day, as on every ledger entry",
         },
         onSave:
-          "Writes the net pay out of that account under Salary, as one entry or one per person, onto All transactions; the sheet becomes paid. The tax stays held until deposited. Refused for a date in closed books, or if the account would go below zero.",
+          "Writes the net pay out of that account under Salary, as one entry or one per person, onto All transactions; the sheet becomes paid. Paid in a later month than the sheet's, the entries belong to the sheet's month's books, without being asked. The tax stays held until deposited. Refused for a date in closed books, or if the account would go below zero.",
         permission: "payroll.pay",
       },
     ],
