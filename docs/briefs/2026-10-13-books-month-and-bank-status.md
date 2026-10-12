@@ -174,6 +174,40 @@ helper reaches in the handover.
 - the overdraft rule still judges it on 12 June;
 - an entry with no books month behaves exactly as before.
 
+## Piece 3b — writing a later books month (the owner, 13 Oct)
+
+Piece 3 made the read side ready for a later books month. That includes its fix: July's salary
+paid on 30 June now counts in July, not June. Piece 3 did not touch the write side, because it
+reaches `packages/shared` and every books-month form. This piece is that, on its own, before
+piece 4.
+
+- **`storedBooksMonth`** (`transactions/books-month.ts`) stops refusing a month after the date's
+  month. A month equal to the date's month still stores null.
+- **`BOOKS_MONTH_LATER_MESSAGE`** leaves `packages/shared`, and so does every test that expected
+  the refusal. Rebuild shared (`npm run build:shared`).
+- **The forms' month list** also offers the three months after the date's month. The forms are:
+  - the expense form;
+  - Cash In;
+  - Money Transfer;
+  - Renew / Record payment;
+  - every edit drawer that has the field.
+
+  List these screens in the handover, under the shared-code rule; the owner has already decided
+  the change itself.
+- **The wording.** The `app-map.ts` files and `BOOKS_MONTH_MEANS` drop "never a later month".
+- **Closed periods** still check both months.
+- **Measure it.** A harness shows three things:
+  - an entry dated 22 June with books month July is accepted;
+  - it counts in July on the Dashboard, Accounts, Expenses and Statement;
+  - the overdraft rule still judges it on 22 June.
+
+**Then, the data.** These are the two entries the rule held back:
+- **Local:** `import-ledger.json`'s `July:tool:63` and `July:tool:80` get `booksMonth` 2026-07-01
+  (a PATCH on each id).
+- **Live:** the replay's `--fix-later-months` (SESSIONS #160).
+
+After that, every BANK STATUS cell of May–August matches the sheet, rounding aside.
+
 ## Piece 4 — Accounts ▸ Bank status
 
 **Where:** `/accounts/bank-status`, under the Accounts accordion in the sidebar. It has a books
