@@ -100,8 +100,11 @@ export function beforeBooksPeriod(day: string): SQL {
  * caller holding a month's last day does not have to add one.
  */
 export function upToBooksPeriod(day: string): SQL {
+  /* The date decides only for an unmarked row: a marked one can be dated
+     before its month (July's salaries paid on 30 June are not June's). */
   return sql`(${booksMonthSql} < ${monthOf(day)}
     or (${transactions.booksMonth} is not null
         and ${booksMonthSql} = ${monthOf(day)})
-    or ${transactions.txnDate} <= ${day})`;
+    or (${transactions.booksMonth} is null
+        and ${transactions.txnDate} <= ${day}))`;
 }

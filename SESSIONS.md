@@ -210,10 +210,21 @@ May: salary 4,91,258, tools 26,277.58, bank fees 5,000.
   session did not do it; it was already on Neon when the copy was taken. June and July
   payroll paid in the next month also carry their period (17 and 22 rows).
 
+**Later books months, read correctly.** While this session worked, the brief gained
+"a books month may be later than the date" (a86e85b). The reading side is ready for it:
+`upToBooksPeriod` lets the date decide only for an unmarked row, so July's salaries paid on
+30 June are not in "as at 30 June". Checked in plain SQL, with marked rows in earlier and
+later months: before(M) + in(M) = up to the end of M for every row and month, and no row is
+in two months. **The writing side (lifting the refusal) is not done**; see Not done.
+
 Build, typecheck, lint and test all green (460 tests). The dev servers on :3000 and :4001 were
 not touched.
 
 **Not done:**
+- **The brief's new first step of piece 3** (a86e85b): `storedBooksMonth` still refuses a
+  later month, and `BOOKS_MONTH_LATER_MESSAGE`, its tests, the form field's month list and
+  the `app-map.ts` wording are unchanged. It reaches `packages/shared`, so it was put to the
+  owner, not done here.
 - **No browser pass.** The two web files only pass the new flag; the harness sent the same
   queries those pages send.
 - **Still open for the owner (#162):** a payroll run paid before its own month stays in the
