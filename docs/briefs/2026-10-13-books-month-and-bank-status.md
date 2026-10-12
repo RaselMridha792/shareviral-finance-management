@@ -127,6 +127,23 @@ The field starts empty. Its hint names the default, for example "June 2026, from
 
 ## Piece 3 — the month views read it
 
+**First, a change to piece 2's rule (the owner, 13 Oct).** A books month may be **later** than
+the date's month. The owner's answer to "can a payment made early belong to the next month?" was
+*"হ্যাঁ, নিয়ম খুলে দাও"*.
+
+- `storedBooksMonth` (`transactions/books-month.ts`) stops refusing a later month.
+- `BOOKS_MONTH_LATER_MESSAGE` goes, together with every test that expected the refusal.
+- The `app-map.ts` wording changes too: "Never a later month than the date's" is no longer
+  true.
+- The cases:
+  - two July-tab tool payments that were charged in June;
+  - July's salaries paid on 30 June;
+  - a subscription paid ahead.
+- **Closed periods still apply to both months**, the date's and the books month.
+
+The boss's data on the local database needs exactly this. Two July payments dated 22–23 June
+(`import-ledger.json`: `July:tool:63`, `July:tool:80`) were refused "July books".
+
 Every screen that answers "how much in month X" groups by the books month:
 - **Dashboard** (`reports/overview.service.ts`): each account's opening, inflow, outflow and
   current figure, and the expense cards;
