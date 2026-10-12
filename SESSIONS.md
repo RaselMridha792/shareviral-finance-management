@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 160 | **The boss's sheet, imported by hand on the local database: the May tab, checked figure by figure against the sheet; and the brief for a books month and a Bank status page** | **local only, nothing on live** — the owner checks May in the local app; then pieces 1–4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The local (Neon) database was emptied on 12 Oct, at the owner's word: every harness login is gone — read #160 before running a harness** |
 | 159 | **Reset for real data: `deploy/reset-keep-team-and-accounts.sh` — keeps the team, accounts, categories, TDS slabs, Settings and four sign-ins; empties everything else** | **built, proved on a copy, not run on live** — the brief of 4 Oct, step 1. **The owner runs the report on the server and reads it with a session before `--wipe`: the steps are in #159** |
 | 158 | **Sign-in: the HR portal's server gets past the captcha with the shared secret (`x-hr-secret`), for an HR account only** | **built** — the brief of 4 Oct, an auth change pushed alone. **The captcha stays off on live until the HR portal sends the header too**; then the owner puts it back and checks the three things in #158 |
 | 157 | **People who can sign in: no "must change password" — the Super Admin sets everyone's password, and it is the one they keep** | **done** — the owner, 4 Oct, from the live list |
@@ -137,6 +138,96 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 160. The boss's sheet, by hand, on the local database — 12–13 Oct 2026
+
+The planning session, with the owner. **Nothing here is on live, and no code changed.**
+
+**The sheet.** "Copy of ShareViral Finance Sheet - 2026 - rasel" (Google Sheet
+`1txH3EPxqs9OANkp-IAKmvid4WYEA48oaHJCVgayZ40A`). It has one tab per month, May to
+September. Each tab holds:
+- BANK STATUS;
+- EXPENSE SUMMARY;
+- CASH IN, OUT, REFUND & TRANSFERS;
+- PAYROLL;
+- AI & OTHER TOOLS;
+- from June on, TDS and Other Expenses.
+
+September is a copy of August, unfinished, and **the owner said leave it out**.
+
+**The owner's rules for this import (12–13 Oct):**
+- one entry at a time, local first, the owner checks, then live;
+- **the sheet's figures and dates as they are**;
+- no FX revaluation entries;
+- TDS is shown as the sheet shows it: deducted, then refunded in July;
+- **where a date would take an account below zero, use the day the money arrived.**
+
+**The accounts are live's own four, mirrored.** The sheet's "Account Name" is the BANK:
+- JPMorgan Chase is Exprovia LLC (USD);
+- Standard Chartered is M/S. EXPROVIA;
+- Bank Asia is MD. NIZAM UDDIN;
+- Payoneer is Nizam Uddin (a card).
+
+On live, `bankName` already says so. Nothing is renamed.
+
+**⚠ The local (Neon) database was emptied on 12 Oct** (`TRUNCATE … CASCADE`, at the owner's
+"local a sob data clear koro").
+- Kept: categories, TDS slabs, `app_settings` and `schema_migrations`.
+- **Every harness login is gone:** superadmin@, ceo@, cfo@, hr@, admin@, cfo-qa@, rolecheck-*
+  and sample*.
+- The one login now is `finance@shareviral.cash` (super_admin). Its password is local-only and
+  was handed to the owner.
+- How to bring the logins back:
+  - `npm run db:seed --workspace @finance/api` recreates the role logins;
+  - `.rolecheck.mjs` makes its own.
+- No dump was taken first. This is the thing [[prove-destructive-on-a-copy]] warns about:
+  Neon is shared, and a "clear local" should have been a copy.
+
+**What is on the local database now.** All of it was entered through the real API.
+
+| What | Detail |
+|---|---|
+| Accounts | 4, opened 1 May 2026 at ৳0, as the sheet's May shows |
+| Team | 12 people: the May PAYROLL names, roles and departments, salary = the sheet's Basic. **joinedOn 1 May 2026 is a placeholder**, and each person's notes say so |
+| TXN-000001 | Funding of ৳17,08,000 ($14,000 @ 122) into Exprovia LLC, dated 9 June, with its ৳4,880 fee row (000002) |
+| TXN-000003/4 | JPMorgan → Bank Asia, ৳8,54,000, dated 11 June |
+| TXN-000018/19 | Bank Asia → Payoneer, ৳26,277.90. The sheet says 17 May; it was moved to 11 June by the owner's rule |
+| Payroll May 2026 | Paid 12 June from Bank Asia, one entry per person (000020–000031). Gross 4,91,258 and TDS 13,720, as the sheet has them |
+| TXN-000017 | ৳120: the payroll's transfer fees, 12 × ৳10 |
+| Subscriptions | Claude Max 5x ($100 + $1) and Max 20x ($113.26 + $1.13), both @ 122, Emon Reja, Payoneer, expired |
+| TXN-000032/33 | The two Claude payments. The sheet's start dates are 16 and 20 May; they were moved to 11 June by the same rule |
+
+**Payroll net = gross, on purpose.** The sheet's May note says *"TDS was not deducted from the
+May salary, so the gross salary was paid"*, and its BANK STATUS counts the gross. The June tab
+then takes May's TDS from June's salaries (its "TDS (May)" column), and July refunds both
+months (৳35,421). Each line therefore carries its TDS, with the net overridden to the gross.
+
+**Checked against the sheet** (`may-recon.mjs` in the scratchpad, run against the local API):
+- JPMorgan and Bank Asia match on IN, OUT + Fee and Closing:
+  - JPMorgan closes at 8,49,120;
+  - Bank Asia closes at 3,36,344.10;
+- Standard Chartered is 0, as the sheet says;
+- payroll Gross and TDS match;
+- all 12 salaries on the people's profiles match the sheet's Basic;
+- **Payoneer closes at ৳0.32 against the sheet's 0.** The app keeps two decimals, so the
+  sheet's $1.1326 fee became $1.13.
+
+**Not attached:** the Proof links for the transfers and the salaries. Those forms have no link
+field. The funding's invoice link is on its entry; the subscriptions' links are in their notes.
+
+**What came out of it.** The owner asked why May reads ৳0 on the Dashboard and on Accounts.
+Every May-tab entry is dated in June, because the boss closed May's books in June. The owner
+chose a books month (13 Oct), with three decisions:
+- a Bank status page under Accounts, laid out like the sheet's table;
+- Check automatic;
+- Note typed by hand.
+
+All of it is in `docs/briefs/2026-10-13-books-month-and-bank-status.md`: four pieces, the
+schema alone first, then the data step.
+
+**For live:** the owner enters the confirmed entries in the live UI, or a later session does it
+through the API. There is no live login or captcha path from a session. Hold it until the
+owner has checked May locally.
 
 ## 159. The reset for real data: the script — 7 Oct 2026
 

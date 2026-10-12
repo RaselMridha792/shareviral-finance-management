@@ -1,0 +1,235 @@
+# Brief — the month an entry belongs to, and a Bank status page like the boss's sheet
+
+**For:** four Claude sessions, one after another, each its own push. **Piece 1 is a schema
+change and travels alone.**
+**From:** the planning session, 13 Oct 2026, from the owner's words and three answers.
+
+## Why
+
+The boss keeps the company's books in a Google Sheet, one tab per month. Each tab opens with
+a **BANK STATUS** table, one row per bank account:
+
+> Account Name · Opening (BDT) · Opening (USD) · IN (BDT) · IN (USD) · OUT (BDT) · OUT (USD) ·
+> Fee (BDT) · Fee (USD) · Closing (BDT) · Closing (USD) · Check · Note
+
+His **May** tab holds money that moved in **June**:
+- the funding arrived 9 June;
+- the transfers ran on 11 June;
+- May's salaries were paid on 12 June.
+
+He closed May's books in June. The app has one date per entry and counts an entry in its
+date's month, so the sheet's May lands in the app's June. May reads ৳0 on the Dashboard and
+on Accounts.
+
+The owner, 13 Oct: *"may er sheet a boss bank status likhe rakche. tahole amra mayte gele
+dashboard a and accounts a sob jaygay 0 keno dekhacche? etato thik na"*.
+
+The owner's answers (AskUserQuestion, 13 Oct):
+1. **The table lives under Accounts:** Accounts ▸ Bank status, with a month picker.
+2. **A month is the month an entry belongs to**, not the month of its date.
+3. **Check is automatic, and Note is typed by hand.**
+
+Two earlier answers also hold here:
+- No FX revaluation entries (12 Oct). A month's BDT opening is the previous month's BDT
+  closing, even when the dollar rate has moved.
+- The sheet's figures are used as they are (12 Oct).
+
+## The model
+
+- **`txn_date` stays the day the money moved.** Everything that is about a day keeps using it:
+  - the overdraft rule (no account below zero on any day);
+  - the bank statement's day-by-day running balance (`/statement`);
+  - matching against the bank's own statement;
+  - **TDS, unchanged in this brief.** Ask the owner before moving it.
+- **New: `transactions.books_month`**, the first day of a month, **NULL meaning "the month of
+  `txn_date`"**.
+  - Every existing row stays right with no backfill.
+  - Only an entry that belongs to another month carries a value.
+- **One expression, written once:** `coalesce(books_month, date_trunc('month', txn_date)::date)`.
+  - Put it in a single helper, and have every month view call that helper.
+  - It must not be retyped module by module. Ten modules filter transactions by date today,
+    and ten copies of a rule is how one of them ends up different.
+- **A books month is the date's month or an earlier one.**
+  - A later month is refused with a sentence: "An entry cannot belong to a month after the
+    one it is dated in."
+  - The owner can widen this rule later. Prepayments are the case that would need it.
+- **Closed periods:**
+  - an entry may not be dated in a closed month;
+  - it may not belong to a closed books month;
+  - it may not be moved into or out of one.
+
+  `settings.assertPeriodOpen` checks both months.
+
+## Piece 1 — schema, alone
+
+Add `deploy/sql/2026-10-13-books-month.sql`. It must be idempotent, and it must not redefine
+anything an earlier file defined.
+
+The file holds four things:
+
+1. **The column.** `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS books_month date;`
+2. **A guard.** Add `transactions_books_month_first`, a check that `books_month` is null or the
+   first of a month. Add it only if it is missing, using the `pg_constraint` pattern the other
+   files use.
+3. **`account_month_notes`:**
+   - columns: `id`, `account_id` (references `accounts`, on delete cascade), `month` (a date,
+     checked to be the first of a month), `note text not null`, `updated_by` (references
+     `users`, on delete set null), `updated_at`;
+   - `unique (account_id, month)`.
+4. **A one-time backfill for payroll rows.** It is idempotent, and harmless on live, which has
+   no payroll rows since the reset:
+
+   ```sql
+   UPDATE transactions t
+      SET books_month = make_date(r.period_year, r.period_month, 1)
+     FROM payroll_runs r
+    WHERE t.payroll_run_id = r.id
+      AND t.books_month IS NULL
+      AND date_trunc('month', t.txn_date)::date <> make_date(r.period_year, r.period_month, 1);
+   ```
+
+Update the Drizzle schema in the same commit, and add nothing that reads the column. Drizzle
+names every column in its SELECT, so the file has to run before code that knows the column.
+The deploy guarantees that on live. Locally, run `node .sql.mjs`.
+
+## Piece 2 — writing it
+
+**The API.** Add an optional `booksMonth` (an ISO date on the 1st) to these endpoints:
+- the general create;
+- cash-in;
+- transfer;
+- pay-subscription;
+- the transaction update;
+- the transfer update.
+
+Absent means null, which is the month of the date.
+
+**Rows that take their books month automatically:**
+- **Payroll.** `pay` writes every salary row with the run's own period whenever that differs
+  from the payment date's month. A May run paid on 12 June is May's, and nobody is asked.
+- **Bank-fee rows** made from `chargeAmount` or `chargeUsd` take their parent's books month.
+- **A transfer's two halves** always share one books month.
+
+**The forms.** Add an optional **"Belongs to month"** field to:
+- Cash In;
+- Money Transfer;
+- the expense form(s);
+- the subscription Renew / Record payment drawer;
+- each edit drawer.
+
+The field starts empty. Its hint names the default, for example "June 2026, from the date".
+
+**Also:**
+- **The Assistant's map** (`app-map.ts` files) learns the field, so its drafts can carry it.
+- **The Excel export** of transactions gains a "Books month" column.
+- **All transactions** keeps its date filter. A row whose books month differs from its date
+  shows a small "May books" mark.
+
+## Piece 3 — the month views read it
+
+Every screen that answers "how much in month X" groups by the books month:
+- **Dashboard** (`reports/overview.service.ts`): each account's opening, inflow, outflow and
+  current figure, and the expense cards;
+- **Accounts:** the overview, and an account's own page, wherever a month's figures appear;
+- **Expenses:** `transactions/expense-overview.ts` and the category screens;
+- **Reports → Statement:** `statement.service.ts`, `reports.service.ts` and `own-dollars.ts`;
+- **Vendors:** the per-period figures;
+- **the Assistant's look-ups** (`ai-intake/ai-tools.ts`) that total a month.
+
+**Opening balances.** A month's opening is the account's opening balance plus every entry
+whose books month is earlier.
+
+**Unchanged, on purpose:**
+- the overdraft rule;
+- `/statement` (the bank statement);
+- reconciliation;
+- TDS;
+- `fx.service.ts`;
+- the date filter on All transactions.
+
+**The shared-code rule applies.** This changes what a month means on several screens. The owner
+asked for exactly that ("dashboard a and accounts a sob jaygay"), so list every screen the
+helper reaches in the handover.
+
+**Measure, do not read.** Write a harness:
+- an entry dated 12 June with books month May counts in May on the Dashboard, Accounts,
+  Expenses and Statement, and not in June;
+- the overdraft rule still judges it on 12 June;
+- an entry with no books month behaves exactly as before.
+
+## Piece 4 — Accounts ▸ Bank status
+
+**Where:** `/accounts/bank-status`, under the Accounts accordion in the sidebar. It has a books
+month picker, and opens on the current month.
+
+**Rows:** one per active account, plus any archived account that moved money that month. A
+totals row closes the table.
+
+**Columns, in the sheet's order:**
+
+| Column | What it holds |
+|---|---|
+| Account Name | The bank name, as the sheet names the account ("JP Morgan Chase"), with the account's own name small under it ("Exprovia LLC"). |
+| Opening | The previous books month's closing. |
+| IN | `in` rows, transfers in included. |
+| OUT | `out` rows, except those in the **Bank charges** category. |
+| Fee | `out` rows in **Bank charges**: the automatic charge rows and the typed ones. |
+| Closing | Opening + IN − OUT − Fee. |
+| Check | **Matched** when this month is reconciled in the app, otherwise "—". |
+| Note | Typed in the row. |
+
+Opening, IN, OUT, Fee and Closing each show BDT and USD.
+
+- **USD comes from each row's own dollars:**
+  - `original_amount` when the row states USD;
+  - otherwise the taka divided by the row's rate.
+
+  Reuse `own-dollars.ts` or `AccountsService.ownCurrencyBalance`; do not write a third
+  version. Opening USD comes from `opening_balance_usd` plus the earlier rows.
+- **Check.**
+  - Find where reconciliation is recorded: `statements.status = 'reconciled'` or `audited`
+    for the period that covers the month.
+  - If reconciliation turns out to be per account, use the account's.
+  - Check is never typed.
+- **Note.**
+  - People with `accounts.write` (Super Admin and CFO) edit it in place.
+  - It is saved to `account_month_notes`, and the change is audited.
+  - Anyone with `accounts.read` can see it.
+- **Design.**
+  - Build it from the app's table pieces (`TableScroll`, `Th`, `Amount`…).
+  - Changing any of them is the ask-first rule.
+  - Right-aligned money columns need the specific rule (CLAUDE.md, `text-right` on `thead th`).
+
+## The data step, after pieces 1–4 are on the local database
+
+The owner is importing the boss's sheet a month at a time. The May tab is already in the local
+database, and the comparison against the sheet is SESSIONS #160.
+
+1. **Set the books month to May 2026 on the May-tab entries that are dated in June:**
+   - the funding (9 June) and its fee;
+   - JPMorgan → Bank Asia (11 June);
+   - Bank Asia → Payoneer (11 June);
+   - the two Claude payments (11 June);
+   - the ৳120 payroll transfer fee (12 June).
+
+   The salary rows get May from the backfill in piece 1.
+2. **Open Bank status for May.** It should read exactly the sheet's May table, apart from two
+   things:
+   - rounding: the app keeps two decimals, the sheet keeps four;
+   - the Payoneer ৳0.32 that #160 explains.
+
+   The expected figures:
+
+   | Account | IN | OUT | Fee | Closing |
+   |---|---|---|---|---|
+   | JPMorgan | 17,08,000 | 8,54,000 | 4,880 | 8,49,120 |
+   | Bank Asia | 8,54,000 | 5,17,535.90 | 120 | 3,36,344.10 |
+   | Standard Chartered | 0 | 0 | 0 | 0 |
+   | Payoneer | 26,277.90 | 26,277.58 | 0 | 0.32 |
+
+3. **The owner checks it**, and only then does anything go to live.
+
+## Not in this brief
+
+- TDS by books month.
+- The June tab of the import, which continues after this.
