@@ -269,6 +269,80 @@ schema alone first, then the data step.
 through the API. There is no live login or captcha path from a session. Hold it until the
 owner has checked May locally.
 
+**June, July and August, 13 Oct** (still local only). At the owner's word, *"prottek maser ja
+ja possible hoy insert kore felo"*: problems are listed, and discussed afterwards.
+
+**How it was entered.** One resumable script drove the real API: `import-boss.mjs` in the
+planning session's scratchpad, with the workbook parsed to JSON by `parse_boss.py`.
+- Every step is recorded in `import-ledger.json`: 126 steps and 33 plans. That ledger is also
+  the list of which entry came from which tab, for the books-month step.
+- It rode through API restarts while piece 2 edited the API.
+
+**People.** Nine were added: Nizam Uddin, Mahadad, Faisal, Zahin, Ishtiaque, Shahadat, Jasmine,
+Riaz, and Khairul Bashar (the developer, who is not Khairul Basar). Each has a placeholder
+joinedOn of the 1st of the first month they appear in. Sagar's login is sagor@.
+
+**Payroll.** One run a month, from Standard Chartered, matches the sheet exactly:
+
+| Month | Net paid | Gross | TDS |
+|---|---|---|---|
+| June | 7,66,579 | 8,02,000 | 21,701 |
+| July | 14,99,277 | 15,21,774 | 21,916 |
+| August | 17,01,481 | 17,25,321 | 23,840 |
+
+- June's "TDS (May)" is an other deduction on each line.
+- July's two odd nets are the sheet's own figures, typed over the arithmetic:
+  - Zahin: 65,617 against 67,097;
+  - Faisal: 37,189 against 36,290.
+- Every salary row carries its Proof link. May's are attached too.
+
+**Other figures, against the sheet:**
+- **Other expenses** match the sheet exactly: 345, 3,87,798 and 61,535.
+- **AI & tools** are within paisa. The sheet keeps fees to four decimals; the app keeps two.
+
+**Closing balances on 31 Aug:**
+
+| Account | App | Sheet |
+|---|---|---|
+| Standard Chartered | 8,22,235.65 | 8,22,235.65 |
+| Payoneer | 5,61,173.89 | 5,61,173.78 (+0.11, rounding) |
+| JPMorgan | 0 | 0 |
+| Bank Asia | 0 | 0 |
+
+**What was decided along the way.** Each item is written in `import-ledger.json`'s problems:
+
+**Dates and money**
+- **Exchange gain, so the dollar accounts open where the sheet opens them:**
+  - JPMorgan ৳3,132 on 1 June;
+  - Payoneer ৳525.08 on 1 July.
+
+  Without the JPMorgan one, its June fee could not be entered.
+- **Moved to the day the money arrived:**
+  - 8 of June's tool payments, to 22/23 June;
+  - 2 of July's, whose start dates were in June, also to 22/23 June;
+  - Hi-Tech Park Advance and Interior Design, to 6 Aug.
+- **Undated in the sheet:**
+  - July's and August's other expenses, dated the month's last day;
+  - Ishtiaque's July salary, paid with the run.
+
+**Plans and links**
+- **Two extra plans.** The once-a-month rule counts by date:
+  - Claude Max 20x (emon): June's renewal fell in the same month as May's payment, which had
+    moved to 11 June;
+  - Github (nizam): two August charges, $0.26 and $44.
+- **JPMorgan's June fee is one bank-charge row** of $130 on the JPMorgan → SCB transfer. The
+  sheet's note splits it into $40 for the transfer and $90 for maintenance.
+- **Transfers have no link field**, so their Proof links are not attached.
+- **developer@ (Numero eSIM) is nobody on the team**, so those plans have no user.
+
+**Left as the sheet has it:**
+- Cursor (shahriar) filed under Design in August;
+- the "Claude Pro" rows priced at $45 and $97.33;
+- the QuickBook note copied from another row;
+- the "paid in cash" delivery charge counted from SCB;
+- every other-expense row filed under the "Other expenses" category, which is the sheet's own
+  bucket.
+
 ## 159. The reset for real data: the script — 7 Oct 2026
 
 The brief: `docs/briefs/2026-10-04-reset-for-real-data.md`, step 1. An ops script only,
