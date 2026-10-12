@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 161 | **Schema: the month an entry belongs to — `transactions.books_month` (NULL = the month of the date), its first-of-month check, `account_month_notes`, and the payroll backfill** | **done** — piece 1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, and applied on the local database. **Next: piece 2** (writing it: the API, the forms, payroll and fees taking it automatically) |
 | 160 | **The boss's sheet, imported by hand on the local database: the May tab, checked figure by figure against the sheet; and the brief for a books month and a Bank status page** | **local only, nothing on live** — the owner checks May in the local app; then pieces 1–4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The local (Neon) database was emptied on 12 Oct, at the owner's word: every harness login is gone — read #160 before running a harness** |
 | 159 | **Reset for real data: `deploy/reset-keep-team-and-accounts.sh` — keeps the team, accounts, categories, TDS slabs, Settings and four sign-ins; empties everything else** | **built, proved on a copy, not run on live** — the brief of 4 Oct, step 1. **The owner runs the report on the server and reads it with a session before `--wipe`: the steps are in #159** |
 | 158 | **Sign-in: the HR portal's server gets past the captcha with the shared secret (`x-hr-secret`), for an HR account only** | **built** — the brief of 4 Oct, an auth change pushed alone. **The captcha stays off on live until the HR portal sends the header too**; then the owner puts it back and checks the three things in #158 |
@@ -138,6 +139,41 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 161. Schema: the month an entry belongs to — 13 Oct 2026
+
+Piece 1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **A schema change, pushed
+alone. Nothing reads the new column yet.**
+
+**`deploy/sql/2026-10-13-books-month.sql`:**
+- `transactions.books_month date`, nullable. NULL means "the month of `txn_date`", so no
+  existing row changes meaning.
+- `transactions_books_month_first`: null or the 1st of a month, added through the
+  `pg_constraint` check as the other files do.
+- `account_month_notes` (id; account_id → accounts, on delete cascade; month, checked to be a
+  1st; note; updated_by → users, on delete set null; updated_at), unique (account_id, month).
+- The payroll backfill from the brief: a salary row dated in another month than its run's
+  period takes the period.
+- "Not later than the date's month" is **not** a CHECK, on purpose. It is the API's rule
+  (piece 2), so the owner can widen it for prepayments without a migration.
+
+**Drizzle:** `booksMonth` and its check on `transactions`; the new table in
+`db/schema/account-month-notes.ts`, exported from the barrel. No service reads either.
+
+**Measured on the local (Neon) database.** Only this file was applied, by a throwaway script,
+not `node .sql.mjs`: that replays every file and would re-run the `files_one_owner`
+redefinitions. Run twice; the second run changed nothing. The check refuses `2026-05-02`.
+**The 24 salary rows of the May tab (paid in June) now carry `books_month = 2026-05-01`**, so
+the data step after piece 4 needs only the six non-payroll entries.
+
+Neon's hostname did not resolve through this machine's DNS during the session (`EAI_AGAIN`,
+while github.com did). The script fell back to 8.8.8.8 with the hostname as the TLS server
+name. If a harness fails the same way, that is the machine, not the app.
+
+Build, typecheck, lint and test all green (460 tests). On live the backfill touches nothing:
+no payroll rows since the reset.
+
+**Next: piece 2**, in its own session.
 
 ## 160. The boss's sheet, by hand, on the local database — 12–13 Oct 2026
 

@@ -52,6 +52,14 @@ export const transactions = pgTable(
     /** The value date — when the money actually moved, not when it was typed. */
     txnDate: date("txn_date").notNull(),
 
+    /**
+     * The month the entry belongs to, as the first of that month. Null means
+     * the month of `txnDate`. The boss closes May's books in June, so a May
+     * salary paid on 12 June is May's. Month views read it through one helper;
+     * `txnDate` stays the day the money moved (overdraft, statement, TDS).
+     */
+    booksMonth: date("books_month"),
+
     /** Magnitude only. `direction` carries the sign. */
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
 
@@ -250,6 +258,10 @@ export const transactions = pgTable(
     check(
       "transactions_withheld_not_negative",
       sql`${t.withheldTaxAmount} >= 0`,
+    ),
+    check(
+      "transactions_books_month_first",
+      sql`${t.booksMonth} is null or extract(day from ${t.booksMonth}) = 1`,
     ),
     // A foreign amount is meaningless without the rate that converted it.
     check(

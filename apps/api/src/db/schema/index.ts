@@ -17,6 +17,7 @@ export * from "./two-factor";
 export * from "./notifications";
 export * from "./audit";
 export * from "./accounts";
+export * from "./account-month-notes";
 export * from "./categories";
 export * from "./vendors";
 export * from "./subscriptions";
