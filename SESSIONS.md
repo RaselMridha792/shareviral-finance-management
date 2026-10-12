@@ -141,6 +141,86 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 163. The month views read the books month — 13 Oct 2026
+
+Piece 3 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **May no longer reads ৳0:**
+every "how much in month X" now counts an entry in the month it belongs to.
+
+**The rule, written once:** `apps/api/src/modules/transactions/books-month.ts`.
+- `booksMonthSql`: `coalesce(books_month, date_trunc('month', txn_date)::date)`, for grouping
+  (the Dashboard's twelve-month trend, bank stats).
+- `inBooksPeriod(from, to)`, `beforeBooksPeriod(day)`, `upToBooksPeriod(day)`: the window, the
+  opening, and "as at the end of that day". On a whole month they are exactly that coalesce.
+  A row with no books month is still judged by its date to the day, so a mid-month window
+  (the Assistant's look-ups take any two dates) is unchanged for it.
+
+**Every screen the helper reaches:**
+- **Dashboard** (`overview.service.ts`): totals and the previous month, salary paid,
+  funding, each account's opening/in/out/closing and its dollars (`own-dollars.ts`), spend
+  and income by category, top vendors, tools and subscriptions, and the twelve-month trend.
+  **Tax withheld stays on `txn_date`** (TDS).
+- **Accounts**: the month dropdown (`asOf`) counts what belongs on or before that month.
+  An account's own page shows today's balance only, so nothing changed there.
+- **Expenses**: the overview (`expense-overview.ts`), the category grid
+  (`/expenses/summary`), and the rows on a category page and on Other expenses.
+- **Reports → Statement**: through `register(..., { byBooksMonth: true })` and the payroll
+  detail.
+- **Reports → Period and bank stats** (no screen calls them; their Excel exports do).
+- **Vendors** `/vendors/subscriptions` (no screen calls it either).
+- **The Assistant's** `period_summary`. `find_transactions` is a list with a date filter, so
+  it stays on the date, like All transactions.
+
+**Shared code, asked first (owner approved):** `byBooksMonth` (optional) on
+`transactionFilterSchema` in `packages/shared`. It reaches `GET /transactions`,
+`/transactions/summary` and the transactions Excel export. **Only the category pages and Other
+expenses send it**, so their rows agree with their boxes. All transactions, the register,
+transfers and Cash In send nothing. `lib/` is unchanged.
+
+**Unchanged on purpose:** the overdraft rule, the register and the bank statement
+(`/statement`, both routes and their exports), reconciliation, TDS, `fx.service.ts`, funding
+(`/reports/funding`), the date filter on All transactions, and the once-a-month renewal
+rule.
+
+**Measured on a docker copy of Neon**: a pg_dump into postgres:17. This API was built and run
+on :4093, the API before this change (HEAD, from `git archive`) on :4094, both against the copy.
+The copy, both servers and the build folders were removed afterwards.
+
+`.booksmonthviewsqa.mjs` (new; needs `BM_DB`, `BM_API` and `BM_OLD_API`): **28/28.**
+- **No books month behaves exactly as before.** Every books month on the copy was set aside,
+  and old and new were asked 73 month questions: Dashboard, Statement, Period, Accounts as at
+  each month end, the Expenses overview and summary, the transactions summary, a quarter,
+  a year and bank stats, Jan–Oct 2026. The answers were identical. The only difference was
+  the last digit of a JS float `share`, because the row order changed; no figure differed.
+  The books months were then put back.
+- **Dated 12 June, books May:**
+  - it counts in May and not in June on the Dashboard (account block, totals, trend), on
+    Accounts (end of May −600, end of June 300, 4 June −600), on Expenses (overview, grid,
+    a category page's rows, whose box equals its rows) and on the Statement;
+  - All transactions and the register still list it on 12 June, with that day's running
+    balance;
+  - the overdraft rule judged it on 12 June (saved). The same entry dated 3 June was
+    refused.
+
+**The May tab on the copy, against #160:** JPMorgan in 17,08,000, out + fee 8,58,880, closing
+8,49,120. Bank Asia in 8,54,000, out + fee 5,17,655.90, closing 3,36,344.10. Payoneer
+26,277.90 / 26,277.58 / 0.32 (the known ৳0.32). SCB 0. All as the sheet has them. Expenses for
+May: salary 4,91,258, tools 26,277.58, bank fees 5,000.
+- **⚠ The six May-tab entries dated in June are already marked May on Neon** (TXN-000001/2,
+  3/4, 18/19, 32/33, 17). The brief put that in the data step, after piece 4, and this
+  session did not do it; it was already on Neon when the copy was taken. June and July
+  payroll paid in the next month also carry their period (17 and 22 rows).
+
+Build, typecheck, lint and test all green (460 tests). The dev servers on :3000 and :4001 were
+not touched.
+
+**Not done:**
+- **No browser pass.** The two web files only pass the new flag; the harness sent the same
+  queries those pages send.
+- **Still open for the owner (#162):** a payroll run paid before its own month stays in the
+  payment's month.
+
+**Next: piece 4**, Accounts ▸ Bank status, in its own session.
+
 ## 162. The month an entry belongs to, written — 13 Oct 2026
 
 Piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **Writing only: nothing reads

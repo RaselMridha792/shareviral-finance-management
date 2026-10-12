@@ -25,11 +25,9 @@ import {
   count,
   desc,
   eq,
-  gte,
   ilike,
   isNotNull,
   isNull,
-  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -39,6 +37,7 @@ import type { AuthenticatedUser } from "../../common/decorators/auth.decorators"
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import { accounts, transactions, vendors, type Vendor } from "../../db/schema";
+import { inBooksPeriod } from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 import { isToolSpend, isToolVendor } from "./tool-spend";
 
@@ -309,7 +308,8 @@ export class VendorsService {
       asked.month ?? today.month,
     );
 
-    const inPeriod = sql`${transactions.txnDate} between ${period.start} and ${period.end}`;
+    // The month each entry belongs to, as every month view counts.
+    const inPeriod = inBooksPeriod(period.start, period.end);
 
     const [tools, ledger, [total]] = await Promise.all([
       this.db.client
@@ -375,8 +375,7 @@ export class VendorsService {
         .leftJoin(accounts, eq(transactions.accountId, accounts.id))
         .where(
           and(
-            gte(transactions.txnDate, period.start),
-            lte(transactions.txnDate, period.end),
+            inPeriod,
             isNull(transactions.voidedAt),
             eq(transactions.direction, "out"),
             notATransfer(),

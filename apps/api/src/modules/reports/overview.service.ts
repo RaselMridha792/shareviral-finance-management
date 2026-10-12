@@ -30,6 +30,11 @@ import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { CHALLAN_COUNTS } from "../tds/challan-counts";
+import {
+  beforeBooksPeriod,
+  booksMonthSql,
+  inBooksPeriod,
+} from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 import { periodDollars } from "./own-dollars";
 
@@ -416,7 +421,8 @@ export class OverviewService {
         total: sql<string>`coalesce(sum(${transactions.withheldTaxAmount}), 0)::text`,
       })
       .from(transactions)
-      .where(and(inPeriod(range), eq(transactions.direction, "out")));
+      // TDS stays on the day the money moved (the brief of 13 Oct 2026).
+      .where(and(onDays(range), eq(transactions.direction, "out")));
 
     const [deposited] = await this.db.client
       .select({
@@ -516,7 +522,7 @@ export class OverviewService {
             end), 0)::text`,
         })
         .from(transactions)
-        .where(and(sql`${transactions.txnDate} < ${range.start}`, LIVE))
+        .where(and(beforeBooksPeriod(range.start), LIVE))
         .groupBy(transactions.accountId),
 
       this.db.client
@@ -923,11 +929,11 @@ export class OverviewService {
         net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
       })
       .from(transactions)
-      .where(and(sql`${transactions.txnDate} < ${first.start}`, LIVE));
+      .where(and(beforeBooksPeriod(first.start), LIVE));
 
     const rows = await this.db.client
       .select({
-        month: sql<string>`to_char(${transactions.txnDate}, 'YYYY-MM')`,
+        month: sql<string>`to_char(${booksMonthSql}, 'YYYY-MM')`,
         moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
         moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
         entries: sql<number>`count(*)::int`,
@@ -938,14 +944,13 @@ export class OverviewService {
       // in the Twelve months table underneath it.
       //
       // `closingBalance` below is rolled forward as `running += in - out`, and
-      // it does not move: both halves of a transfer carry the same txn_date, so
+      // it does not move: both halves of a transfer carry the same books month, so
       // each month loses an equal in and out and every net is unchanged. That
       // is what makes this safe here and NOT safe in bankStats, where a single
       // account can be in scope and only one half of the pair with it.
       .where(
         and(
-          gte(transactions.txnDate, first.start),
-          lte(transactions.txnDate, ranges[ranges.length - 1].end),
+          inBooksPeriod(first.start, ranges[ranges.length - 1].end),
           notATransfer(),
           LIVE,
         ),
@@ -987,7 +992,16 @@ export class OverviewService {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The period's rows, by the month each entry belongs to — May's books closed
+ * in June are May's figures here. See `books-month.ts`.
+ */
 function inPeriod(range: PeriodRange) {
+  return and(inBooksPeriod(range.start, range.end), LIVE);
+}
+
+/** The period's rows by the day the money moved: TDS only. */
+function onDays(range: PeriodRange) {
   return and(
     gte(transactions.txnDate, range.start),
     lte(transactions.txnDate, range.end),

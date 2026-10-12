@@ -26,6 +26,7 @@ import {
   type Account,
 } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
+import { upToBooksPeriod } from "../transactions/books-month";
 
 /**
  * An account as the rest of the world may see it.
@@ -138,8 +139,13 @@ function counted(asOf: string | null) {
    * dollars nor a rate" and marked a dollar account with a stated opening and
    * no entries as approximate: "~$100.00" for exactly $100.00.
    */
+  /*
+   * "Held at the end of that month" counts what BELONGS to the month, not
+   * only what is dated in it: May's books closed in June are in May's figure
+   * (`books-month.ts`). An unmarked row is still judged by its date.
+   */
   return asOf
-    ? sql`${transactions.id} is not null and ${transactions.voidedAt} is null and ${transactions.txnDate} <= ${asOf}`
+    ? sql`${transactions.id} is not null and ${transactions.voidedAt} is null and ${upToBooksPeriod(asOf)}`
     : sql`${transactions.id} is not null and ${transactions.voidedAt} is null`;
 }
 

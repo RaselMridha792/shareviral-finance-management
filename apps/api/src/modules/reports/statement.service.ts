@@ -17,7 +17,7 @@ import {
   type StatementQuery,
   type WaterfallStep,
 } from "@finance/shared";
-import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
@@ -32,6 +32,7 @@ import {
   type Statement,
 } from "../../db/schema";
 import { FilesService } from "../files/files.service";
+import { inBooksPeriod } from "../transactions/books-month";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
 import { TransactionsService } from "../transactions/transactions.service";
@@ -162,10 +163,13 @@ export class StatementService {
     // ledger page here and the register behind it cannot disagree.
     const registers = await Promise.all(
       accountIds.map((id) =>
-        this.transactionsService.register(id, {
-          from: range.start,
-          to: range.end,
-        }),
+        // By the month each entry belongs to: May's books closed in June
+        // are on May's statement (`books-month.ts`).
+        this.transactionsService.register(
+          id,
+          { from: range.start, to: range.end },
+          { byBooksMonth: true },
+        ),
       ),
     );
 
@@ -581,8 +585,7 @@ export class StatementService {
         and(
           LIVE,
           eq(transactions.createdVia, "payroll"),
-          gte(transactions.txnDate, range.start),
-          lte(transactions.txnDate, range.end),
+          inBooksPeriod(range.start, range.end),
           sql`${transactions.payrollRunId} is not null`,
         ),
       );

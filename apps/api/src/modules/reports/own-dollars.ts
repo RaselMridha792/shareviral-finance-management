@@ -1,6 +1,7 @@
-import { and, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, isNull, sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema";
+import { inBooksPeriod } from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 
 /**
@@ -46,7 +47,8 @@ const rowDollars = sql`
  *
  * Transfers are excluded for the same reason they are excluded from the taka
  * totals: moving money between two of our own accounts is not income and not
- * spending. See `own-money.ts`.
+ * spending. See `own-money.ts`. A period is the month each entry belongs to,
+ * so the dollars beside a taka total count the same rows (`books-month.ts`).
  */
 export function periodDollars(range: { start: string; end: string }): {
   moneyIn: SQL<string>;
@@ -55,8 +57,7 @@ export function periodDollars(range: { start: string; end: string }): {
   where: SQL;
 } {
   const inPeriod = and(
-    gte(transactions.txnDate, range.start),
-    lte(transactions.txnDate, range.end),
+    inBooksPeriod(range.start, range.end),
     isNull(transactions.voidedAt),
     isNull(transactions.deletedAt),
     notATransfer(),

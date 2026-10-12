@@ -617,6 +617,14 @@ export const transactionFilterSchema = z.object({
    * transfer is exactly what the reader is looking for.
    */
   excludeTransfers: boolish.optional(),
+
+  /**
+   * Read `from`..`to` as the month each entry belongs to, not the day it is
+   * dated: May's bill paid on 12 June is in May. The Expenses screens send it,
+   * so their rows agree with their month boxes. All transactions, the register
+   * and the bank statement do not: there the date is what the reader filters.
+   */
+  byBooksMonth: boolish.optional(),
 });
 export type TransactionFilter = z.infer<typeof transactionFilterSchema>;
 

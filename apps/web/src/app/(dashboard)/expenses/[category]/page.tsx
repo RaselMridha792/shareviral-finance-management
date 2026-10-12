@@ -79,7 +79,14 @@ async function everyRowFor({
   to: string;
   slug: string;
 }) {
-  const query = { from, to, direction: "out" as const, categorySlug: slug };
+  // By the month each entry belongs to, so the rows agree with the summary.
+  const query = {
+    from,
+    to,
+    direction: "out" as const,
+    categorySlug: slug,
+    byBooksMonth: true,
+  };
 
   const first = await ledgerApi.list({ ...query, page: 1, pageSize: REQUEST_MAX });
   const pages = Math.ceil(first.total / REQUEST_MAX);

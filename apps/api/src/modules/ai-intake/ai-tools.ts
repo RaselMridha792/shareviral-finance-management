@@ -24,6 +24,7 @@ import { DbService } from "../../db/db.service";
 import { stateOf } from "../hr-requests/hr-requests.schemas";
 import { requestRowsSql } from "../hr-requests/request-rows";
 import { CHALLAN_COUNTS } from "../tds/challan-counts";
+import { inBooksPeriod } from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 import {
   accounts,
@@ -505,15 +506,9 @@ export class AiToolsService {
       // Spoken aloud to the owner, so a wrong figure here is not a wrong pixel
       // — it is an answer. Own-account transfers were counted on both sides:
       // the assistant said 1,76,600 spent in August while every report said
-      // 1,11,600.
-      .where(
-        and(
-          gte(transactions.txnDate, from),
-          lte(transactions.txnDate, to),
-          notATransfer(),
-          LIVE,
-        ),
-      );
+      // 1,11,600. By the month each entry belongs to, as the screens count:
+      // "how much in May" includes May's books closed in June.
+      .where(and(inBooksPeriod(from, to), notATransfer(), LIVE));
 
     const spend = await this.db.client
       .select({
@@ -528,8 +523,7 @@ export class AiToolsService {
       )
       .where(
         and(
-          gte(transactions.txnDate, from),
-          lte(transactions.txnDate, to),
+          inBooksPeriod(from, to),
           eq(transactions.direction, "out"),
           notATransfer(),
           LIVE,

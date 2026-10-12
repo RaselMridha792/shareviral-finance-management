@@ -82,6 +82,8 @@ async function everyRow({ from, to }: { from: string; to: string }) {
     direction: "out" as const,
     excludeToolSpend: true,
     excludeTransfers: true,
+    // The month each entry belongs to, as the Expenses boxes count it.
+    byBooksMonth: true,
   };
 
   const first = await ledgerApi.list({
@@ -193,6 +195,7 @@ export function OtherExpensesScreen({
           direction: "out",
           // Both calls, or the subtraction below counts transfers as tooling.
           excludeTransfers: true,
+          byBooksMonth: true,
           page: 1,
           pageSize: 1,
         }),

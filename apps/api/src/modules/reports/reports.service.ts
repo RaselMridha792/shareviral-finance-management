@@ -25,6 +25,11 @@ import { DbService } from "../../db/db.service";
 import { accounts, categories, fxRates, transactions } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
 import { SettingsService } from "../settings/settings.service";
+import {
+  beforeBooksPeriod,
+  booksMonthSql,
+  inBooksPeriod,
+} from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 
 /** Never count a voided row. It stays visible; it is not money. */
@@ -179,14 +184,7 @@ export class ReportsService {
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
-      .where(
-        and(
-          notATransfer(),
-          gte(transactions.txnDate, range.start),
-          lte(transactions.txnDate, range.end),
-          LIVE,
-        ),
-      );
+      .where(and(notATransfer(), inBooksPeriod(range.start, range.end), LIVE));
 
     return {
       moneyIn: row.moneyIn,
@@ -223,8 +221,7 @@ export class ReportsService {
       .where(
         and(
           notATransfer(),
-          gte(transactions.txnDate, range.start),
-          lte(transactions.txnDate, range.end),
+          inBooksPeriod(range.start, range.end),
           eq(transactions.direction, direction),
           LIVE,
         ),
@@ -299,6 +296,9 @@ export class ReportsService {
 
   private async balanceAsOf(date: string, accountId?: string): Promise<string> {
     /**
+     * "Before" by the month each entry belongs to, the same rule the period's
+     * own figures use (`books-month.ts`), so opening + in - out still lands.
+     *
      * Scoped to the same account as the movements it is rolled forward with.
      *
      * This took no account id: filtered to one account, the opening was still
@@ -329,7 +329,7 @@ export class ReportsService {
       .from(transactions)
       .where(
         and(
-          sql`${transactions.txnDate} < ${date}`,
+          beforeBooksPeriod(date),
           LIVE,
           accountId ? eq(transactions.accountId, accountId) : undefined,
         ),
@@ -382,7 +382,7 @@ export class ReportsService {
      */
     const rows = await this.db.client
       .select({
-        month: sql<number>`extract(month from ${transactions.txnDate})::int`,
+        month: sql<number>`extract(month from ${booksMonthSql})::int`,
         moneyIn: sql<string>`coalesce(sum(case when ${notATransfer()} and ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
         moneyOut: sql<string>`coalesce(sum(case when ${notATransfer()} and ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
         movement: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
@@ -391,7 +391,7 @@ export class ReportsService {
       .from(transactions)
       .where(
         and(
-          sql`extract(year from ${transactions.txnDate}) = ${query.year}`,
+          sql`extract(year from ${booksMonthSql}) = ${query.year}`,
           LIVE,
           scope,
         ),

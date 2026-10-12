@@ -61,7 +61,11 @@ import {
 } from "./expense-overview";
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
-import { storedBooksMonth } from "./books-month";
+import {
+  beforeBooksPeriod,
+  storedBooksMonth,
+  upToBooksPeriod,
+} from "./books-month";
 import { nextRefNo } from "./ref-no";
 import { renewalInMonth } from "./renewal-in-month";
 
@@ -234,8 +238,14 @@ export class TransactionsService {
     // Money moved between our own accounts is not money spent — see
     // `own-money.ts` for where this must and must not be applied.
     if (filter.excludeTransfers) clauses.push(notATransfer());
-    if (filter.from) clauses.push(gte(transactions.txnDate, filter.from));
-    if (filter.to) clauses.push(lte(transactions.txnDate, filter.to));
+    if (filter.byBooksMonth) {
+      // The Expenses screens: the month each entry belongs to.
+      if (filter.from) clauses.push(not(beforeBooksPeriod(filter.from)));
+      if (filter.to) clauses.push(upToBooksPeriod(filter.to));
+    } else {
+      if (filter.from) clauses.push(gte(transactions.txnDate, filter.from));
+      if (filter.to) clauses.push(lte(transactions.txnDate, filter.to));
+    }
     if (filter.accountId)
       clauses.push(eq(transactions.accountId, filter.accountId));
     if (filter.direction)
@@ -479,6 +489,13 @@ export class TransactionsService {
   async register(
     accountId: string,
     range: { from?: string; to?: string; includeVoided?: boolean },
+    /**
+     * Reports → Statement only: the window is the month each entry belongs to
+     * (`books-month.ts`). The register screen and the bank statement keep the
+     * day the money moved, so neither the route nor its query schema can ask
+     * for this.
+     */
+    options: { byBooksMonth?: boolean } = {},
   ) {
     const [account] = await this.db.client
       .select({
@@ -516,7 +533,9 @@ export class TransactionsService {
           and(
             eq(transactions.accountId, accountId),
             isNull(transactions.voidedAt),
-            sql`${transactions.txnDate} < ${range.from}`,
+            options.byBooksMonth
+              ? beforeBooksPeriod(range.from)
+              : sql`${transactions.txnDate} < ${range.from}`,
           ),
         );
       carriedForward = carried.total;
@@ -534,8 +553,13 @@ export class TransactionsService {
     ];
     // A voided row stays visible and struck through, but it is not money.
     if (!range.includeVoided) clauses.push(isNull(transactions.voidedAt));
-    if (range.from) clauses.push(gte(transactions.txnDate, range.from));
-    if (range.to) clauses.push(lte(transactions.txnDate, range.to));
+    if (options.byBooksMonth) {
+      if (range.from) clauses.push(not(beforeBooksPeriod(range.from)));
+      if (range.to) clauses.push(upToBooksPeriod(range.to));
+    } else {
+      if (range.from) clauses.push(gte(transactions.txnDate, range.from));
+      if (range.to) clauses.push(lte(transactions.txnDate, range.to));
+    }
 
     const rows = await this.db.client
       .select({
@@ -661,8 +685,10 @@ export class TransactionsService {
       isNull(transactions.voidedAt),
       eq(transactions.direction, "out"),
     ];
-    if (query.from) clauses.push(gte(transactions.txnDate, query.from));
-    if (query.to) clauses.push(lte(transactions.txnDate, query.to));
+    // By the month each entry belongs to, as every month view counts
+    // (`books-month.ts`): the Expenses screen picks a whole month.
+    if (query.from) clauses.push(not(beforeBooksPeriod(query.from)));
+    if (query.to) clauses.push(upToBooksPeriod(query.to));
 
     if (query.categorySlug) {
       const ids = await this.categoryIdsForSlug(query.categorySlug, undefined);

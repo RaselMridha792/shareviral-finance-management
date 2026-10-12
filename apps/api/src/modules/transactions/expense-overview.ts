@@ -1,7 +1,8 @@
-import { and, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema/transactions";
 import { isToolSpend } from "../vendors/tool-spend";
+import { inBooksPeriod } from "./books-month";
 import { notATransfer } from "./own-money";
 
 /**
@@ -31,15 +32,18 @@ import { notATransfer } from "./own-money";
  *     JavaScript is how a figure ends up a paisa out and nobody can say where.
  */
 
-/** Money out that is neither a transfer nor voided, in the window. */
+/**
+ * Money out that is neither a transfer nor voided, in the window — the window
+ * being the month each entry belongs to, so May's salaries paid on 12 June
+ * are May's spending (`books-month.ts`).
+ */
 function spendingIn(from: string, to: string): SQL[] {
   return [
     isNull(transactions.deletedAt),
     isNull(transactions.voidedAt),
     eq(transactions.direction, "out"),
     notATransfer(),
-    gte(transactions.txnDate, from),
-    lte(transactions.txnDate, to),
+    inBooksPeriod(from, to),
   ];
 }
 
