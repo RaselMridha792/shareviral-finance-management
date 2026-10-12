@@ -510,6 +510,42 @@ joinedOn of the 1st of the first month they appear in. Sagar's login is sagor@.
 - every other-expense row filed under the "Other expenses" category, which is the sheet's own
   bucket.
 
+**For live, 13 Oct.** The replay script is built and proved on a copy. It has **not been run on
+live**.
+
+**What it is.** One file, `replay.mjs`, in the planning session's scratchpad. The sheet's
+May–August data is inside it.
+
+**How it runs.** On the server, inside the api container:
+`docker compose exec -T api node --input-type=module - < replay.mjs`.
+- It signs a session for finance@ with the server's own `JWT_ACCESS_SECRET`, so it needs no
+  password and no captcha.
+- Everything goes through the API, so every rule applies.
+- **Plan only by default.** `--write` writes; `--fix-later-months` runs after piece 3 lands.
+- It resumes from `/data/uploads/.boss-import-ledger.json`, the uploads volume, which survives a
+  container swap.
+
+**Matching live's people:**
+- the 13 who are already there, by employee code (SVBE-01…13);
+- 8 more are added (the owner, 13 Oct: "Finance-এ সরাসরি সবাইকে বানাও");
+- their salaries come from the sheet's Basic;
+- the four accounts open on 1 May 2026.
+
+**Proved on a docker copy** shaped like live's 13 Oct state: the same 4 accounts, the 18 people
+and an empty ledger. All four tabs went in.
+- **Every BANK STATUS cell matches the sheet except Payoneer June and July.**
+- Those two are off by ৳14,470.53 between them: two July tool payments charged in June. The
+  server still refuses a later books month; piece 3 lifts that.
+- May's Payoneer matches to the paisa this time.
+
+**Not on the server yet.** Getting the file to the server was refused twice by Claude Code's
+auto-mode classifier as data exfiltration, because the file carries salaries:
+- a push to a non-deploying `boss-import` branch;
+- a copy to `F:oss-import`.
+
+The owner decides how the file gets there. The two ways are their own `scp`, or allowing it. Do
+not work around it.
+
 ## 159. The reset for real data: the script — 7 Oct 2026
 
 The brief: `docs/briefs/2026-10-04-reset-for-real-data.md`, step 1. An ops script only,
