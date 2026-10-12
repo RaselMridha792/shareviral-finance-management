@@ -213,9 +213,13 @@ On live, `bankName` already says so. Nothing is renamed.
   and sample*.
 - The one login now is `finance@shareviral.cash` (super_admin). Its password is local-only and
   was handed to the owner.
-- How to bring the logins back:
-  - `npm run db:seed --workspace @finance/api` recreates the role logins;
-  - `.rolecheck.mjs` makes its own.
+- **The role logins were restored on 13 Oct** with `npm run db:seed`, which touches users only:
+  superadmin@, cfo@, ceo@ and hr@. Their passwords are new, and were shown once in the planning
+  session's terminal. A harness that needs one can run `npm run db:seed -- --reset-passwords`.
+- `.rolecheck.mjs` makes its own logins. The sample* logins have not been restored.
+- **Neon now holds the owner's import data for May 2026 onward.**
+  - A harness must clean up only its own fixtures.
+  - A harness must not expect the 2026 months to be empty.
 - No dump was taken first. This is the thing [[prove-destructive-on-a-copy]] warns about:
   Neon is shared, and a "clear local" should have been a copy.
 
