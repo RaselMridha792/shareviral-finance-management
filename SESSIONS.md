@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 166 | **Bank status: a dollar account's revaluation (Exchange gain / loss) sits in the Opening, as in the sheet, with a line under it saying so; IN and OUT no longer carry it** | **done** — piece 4b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. June JPMorgan opens 8,52,252 with IN 0. **One open point for the owner: the Opening's dollars, see #166** |
 | 165 | **A later books month, written: July's salaries paid on 30 June are July's, a bill paid ahead belongs to the month it is for; the forms offer the three months after the date's** | **done** — piece 3b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner marks the two July-tab tool payments July on the local database (the permission check refused this session's write): the steps are in #165** |
 | 164 | **Accounts ▸ Bank status: the boss's BANK STATUS table, a books month at a time — Opening, In, Out, Fee, Closing in taka and dollars, Check from reconciliation, Note typed in the row** | **done** — piece 4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. May reads the sheet exactly on a copy of Neon. **Still open: piece 3b** (writing a later books month) was not done before this; see #164 |
 | 162 | **The month an entry belongs to, written: `booksMonth` on every door, payroll and bank charges taking it by themselves, "Belongs to month" on the forms, the Assistant's map, the Excel column, the "May books" mark** | **done** — piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. No total changed. **Next: piece 3** (the month views read it) |
@@ -142,6 +143,58 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 166. Bank status: the revaluation in the Opening — 13 Oct 2026
+
+Piece 4b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **Only Accounts ▸ Bank
+status changed.** Every other screen still counts an Exchange gain or loss as in or out.
+
+**The fold** (`accounts/bank-status.service.ts`):
+- A row in **Exchange gain** or **Exchange loss** (`isRevaluation`: slug `exchange-gain` /
+  `exchange-loss`, or the name; coalesced, since a transfer has no category) leaves IN, OUT and
+  Fee.
+- That month's gain less loss is added to the Opening: previous Closing + gain − loss. Dollars
+  fold the same way.
+- The **Closing does not move**, by construction.
+- The API row gains `revaluation` (taka and dollars, already inside `opening`), and the totals
+  carry it too.
+
+**The page:** under an Opening that holds a revaluation, a small line reads "incl. ৳3,132.00
+revaluation", with a tooltip. The note under the table says why an Opening can differ from last
+month's Closing. Built from `Amount` as it is; nothing under `ui/`, `money/`, `lib/` or
+`packages/shared` changed.
+
+**Measured on a docker copy of Neon** (postgres:17 on :55437; this API, compiled to a throwaway
+folder, on :4098). The copy, the server and the folder were removed afterwards.
+`.bankstatusqa.mjs`, updated: **32/32.**
+- **June JPMorgan: Opening 8,52,252 (revaluation 3,132), IN 0**, as in the sheet.
+- **July Payoneer: IN 0, Opening 2,01,569.94** (revaluation 525.08). The sheet has 2,01,569.9404.
+- Every month Jan–Dec, every account:
+  - the row adds up in both currencies;
+  - Opening less the revaluation is last month's Closing;
+  - the revaluation equals the gain and loss rows, counted in plain SQL;
+  - **Closing = Accounts at the month end** (so no Closing moved);
+  - IN + gain and OUT + Fee + loss equal the Dashboard's figures.
+- May still reads the brief's table, and Check, Note and archived accounts are as in #164.
+
+**Found on the copy: piece 3b's data step is done on Neon.** TXN-2026-000105 and
+TXN-2026-000122 carry books month July, updated at 11:52–11:53 on 13 Oct. #165's session was
+refused that write, so somebody did it by hand. That is why July Payoneer reads the sheet.
+
+**Open point for the owner — the Opening's dollars.** The sheet keeps a dollar account's
+dollars when it revalues: June JPMorgan opens **$6,960**, the same as May's close. The app reads
+the gain row's dollars from its rate (৳3,132 → $25.58), so the page shows **$6,985.58**. This is
+not new: before 4b the $25.58 sat in IN, and Accounts' own dollar balance counts it too
+(`rowSignedDollars`, shared with Accounts). The same is true of July Payoneer: $4.28. Making a
+revaluation carry $0 changes Accounts' dollar balance, so it is the owner's call and its own
+session. One option is to record the gain row with USD 0 stated.
+
+Build, typecheck, lint and test all green (460 tests). The dev servers on :3000 and :4001 were not
+touched. **No browser pass:** the hint is one conditional line; typecheck and lint cover it,
+not its look.
+
+**Next:** the owner checks May–August on Bank status in the local app before anything goes to
+live.
 
 ## 165. A later books month, written — 13 Oct 2026
 

@@ -30,6 +30,11 @@ export type BankStatusRow = {
   currency: string;
   isActive: boolean;
   opening: BothCurrencies;
+  /**
+   * The month's Exchange gain less Exchange loss, already inside `opening`
+   * (piece 4b): the sheet revalues a dollar account into the Opening.
+   */
+  revaluation: BothCurrencies;
   moneyIn: BothCurrencies;
   moneyOut: BothCurrencies;
   fee: BothCurrencies;
@@ -72,6 +77,10 @@ export type BankStatus = {
  * construction, and Closing lands on what Accounts shows "at the end of" the
  * same month: both count a row the same way (voided rows out, nothing else).
  *
+ * A revaluation (Exchange gain or loss) is folded into the Opening, as the
+ * sheet shows it, and leaves IN and OUT (piece 4b). The Closing is the same
+ * either way; only this page folds it.
+ *
  * The dollars are each row's own, through the same expression an account's
  * own-currency balance uses (`rowSignedDollars`), never a month's taka
  * divided by one rate.
@@ -91,15 +100,19 @@ export class BankStatusService {
     const live = sql`${transactions.id} is not null and ${transactions.voidedAt} is null`;
     const before = sql`${live} and ${beforeBooksPeriod(start)}`;
     const during = sql`${live} and ${inBooksPeriod(start, end)}`;
-    const isIn = sql`${during} and ${transactions.direction} = 'in'`;
-    const isOut = sql`${during} and ${transactions.direction} = 'out' and not ${isFee}`;
-    const isFeeRow = sql`${during} and ${transactions.direction} = 'out' and ${isFee}`;
+    const isReval = sql`${during} and ${isRevaluation}`;
+    const flows = sql`${during} and not ${isRevaluation}`;
+    const isIn = sql`${flows} and ${transactions.direction} = 'in'`;
+    const isOut = sql`${flows} and ${transactions.direction} = 'out' and not ${isFee}`;
+    const isFeeRow = sql`${flows} and ${transactions.direction} = 'out' and ${isFee}`;
 
     /* The stated opening counts from the month it was stated in on. */
     const opened = sql`${accounts.openingBalanceOn} <= ${end}`;
 
+    const revalBdt = sql`coalesce(sum(${transactions.signedAmount}) filter (where ${isReval}), 0)::numeric(14,2)`;
     const openBdt = sql`(case when ${opened} then ${accounts.openingBalance} else 0 end
-      + coalesce(sum(${transactions.signedAmount}) filter (where ${before}), 0))::numeric(14,2)`;
+      + coalesce(sum(${transactions.signedAmount}) filter (where ${before}), 0)
+      + ${revalBdt})::numeric(14,2)`;
     const inBdt = sql`coalesce(sum(${transactions.amount}) filter (where ${isIn}), 0)::numeric(14,2)`;
     const outBdt = sql`coalesce(sum(${transactions.amount}) filter (where ${isOut}), 0)::numeric(14,2)`;
     const feeBdt = sql`coalesce(sum(${transactions.amount}) filter (where ${isFeeRow}), 0)::numeric(14,2)`;
@@ -111,8 +124,10 @@ export class BankStatusService {
      * cents, a month's closing is the next one's opening exactly.
      */
     const usd = sql`round(${rowSignedDollars}, 2)`;
+    const revalUsd = sql`coalesce(sum(${usd}) filter (where ${isReval}), 0)::numeric(14,2)`;
     const openUsd = sql`(case when ${opened} then coalesce(${accounts.openingBalanceUsd}, 0) else 0 end
-      + coalesce(sum(${usd}) filter (where ${before}), 0))::numeric(14,2)`;
+      + coalesce(sum(${usd}) filter (where ${before}), 0)
+      + ${revalUsd})::numeric(14,2)`;
     const inUsd = sql`coalesce(sum(${usd}) filter (where ${isIn}), 0)::numeric(14,2)`;
     /* Money out is negative in the signed dollars; the columns show it as spent. */
     const outUsd = sql`(-coalesce(sum(${usd}) filter (where ${isOut}), 0))::numeric(14,2)`;
@@ -131,11 +146,13 @@ export class BankStatusService {
         currency: accounts.currency,
         isActive: accounts.isActive,
         openBdt: text(openBdt),
+        revalBdt: text(revalBdt),
         inBdt: text(inBdt),
         outBdt: text(outBdt),
         feeBdt: text(feeBdt),
         closeBdt: closingOf(openBdt, inBdt, outBdt, feeBdt),
         openUsd: text(openUsd),
+        revalUsd: text(revalUsd),
         inUsd: text(inUsd),
         outUsd: text(outUsd),
         feeUsd: text(feeUsd),
@@ -183,6 +200,7 @@ export class BankStatusService {
         currency: row.currency,
         isActive: row.isActive,
         opening: both(row.openBdt, row.openUsd),
+        revaluation: both(row.revalBdt, row.revalUsd),
         moneyIn: both(row.inBdt, row.inUsd),
         moneyOut: both(row.outBdt, row.outUsd),
         fee: both(row.feeBdt, row.feeUsd),
@@ -336,6 +354,17 @@ const isFee = sql`coalesce(${transactions.chargeForId} is not null
                  and (p.slug = 'bank-charges' or p.name ilike '%bank charge%')))),
   false)`;
 
+/**
+ * A revaluation: a row filed under Exchange gain or Exchange loss — how the
+ * app records a dollar account moved to the month's rate on the 1st. Coalesced
+ * for the same reason as `isFee`: a transfer has no category.
+ */
+const isRevaluation = sql`coalesce(${transactions.categoryId} in (
+    select c.id from categories c
+     where c.slug in ('exchange-gain', 'exchange-loss')
+        or c.name ilike 'exchange gain' or c.name ilike 'exchange loss'),
+  false)`;
+
 /** The 1st of a month, as its range; anything else is refused. */
 function rangeOf(month: string) {
   const match = /^(\d{4})-(\d{2})-01$/.exec(month);
@@ -360,6 +389,7 @@ function totalsOf(rows: BankStatusRow[]): BankStatus["totals"] {
   });
   return {
     opening: sum((r) => r.opening),
+    revaluation: sum((r) => r.revaluation),
     moneyIn: sum((r) => r.moneyIn),
     moneyOut: sum((r) => r.moneyOut),
     fee: sum((r) => r.fee),

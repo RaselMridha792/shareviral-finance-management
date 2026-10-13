@@ -131,7 +131,11 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
                         </p>
                       ) : null}
                     </td>
-                    <MoneyCell value={row.opening} exact={row.usdExact} />
+                    <MoneyCell
+                      value={row.opening}
+                      exact={row.usdExact}
+                      revaluation={row.revaluation}
+                    />
                     <MoneyCell value={row.moneyIn} exact={row.usdExact} />
                     <MoneyCell value={row.moneyOut} exact={row.usdExact} />
                     <MoneyCell value={row.fee} exact={row.usdExact} />
@@ -163,6 +167,7 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
                   <MoneyCell
                     value={status.totals.opening}
                     exact={status.totals.usdExact}
+                    revaluation={status.totals.revaluation}
                   />
                   <MoneyCell
                     value={status.totals.moneyIn}
@@ -197,22 +202,32 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
         date. Fee is the Bank charges heading; Out is every other payment and
         transfer out. Dollars are each entry&apos;s own; a ~ means some entry
         had none and was read at that day&apos;s rate. Check reads Matched once
-        a statement covering the month is reconciled in Reports.
+        a statement covering the month is reconciled in Reports. A dollar
+        account&apos;s revaluation (Exchange gain or loss) is part of its
+        Opening, as in the sheet, so that Opening can differ from last
+        month&apos;s Closing; the line under it says by how much.
       </p>
     </>
   );
 }
 
-/** Taka, and the dollars the rows carried small under it. */
+/**
+ * Taka, and the dollars the rows carried small under it. On the Opening, a
+ * month's revaluation is named under both, so an Opening that differs from
+ * last month's Closing does not read as a fault.
+ */
 function MoneyCell({
   value,
   exact,
   strong = false,
+  revaluation,
 }: {
   value: BothCurrencies;
   exact: boolean;
   strong?: boolean;
+  revaluation?: BothCurrencies;
 }) {
+  const revalued = revaluation && Number(revaluation.bdt) !== 0;
   return (
     <td className="text-right">
       <Amount
@@ -227,6 +242,21 @@ function MoneyCell({
         showCounterpart={false}
         className="block text-xs font-normal text-muted-foreground"
       />
+      {revalued ? (
+        <span
+          className="block text-xs font-normal text-muted-foreground"
+          data-revaluation={revaluation.bdt}
+          title="This month's revaluation (Exchange gain or loss) is part of the Opening, as in the sheet"
+        >
+          incl.{" "}
+          <Amount
+            value={revaluation.bdt}
+            showCounterpart={false}
+            className="font-normal"
+          />{" "}
+          revaluation
+        </span>
+      ) : null}
     </td>
   );
 }

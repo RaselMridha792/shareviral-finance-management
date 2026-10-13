@@ -16,6 +16,8 @@ export type BankStatusRow = {
   currency: string;
   isActive: boolean;
   opening: BothCurrencies;
+  /** The month's exchange gain less loss, already inside `opening`. */
+  revaluation: BothCurrencies;
   moneyIn: BothCurrencies;
   moneyOut: BothCurrencies;
   fee: BothCurrencies;
@@ -34,7 +36,13 @@ export type BankStatus = {
   rows: BankStatusRow[];
   totals: Pick<
     BankStatusRow,
-    "opening" | "moneyIn" | "moneyOut" | "fee" | "closing" | "usdExact"
+    | "opening"
+    | "revaluation"
+    | "moneyIn"
+    | "moneyOut"
+    | "fee"
+    | "closing"
+    | "usdExact"
   >;
 };
 
