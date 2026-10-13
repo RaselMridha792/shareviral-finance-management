@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 167 | **Schema: Check ticked by hand on Bank status — `account_month_checks`, a row per account per month ticked** | **done** — piece 4d-1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, applied on the local database. **Next: piece 4d-2** (the service and the tick on the page) |
 | 166 | **Bank status: a dollar account's revaluation (Exchange gain / loss) sits in the Opening, as in the sheet, with a line under it saying so; IN and OUT no longer carry it** | **done** — piece 4b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. June JPMorgan opens 8,52,252 with IN 0. **One open point for the owner: the Opening's dollars, see #166** |
 | 165 | **A later books month, written: July's salaries paid on 30 June are July's, a bill paid ahead belongs to the month it is for; the forms offer the three months after the date's** | **done** — piece 3b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner marks the two July-tab tool payments July on the local database (the permission check refused this session's write): the steps are in #165** |
 | 164 | **Accounts ▸ Bank status: the boss's BANK STATUS table, a books month at a time — Opening, In, Out, Fee, Closing in taka and dollars, Check from reconciliation, Note typed in the row** | **done** — piece 4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. May reads the sheet exactly on a copy of Neon. **Still open: piece 3b** (writing a later books month) was not done before this; see #164 |
@@ -143,6 +144,26 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 167. Schema: Check ticked by hand on Bank status — 13 Oct 2026
+
+Piece 4d-1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **A schema change,
+pushed alone. Nothing reads the new table yet.**
+
+**`deploy/sql/2026-10-13-bank-status-checks.sql`:** `account_month_checks` (id; account_id →
+accounts, on delete cascade; month, checked to be a 1st; checked_by → users, on delete set
+null; checked_at not null default now()), unique (account_id, month). A row means ticked;
+unticking will delete it. Its own table rather than a column on `account_month_notes`, for the
+brief's reason (a note row dies with its note).
+
+**Drizzle:** `db/schema/account-month-checks.ts`, exported from the barrel.
+
+**Measured on the local (Neon) database.** Only this file was applied, by a throwaway script,
+not `node .sql.mjs` (same reason as #161). Run twice; the second changed nothing. The five
+columns are there, and the check refuses `2026-05-02`. Build, typecheck, lint and test green.
+
+**Next: piece 4d-2** (the service, `PUT /accounts/bank-status/check`, the tick on the page),
+in its own session, after this deploy has applied the table on live.
 
 ## 166. Bank status: the revaluation in the Opening — 13 Oct 2026
 
