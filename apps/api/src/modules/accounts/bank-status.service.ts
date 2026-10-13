@@ -8,8 +8,10 @@ import { and, asc, eq, gte, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 
 import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
+import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import {
+  accountMonthChecks,
   accountMonthNotes,
   accounts,
   statements,
@@ -46,6 +48,14 @@ export type BankStatusRow = {
     updatedAt: string;
     updatedBy: string | null;
   } | null;
+  /**
+   * Check ticked by hand for this account and month (piece 4d), or null.
+   * Check reads Matched when this is set or the month is reconciled.
+   */
+  check: {
+    checkedAt: string;
+    checkedBy: string | null;
+  } | null;
 };
 
 export type BankStatus = {
@@ -64,6 +74,7 @@ export type BankStatus = {
     | "currency"
     | "isActive"
     | "note"
+    | "check"
   >;
 };
 
@@ -174,7 +185,7 @@ export class BankStatusService {
     /* Every active account; an archived one only when money moved that month. */
     const shown = rows.filter((row) => row.isActive || row.moved > 0);
 
-    const [notes, reconciled] = await Promise.all([
+    const [notes, checks, reconciled] = await Promise.all([
       this.db.client
         .select({
           accountId: accountMonthNotes.accountId,
@@ -185,13 +196,24 @@ export class BankStatusService {
         .from(accountMonthNotes)
         .leftJoin(users, eq(users.id, accountMonthNotes.updatedBy))
         .where(eq(accountMonthNotes.month, start)),
+      this.db.client
+        .select({
+          accountId: accountMonthChecks.accountId,
+          checkedAt: accountMonthChecks.checkedAt,
+          checkedBy: users.fullName,
+        })
+        .from(accountMonthChecks)
+        .leftJoin(users, eq(users.id, accountMonthChecks.checkedBy))
+        .where(eq(accountMonthChecks.month, start)),
       this.isReconciled(start, end),
     ]);
     const noteOf = new Map(notes.map((note) => [note.accountId, note]));
+    const checkOf = new Map(checks.map((check) => [check.accountId, check]));
 
     const both = (bdt: string, usd: string): BothCurrencies => ({ bdt, usd });
     const out: BankStatusRow[] = shown.map((row) => {
       const note = noteOf.get(row.accountId);
+      const check = checkOf.get(row.accountId);
       return {
         accountId: row.accountId,
         name: row.name,
@@ -211,6 +233,12 @@ export class BankStatusService {
               text: note.text,
               updatedAt: note.updatedAt.toISOString(),
               updatedBy: note.updatedBy,
+            }
+          : null,
+        check: check
+          ? {
+              checkedAt: check.checkedAt.toISOString(),
+              checkedBy: check.checkedBy,
             }
           : null,
       };
@@ -305,6 +333,95 @@ export class BankStatusService {
 
       return { note: { text, updatedAt: saved.updatedAt.toISOString() } };
     });
+  }
+
+  /**
+   * Ticks or unticks one row's Check by hand (piece 4d). Unticking deletes the
+   * hand tick only: a reconciled month still reads Matched. Audited both ways;
+   * ticking what is already ticked, or unticking what is not, changes nothing.
+   *
+   * Like a note, a tick is the person's word that the row agrees with the
+   * bank, not money, so a closed period does not stop it.
+   */
+  async saveCheck(
+    input: { accountId: string; month: string; checked: boolean },
+    actor: AuthenticatedUser,
+  ) {
+    const { start, label } = rangeOf(input.month);
+
+    const [account] = await this.db.client
+      .select({ id: accounts.id, name: accounts.name })
+      .from(accounts)
+      .where(and(eq(accounts.id, input.accountId), isNull(accounts.deletedAt)))
+      .limit(1);
+    if (!account) throw new NotFoundException("No such account");
+
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(accountMonthChecks)
+        .where(
+          and(
+            eq(accountMonthChecks.accountId, account.id),
+            eq(accountMonthChecks.month, start),
+          ),
+        )
+        .limit(1);
+
+      if (!input.checked) {
+        if (!existing) return { check: null };
+        await tx
+          .delete(accountMonthChecks)
+          .where(eq(accountMonthChecks.id, existing.id));
+        await this.audit.record(tx, {
+          action: "delete",
+          entityTable: "account_month_checks",
+          entityId: existing.id,
+          module: "accounts",
+          summary: `Unticked the Bank status check for ${account.name}, ${label}`,
+          before: existing,
+        });
+        return { check: null };
+      }
+
+      if (existing) {
+        return { check: await this.checkOut(tx, existing) };
+      }
+
+      const [saved] = await tx
+        .insert(accountMonthChecks)
+        .values({ accountId: account.id, month: start, checkedBy: actor.id })
+        .returning();
+
+      await this.audit.record(tx, {
+        action: "create",
+        entityTable: "account_month_checks",
+        entityId: saved.id,
+        module: "accounts",
+        summary: `Ticked the Bank status check for ${account.name}, ${label}`,
+        after: saved,
+      });
+
+      return { check: await this.checkOut(tx, saved) };
+    });
+  }
+
+  /** A tick as the page reads it: when, and the name of who ticked it. */
+  private async checkOut(
+    tx: DbTransaction,
+    check: typeof accountMonthChecks.$inferSelect,
+  ) {
+    const [who] = check.checkedBy
+      ? await tx
+          .select({ name: users.fullName })
+          .from(users)
+          .where(eq(users.id, check.checkedBy))
+          .limit(1)
+      : [];
+    return {
+      checkedAt: check.checkedAt.toISOString(),
+      checkedBy: who?.name ?? null,
+    };
   }
 
   /**

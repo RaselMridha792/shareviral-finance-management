@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 168 | **Bank status: Check ticked by hand — a tick box per row for the Super Admin and CFO, "By hand" or "Reconciled" under Matched, who and when on hover, audited** | **done** — piece 4d-2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner tries it on the live site**: tick a row, reload, untick |
 | 167 | **Schema: Check ticked by hand on Bank status — `account_month_checks`, a row per account per month ticked** | **done** — piece 4d-1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, applied on the local database. **Next: piece 4d-2** (the service and the tick on the page) |
 | 166 | **Bank status: a dollar account's revaluation (Exchange gain / loss) sits in the Opening, as in the sheet, with a line under it saying so; IN and OUT no longer carry it** | **done** — piece 4b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. June JPMorgan opens 8,52,252 with IN 0. **One open point for the owner: the Opening's dollars, see #166** |
 | 165 | **A later books month, written: July's salaries paid on 30 June are July's, a bill paid ahead belongs to the month it is for; the forms offer the three months after the date's** | **done** — piece 3b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner marks the two July-tab tool payments July on the local database (the permission check refused this session's write): the steps are in #165** |
@@ -144,6 +145,40 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 168. Bank status: Check ticked by hand — 13 Oct 2026
+
+Piece 4d-2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. Pushed after #167's
+schema had deployed (live answered `f4f6006` first).
+
+**API.** Each Bank status row gains `check: { checkedAt, checkedBy } | null`, read from
+`account_month_checks`. `PUT /accounts/bank-status/check` (`{ accountId, month, checked }`,
+`accounts.write`) inserts or deletes the row; both are audited ("Ticked / Unticked the Bank
+status check for X, May 2026"). Ticking what is ticked, or unticking what is not, writes
+nothing. Allowed in a locked month, as a note is. The Assistant's map names the new form.
+
+**Page.** The Check cell: a tick box for writers (Super Admin, CFO), then Matched or the dash,
+and a small line saying which — "By hand", "Reconciled" or "By hand · reconciled". Hovering
+shows who ticked it and when. The CEO sees the same with no box. Unticking a reconciled month
+leaves it Matched. The Total row still reads the reconciliation alone. Nothing under `ui/`,
+`money/`, `lib/` or `packages/shared` changed.
+
+**Measured on a docker copy of Neon** (postgres:17 on :55438; this API compiled to a throwaway
+folder on :4099; a copy of `apps/web` built and started on :3099). All removed afterwards.
+- `.bankcheckqa.mjs` (new, needs `BS_DB`): **27/27** — tick, reload, still ticked, by whom;
+  the account and the month beside it not; a second tick no second row or audit; untick deletes;
+  a reconciled month Matched with no tick and after tick + untick; the CEO sees it and gets 403
+  both ways; 400 for a mid-month date or a non-boolean, 404 for an unknown account; the audit
+  holds create and delete.
+- `.bankcheckuiqa.mjs` (new, needs `BS_DB`, `BS_WEB`): **15/15** — the box, "Matched / By
+  hand", the hover, the database, a reload, the CEO without a box, untick, a reconciled month,
+  no sideways scroll at 1440/1180/900.
+- **For the next UI harness:** build the web copy with `MSYS_NO_PATHCONV=1`. Git Bash turned
+  `NEXT_PUBLIC_API_URL=/api` into `C:/Program Files/Git/api`, and every client call failed.
+
+Build, typecheck, lint and test green (460 tests).
+
+**Next in the brief: piece 4c** (a revaluation is worth $0) waits for the owner's yes.
 
 ## 167. Schema: Check ticked by hand on Bank status — 13 Oct 2026
 

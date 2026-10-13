@@ -21,7 +21,7 @@ export const ACCOUNTS_MAP = [
       {
         href: "/accounts/bank-status",
         name: "Bank status",
-        does: "One books month, one row per account, as the boss's BANK STATUS sheet: Opening, In, Out, Fee (the Bank charges heading) and Closing, each in taka and in the entries' own dollars, then Check and Note. A month is the month an entry belongs to, so May's funding dated 9 June is in May. Opening is the month before's Closing; Closing is what Accounts shows at the end of the month. Check reads Matched once a statement covering the month is reconciled.",
+        does: "One books month, one row per account, as the boss's BANK STATUS sheet: Opening, In, Out, Fee (the Bank charges heading) and Closing, each in taka and in the entries' own dollars, then Check and Note. A month is the month an entry belongs to, so May's funding dated 9 June is in May. Opening is the month before's Closing; Closing is what Accounts shows at the end of the month. Check reads Matched when that account's month is ticked by hand, or once a statement covering the month is reconciled; the cell says which.",
       },
       {
         href: "/accounts/[id]",
@@ -112,6 +112,19 @@ export const ACCOUNTS_MAP = [
         },
         onSave:
           "Keeps one note per account per books month, shown to anyone who reads Accounts. Changes no figure; allowed in a locked month. Every write and clear is audited.",
+        permission: "accounts.write",
+      },
+      {
+        name: "Bank status check",
+        on: "/accounts/bank-status",
+        opens: "the tick box in an account's Check cell",
+        saves: ["PUT /accounts/bank-status/check"],
+        fields: {
+          checked:
+            "true ticks this account's month by hand; false removes the hand tick",
+        },
+        onSave:
+          "Marks the row Matched by hand, with who ticked it and when. Unticking removes only the hand tick: a reconciled month still reads Matched. Changes no figure; allowed in a locked month. Both are audited.",
         permission: "accounts.write",
       },
       {

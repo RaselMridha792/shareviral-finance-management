@@ -22,6 +22,7 @@ import { ApiError } from "@/lib/api-client";
 import {
   bankStatusApi,
   type BankStatus,
+  type BankStatusCheck,
   type BankStatusRow,
   type BothCurrencies,
 } from "./bank-status-api";
@@ -145,7 +146,13 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
                       strong
                     />
                     <td>
-                      <CheckMark reconciled={status.reconciled} />
+                      <CheckCell
+                        key={`${status.month}:${row.accountId}`}
+                        row={row}
+                        month={status.month}
+                        reconciled={status.reconciled}
+                        canWrite={canWrite}
+                      />
                     </td>
                     <td className="cell-prose">
                       <NoteCell
@@ -201,11 +208,12 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
         A month is the month an entry belongs to, which can differ from its
         date. Fee is the Bank charges heading; Out is every other payment and
         transfer out. Dollars are each entry&apos;s own; a ~ means some entry
-        had none and was read at that day&apos;s rate. Check reads Matched once
-        a statement covering the month is reconciled in Reports. A dollar
-        account&apos;s revaluation (Exchange gain or loss) is part of its
-        Opening, as in the sheet, so that Opening can differ from last
-        month&apos;s Closing; the line under it says by how much.
+        had none and was read at that day&apos;s rate. Check reads Matched when
+        the row is ticked by hand, or once a statement covering the month is
+        reconciled in Reports; the cell says which. A dollar account&apos;s
+        revaluation (Exchange gain or loss) is part of its Opening, as in the
+        sheet, so that Opening can differ from last month&apos;s Closing; the
+        line under it says by how much.
       </p>
     </>
   );
@@ -261,12 +269,99 @@ function MoneyCell({
   );
 }
 
-/** Never typed: the app's own reconciliation decides it. */
+/** The Total row: only the app's own reconciliation decides it. */
 function CheckMark({ reconciled }: { reconciled: boolean }) {
   return reconciled ? (
     <StatusPill tone="positive">Matched</StatusPill>
   ) : (
     <span className="text-muted-foreground">—</span>
+  );
+}
+
+/**
+ * A row's Check: Matched when the row is ticked by hand or the month is
+ * reconciled, and the line under it says which. Writers get the tick box;
+ * unticking removes the hand tick only, so a reconciled month stays Matched.
+ */
+function CheckCell({
+  row,
+  month,
+  reconciled,
+  canWrite,
+}: {
+  row: BankStatusRow;
+  month: string;
+  reconciled: boolean;
+  canWrite: boolean;
+}) {
+  const [check, setCheck] = useState<BankStatusCheck | null>(row.check);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const matched = Boolean(check) || reconciled;
+  const byHand = check
+    ? `Ticked by ${check.checkedBy ?? "someone since removed"} on ${new Date(
+        check.checkedAt,
+      ).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`
+    : undefined;
+  const source = check
+    ? reconciled
+      ? "By hand · reconciled"
+      : "By hand"
+    : reconciled
+      ? "Reconciled"
+      : null;
+
+  async function toggle(next: boolean) {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const result = await bankStatusApi.saveCheck(row.accountId, month, next);
+      setCheck(result.check);
+    } catch (caught) {
+      setMessage(
+        caught instanceof ApiError
+          ? caught.message
+          : "Could not save the check",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div data-check={check ? "hand" : reconciled ? "reconciled" : "none"}>
+      <div className="flex items-center gap-2">
+        {canWrite ? (
+          <input
+            type="checkbox"
+            aria-label={`Check ${row.bankName || row.name} by hand`}
+            checked={Boolean(check)}
+            disabled={saving}
+            title={byHand ?? "Tick when this row agrees with the bank"}
+            onChange={(event) => void toggle(event.target.checked)}
+            className="size-4 accent-primary"
+          />
+        ) : null}
+        {matched ? (
+          <span title={byHand}>
+            <StatusPill tone="positive">Matched</StatusPill>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </div>
+      {source ? (
+        <p className="mt-0.5 text-xs text-muted-foreground" title={byHand}>
+          {source}
+        </p>
+      ) : null}
+      {message ? (
+        <p role="alert" className="mt-1 text-xs text-negative">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

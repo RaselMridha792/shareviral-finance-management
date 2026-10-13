@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/api-client";
 
 /*
- * Accounts ▸ Bank status's two calls, kept beside the screen rather than in
+ * Accounts ▸ Bank status's three calls, kept beside the screen rather than in
  * `lib/`: nothing else reads them, and `lib/` is shared by every screen.
  */
 
@@ -25,7 +25,11 @@ export type BankStatusRow = {
   /** False when some row's dollars were read at the day's rate. */
   usdExact: boolean;
   note: { text: string; updatedAt: string; updatedBy: string | null } | null;
+  /** Ticked by hand for this account and month, or null. */
+  check: BankStatusCheck | null;
 };
+
+export type BankStatusCheck = { checkedAt: string; checkedBy: string | null };
 
 export type BankStatus = {
   /** The books month, as its first day. */
@@ -61,4 +65,11 @@ export const bankStatusApi = {
         body: JSON.stringify({ accountId, month, note }),
       },
     ),
+
+  /** False removes the hand tick; a reconciled month stays Matched. */
+  saveCheck: (accountId: string, month: string, checked: boolean) =>
+    apiFetch<{ check: BankStatusCheck | null }>("/accounts/bank-status/check", {
+      method: "PUT",
+      body: JSON.stringify({ accountId, month, checked }),
+    }),
 };

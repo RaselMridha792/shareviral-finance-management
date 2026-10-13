@@ -64,10 +64,18 @@ const bankStatusNoteSchema = z.object({
   note: z.string().max(500, "A note is at most 500 characters"),
 });
 
+/** Check ticked by hand; false removes the tick (piece 4d). */
+const bankStatusCheckSchema = z.object({
+  accountId: uuidSchema,
+  month: firstOfMonth,
+  checked: z.boolean(),
+});
+
 type CardPasswordBody = z.infer<typeof cardPasswordSchema>;
 type RevealBody = z.infer<typeof revealSchema>;
 type BankStatusQuery = z.infer<typeof bankStatusQuerySchema>;
 type BankStatusNoteBody = z.infer<typeof bankStatusNoteSchema>;
+type BankStatusCheckBody = z.infer<typeof bankStatusCheckSchema>;
 
 @Controller("accounts")
 export class AccountsController {
@@ -128,6 +136,16 @@ export class AccountsController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.bankStatus.saveNote(body, actor);
+  }
+
+  /** The Check column, ticked by hand; unticking leaves a reconciled month Matched. */
+  @Put("bank-status/check")
+  @RequirePermission("accounts.write")
+  saveBankStatusCheck(
+    @ZodBody(bankStatusCheckSchema) body: BankStatusCheckBody,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.bankStatus.saveCheck(body, actor);
   }
 
   @Get()
