@@ -280,6 +280,32 @@ What to change:
 **Measure it** on a copy that has the import: June JPMorgan reads Opening 8,52,252 with IN 0.
 Every month's Closing is unchanged.
 
+## Piece 4c — a revaluation is worth $0
+
+Piece 4b (`bd04ef6`, #166) found this. The sheet revalues a dollar account in taka only, so its
+dollars do not move: June opens JPMorgan at **$6,960**. The app turns the "Exchange gain" row
+into dollars at the row's rate, so it shows **$6,985.58**. The +$25.58 is ৳3,132 ÷ 122.45.
+Payoneer's July gain adds a few dollars the same way. These figures reach Accounts' own dollar
+balance too.
+
+The planning session's recommendation, pending the owner's yes:
+- **The rule.** A row in the **Exchange gain** or **Exchange loss** category counts **$0** in
+  every dollar figure:
+  - the dollar balance on Accounts;
+  - the dollar columns on Bank status and the Dashboard;
+  - `own-dollars.ts`.
+
+  Its taka is unchanged.
+- **Where the rule lives.** It sits in the one place the per-row dollar figure is worked out
+  (moved into a function by piece 4), not in each screen.
+- **The shared-code rule applies.** List every screen whose dollars move.
+
+**Measure it.** Write a harness:
+- June JPMorgan opens at **$6,960.00** on Bank status;
+- Accounts' dollar balance for JPMorgan is the same before and after, apart from the
+  revaluation rows;
+- every taka figure is unchanged.
+
 ## The data step, after pieces 1–4 are on the local database
 
 The owner is importing the boss's sheet a month at a time. The May tab is already in the local
