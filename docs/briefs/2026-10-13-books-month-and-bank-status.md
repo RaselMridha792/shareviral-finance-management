@@ -306,6 +306,56 @@ The planning session's recommendation, pending the owner's yes:
   revaluation rows;
 - every taka figure is unchanged.
 
+## Piece 4d — Check can be ticked by hand (the owner, 13 Oct)
+
+The owner: *"bank status a manual check marked manually o kora jabe"*.
+
+The rule today (piece 4) is that Check reads **Matched** only when the month's statement is
+reconciled in Reports. That record is for the whole company, so every row agrees. The owner
+also wants a tick per row, by hand, the way the sheet's Check column is filled in.
+
+- **The rule.** Check is **Matched** when either of these holds:
+  - **this account and this month** are ticked by hand;
+  - the month is reconciled.
+
+  The cell says which one. A hand tick shows who ticked it and when, for example on hover.
+- **Who.**
+  - People with `accounts.write` (Super Admin and CFO) can tick and untick. It is the same gate
+    as Note.
+  - Everyone with `accounts.read` sees the tick.
+  - Both ticking and unticking are audited.
+- **Unticking** removes the hand tick only. A reconciled month still reads Matched.
+
+### 4d-1, schema alone
+
+Add `deploy/sql/2026-10-13-bank-status-checks.sql`. It must be idempotent.
+
+- **A table of its own**, `account_month_checks`:
+  - `account_id` references `accounts`, on delete cascade;
+  - `month` is a date, checked to be the 1st of a month;
+  - `checked_by` references `users`, on delete set null;
+  - `checked_at timestamptz not null default now()`;
+  - `unique (account_id, month)`.
+- **Why not a column on `account_month_notes`:** there `note` is not null, and a row is gone
+  when its note is cleared. Either a tick would need a note to exist, or clearing a note would
+  untick the row.
+
+Update the Drizzle schema in the same commit, and add nothing that reads it. Run `node .sql.mjs`
+locally, and push it alone.
+
+### 4d-2, the page
+
+- **The service.** It reads the table, writes it with `PUT /accounts/bank-status/check` (body:
+  `{ accountId, month, checked }`), and deletes the row on untick.
+- **The page.** The Check cell gets a tick control for writers. Readers see the result only.
+
+**Measure it** with a harness:
+- tick, then reload, and the row still reads Matched by hand;
+- untick, and it no longer does;
+- a reconciled month still reads Matched with no tick;
+- a reader cannot tick (403);
+- the audit holds both changes.
+
 ## The data step, after pieces 1–4 are on the local database
 
 The owner is importing the boss's sheet a month at a time. The May tab is already in the local
