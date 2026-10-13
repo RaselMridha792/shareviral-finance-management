@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 169 | **Schema: TDS refunded to staff — `tds_refunds`, a row per refund naming the month whose TDS it hands back** | **done** — piece T1 of `docs/briefs/2026-10-13-tds-refunded-to-staff.md`, pushed alone, applied on the local database. **Next: piece T2** (the service, every reader of "owed", the page) |
 | 168 | **Bank status: Check ticked by hand — a tick box per row for the Super Admin and CFO, "By hand" or "Reconciled" under Matched, who and when on hover, audited** | **done** — piece 4d-2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner tries it on the live site**: tick a row, reload, untick |
 | 167 | **Schema: Check ticked by hand on Bank status — `account_month_checks`, a row per account per month ticked** | **done** — piece 4d-1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, applied on the local database. **Next: piece 4d-2** (the service and the tick on the page) |
 | 166 | **Bank status: a dollar account's revaluation (Exchange gain / loss) sits in the Opening, as in the sheet, with a line under it saying so; IN and OUT no longer carry it** | **done** — piece 4b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. June JPMorgan opens 8,52,252 with IN 0. **One open point for the owner: the Opening's dollars, see #166** |
@@ -145,6 +146,30 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 169. Schema: TDS refunded to staff — 13 Oct 2026
+
+Piece T1 of `docs/briefs/2026-10-13-tds-refunded-to-staff.md`. **A schema change, pushed alone.
+Nothing reads the new table yet.**
+
+**`deploy/sql/2026-10-13-tds-refunds.sql`:** `tds_refunds` — id; entity_id (nullable, as on
+every business table); period_year and period_month (integer, as on payroll runs; month checked
+1–12); amount numeric(14,2), checked > 0; refunded_on date; transaction_id → transactions, on
+delete set null; note; created_at / updated_at; created_by / updated_by → users, on delete set
+null; and the soft-delete trio `deleted_at` / `deleted_by` / `delete_reason`, as `tds_deposits`
+has. One index on (period_year, period_month) over live rows.
+
+**Drizzle:** `db/schema/tds-refunds.ts`, exported from the barrel.
+
+**Applied on the local database** — only this file, run twice (second run changed nothing), not
+the whole of `.sql.mjs`, so the older `files_one_owner` files were not replayed. Columns, the
+two checks and the three foreign keys read back as written. The four checks pass.
+
+**For T2:**
+- `seed-bulk.ts` will now print `tds_refunds` among tables it does not fill — add it to
+  `LEFT_ALONE` or seed it.
+- The table is not in the trash's list; if refunds are soft-deleted, decide whether the trash
+  shows them.
 
 ## 168. Bank status: Check ticked by hand — 13 Oct 2026
 
