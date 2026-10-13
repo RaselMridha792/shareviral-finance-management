@@ -251,6 +251,35 @@ Opening, IN, OUT, Fee and Closing each show BDT and USD.
   - Changing any of them is the ask-first rule.
   - Right-aligned money columns need the specific rule (CLAUDE.md, `text-right` on `thead th`).
 
+## Piece 4b — a revaluation is part of the Opening, as in the sheet
+
+Piece 4 is live as of `ea445cb`. Measured on the local database, which holds the whole import,
+every month's Closing matches the sheet. There are two exceptions:
+- **Payoneer in June**, which is piece 3b;
+- **how a dollar account's revaluation is shown.**
+
+The sheet revalues a dollar account at each month's rate and shows the new figure as that
+month's **Opening**, with IN at 0. The app records the same revaluation as an "Exchange gain"
+(or "Exchange loss") entry on the 1st (the owner, 13 Oct). The page counts that entry in IN:
+
+| Month | Account | The page | The sheet |
+|---|---|---|---|
+| June | JPMorgan | Opening 8,49,120, IN 3,132 | Opening 8,52,252, IN 0 |
+| July | Payoneer | IN 525 | IN 0 |
+
+What to change:
+- **The fold.** On Accounts ▸ Bank status only, rows in the **Exchange gain** and **Exchange
+  loss** categories join that month's Opening: previous Closing + gain − loss. They leave IN and
+  OUT.
+- **The Closing does not move.**
+- **A hint on the Opening** (or the cell) says it includes the month's revaluation. Otherwise an
+  Opening that differs from last month's Closing reads as a fault.
+- **The dollar columns** fold the same way.
+- **Other screens are unchanged.**
+
+**Measure it** on a copy that has the import: June JPMorgan reads Opening 8,52,252 with IN 0.
+Every month's Closing is unchanged.
+
 ## The data step, after pieces 1–4 are on the local database
 
 The owner is importing the boss's sheet a month at a time. The May tab is already in the local
