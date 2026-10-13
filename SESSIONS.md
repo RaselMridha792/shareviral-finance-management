@@ -757,6 +757,46 @@ auto-mode classifier as data exfiltration, because the file carries salaries:
 The owner decides how the file gets there. The two ways are their own `scp`, or allowing it. Do
 not work around it.
 
+**On live: done, 13 Oct 2026.** The owner ran the replay on the server. It took three runs,
+because the ledger resumed each one.
+
+| Month | Salaries | Tools |
+|---|---|---|
+| May | 4,91,258 (gross paid) | 2 |
+| June | 7,66,579 | 19 |
+| July | 14,99,277 | 19 |
+| August | 17,01,481 | 18 |
+
+**Beside the sheet.** The replay rebuilt every tab's BANK STATUS from live and set it beside the
+sheet. Every cell matches. The largest difference is **৳0.43**, which is the sheet's own typed
+June Payoneer closing against its arithmetic.
+- The two July tools charged in June count in July, because piece 3b was live first.
+- May's Payoneer is exact on live.
+
+**Before the write.** The owner took a dump:
+`/opt/sfm/deploy/backups/before-boss-import-2026-10-12_2152.sql.gz` (68K).
+
+**What the first two runs ran into.** Both stopped at July's payroll: "Somebody on that list was
+not employed in that month."
+- **Nizam Uddin (SVBE-01) was `contractor` on live**, as the HR portal sent him. The owner says
+  he is the Vice Chairman and a full-time employee.
+- He was set to `employee` **directly in the database**
+  (`update team_members set engagement_type = 'employee' where employee_code = 'SVBE-01'`).
+  **It is not in the audit log.**
+- **The HR portal still says contractor.** Unless it is fixed there, its next sync of him may
+  flip him back. Nothing already paid would change, but he would drop off future payroll.
+
+**Left on the server:**
+- `/root/boss-replay.mjs`, which carries salaries. **Delete it.**
+- `/opt/sfm/deploy/uploads/.boss-import-ledger.json`, the resume ledger. Delete it once the
+  owner has checked live.
+
+**The 8 people added on live:** Mahadad, Faisal, Zahin, Ishtiaque, Shahadat, Jasmine, Riaz and
+Khairul Bashar.
+- They have **no employee code**.
+- Their **joining dates are placeholders**: the 1st of the first month they were paid.
+- If the HR portal later sends the same people, finance will hold two of each.
+
 ## 159. The reset for real data: the script — 7 Oct 2026
 
 The brief: `docs/briefs/2026-10-04-reset-for-real-data.md`, step 1. An ops script only,
