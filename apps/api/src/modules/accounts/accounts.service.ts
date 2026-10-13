@@ -208,15 +208,14 @@ const currentBalance = balanceUpTo(null);
  * makes the answer approximate rather than wrong — `ownCurrencyExact` below is
  * what says so, and the screen marks it.
  */
-const ownBalanceUpTo = (asOf: string | null) => sql<string>`(
-  case when ${accounts.currency} = 'BDT' then (
-    ${openingUpTo(asOf, accounts.openingBalance)} + coalesce(
-      sum(${transactions.signedAmount}) filter (
-        where ${counted(asOf)}
-      ), 0)
-  ) else (
-  coalesce(${openingUpTo(asOf, accounts.openingBalanceUsd)}, 0) + coalesce(
-    sum(
+/**
+ * What one row moved in dollars, signed: in adds, out subtracts.
+ *
+ * The rule the paragraph above describes, as one expression so that
+ * Accounts ▸ Bank status (`bank-status.service.ts`) reads a row's dollars
+ * exactly as an account's own balance does, rather than in a third way.
+ */
+export const rowSignedDollars = sql<string>`(
       case
         when ${transactions.originalCurrency} = 'USD'
              and ${transactions.originalAmount} is not null
@@ -272,10 +271,33 @@ const ownBalanceUpTo = (asOf: string | null) => sql<string>`(
         ))
         else 0
       end
-    ) filter (where ${counted(asOf)}), 0)
+)`;
+
+const ownBalanceUpTo = (asOf: string | null) => sql<string>`(
+  case when ${accounts.currency} = 'BDT' then (
+    ${openingUpTo(asOf, accounts.openingBalance)} + coalesce(
+      sum(${transactions.signedAmount}) filter (
+        where ${counted(asOf)}
+      ), 0)
+  ) else (
+  coalesce(${openingUpTo(asOf, accounts.openingBalanceUsd)}, 0) + coalesce(
+    sum(${rowSignedDollars}) filter (where ${counted(asOf)}), 0)
   ) end
 )::numeric(14,2)::text`;
 const ownCurrencyBalance = ownBalanceUpTo(null);
+
+/**
+ * Whether a row's dollars above are its own (stated, or at its own rate)
+ * rather than read at the day's rate. Never null: see the note inside
+ * `ownExactUpTo` on why the outer coalesce is the whole of it.
+ */
+export const rowHasDollars = sql<boolean>`coalesce(
+      (${transactions.originalCurrency} = 'USD'
+        and ${transactions.originalAmount} is not null
+        and ${transactions.originalAmount} <> 0)
+      or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,
+      false
+    )`;
 
 /**
  * Whether that figure is a record or an estimate.
@@ -303,13 +325,7 @@ const ownExactUpTo = (asOf: string | null) => sql<boolean>`(
      * (No backticks in here: this comment lives inside a JS template
      * literal, and one of them ends the string.)
      */
-    coalesce(
-      (${transactions.originalCurrency} = 'USD'
-        and ${transactions.originalAmount} is not null
-        and ${transactions.originalAmount} <> 0)
-      or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,
-      false
-    )
+    ${rowHasDollars}
   ) filter (where ${counted(asOf)}), true))
 )`;
 const ownCurrencyExact = ownExactUpTo(null);

@@ -19,6 +19,11 @@ export const ACCOUNTS_MAP = [
         does: "Every account as a card with what it holds. An account is added, edited, archived or deleted here.",
       },
       {
+        href: "/accounts/bank-status",
+        name: "Bank status",
+        does: "One books month, one row per account, as the boss's BANK STATUS sheet: Opening, In, Out, Fee (the Bank charges heading) and Closing, each in taka and in the entries' own dollars, then Check and Note. A month is the month an entry belongs to, so May's funding dated 9 June is in May. Opening is the month before's Closing; Closing is what Accounts shows at the end of the month. Check reads Matched once a statement covering the month is reconciled.",
+      },
+      {
         href: "/accounts/[id]",
         name: "An account's own page",
         does: "One account: its details and what it holds.",
@@ -95,6 +100,18 @@ export const ACCOUNTS_MAP = [
         saves: ["DELETE /accounts/:id"],
         onSave:
           "Removes an archived account for good. Refused unless nothing points at it: no entries, payroll run, TDS challan or tax payment. Such an account stays archived, already out of every picker. An account in use is archived first.",
+        permission: "accounts.write",
+      },
+      {
+        name: "Bank status note",
+        on: "/accounts/bank-status",
+        opens: "the Note box in an account's row; saved when it loses focus",
+        saves: ["PUT /accounts/bank-status/note"],
+        fields: {
+          note: "a line of up to 500 characters; empty clears it",
+        },
+        onSave:
+          "Keeps one note per account per books month, shown to anyone who reads Accounts. Changes no figure; allowed in a locked month. Every write and clear is audited.",
         permission: "accounts.write",
       },
       {

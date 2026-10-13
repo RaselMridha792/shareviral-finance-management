@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
 } from "@nestjs/common";
 import {
   createAccountSchema,
@@ -24,6 +25,7 @@ import {
 } from "../../common/decorators/auth.decorators";
 import { ZodBody, ZodQuery } from "../../common/pipes/zod-validation.pipe";
 import { AccountsService } from "./accounts.service";
+import { BankStatusService } from "./bank-status.service";
 import { CardPasswordService } from "./card-password.service";
 import { CardSecretsService } from "./card-secrets.service";
 
@@ -48,8 +50,24 @@ const revealSchema = z.object({
   cardPassword: z.string().min(1, "Type the card password").max(200),
 });
 
+/** A books month, as its first day. */
+const firstOfMonth = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])-01$/, "A books month is the 1st of a month");
+
+const bankStatusQuerySchema = z.object({ month: firstOfMonth });
+
+const bankStatusNoteSchema = z.object({
+  accountId: uuidSchema,
+  month: firstOfMonth,
+  /** Empty clears the note. */
+  note: z.string().max(500, "A note is at most 500 characters"),
+});
+
 type CardPasswordBody = z.infer<typeof cardPasswordSchema>;
 type RevealBody = z.infer<typeof revealSchema>;
+type BankStatusQuery = z.infer<typeof bankStatusQuerySchema>;
+type BankStatusNoteBody = z.infer<typeof bankStatusNoteSchema>;
 
 @Controller("accounts")
 export class AccountsController {
@@ -57,6 +75,7 @@ export class AccountsController {
     private readonly accounts: AccountsService,
     private readonly cardPassword: CardPasswordService,
     private readonly cardSecrets: CardSecretsService,
+    private readonly bankStatus: BankStatusService,
   ) {}
 
   /**
@@ -89,6 +108,26 @@ export class AccountsController {
       { current: body.current ?? null, next: body.next },
       actor,
     );
+  }
+
+  /**
+   * Accounts ▸ Bank status for one books month. Above `@Get(":id")`, for the
+   * reason `card-password` is.
+   */
+  @Get("bank-status")
+  @RequirePermission("accounts.read")
+  bankStatusFor(@ZodQuery(bankStatusQuerySchema) query: BankStatusQuery) {
+    return this.bankStatus.month(query.month);
+  }
+
+  /** The Note column: typed by hand, empty clears it. */
+  @Put("bank-status/note")
+  @RequirePermission("accounts.write")
+  saveBankStatusNote(
+    @ZodBody(bankStatusNoteSchema) body: BankStatusNoteBody,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.bankStatus.saveNote(body, actor);
   }
 
   @Get()

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 164 | **Accounts ▸ Bank status: the boss's BANK STATUS table, a books month at a time — Opening, In, Out, Fee, Closing in taka and dollars, Check from reconciliation, Note typed in the row** | **done** — piece 4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. May reads the sheet exactly on a copy of Neon. **Still open: piece 3b** (writing a later books month) was not done before this; see #164 |
 | 162 | **The month an entry belongs to, written: `booksMonth` on every door, payroll and bank charges taking it by themselves, "Belongs to month" on the forms, the Assistant's map, the Excel column, the "May books" mark** | **done** — piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. No total changed. **Next: piece 3** (the month views read it) |
 | 161 | **Schema: the month an entry belongs to — `transactions.books_month` (NULL = the month of the date), its first-of-month check, `account_month_notes`, and the payroll backfill** | **done** — piece 1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, and applied on the local database. **Next: piece 2** (writing it: the API, the forms, payroll and fees taking it automatically) |
 | 160 | **The boss's sheet, imported by hand on the local database: the May tab, checked figure by figure against the sheet; and the brief for a books month and a Bank status page** | **local only, nothing on live** — the owner checks May in the local app; then pieces 1–4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The local (Neon) database was emptied on 12 Oct, at the owner's word: every harness login is gone — read #160 before running a harness** |
@@ -140,6 +141,99 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 164. Accounts ▸ Bank status — 13 Oct 2026
+
+Piece 4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **A new page,
+`/accounts/bank-status`**, under Accounts in the sidebar (after Cash In). It has a month picker
+(`MonthPicker`, unchanged) and opens on the current month.
+
+**The table, in the sheet's order:** SL, Account Name (the bank name, with the account's own name
+small under it), Opening, In, Out, Fee, Closing, Check, Note. A totals row closes it. Every money
+column shows taka, with the dollars small under it. The rows are every active account, plus an
+archived one only in a month it moved money.
+
+**The API** (`apps/api/src/modules/accounts/bank-status.service.ts`):
+- `GET /accounts/bank-status?month=2026-05-01` (`accounts.read`). `PUT /accounts/bank-status/note`
+  (`accounts.write`), where an empty note clears it. Both are declared above `@Get(":id")`.
+- **Months are books months**, through `beforeBooksPeriod` / `inBooksPeriod` from `books-month.ts`
+  (no new copy of the rule). A row counts the way Accounts and the Dashboard count it: voided
+  rows out. So Closing is Accounts "at the end of" that month, and Opening is the month before's
+  Closing.
+- **Fee** is an out row with `charge_for_id`, or in the Bank charges heading (slug
+  `bank-charges`, else a name like "bank charge", or a child of it). **Out** is every other out
+  row, transfers included.
+- **Dollars** go through `rowSignedDollars` / `rowHasDollars`. These were pulled out of
+  `accounts.service.ts`'s own-balance expression, not rewritten: `original_amount` when the row
+  states USD, else the row's own rate, else that day's rate (shown with `~`). Each row's dollars
+  are rounded to the cent before summing. Otherwise May's closing and June's opening differed by
+  one cent. Opening USD is `opening_balance_usd` plus the earlier rows.
+- **Check** is `statements` (Reports → Statement): **Matched** when a statement covering the whole
+  month is `reconciled` or `audited`, otherwise "—". It is company-wide, because reconciliation is
+  not per account. It is never typed.
+- **Note**: one row in `account_month_notes` per account per month. Saved on Enter or when the
+  box loses focus. Create, change and clear are each audited (`entity_table
+  account_month_notes`). A locked month does not stop a note.
+- The Assistant's map (`accounts/app-map.ts`) has the screen and the note form.
+
+**Shared code: none changed.** No `components/ui`, `components/money`, `lib/` or
+`packages/shared` file was touched. The page is built from `TableScroll`, `Th`, `SerialCell`,
+`TableMessageRow`, `Amount`, `StatusPill`, `Input` and `MonthPicker`, all used as they are. Its
+two API calls are in `components/accounts/bank-status-api.ts`, not `lib/`. `nav-items.ts` gained
+one child. `accounts.service.ts` only moved two SQL fragments into named exports. Accounts'
+answers are identical before and after: the dev API on :4001 (HEAD) against this build, 14
+questions (`/accounts`, `/accounts/balances`, `asOf` every month of 2026), figure for figure.
+
+**Measured on a docker copy of Neon** (postgres:17 on :55433, a pg_dump). This API ran on :4095,
+and a copy of `apps/web` was built and started on :3095. The copy, both servers and both build
+folders were removed afterwards.
+- `.bankstatusqa.mjs` (new; needs `BS_DB`): **29/29.**
+  - **May reads the brief's table exactly**:
+    - JPMorgan 17,08,000 / 8,54,000 / 4,880 / 8,49,120;
+    - Bank Asia 8,54,000 / 5,17,535.90 / 120 / 3,36,344.10;
+    - SCB 0;
+    - Payoneer 26,277.90 / 26,277.58 / 0 / 0.32 (the known ৳0.32).
+  - Every month Jan–Dec 2026, every account:
+    - the row adds up in both currencies (96/96);
+    - Opening = last month's Closing;
+    - Closing = Accounts as at the month end, and the dollars equal Accounts' own balance for a
+      USD account;
+    - In and Out + Fee = the Dashboard's figures;
+    - Fee = the Bank charges rows counted in plain SQL.
+  - Totals are the column sums.
+  - Check: off with nothing reconciled; Matched for a reconciled May statement or a quarter
+    around May; June not; a draft not; an audited one yes.
+  - Notes:
+    - write, change and clear, each audited;
+    - the CEO reads it and gets 403 writing it;
+    - a month that is not a 1st is refused 400.
+  - Archived accounts: one with no movement is hidden, one that moved money is shown.
+- `.bankstatusuiqa.mjs` (new; needs `BS_DB`, `BS_WEB`): **16/16.**
+  - The sidebar link works, and the page opens on October.
+  - May through the picker shows the sheet's figures.
+  - The five money headings and their cells are right-aligned.
+  - There is no sideways page scroll at 1440, 1180 or 900. The Note box fits at 1440.
+  - A note typed and saved with Enter reaches the database and comes back on reload.
+  - The CEO sees it with no box. Emptying the box clears it.
+- **Found while measuring:** a transfer has no category, so `category_id in (…)` is UNKNOWN, and
+  `not UNKNOWN` dropped every transfer from Out (JPMorgan's May read ৳0 out). Fixed with a
+  coalesce; the comment on `isFee` says so.
+
+Build, typecheck, lint and test all green (460 tests). The dev servers on :3000 and :4001 were not
+touched. `sfm-replay-db` on :55432 belongs to #160 and was not touched.
+
+**Not done / for the owner:**
+- **Piece 3b had not been done** when this started (`storedBooksMonth` still refuses a later
+  month). Piece 4 does not depend on it; the brief puts it first. It still needs its own session.
+- The brief's **data step** (marking the six May-tab entries dated in June) was already on Neon
+  (#163), which is why May matches today.
+- A stray build log is at **`F:\bsweb-build.log`** (a path slip). The safety check would not let
+  this session delete a file at a drive root. Delete it by hand.
+- `sheet-new.png` was already modified before this session and is not in this commit.
+- No browser pass in dark mode.
+
+**Next:** piece 3b, then the owner checks May on Bank status in the local app before anything
+goes to live.
 
 ## 163. The month views read the books month — 13 Oct 2026
 

@@ -21,6 +21,7 @@ import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { TableIcon } from "@phosphor-icons/react/dist/ssr/Table";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 
@@ -95,6 +96,14 @@ export const NAV_GROUPS: NavGroup[] = [
             href: "/accounts/cash-in",
             label: "Cash In",
             icon: HandCoinsIcon,
+            permission: "accounts.read",
+          },
+          {
+            // The boss's BANK STATUS table, a books month at a time.
+            key: "accounts-bank-status",
+            href: "/accounts/bank-status",
+            label: "Bank status",
+            icon: TableIcon,
             permission: "accounts.read",
           },
           {
