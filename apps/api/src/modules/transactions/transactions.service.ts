@@ -1314,8 +1314,7 @@ export class TransactionsService {
     /*
      * The month it belongs to after this edit: the one asked for, or the one
      * it has, judged against the date it will have. A date moved into the
-     * books month's own month leaves nothing to store; a date moved before
-     * the books month is refused, as on a new entry.
+     * books month's own month leaves nothing to store.
      */
     const nextBooksMonth = storedBooksMonth(
       input.txnDate ?? existing.txnDate,

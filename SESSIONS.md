@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 165 | **A later books month, written: July's salaries paid on 30 June are July's, a bill paid ahead belongs to the month it is for; the forms offer the three months after the date's** | **done** — piece 3b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner marks the two July-tab tool payments July on the local database (the permission check refused this session's write): the steps are in #165** |
 | 164 | **Accounts ▸ Bank status: the boss's BANK STATUS table, a books month at a time — Opening, In, Out, Fee, Closing in taka and dollars, Check from reconciliation, Note typed in the row** | **done** — piece 4 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. May reads the sheet exactly on a copy of Neon. **Still open: piece 3b** (writing a later books month) was not done before this; see #164 |
 | 162 | **The month an entry belongs to, written: `booksMonth` on every door, payroll and bank charges taking it by themselves, "Belongs to month" on the forms, the Assistant's map, the Excel column, the "May books" mark** | **done** — piece 2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. No total changed. **Next: piece 3** (the month views read it) |
 | 161 | **Schema: the month an entry belongs to — `transactions.books_month` (NULL = the month of the date), its first-of-month check, `account_month_notes`, and the payroll backfill** | **done** — piece 1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, and applied on the local database. **Next: piece 2** (writing it: the API, the forms, payroll and fees taking it automatically) |
@@ -141,6 +142,69 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 165. A later books month, written — 13 Oct 2026
+
+Piece 3b of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **An entry may now belong to
+a month after the one it is dated in.** Piece 3 already read it correctly; this lifts the refusal.
+
+**What changed:**
+- `storedBooksMonth` (`transactions/books-month.ts`) no longer refuses a later month. The date's
+  own month is still stored as null. An edit that moves the date before its books month now
+  keeps the books month instead of being refused.
+- **Payroll `pay`:** a run paid in any other month than its period takes the period, earlier or
+  later. July's run paid on 30 June is July's (the open question in #162, settled by the brief's
+  cases). Payroll's map says so.
+- `BOOKS_MONTH_MEANS` drops "Never a later month"; it now gives July's salaries paid 30 June as
+  the example.
+- **Closed books still judge both months** (`settings.assertPeriodOpen`, unchanged).
+
+**Shared code (decided by the owner in the brief, listed here as the rule asks):**
+- `packages/shared`: `BOOKS_MONTH_LATER_MESSAGE` removed, with its comment. Nothing else used it.
+  Shared rebuilt.
+- `components/ledger/books-month-field.tsx` (not `ui/`): the list now offers the **three months
+  after** the date's month, then the twelve before. The screens it reaches: the expense form
+  (Other expenses, the category pages, an account's register, All transactions; add and edit),
+  Cash In (add and edit), Money Transfer (new and edit) and the subscription Renew / Record
+  payment drawer.
+- No unit test expected the refusal; the two harness checks that did were turned round.
+
+**Measured on a docker copy of Neon** (postgres:17 on :55436; this API, compiled to a throwaway
+folder, on :4096). The copy, the server and the build folder were removed afterwards.
+- `.booksmonthlaterqa.mjs` (new; needs `BM_DB`): **22/22.**
+  - ৳600 dated 22 June, books July: **accepted**, stored as July.
+  - It counts in July and not June on the Dashboard (account block and company total),
+    Accounts (as at 22 June, end of June, end of July), **Bank status**, Expenses (overview,
+    grid, a category page's rows) and the Statement.
+  - All transactions and the register still list it on 22 June, running balance 400.
+  - **The overdraft rule judges the day:** ৳500 more dated 22 June, books July, is refused
+    (22 June holds 400, though July could afford it).
+- `.booksmonthqa.mjs` (piece 2's, updated): **34/34.** A later month is stored; a date moved
+  before its books month keeps it; **a November run paid 30 October: all 21 salary rows are
+  November's.**
+- **The two July-tab payments, on the copy** (TXN-2026-000105 Claude Max 5x ৳11,990.58, 23 June;
+  TXN-2026-000122 Claude Pro ৳2,479.95, 22 June), PATCHed to `booksMonth` 2026-07-01. Payoneer
+  then reads the sheet:
+  - June out 1,09,789.56 (sheet 1,09,789.5516), closing 2,01,044.86 (the known ৳0.32 on top);
+  - July out 98,694.70 (sheet 98,694.80), closing 1,02,875.24 (sheet 1,02,875.14). July's
+    Opening still shows 2,01,044.86 with ৳525.08 in IN: that is piece 4b;
+  - August unchanged. (A ৳122 that showed in August on the copy was the harness's own renewal
+    fixture, "BMQA", not on Neon.)
+
+Build, typecheck, lint and test all green (460 tests). The dev servers on :3000 and :4001 and
+`sfm-replay-db` were not touched.
+
+**Not done — for the owner:**
+- **The local data step.** Writing the two PATCHes to Neon was refused by Claude Code's
+  permission check, so they are **not on the local database**. In the local app: All
+  transactions → TXN-2026-000105 → Edit → "Belongs to month" = July 2026 → Save; the same for
+  TXN-2026-000122. (Needs the API on :4001 running this commit's code.) Or allow the write, and a
+  session does it.
+- **Live:** the replay's `--fix-later-months` (#160), once this commit is deployed. Still held
+  until the owner has checked May locally.
+- No browser pass on the form's longer month list.
+
+**Next: piece 4b** (the revaluation in the Opening), in its own session.
 
 ## 164. Accounts ▸ Bank status — 13 Oct 2026
 

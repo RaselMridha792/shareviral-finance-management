@@ -3,19 +3,19 @@
  * docs/briefs/2026-10-13-books-month-and-bank-status.md, writing it.
  *
  *   A. a new entry: a books month earlier than the date's is stored, the date's
- *      own month is stored as null, a later one is refused with the brief's
- *      sentence, a day other than the 1st is refused; its bank charge takes
+ *      own month is stored as null, a later one is stored too (piece 3b), a
+ *      day other than the 1st is refused; its bank charge takes
  *      the entry's books month.
  *   B. an edit: null puts it back (charge too); a new month moves the charge
  *      with it though the body never mentions the charge; a date moved before
- *      the books month is refused.
+ *      the books month keeps it (piece 3b).
  *   C. Cash In, a transfer (both halves and the charge share it), a transfer
  *      corrected without one (all three back to the date's month), the
  *      transfers list carrying it, and a subscription renewal.
  *   D. closed books: an entry dated in an open month may not join a closed
  *      books month, nor be moved out of one.
  *   E. payroll: a September run paid on 5 October is September's, without
- *      being asked.
+ *      being asked; a November run paid on 30 October is November's (3b).
  *   F. the Excel export has a "Books month" column, filled on every row.
  *
  * WRITES ENTRIES AND A PAYROLL RUN, and uses up reference numbers. Run it on a
@@ -80,7 +80,6 @@ const [account] = await q(`select id from accounts where currency='BDT' and dele
 const [outCategory] = await q(
   `select c.id from categories c where c.kind='out' and c.deleted_at is null and c.parent_id is not null and c.slug <> 'bank-charges' order by c.name limit 1`,
 );
-const LATER = "An entry cannot belong to a month after the one it is dated in.";
 const expense = (extra) => ({
   direction: "out",
   txnDate: "2026-06-12",
@@ -113,7 +112,7 @@ check("the date's own month is stored as null", own.status === 201 && (await mon
 const none = await call("POST", "/transactions", expense({ chargeAmount: "3.00" }));
 check("no books month: null, and so is its charge", (await months(none.body?.id)) === null && (await chargeMonth(none.body?.id)) === null);
 const later = await call("POST", "/transactions", expense({ booksMonth: "2026-07-01" }));
-check("a later month is refused with the brief's sentence", later.status === 400 && msgOf(later).includes(LATER), `${later.status} ${msgOf(later)}`);
+check("a later month is stored (piece 3b)", later.status === 201 && (await months(later.body?.id)) === "2026-07-01", `${later.status} ${msgOf(later)}`);
 const notFirst = await call("POST", "/transactions", expense({ booksMonth: "2026-05-02" }));
 check("a day other than the 1st is refused", notFirst.status === 400, `${notFirst.status} ${msgOf(notFirst)}`);
 
@@ -127,7 +126,7 @@ check("  the charge follows anyway", (await chargeMonth(a.body.id)) === "2026-04
 e = await call("PATCH", `/transactions/${a.body.id}`, { notes: "untouched month" });
 check("an edit that says nothing keeps it", e.status === 200 && (await months(a.body.id)) === "2026-04-01");
 e = await call("PATCH", `/transactions/${a.body.id}`, { txnDate: "2026-03-10" });
-check("a date moved before its books month is refused", e.status === 400 && msgOf(e).includes(LATER), `${e.status} ${msgOf(e)}`);
+check("a date moved before its books month keeps it (piece 3b)", e.status === 200 && (await months(a.body.id)) === "2026-04-01", `${e.status} ${msgOf(e)}`);
 e = await call("PATCH", `/transactions/${a.body.id}`, { txnDate: "2026-04-20" });
 check("a date moved into its books month leaves nothing stored", e.status === 200 && (await months(a.body.id)) === null, `${e.status} ${msgOf(e)}`);
 
@@ -237,6 +236,24 @@ check(
   "paid 5 October: every salary row is September's",
   paid.status < 300 && salaryRows.length > 0 && salaryRows.every((r) => r.bm === "2026-09-01"),
   `${paid.status} ${msgOf(paid)} — ${salaryRows.length} rows`,
+);
+
+const early = await call("POST", "/payroll/runs", { periodYear: 2026, periodMonth: 11 });
+const earlyId = early.body?.run?.id ?? early.body?.id;
+const earlyGen = await call("POST", `/payroll/runs/${earlyId}/generate-lines`, {});
+const earlyFin = await call("POST", `/payroll/runs/${earlyId}/finalize`, {});
+const earlyPaid = await call("POST", `/payroll/runs/${earlyId}/pay`, {
+  paymentDate: "2026-10-30",
+  accountId: payer.id,
+  paymentMode: "individual",
+  usdRate: "122.00",
+});
+const earlyRows = await q(`select books_month::text as bm from transactions where payroll_run_id=$1`, [earlyId]);
+check(
+  "a November run paid 30 October: every salary row is November's (3b)",
+  early.status === 201 && earlyGen.status < 300 && earlyFin.status < 300 && earlyPaid.status < 300 &&
+    earlyRows.length > 0 && earlyRows.every((r) => r.bm === "2026-11-01"),
+  `${early.status}/${earlyGen.status}/${earlyFin.status}/${earlyPaid.status} ${msgOf(earlyPaid)} — ${earlyRows.length} rows`,
 );
 
 console.log("F. the Excel export");

@@ -973,14 +973,13 @@ export class PayrollService {
     }
 
     /*
-     * The run's own month, when it was paid in a later one: May's salaries
-     * paid on 12 June are May's books, and nobody is asked (the brief of
-     * 13 Oct 2026). A run paid in its own month stores nothing. A run paid
-     * BEFORE its month — July's on 30 June — stays in the payment's month:
-     * a later books month is the one thing an entry may not have.
+     * The run's own month, when it was paid in another: May's salaries paid
+     * on 12 June are May's books, and July's paid on 30 June are July's —
+     * nobody is asked (the brief of 13 Oct 2026, piece 3b). A run paid in its
+     * own month stores nothing.
      */
     const period = firstDayOf(run.periodYear, run.periodMonth);
-    const booksMonth = period < monthOf(input.paymentDate) ? period : null;
+    const booksMonth = period !== monthOf(input.paymentDate) ? period : null;
 
     await this.settings.assertPeriodOpen(input.paymentDate, booksMonth);
 

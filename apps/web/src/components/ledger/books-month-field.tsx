@@ -7,6 +7,8 @@ import { Field, Select } from "@/components/ui/field";
 
 /** How far back the picker offers. Older is still kept when a row has it. */
 const MONTHS_BACK = 12;
+/** How far ahead: July's salaries paid on 30 June, a bill paid ahead. */
+const MONTHS_AHEAD = 3;
 
 /**
  * "Belongs to month": the month's books an entry counts in, when that is not
@@ -14,8 +16,7 @@ const MONTHS_BACK = 12;
  * 13 Oct 2026).
  *
  * Starts empty, and empty is the month of the date, which the hint names.
- * Offers that month's predecessors only: a later month is refused by the API,
- * so a picker that offered one would be offering an error.
+ * Offers the three months after that month, then the twelve before it.
  *
  * It reads the date from its own form's `txnDate` box rather than taking it
  * as a prop: every form it sits in keeps the date uncontrolled, and following
@@ -59,7 +60,14 @@ export function BooksMonthField({
     ? `${date.slice(0, 7)}-01`
     : null;
   const months = own
-    ? Array.from({ length: MONTHS_BACK }, (_, i) => shiftMonth(own, -(i + 1)))
+    ? [
+        ...Array.from({ length: MONTHS_AHEAD }, (_, i) =>
+          shiftMonth(own, MONTHS_AHEAD - i),
+        ),
+        ...Array.from({ length: MONTHS_BACK }, (_, i) =>
+          shiftMonth(own, -(i + 1)),
+        ),
+      ]
     : [];
   // A stored month the list no longer reaches stays choosable, so opening an
   // old entry and saving it cannot quietly move it.

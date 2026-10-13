@@ -1,5 +1,3 @@
-import { BadRequestException } from "@nestjs/common";
-import { BOOKS_MONTH_LATER_MESSAGE } from "@finance/shared";
 import { sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema/transactions";
@@ -13,23 +11,16 @@ import { transactions } from "../../db/schema/transactions";
  * to be the date's own is stored as null, and two rows that mean the same
  * thing never look different in the table.
  *
- * Earlier months only. A later one is refused with the brief's sentence —
- * prepayments are the case that would need it, and the owner widens the rule
- * when he wants them, here and nowhere else.
+ * Earlier or later months alike (the owner, 13 Oct: July's salaries paid
+ * on 30 June are July's, and so is a bill paid ahead). Closed books still
+ * judge both months — that is `settings.assertPeriodOpen`, not this.
  */
 export function storedBooksMonth(
   txnDate: string,
   booksMonth: string | null | undefined,
 ): string | null {
   if (!booksMonth) return null;
-  const own = monthOf(txnDate);
-  if (booksMonth > own) {
-    throw new BadRequestException({
-      message: BOOKS_MONTH_LATER_MESSAGE,
-      errors: { booksMonth: [BOOKS_MONTH_LATER_MESSAGE] },
-    });
-  }
-  return booksMonth === own ? null : booksMonth;
+  return booksMonth === monthOf(txnDate) ? null : booksMonth;
 }
 
 /** The 1st of the month `date` falls in, as an ISO date. */
@@ -42,7 +33,7 @@ export function monthOf(date: string): string {
  * One wording, so the Assistant hears the same rule from every door.
  */
 export const BOOKS_MONTH_MEANS =
-  "the month's books it belongs to, as the 1st (2026-05-01), when not the month of txnDate: May's bill paid 12 June. Never a later month than the date's; leave it out for the date's own month";
+  "the month's books it belongs to, as the 1st (2026-05-01), when not the month of txnDate: May's bill paid 12 June, or July's salaries paid 30 June. Leave it out for the date's own month";
 
 /* -------------------------------------------------------------------------- */
 /*  Reading it: every month view asks here, and nowhere else                   */

@@ -144,19 +144,12 @@ export function chargeStatedOnce(body: {
  * 12 June are May's. `txn_date` stays the day the money moved; this says
  * which month's books it sits in. Always the 1st of a month, and absent or
  * null meaning "the month of the date" — so an entry that belongs to its own
- * month carries nothing.
- *
- * A later month than the date's is refused by the API with
- * `BOOKS_MONTH_LATER_MESSAGE`, not here: an update may not carry the date it
- * is checked against, and one rule in one place is what keeps two doors from
- * disagreeing.
+ * month carries nothing. It may be earlier or later than the date's month:
+ * July's salaries paid on 30 June are July's.
  */
 export const booksMonthSchema = isoDateSchema.refine((v) => v.endsWith("-01"), {
   message: "Pick a month",
 });
-
-export const BOOKS_MONTH_LATER_MESSAGE =
-  "An entry cannot belong to a month after the one it is dated in.";
 
 /** The month an entry counts in, as its 1st: its own, or its date's. */
 export function booksMonthOf(
