@@ -288,7 +288,7 @@ into dollars at the row's rate, so it shows **$6,985.58**. The +$25.58 is ৳3,1
 Payoneer's July gain adds a few dollars the same way. These figures reach Accounts' own dollar
 balance too.
 
-The planning session's recommendation, pending the owner's yes:
+**The owner said yes on 13 Oct** (*"hea korbo kore felo"*):
 - **The rule.** A row in the **Exchange gain** or **Exchange loss** category counts **$0** in
   every dollar figure:
   - the dollar balance on Accounts;
