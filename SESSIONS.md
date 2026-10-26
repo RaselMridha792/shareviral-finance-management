@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 171 | **The seeders refuse production: `db:seed` on a database with people on it, and `db:demo`, `db:bulk`, `db:seed-categories` always** | **done** — the owner, 26 Oct: live holds the real books now. Nothing ran them on deploy before either |
+| 170 | **AI tools & subscriptions: Renews on is a box, filled in and editable; a plan's Invoice and Reference take several files at once; the register reads by start date, the 1st first** | **done** — the owner's to-do of 26 Oct, items 1–3. **Open: the 33 plans imported on live carry worked-out renewal dates — correct them from the sheet, or by hand?** |
 | 169 | **Schema: TDS refunded to staff — `tds_refunds`, a row per refund naming the month whose TDS it hands back** | **done** — piece T1 of `docs/briefs/2026-10-13-tds-refunded-to-staff.md`, pushed alone, applied on the local database. **Next: piece T2** (the service, every reader of "owed", the page) |
 | 168 | **Bank status: Check ticked by hand — a tick box per row for the Super Admin and CFO, "By hand" or "Reconciled" under Matched, who and when on hover, audited** | **done** — piece 4d-2 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`. **The owner tries it on the live site**: tick a row, reload, untick |
 | 167 | **Schema: Check ticked by hand on Bank status — `account_month_checks`, a row per account per month ticked** | **done** — piece 4d-1 of `docs/briefs/2026-10-13-books-month-and-bank-status.md`, pushed alone, applied on the local database. **Next: piece 4d-2** (the service and the tick on the page) |
@@ -146,6 +148,83 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 171. The seeders never write to the live books — 27 Oct 2026
+
+The owner: *"amar application a akhon original data ache live a dekhe niyo jate kono seed jate
+na cole live data harano jabena"*.
+
+**What was already true.**
+- Nothing runs a seeder on deploy (`remote-deploy.sh`, CI, the Dockerfile) or at start-up. The
+  api's two `onModuleInit` hooks make the uploads folder and log a line.
+- Every `deploy/sql` file runs once and is recorded in `schema_migrations`. The old files that
+  insert rows (two-accounts, categories, tax-policy) never run again.
+- The two wipe scripts on the server only report unless `--wipe` is given, and the reset also
+  asks for `RESET` to be typed.
+
+**What was not.** The seeders are compiled into the production image
+(`apps/api/dist/db/…`), and a command run inside the api container reaches live. On the live
+data:
+- `db:bulk wipe` deletes every account but two;
+- `db:demo` adds a made-up July and August;
+- `db:seed` adds four test sign-ins.
+
+**Now:**
+- **`production-guard.ts`** stops `db:demo`, `db:bulk` and `db:seed-categories` first thing
+  whenever `NODE_ENV=production`, which the api image sets.
+- **`db:seed`** in production runs only on a database with **no** sign-ins: the first Super Admin
+  of a fresh install.
+
+**Measured.** Each of the four was run with `NODE_ENV=production` against Neon, which holds 5
+sign-ins. All four refused before writing, and Neon's users (5) and accounts (4) were
+unchanged. Local runs, without `NODE_ENV`, are unaffected.
+
+## 170. AI tools & subscriptions: Renews on, several papers, by start date — 27 Oct 2026
+
+Three items from the owner, found while checking the boss's data on live (to-do of 26 Oct,
+`docs/briefs/2026-10-26-todo.md`).
+
+1. **"Renews on" is a box again.** *"autofill system ta thik thakuk … renew month tao edit kora
+   jay"*. The worked-out date counts on from today, so a plan entered from past records renewed
+   on a date that never happened: started 30 Jun, monthly, "renews 30 Oct".
+   - `subscriptionFieldsSchema.nextRenewalOn` is back as an optional field: a date, or `""`/null.
+   - **Absent:** worked out as before. On an edit, that happens only when the start date or the
+     cycle moves.
+   - **A date:** kept. It has to be after the start date; otherwise it is refused on the field.
+   - **Blank:** back to the worked-out date.
+   - **The form.**
+     - The box is filled in the way it was: an existing plan shows its stored date, which a
+       payment may have moved, until its start date or cycle changes.
+     - Untouched, nothing is sent.
+     - Typed, it is sent, and "Use the worked-out date" puts it back.
+   - Recording a payment still moves the date on.
+   - **The Assistant's map** says the same.
+2. **Several papers at once.** The plan form had its own clip, which kept `files[0]` with no
+   `multiple`, so a second invoice took a save and a reopen.
+   - The clip now holds a list.
+   - Each paper has its own preview and remove.
+   - Anything already on file or already picked is left out, and the form says so.
+   - Save uploads each one.
+3. **The register reads by start date**, the 1st first, then the order the plans were added. It
+   had been newest-added first. With months of past records entered at once, that was the
+   import's order.
+   - **A plan just added no longer lands at the top of page one.** It sits at its date.
+
+**Measured.**
+- `subsqa.mjs` (scratchpad), local API and browser: **15/15**.
+  - The renewal box: worked out, typed on create, refused before the start, typed on edit,
+    untouched by another edit, cleared back.
+  - The register in start-date order (35 rows).
+  - The drawer: a filled box; both clips `multiple`; two invoices and two references picked at
+    once, listed, and saved in one go (4 files on the plan); the typed date saved.
+  - Cleaned up.
+- The four CI steps are green: tests 460 + 386.
+- `subscriptions.test.ts`'s "refuses a renewal date outright" pinned the old rule. It is
+  replaced by a test of the new one.
+
+**Open, for the owner.** The 33 plans imported on live carry worked-out renewal dates. Correct
+them from each sheet row's "Next Renewal Date" (`boss.json` has them), or by hand with the new
+box?
 
 ## 169. Schema: TDS refunded to staff — 13 Oct 2026
 

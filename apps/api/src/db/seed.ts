@@ -147,6 +147,24 @@ async function main() {
     process.exit(1);
   }
 
+  /*
+   * In production, only a database with nobody on it: the first Super Admin of
+   * a fresh install. The live database has its people and its real books (the
+   * owner, 26 Oct 2026), and four test sign-ins added to it are four doors
+   * nobody meant to open. See production-guard.ts.
+   */
+  if (process.env.NODE_ENV === "production") {
+    const [{ count: people }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users);
+    if (people > 0) {
+      console.error(
+        `db:seed does not run on a production database that already has ${people} sign-in(s): it holds the company's real books.`,
+      );
+      process.exit(1);
+    }
+  }
+
   // SEED_RESET=true wipes users (and their sessions, via cascade) plus the
   // audit log, then seeds fresh. Only ever for a database with no real data.
   if (process.env.SEED_RESET === "true") {

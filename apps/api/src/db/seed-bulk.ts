@@ -51,6 +51,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { poolOptionsFor } from "./connection";
+import { refuseOnProduction } from "./production-guard";
 import * as schema from "./schema";
 import {
   accounts,
@@ -109,6 +110,7 @@ function loadEnvFiles(): void {
   }
 }
 
+refuseOnProduction("db:bulk");
 loadEnvFiles();
 
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;

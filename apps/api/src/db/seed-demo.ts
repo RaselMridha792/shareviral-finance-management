@@ -19,6 +19,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { poolOptionsFor } from "./connection";
+import { refuseOnProduction } from "./production-guard";
 import * as schema from "./schema";
 import {
   accounts,
@@ -36,6 +37,8 @@ import {
   vendors,
   withholdingReturns,
 } from "./schema";
+
+refuseOnProduction("db:demo");
 
 config({ path: ".env.local" });
 config({ path: ".env" });
