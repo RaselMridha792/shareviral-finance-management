@@ -108,6 +108,7 @@ export function SubscriptionHeadCells() {
       <Th>Billing Cycle</Th>
       <Th>Next Renewal Date</Th>
       <Th>Status</Th>
+      <Th>Check</Th>
     </>
   );
 }
@@ -344,6 +345,14 @@ export function SubscriptionBodyCells({
 
       <td>
         <SubscriptionStatusPill status={row.status} />
+      </td>
+
+      {/* Checked against the papers by hand, on the plan's form (27 Oct
+          2026) — the boss's sheet has the same column. */}
+      <td>
+        <StatusPill tone={row.checked ? "positive" : "neutral"}>
+          {row.checked ? "Checked" : "Unchecked"}
+        </StatusPill>
       </td>
     </>
   );

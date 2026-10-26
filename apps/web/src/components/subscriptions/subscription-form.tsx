@@ -360,6 +360,9 @@ export function SubscriptionForm({
   const [status, setStatus] = useState<SubscriptionStatus>(
     subscription?.status ?? "active",
   );
+  /* Checked against the papers by hand (27 Oct 2026); a new plan starts
+     unchecked. */
+  const [checked, setChecked] = useState(subscription?.checked ?? false);
 
   const [costUsd, setCostUsd] = useState(subscription?.costUsd ?? "");
   const [costBdt, setCostBdt] = useState(subscription?.costBdt ?? "");
@@ -511,6 +514,7 @@ export function SubscriptionForm({
         planName,
         category,
         status,
+        checked,
         costUsd,
         costBdt,
         chargeUsd,
@@ -776,6 +780,18 @@ export function SubscriptionForm({
                   {SUBSCRIPTION_STATUS_LABELS[id]}
                 </option>
               ))}
+            </Select>
+          </Field>
+
+          {/* The boss's sheet has a Check column on every tool row; this is
+              that, set by hand (the owner, 27 Oct 2026). */}
+          <Field label="Check" error={fieldErrors.checked}>
+            <Select
+              value={checked ? "checked" : "unchecked"}
+              onChange={(e) => setChecked(e.target.value === "checked")}
+            >
+              <option value="unchecked">Unchecked</option>
+              <option value="checked">Checked</option>
             </Select>
           </Field>
         </div>

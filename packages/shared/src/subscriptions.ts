@@ -229,6 +229,12 @@ const subscriptionFieldsSchema = z.strictObject({
   planName: z.string().trim().min(1, "Name the plan").max(160),
   category: subscriptionCategorySchema,
   status: subscriptionStatusSchema.default("active"),
+  /**
+   * Checked against the papers, or not yet — set by hand, Checked or
+   * Unchecked (the owner, 27 Oct 2026). The boss's sheet has a Check column on
+   * every tool row; this is that, per plan. A new plan starts unchecked.
+   */
+  checked: z.boolean().default(false),
 
   costUsd: amountSchema,
   costBdt: optionalMoney,

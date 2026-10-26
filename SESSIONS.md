@@ -34,6 +34,8 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 173 | **AI tools & subscriptions: Check — Checked or Unchecked on every plan, a dropdown on Add and Edit, a column in the table** | **done** — the owner, 27 Oct. Every plan on file starts Unchecked |
+| 172 | **Schema: `subscriptions.checked`** | **done** — pushed alone and deployed before #173 |
 | 171 | **The seeders refuse production: `db:seed` on a database with people on it, and `db:demo`, `db:bulk`, `db:seed-categories` always** | **done** — the owner, 26 Oct: live holds the real books now. Nothing ran them on deploy before either |
 | 170 | **AI tools & subscriptions: Renews on is a box, filled in and editable; a plan's Invoice and Reference take several files at once; the register reads by start date, the 1st first** | **done** — the owner's to-do of 26 Oct, items 1–3. **Open: the 33 plans imported on live carry worked-out renewal dates — correct them from the sheet, or by hand?** |
 | 169 | **Schema: TDS refunded to staff — `tds_refunds`, a row per refund naming the month whose TDS it hands back** | **done** — piece T1 of `docs/briefs/2026-10-13-tds-refunded-to-staff.md`, pushed alone, applied on the local database. **Next: piece T2** (the service, every reader of "owed", the page) |
@@ -148,6 +150,42 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 173. A plan's Check, and its schema (#172) — 27 Oct 2026
+
+The owner: *"notun ekta field add korte hobe Check: checked, unchecked name eta dropdown hobe
+eta edit kora jabe new add korar somoy o bosano jabe and table a eta dekhabe"*. The boss's
+sheet has a Check column on every tool row; this is that, per plan.
+
+**#172, pushed alone.**
+- `deploy/sql/2026-10-27-subscriptions-checked.sql` adds
+  `subscriptions.checked boolean not null default false`.
+- The Drizzle column is in the same commit.
+- It was applied locally twice; the second run changed nothing.
+- It deployed before the code that reads it.
+
+**#173:**
+- **`subscriptionFieldsSchema.checked`** is `z.boolean().default(false)`. A new plan starts
+  Unchecked, and an edit without the key leaves it alone.
+- **The API** inserts it, and `columns()` and the row type carry it.
+- **The form** has a **Check** dropdown (Unchecked / Checked) beside Status, on Add and Edit.
+- **The table** has a **Check** column after Status: a green "Checked" or a grey "Unchecked".
+  - The same columns sit on a person's tools on Team, so it shows there too.
+  - Both tables are 120px wider. The register's loading row spans 20.
+- **The Assistant's map** knows the field.
+
+**Measured.**
+- `checkqa.mjs` (scratchpad), local API and browser: **11/11**.
+  - A new plan starts Unchecked; a plan can be added Checked; it changes on edit; another edit
+    leaves it.
+  - The table has the column, and the row reads Unchecked.
+  - The form's dropdown, set to Checked and saved, turns the row Checked, and the value is
+    stored.
+  - Cleaned up.
+- The four CI steps are green: 460 + 386.
+
+**For the owner.** Every plan already on live reads **Unchecked**. Tick each one as you check
+it.
 
 ## 171. The seeders never write to the live books — 27 Oct 2026
 

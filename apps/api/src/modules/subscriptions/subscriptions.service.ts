@@ -244,6 +244,7 @@ export class SubscriptionsService {
             planName: input.planName,
             category: input.category,
             status: input.status,
+            checked: input.checked,
             ...values,
             /*
              * Outside `moneyOf`, and that is the point.
@@ -650,6 +651,7 @@ export class SubscriptionsService {
       planName: subscriptions.planName,
       category: subscriptions.category,
       status: subscriptions.status,
+      checked: subscriptions.checked,
       costUsd: subscriptions.costUsd,
       costBdt: subscriptions.costBdt,
       chargeUsd: subscriptions.chargeUsd,
@@ -870,6 +872,7 @@ type SubscriptionRow = {
   planName: string;
   category: string;
   status: string;
+  checked: boolean;
   costUsd: string;
   costBdt: string | null;
   /** Selected all along by `columns()`; the type had never said so. */

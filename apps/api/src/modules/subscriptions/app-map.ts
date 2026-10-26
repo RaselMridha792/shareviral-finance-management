@@ -68,6 +68,8 @@ export const SUBSCRIPTIONS_MAP = [
           boughtFor: "the department it is for; on screen, User Department",
           nextRenewalOn:
             "Renews on: filled in from the start date and the cycle; typed over for a plan that renews on another day, after the start date",
+          checked:
+            "Check: Checked or Unchecked, whether somebody has checked the plan against its papers; Unchecked unless said",
         },
         onSave:
           "Adds the plan. If it is active, its first payment then leaves its account on the start date, under the AI tools heading; if that payment is refused, the plan stays and Renew takes it.",
@@ -122,6 +124,7 @@ export const SUBSCRIPTIONS_MAP = [
         schema: updateSubscriptionSchema,
         fields: {
           users: "the whole list when sent; anyone left out comes off",
+          checked: "Check: Checked or Unchecked, set by hand",
         },
         onSave:
           "Changes the plan in place and never takes money. The renewal date moves when it is typed, or when the start date or the cycle changes; a blank one goes back to the worked-out date. The three prices must agree.",

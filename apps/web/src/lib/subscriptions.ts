@@ -35,6 +35,8 @@ export type SubscriptionDto = {
   planName: string;
   category: SubscriptionCategory;
   status: SubscriptionStatus;
+  /** Checked against the papers by hand — Checked or Unchecked. */
+  checked: boolean;
   /**
    * All three, on the owner's instruction — the bills arrive in both
    * currencies. The form derives whichever was not typed, so a row never holds
