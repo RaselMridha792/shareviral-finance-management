@@ -227,6 +227,12 @@ sheet has a Check column on every tool row; this is that, per plan.
 **For the owner.** Every plan already on live reads **Unchecked**. Tick each one as you check
 it.
 
+**Later, 27 Oct.** The owner asked for every plan on file to be Checked.
+- **Live:** done by SQL in the database (`update subscriptions set checked = true …`),
+  `UPDATE 32`. The 33rd had already been ticked by hand. Result: 33 checked, 0 unchecked. These
+  changes are **not in the audit log**.
+- **Local:** done through the API, 33 of 33, audited.
+
 ## 171. The seeders never write to the live books — 27 Oct 2026
 
 The owner: *"amar application a akhon original data ache live a dekhe niyo jate kono seed jate
