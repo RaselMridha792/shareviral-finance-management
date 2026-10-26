@@ -239,7 +239,23 @@ export type PayrollLineDto = {
    * than converting at whatever the rate happens to be today.
    */
   fxRate: string | null;
+  /**
+   * The dollar rate on the payment that paid this line, if it has been paid.
+   * A paid line with no `fxRate` is read in dollars at this — see `rateOf`.
+   */
+  paidUsdRate: string | null;
 };
+
+/**
+ * The rate a line is read in dollars at: its own, else the one it was paid at.
+ * Null when neither exists, and the dollar figure is then not shown at all.
+ */
+export function rateOf(line: PayrollLineDto): number | null {
+  const rate = Number(line.fxRate ?? line.paidUsdRate);
+  return (line.fxRate ?? line.paidUsdRate) && Number.isFinite(rate) && rate > 0
+    ? rate
+    : null;
+}
 
 /** One social account on a person's profile. */
 export type TeamSocialDto = {

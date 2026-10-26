@@ -152,6 +152,38 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 177. Payroll: the salary sheet's cards in dollars too — 27 Oct 2026
+
+The owner: *"payroll page er opore boro card gulate dollare convert kore amount tao dekhaiyo
+same onnanno card a jevabe dekhaichila"*. The four cards (Gross, Additions, Tax withheld, Net to
+pay) now carry a small "~$…" line under the taka figure, the way Expense overview's cards do.
+
+**Where the rate comes from.** None of the 60 imported lines has a typed FX rate, so before this
+the sheet's dollar column read N/A everywhere. Their rate is on the **payment**: the Pay step
+stores it as `transactions.usd_rate`, and the imported payments carry 122 for May, 122.45 for
+June and 122.77 for July and August.
+- `getRun` now sends each line's `paidUsdRate`, taken from its live payment row
+  (`payroll_line_id`).
+- `rateOf(line)` in `lib/payroll.ts` is the line's own rate, or failing that the rate it was
+  paid at.
+- The cards, the table's "≈ $" total and each line's dollar cell all read `rateOf`, so the three
+  agree.
+- On a finalised sheet the FX Rate cell shows the paid rate. A draft still shows only what was
+  typed. The run-wide "set the rate" fill is unchanged; it refuses finalised sheets.
+- A line with no rate at all is counted, and shown as "· n without a rate".
+- The amount's usual counterpart at today's rate is off when the sheet has its own rates, so
+  that a card does not carry two different dollar figures.
+
+**Measured on local** with `payusdqa.mjs` (read-only), 24 of 24 checks passing. Every card,
+every month, equals the SQL sum of each line ÷ its rate. The table's total agrees with Net. For
+May: Gross ~$4,026.70, Tax ~$112.46, Net ~$4,026.70.
+
+**For the owner:** the sheet's May "Net Pay (USD)" is $3,914.25. That is ৳4,77,538 ÷ 122, and
+the ৳4,77,538 was never paid: the May note says the gross was paid. The app's ~$4,026.70 is the
+gross that left the bank, ÷ 122.
+
+The four CI steps are green.
+
 ## 176. AI tools & subscriptions: Paid On in front, and the order — 27 Oct 2026
 
 The owner, looking at July: the first column was **Start Date**, so a month of plans all paid in

@@ -51,6 +51,7 @@ import { ApiError } from "@/lib/api-client";
 import type { AccountDto } from "@/lib/masters";
 import {
   payrollApi,
+  rateOf,
   type EligibleMemberDto,
   teamApi,
   type PayrollLineDto,
@@ -267,21 +268,46 @@ export function SalarySheetScreen({
    * a "≈" in front of it. The taka totals are summed in minor units because
    * they are the ones somebody pays.
    */
-  const usdTotal = useMemo(() => {
-    let amount = 0;
+  const usd = useMemo(() => {
+    const totals = { gross: 0, additions: 0, tds: 0, net: 0 };
     let without = 0;
     let counted = 0;
     for (const line of lines) {
-      const rate = Number(line.fxRate);
-      if (!line.fxRate || !Number.isFinite(rate) || rate <= 0) {
+      const rate = rateOf(line);
+      if (rate === null) {
         without += 1;
         continue;
       }
-      amount += Number(line.netAmount) / rate;
+      totals.gross += Number(line.grossAmount) / rate;
+      totals.additions +=
+        (Number(line.bonusAmount) + Number(line.otherAdditions)) / rate;
+      totals.tds += Number(line.tdsAmount) / rate;
+      totals.net += Number(line.netAmount) / rate;
       counted += 1;
     }
-    return counted === 0 ? null : { amount, without };
+    return counted === 0 ? null : { ...totals, without };
   }, [lines]);
+
+  /*
+   * The cards' dollar line, under the taka, the way Expense overview's cards
+   * carry one (the owner, 27 Oct 2026: "dollare convert kore amount tao
+   * dekhaiyo"). Each figure is the lines added at their own rates, so it is
+   * the same arithmetic as the table's own "≈ $" total, and it says how many
+   * lines it is missing.
+   */
+  const usdLine = (figure: "gross" | "additions" | "tds" | "net") =>
+    usd === null ? null : (
+      <span className="tabular-nums">
+        <Amount
+          value={usd[figure].toFixed(2)}
+          currency="USD"
+          approximate
+          showCounterpart={false}
+          tone="neutral"
+        />
+        {usd.without > 0 ? ` · ${usd.without} without a rate` : ""}
+      </span>
+    );
 
   /**
    * Commits whatever is still being typed, and says so.
@@ -557,28 +583,51 @@ export function SalarySheetScreen({
       ) : null}
 
       <StatStrip min={220}>
+        {/* The usual counterpart only when no line has a rate: otherwise the
+            dollar line is `secondary`, at the lines' own rates, and a second
+            one at today's rate would disagree with it. */}
         <StatCell
           label="Gross"
           icon="payments"
-          value={<Amount value={run.totalGross} tone="neutral" />}
+          value={
+            <Amount
+              value={run.totalGross}
+              tone="neutral"
+              showCounterpart={usd === null}
+            />
+          }
+          secondary={usdLine("gross")}
         />
         <StatCell
           label="Additions"
           icon={PlusCircleIcon}
-          value={<Amount value={run.totalAdditions} tone="neutral" />}
+          value={
+            <Amount
+              value={run.totalAdditions}
+              tone="neutral"
+              showCounterpart={usd === null}
+            />
+          }
+          secondary={usdLine("additions")}
         />
         <StatCell
           label="Tax withheld"
           icon={VaultIcon}
           iconTone="text-warning"
-          value={<Amount value={run.totalTds} tone="neutral" />}
+          value={
+            <Amount value={run.totalTds} tone="neutral" showCounterpart={usd === null} />
+          }
+          secondary={usdLine("tds")}
           footnote="Stays with you until the challan is deposited"
         />
         <StatCell
           label="Net to pay"
           icon={HandCoinsIcon}
           emphasis
-          value={<Amount value={run.totalNet} tone="neutral" />}
+          value={
+            <Amount value={run.totalNet} tone="neutral" showCounterpart={usd === null} />
+          }
+          secondary={usdLine("net")}
         />
       </StatStrip>
 
@@ -790,11 +839,11 @@ export function SalarySheetScreen({
                     people is worse than no dollar total.
                   */}
                   <td className="col-amount">
-                    {usdTotal === null
+                    {usd === null
                       ? "N/A"
-                      : `≈ $${usdTotal.amount.toFixed(2)}${
-                          usdTotal.without > 0
-                            ? ` (${usdTotal.without} without a rate)`
+                      : `≈ $${usd.net.toFixed(2)}${
+                          usd.without > 0
+                            ? ` (${usd.without} without a rate)`
                             : ""
                         }`}
                   </td>
@@ -1268,10 +1317,16 @@ function LineRow({
         Once a run is finalised its figures are what was filed, and a rate that
         could still move would make a filed month read differently tomorrow.
       */}
-      <RateCell value={line.fxRate} editable={editable} onSave={saveRate} />
+      {/* A finalised sheet shows the rate its payment carried when the line
+          has none of its own; a draft shows only what was typed here. */}
+      <RateCell
+        value={line.fxRate ?? (editable ? null : line.paidUsdRate)}
+        editable={editable}
+        onSave={saveRate}
+      />
       <td className="col-amount text-sm text-muted-foreground">
-        {line.fxRate
-          ? `≈ $${(Number(line.netAmount) / Number(line.fxRate)).toFixed(2)}`
+        {rateOf(line)
+          ? `≈ $${(Number(line.netAmount) / rateOf(line)!).toFixed(2)}`
           : "N/A"}
       </td>
       <td>

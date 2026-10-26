@@ -237,6 +237,20 @@ export class PayrollService {
          * like a save that silently failed.
          */
         fxRate: payrollLines.fxRate,
+        /*
+         * The dollar rate on the payment that paid this line, when it was
+         * paid — what the Pay step asks for ("what one US dollar was worth on
+         * the day the salaries left the account"). A paid line with no rate of
+         * its own is read in dollars at this, so a paid sheet is not N/A in
+         * dollars for want of a box nobody can fill once it is finalised.
+         */
+        paidUsdRate: sql<string | null>`(
+          select t.usd_rate::text from transactions t
+          where t.payroll_line_id = payroll_lines.id
+            and t.voided_at is null and t.deleted_at is null
+          order by t.txn_date desc
+          limit 1
+        )`,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
