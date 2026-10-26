@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   index,
   numeric,
@@ -72,6 +73,13 @@ export const subscriptions = pgTable(
 
     category: subscriptionCategoryEnum("category").notNull(),
     status: subscriptionStatusEnum("status").notNull().default("active"),
+    /**
+     * Whether somebody has checked this plan against the papers — the boss's
+     * sheet has a Check column on every tool row. Set by hand on the form,
+     * Checked or Unchecked (the owner, 27 Oct 2026). A new plan starts
+     * unchecked.
+     */
+    checked: boolean("checked").notNull().default(false),
 
     /**
      * All three stored, on the owner's instruction, and the form computes
