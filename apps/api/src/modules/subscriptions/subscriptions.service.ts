@@ -131,20 +131,24 @@ export class SubscriptionsService {
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(where)
       /*
-       * Newest first, on the owner's instruction: something just bought is at
-       * the top, where somebody who has just added it looks for it.
+       * By the date the plan started, the 1st of the month first.
        *
-       * This used to lead with the next renewal date, on the reasoning that
-       * "what is about to bill" is the commonest question. It is not the
-       * commonest *action* — adding a plan is — and a row that lands in the
-       * middle of page one, sorted by a date the person adding it has not
-       * thought about yet, reads as not having saved.
+       * The owner, 26 Oct 2026: *"table gula jate sundor vabe month er suru
+       * theke ses evabe sorting hoy"*. It was newest-added first, which read
+       * well while plans were added as they were bought; with months of past
+       * records entered in one go, "added" is the order of the import and the
+       * register read in no order at all. The Date column shows the start
+       * date, so the table now reads down it.
        *
-       * `id` breaks the tie so the order is total. Two plans added in the same
-       * second would otherwise swap places between page loads, which is how a
-       * pager starts showing the same row twice.
+       * Then the order they were added in, and `id` last so the order is
+       * total: two rows the same on both would otherwise swap places between
+       * page loads, which is how a pager starts showing the same row twice.
        */
-      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
+      .orderBy(
+        asc(subscriptions.startDate),
+        asc(subscriptions.createdAt),
+        asc(subscriptions.id),
+      )
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
@@ -223,6 +227,7 @@ export class SubscriptionsService {
 
   async create(input: CreateSubscriptionInput, actor: AuthenticatedUser) {
     const values = this.moneyOf(input);
+    this.assertRenewalAfterStart(input.nextRenewalOn, input.startDate);
     await this.assertMembersExist(input.users.map((u) => u.teamMemberId));
 
     return this.audit.mutate({
@@ -256,24 +261,23 @@ export class SubscriptionsService {
             billingCycle: input.billingCycle,
             startDate: input.startDate,
             /*
-             * Worked out from the start date and the cycle, never typed.
+             * Worked out from the start date and the cycle, unless typed.
              *
-             * The owner: "If select Monthly hoy tahole renews date auto
-             * calculation hobe ekhane notun kore renewal date dite hobena oi
-             * field ta remove korte hobe." A renewal date is not an
-             * independent fact — it is the start date plus however many cycles
-             * have gone by — and asking for it separately meant two fields
-             * that could disagree with nothing to say which was right.
-             *
-             * It is still a stored COLUMN, because recording a payment
-             * advances it (`payForSubscription`), and that is real information
-             * this cannot know. What has gone is somebody typing it.
+             * The owner first asked for no box at all ("oi field ta remove
+             * korte hobe"): a renewal date is the start date plus however many
+             * cycles have gone by. But the derivation counts on from today, and
+             * a plan entered from past records then renews on a date that never
+             * happened — so the box is back, filled in the same way, and what
+             * is typed in it wins (26 Oct 2026). Recording a payment still
+             * advances the stored date (`payForSubscription`).
              */
-            nextRenewalOn: nextRenewalAfter(
-              input.startDate,
-              input.billingCycle,
-              todayInDhaka(),
-            ),
+            nextRenewalOn:
+              input.nextRenewalOn ??
+              nextRenewalAfter(
+                input.startDate,
+                input.billingCycle,
+                todayInDhaka(),
+              ),
             renewalNote: input.renewalNote ?? null,
             paymentMethod: input.paymentMethod,
             accountId: input.accountId ?? null,
@@ -303,6 +307,10 @@ export class SubscriptionsService {
     if (input.users) {
       await this.assertMembersExist(input.users.map((u) => u.teamMemberId));
     }
+    this.assertRenewalAfterStart(
+      input.nextRenewalOn,
+      input.startDate ?? existing.startDate,
+    );
 
     // The three money fields only tie out against each other, so a change to
     // one has to be checked against what is already stored rather than against
@@ -332,17 +340,17 @@ export class SubscriptionsService {
         return row;
       },
       run: async (tx) => {
-        const { users, ...rest } = input;
+        const { users, nextRenewalOn: typedRenewal, ...rest } = input;
 
         /*
          * The renewal date follows the start date and the cycle, and moves
-         * only when one of those two does.
+         * only when one of those two does — or when it is typed.
          *
          * Not recomputed on every edit: recording a payment advances the
          * stored date by a cycle, so re-deriving it because somebody fixed a
          * spelling in the notes would undo that and quietly move a card charge
-         * back a month. The contract no longer carries the field at all, so
-         * there is nothing in `rest` to overwrite it with.
+         * back a month. A typed date (26 Oct 2026) wins over both; a blank
+         * one puts the worked-out date back.
          */
         const startDate = input.startDate ?? existing.startDate;
         /* The column is plain `text`, so what comes back is a string rather
@@ -357,20 +365,18 @@ export class SubscriptionsService {
             input.startDate !== existing.startDate) ||
           (input.billingCycle !== undefined &&
             input.billingCycle !== existing.billingCycle);
+        const worked = () =>
+          nextRenewalAfter(startDate, billingCycle, todayInDhaka());
 
         await tx
           .update(subscriptions)
           .set({
             ...rest,
-            ...(cycleMoved
-              ? {
-                  nextRenewalOn: nextRenewalAfter(
-                    startDate,
-                    billingCycle,
-                    todayInDhaka(),
-                  ),
-                }
-              : {}),
+            ...(typedRenewal !== undefined
+              ? { nextRenewalOn: typedRenewal ?? worked() }
+              : cycleMoved
+                ? { nextRenewalOn: worked() }
+                : {}),
             // Only when money was actually in the body: otherwise an edit to
             // the plan name would rewrite a rate somebody had corrected by
             // hand.
@@ -837,6 +843,21 @@ export class SubscriptionsService {
       throw new BadRequestException({
         message: "Validation failed",
         errors: { users: ["Somebody on this list is no longer on the team"] },
+      });
+    }
+  }
+
+  /** A typed renewal has to come after the plan started. */
+  private assertRenewalAfterStart(
+    renewal: string | null | undefined,
+    startDate: string,
+  ) {
+    if (renewal && renewal <= startDate) {
+      throw new BadRequestException({
+        message: "Validation failed",
+        errors: {
+          nextRenewalOn: ["Renews on has to be after the day it started"],
+        },
       });
     }
   }

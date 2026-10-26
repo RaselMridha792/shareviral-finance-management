@@ -66,6 +66,8 @@ export const SUBSCRIPTIONS_MAP = [
           chargeUsd: "what the card adds on top each cycle, in dollars",
           accountId: "the card or account it is paid from; needed when active",
           boughtFor: "the department it is for; on screen, User Department",
+          nextRenewalOn:
+            "Renews on: filled in from the start date and the cycle; typed over for a plan that renews on another day, after the start date",
         },
         onSave:
           "Adds the plan. If it is active, its first payment then leaves its account on the start date, under the AI tools heading; if that payment is refused, the plan stays and Renew takes it.",
@@ -122,7 +124,7 @@ export const SUBSCRIPTIONS_MAP = [
           users: "the whole list when sent; anyone left out comes off",
         },
         onSave:
-          "Changes the plan in place and never takes money. The renewal date moves only when the start date or the cycle changes, and the three prices must agree.",
+          "Changes the plan in place and never takes money. The renewal date moves when it is typed, or when the start date or the cycle changes; a blank one goes back to the worked-out date. The three prices must agree.",
         permission: "vendors.write",
       },
       {

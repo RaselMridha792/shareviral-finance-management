@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ApiError } from "@/lib/api-client";
-import { formatDate } from "@/lib/utils";
 import type { AccountDto } from "@/lib/masters";
 import type { TeamMemberDto } from "@/lib/payroll";
 import {
@@ -99,7 +98,7 @@ function methodSuggestedBy(
  */
 function Clip({
   picker,
-  file,
+  files,
   onPick,
   label,
   stored = [],
@@ -108,8 +107,16 @@ function Clip({
   children,
 }: {
   picker: React.RefObject<HTMLInputElement | null>;
-  file: File | null;
-  onPick: (next: File | null) => void;
+  /**
+   * Every paper picked in this sitting — several at once (26 Oct 2026).
+   *
+   * It held one: the picker had no `multiple` and kept `files[0]`, so a second
+   * invoice meant saving, opening the plan again and picking it there. The
+   * owner hit it correcting old plans, which is exactly when papers come in
+   * twos.
+   */
+  files: File[];
+  onPick: (next: File[]) => void;
   label: string;
   /**
    * What the plan already carries in this slot.
@@ -127,7 +134,7 @@ function Clip({
   const preview = useFilePreview();
   const [rejected, setRejected] = useState<string | null>(null);
   const kept = stored.filter((one) => !removing.includes(one.id));
-  const all = [...kept.map(asPreview), ...(file ? [file] : [])];
+  const all = [...kept.map(asPreview), ...files];
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
@@ -136,19 +143,29 @@ function Clip({
           ref={picker}
           type="file"
           accept="image/*,application/pdf"
+          multiple
           className="sr-only"
           onChange={(event) => {
-            const next = event.target.files?.[0] ?? null;
+            const chosen = [...(event.target.files ?? [])];
             // Cleared so picking the same file twice still fires.
             event.target.value = "";
-            /* The paper already on file, picked again, is a second copy of
-               it rather than a second paper. */
-            if (next && kept.some((one) => sameAsStored(next, one))) {
-              setRejected("That one is already attached.");
-              return;
-            }
-            setRejected(null);
-            onPick(next);
+            /* The paper already on file, or already picked, picked again is a
+               second copy of it rather than a second paper. */
+            const fresh = chosen.filter(
+              (next) =>
+                !kept.some((one) => sameAsStored(next, one)) &&
+                !files.some(
+                  (one) => one.name === next.name && one.size === next.size,
+                ),
+            );
+            setRejected(
+              fresh.length < chosen.length
+                ? chosen.length === 1
+                  ? "That one is already attached."
+                  : "Some of those were already attached, and were left out."
+                : null,
+            );
+            if (fresh.length) onPick([...files, ...fresh]);
           }}
         />
         <button
@@ -179,8 +196,9 @@ function Clip({
           }
         />
       ))}
-      {file ? (
+      {files.map((file, index) => (
         <span
+          key={`${file.name}-${file.size}-${index}`}
           data-attached="picked"
           className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
         >
@@ -199,20 +217,18 @@ function Clip({
           <PreviewButton
             name={file.name}
             count={all.length}
-            onClick={() => preview.show(all, kept.length)}
+            onClick={() => preview.show(all, kept.length + index)}
           />
-          {/* A picked file could not be taken back before — only replaced by
-              picking another. */}
           <button
             type="button"
-            onClick={() => onPick(null)}
+            onClick={() => onPick(files.filter((one) => one !== file))}
             aria-label={`Remove ${file.name}`}
             className="shrink-0 cursor-pointer rounded p-0.5 transition hover:bg-surface-muted hover:text-foreground"
           >
             <X className="size-3" />
           </button>
         </span>
-      ) : null}
+      ))}
 
       {preview.overlay}
     </div>
@@ -297,7 +313,7 @@ export function SubscriptionForm({
    * it, the way every other money form in this app asks for them.
    */
   const [websiteUrl, setWebsiteUrl] = useState(subscription?.websiteUrl ?? "");
-  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const invoicePicker = useRef<HTMLInputElement>(null);
   /*
    * Read, never written. The box that set it is gone — a reference is attached
@@ -306,7 +322,7 @@ export function SubscriptionForm({
    * somebody recorded before this change.
    */
   const [reference] = useState(subscription?.reference ?? "");
-  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
 
   /** What the plan being edited already carries — see `Clip`. */
   const papers = useStoredPapers(
@@ -316,14 +332,14 @@ export function SubscriptionForm({
   /** The words beside a clip: nothing when a paper is on file or picked. */
   const clipNote = (
     kind: "invoice" | "bank_statement",
-    picked: File | null,
+    picked: File[],
     empty: string,
   ) =>
     papers.loading
       ? "Checking what is attached…"
       : papers.failed
         ? "Could not check what is already attached."
-        : picked ||
+        : picked.length > 0 ||
             papers
               .of(kind)
               .some((one) => !papers.removing.includes(one.id))
@@ -360,14 +376,20 @@ export function SubscriptionForm({
   );
   const [startDate, setStartDate] = useState(subscription?.startDate ?? "");
   /*
-   * No renewal-date state, because the form no longer asks for one.
+   * The renewal date: filled in, and editable (26 Oct 2026).
    *
-   * The owner: "If select Monthly hoy tahole renews date auto calculation hobe
-   * ekhane notun kore renewal date dite hobena oi field ta remove korte hobe."
-   * The server derives it from the start date and the cycle. What is shown
-   * below is that same derivation, so somebody sees the date they are choosing
-   * rather than being told about it afterwards.
+   * The owner first asked for no box ("oi field ta remove korte hobe"); the
+   * server derived the date from the start date and the cycle, counting on
+   * from today. For a plan entered from past records that gives a renewal that
+   * never happened — started 30 Jun, monthly, "renews 30 Oct" — so the box is
+   * back: *"autofill system ta thik thakuk … renew month tao edit kora jay"*.
+   *
+   * Untouched, nothing is sent and the server works it out as before. Typed,
+   * the typed date is sent and wins. Cleared, it goes back to the worked-out
+   * date.
    */
+  const [renewal, setRenewal] = useState("");
+  const [renewalTouched, setRenewalTouched] = useState(false);
   /*
    * Guarded, because a new plan has no start date until somebody types one.
    * `nextRenewalAfter("")` reaches `parseIsoDate("")` and throws, which took
@@ -377,6 +399,16 @@ export function SubscriptionForm({
   const derivedRenewal = /^\d{4}-\d{2}-\d{2}$/.test(startDate)
     ? nextRenewalAfter(startDate, billingCycle, todayInDhaka())
     : null;
+  /* An existing plan keeps its stored date — a payment may have moved it — until
+     its start date or cycle changes, which is when the server re-derives too. */
+  const cycleMoved =
+    !subscription ||
+    startDate !== subscription.startDate ||
+    billingCycle !== subscription.billingCycle;
+  const autoRenewal = cycleMoved
+    ? derivedRenewal
+    : (subscription?.nextRenewalOn ?? derivedRenewal);
+  const shownRenewal = renewalTouched ? renewal : (autoRenewal ?? "");
 
   const [accountId, setAccountId] = useState(subscription?.accountId ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
@@ -485,6 +517,8 @@ export function SubscriptionForm({
         usdRate,
         billingCycle,
         startDate,
+        // Only when typed: untouched, the server works it out as it always did.
+        ...(renewalTouched ? { nextRenewalOn: renewal } : {}),
         // No longer asked for — the account picker is the only "paid by" the
         // form shows. It still has to be sent: the field's `.default("card")`
         // lands in the schema's output type, which is what the client is typed
@@ -580,21 +614,22 @@ export function SubscriptionForm({
        * one save rather than a second copy beside the first.
        */
       const unremoved = await papers.commit();
-      for (const [file, kind, what] of [
-        [invoiceFile, "invoice", "invoice"],
-        [referenceFile, "bank_statement", "bank record"],
+      for (const [files, kind, what] of [
+        [invoiceFiles, "invoice", "invoice"],
+        [referenceFiles, "bank_statement", "bank record"],
       ] as const) {
-        if (!file) continue;
-        try {
-          await uploadSubscriptionFile(saved.id, file, kind);
-        } catch (caught) {
-          onSaved(status);
-          setError(
-            `The plan is saved, but the ${what} did not upload: ${
-              caught instanceof ApiError ? caught.message : "try it again"
-            }.`,
-          );
-          return;
+        for (const file of files) {
+          try {
+            await uploadSubscriptionFile(saved.id, file, kind);
+          } catch (caught) {
+            onSaved(status);
+            setError(
+              `The plan is saved, but the ${what} ${file.name} did not upload: ${
+                caught instanceof ApiError ? caught.message : "try it again"
+              }.`,
+            );
+            return;
+          }
         }
       }
 
@@ -868,25 +903,40 @@ export function SubscriptionForm({
           </Field>
 
           {/*
-            Stated, not asked. A renewal date is the start date plus however
-            many cycles have gone by, and two fields for one fact is two
-            fields that can disagree.
-
-            It still MOVES on its own afterwards: recording a payment advances
-            the stored date by a cycle, which is real information this cannot
-            know. So this says what the date will be when the plan is saved,
-            not what it will read forever.
+            Filled in from the start date and the cycle, and editable: the
+            worked-out date counts on from today, which is wrong for a plan
+            entered from past records. Recording a payment still moves the
+            stored date on.
           */}
-          <Field label="Renews on">
-            <p className="sv-chip flex h-11 items-center rounded-[11px] border-dashed px-3.5 text-[14.5px] text-muted-foreground">
-              {derivedRenewal ? (
-                <span className="num">{formatDate(derivedRenewal)}</span>
-              ) : /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? (
+          <Field
+            label="Renews on"
+            error={fieldErrors.nextRenewalOn}
+            hint={
+              renewalTouched ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenewalTouched(false);
+                    setRenewal("");
+                  }}
+                  className="cursor-pointer underline underline-offset-2"
+                >
+                  Use the worked-out date
+                </button>
+              ) : /^\d{4}-\d{2}-\d{2}$/.test(startDate) && !autoRenewal ? (
                 "Not recurring — no renewal date"
               ) : (
-                "Choose when it started"
-              )}
-            </p>
+                "Filled in from when it started; change it if it renews another day"
+              )
+            }
+          >
+            <DateInput
+              value={shownRenewal}
+              onChange={(e) => {
+                setRenewal(e.target.value);
+                setRenewalTouched(e.target.value !== "");
+              }}
+            />
           </Field>
 
           <Field label="Payment Method" error={fieldErrors.paymentMethod}>
@@ -1001,15 +1051,15 @@ export function SubscriptionForm({
           >
             <Clip
               picker={invoicePicker}
-              file={invoiceFile}
-              onPick={setInvoiceFile}
+              files={invoiceFiles}
+              onPick={setInvoiceFiles}
               label="Attach the invoice"
               stored={papers.of("invoice")}
               removing={papers.removing}
               onToggleRemove={papers.toggle}
             >
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {clipNote("invoice", invoiceFile, "No invoice attached")}
+                {clipNote("invoice", invoiceFiles, "No invoice attached")}
               </span>
             </Clip>
           </Field>
@@ -1023,8 +1073,8 @@ export function SubscriptionForm({
                 got. The stored value and every number already in it stay. */}
             <Clip
               picker={referencePicker}
-              file={referenceFile}
-              onPick={setReferenceFile}
+              files={referenceFiles}
+              onPick={setReferenceFiles}
               label="Attach the bank's record"
               stored={papers.of("bank_statement")}
               removing={papers.removing}
@@ -1033,7 +1083,7 @@ export function SubscriptionForm({
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                 {clipNote(
                   "bank_statement",
-                  referenceFile,
+                  referenceFiles,
                   "No reference attached",
                 )}
               </span>

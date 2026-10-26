@@ -297,31 +297,35 @@ describe("creating a subscription", () => {
     assert.equal(parsed.data?.renewalNote, "Credit base");
   });
 
-  it("refuses a renewal date outright, rather than ignoring one", () => {
+  it("takes a typed renewal date, and blank means work it out", () => {
     /*
-     * It used to accept one and check it was not before the start date. The
-     * date is now derived from the start date and the cycle — the two could
-     * disagree with nothing to say which was right — so the key is gone from
-     * the contract.
-     *
-     * Refused rather than silently dropped: a value the server discards is
-     * worse than one it rejects, because the caller never finds out.
+     * The box was taken away once (the date is the start date plus the cycles
+     * gone by) and came back on 26 Oct 2026: worked out from TODAY, a plan
+     * entered from past records renewed on a date that never happened. Filled
+     * in the same way, and editable. Whether it comes after the start date is
+     * the service's check, which knows the stored start date on an edit.
      */
-    const parsed = createSubscriptionSchema.safeParse({
+    const typed = createSubscriptionSchema.safeParse({
       ...plan,
-      nextRenewalOn: "2025-12-01",
+      nextRenewalOn: "2026-02-15",
     });
-    assert.equal(parsed.success, false);
-    /* An unrecognised key is reported against the OBJECT, not against the key
-       — `path` is empty and the name is in `keys`. Asserting on path[0] passed
-       for a field that had its own rule and says nothing about one that has
-       been removed. */
-    const issue = parsed.error?.issues[0];
-    assert.equal(issue?.code, "unrecognized_keys");
-    assert.deepEqual(
-      (issue as { keys?: string[] } | undefined)?.keys,
-      ["nextRenewalOn"],
-    );
+    assert.equal(typed.success, true, JSON.stringify(typed.error?.issues));
+    assert.equal(typed.data?.nextRenewalOn, "2026-02-15");
+
+    const blank = createSubscriptionSchema.safeParse({
+      ...plan,
+      nextRenewalOn: "",
+    });
+    assert.equal(blank.data?.nextRenewalOn, null);
+
+    const absent = createSubscriptionSchema.safeParse(plan);
+    assert.equal(absent.data?.nextRenewalOn, undefined);
+
+    const bad = createSubscriptionSchema.safeParse({
+      ...plan,
+      nextRenewalOn: "2026-02-31",
+    });
+    assert.equal(bad.success, false);
   });
 
   it("refuses the same person twice on one plan", () => {

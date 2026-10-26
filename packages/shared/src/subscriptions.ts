@@ -256,19 +256,27 @@ const subscriptionFieldsSchema = z.strictObject({
   billingCycle: billingCycleSchema.default("monthly"),
 
   startDate: isoDateSchema,
-  /*
-   * No `nextRenewalOn`. It is worked out from the start date and the cycle —
-   * `nextRenewalAfter` below — and moves after that only when a payment is
-   * recorded against the plan.
+  /**
+   * When it renews next — worked out, and now editable too.
    *
-   * Removed rather than accepted-and-ignored: a field the server quietly
-   * discards is worse than one it refuses, because the caller has no way to
-   * find out. A client still sending it now gets an error naming the key.
+   * It is worked out from the start date and the cycle (`nextRenewalAfter`
+   * below) and moves on when a payment is recorded. The form fills it in that
+   * way still. But the derivation counts on from TODAY, so a plan entered from
+   * past records got a renewal that never happened: started 30 Jun, monthly,
+   * entered in October, "renews 30 Oct". The owner, 26 Oct 2026: *"autofill
+   * system ta thik thakuk … renew month tao edit kora jay"*.
    *
-   * `renewalNote` stays and matters more for it. The importer's sheet has rows
-   * saying "Credit Base" where a date belongs, and that is where the reason
-   * goes.
+   * Absent: worked out as before (on a change, only when the start date or the
+   * cycle moved). A date: that date, after the start date. Blank or null: back
+   * to the worked-out date.
+   *
+   * `renewalNote` stays beside it. The importer's sheet has rows saying
+   * "Credit Base" where a date belongs, and that is where the reason goes.
    */
+  nextRenewalOn: z
+    .union([isoDateSchema, z.literal(""), z.null()])
+    .transform((v) => (v === "" ? null : v))
+    .optional(),
   renewalNote: optionalSubText(120),
 
   paymentMethod: paymentMethodSchema.default("card"),
