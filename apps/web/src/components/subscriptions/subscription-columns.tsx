@@ -74,7 +74,10 @@ export type SubscriptionRowHandlers = {
 export function SubscriptionHeadCells() {
   return (
     <>
-      <Th>Start Date</Th>
+      {/* The owner, 27 Oct 2026: Paid On in front, and the table ordered by
+          it. A month on the register is the plans paid in it, and a start
+          date in that first column read 20 May in July. */}
+      <Th>Paid On</Th>
       <Th>Tool Name</Th>
       {/* The owner: "ekhane tool name and plan akoi table er row te cole geche
           eta alada row hobe". They were stacked in one cell — the plan in small
@@ -105,6 +108,8 @@ export function SubscriptionHeadCells() {
       <Th>Login accounts</Th>
       <Th>User Name</Th>
       <Th>User Department</Th>
+      {/* Moved in from the front, beside the two dates it goes with. */}
+      <Th>Start Date</Th>
       <Th>Billing Cycle</Th>
       <Th>Next Renewal Date</Th>
       <Th>Status</Th>
@@ -126,7 +131,11 @@ export function SubscriptionBodyCells({
   return (
     <>
       <td className="font-extrabold whitespace-nowrap tabular-nums">
-        {formatDate(row.startDate)}
+        {row.paidOn ? (
+          formatDate(row.paidOn)
+        ) : (
+          <span className="font-normal text-muted-foreground">Not paid</span>
+        )}
       </td>
 
       <td>
@@ -322,6 +331,10 @@ export function SubscriptionBodyCells({
 
       <td className="text-sm text-muted-foreground">
         {row.boughtFor ?? "N/A"}
+      </td>
+
+      <td className="text-sm font-extrabold whitespace-nowrap tabular-nums">
+        {formatDate(row.startDate)}
       </td>
 
       <td className="text-sm text-muted-foreground">

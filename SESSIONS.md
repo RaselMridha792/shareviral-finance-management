@@ -152,6 +152,36 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 176. AI tools & subscriptions: Paid On in front, and the order — 27 Oct 2026
+
+The owner, looking at July: the first column was **Start Date**, so a month of plans all paid in
+July read 20 May, 9 June, 14 June… *"paid on column ta baniye oitake samne rakho and akhon jeta
+dekha jacche oita vitorer dike thakbe tahole shorting bojha jabe"*.
+
+**What changed**
+- **The API.** Each row carries `paidOn`, and the list is ordered by it, earliest first, with a
+  plan that was never paid last. With a month, `paidOn` is the first live payment booked to that
+  month. That date can be in the month before: Zahin's Claude Pro, paid on 22 June for July,
+  reads 22/06 in July. With Every month, it is the latest payment.
+- **The table.** **Paid On** is the first column after SL, and an unpaid plan reads "Not paid".
+  **Start Date** has moved inward, just before Billing Cycle.
+- **Shared component.** `SubscriptionHeadCells` and `SubscriptionBodyCells` are shared, so a
+  person's "Paid tools" on the Team profile shows the same row. There, Paid On is the latest
+  payment.
+- Both tables are one column wider: 2456px and 2592px.
+
+**Measured on local** with `paidqa.mjs`, 32 of 32 checks passing:
+- for June, July and August, every Paid On equals that month's first payment in the database,
+  and the rows go in date order;
+- with Every month, Paid On is the latest payment, in order;
+- on screen in July, Paid On is the column after SL, Start Date sits before Billing Cycle, and
+  the rows read 22/06, 23/06, 01/07 … 30/07;
+- the four CI steps are green.
+
+**Noticed, not touched.** On this screen the console logs React's duplicate-key error with the
+key "none". `PayDialog` and `UpgradeDialog` are siblings and both are keyed `?? "none"`
+(subscriptions-screen.tsx, around line 676). This was there before this change.
+
 ## 175. AI tools & subscriptions: the month is the plans paid in it — 27 Oct 2026
 
 The owner, from the live register: with **October 2026** chosen, it listed plans from May. The

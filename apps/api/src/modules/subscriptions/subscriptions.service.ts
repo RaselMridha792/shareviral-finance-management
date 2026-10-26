@@ -129,26 +129,28 @@ export class SubscriptionsService {
       .where(where);
 
     const rows = await this.db.client
-      .select(this.columns())
+      .select(this.columns(query.paidIn))
       .from(subscriptions)
       .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(where)
       /*
-       * By the date the plan started, the 1st of the month first.
+       * By the day it was paid, the 1st of the month first — the Paid On
+       * column, which is the table's first.
        *
        * The owner, 26 Oct 2026: *"table gula jate sundor vabe month er suru
-       * theke ses evabe sorting hoy"*. It was newest-added first, which read
-       * well while plans were added as they were bought; with months of past
-       * records entered in one go, "added" is the order of the import and the
-       * register read in no order at all. The Date column shows the start
-       * date, so the table now reads down it.
+       * theke ses evabe sorting hoy"*; and on 27 Oct, with the month meaning
+       * the plans paid in it, Paid On went in front so the order can be read
+       * off the screen. Start date had been the order, and July read 20 May,
+       * 9 June, 14 June… for plans all paid in July.
        *
-       * Then the order they were added in, and `id` last so the order is
-       * total: two rows the same on both would otherwise swap places between
-       * page loads, which is how a pager starts showing the same row twice.
+       * A plan never paid comes last. Then the start date, the order they
+       * were added in, and `id` last so the order is total: two rows the same
+       * on all of them would otherwise swap places between page loads, which
+       * is how a pager starts showing the same row twice.
        */
       .orderBy(
+        sql`${this.paidOnSql(query.paidIn)} asc nulls last`,
         asc(subscriptions.startDate),
         asc(subscriptions.createdAt),
         asc(subscriptions.id),
@@ -642,9 +644,36 @@ export class SubscriptionsService {
     return sql<string>`coalesce(${subscriptions.toolName}, ${vendors.name})`;
   }
 
-  private columns() {
+  /**
+   * The day a plan was paid, as `YYYY-MM-DD`, or null if it never was.
+   *
+   * With a month, the first live payment booked to it — a renewal paid on 22
+   * June for July reads 22 June in July. Without one, the latest payment
+   * there is. Text, so the date arrives as the day it is and not as a
+   * midnight in some time zone.
+   */
+  private paidOnSql(paidIn?: string) {
+    return paidIn
+      ? sql<string | null>`(
+          select min(${transactions.txnDate})::text from ${transactions}
+          where ${transactions.subscriptionId} = ${subscriptions.id}
+            and ${transactions.voidedAt} is null
+            and ${transactions.deletedAt} is null
+            and ${booksMonthSql} = ${monthOf(paidIn)}
+        )`
+      : sql<string | null>`(
+          select max(${transactions.txnDate})::text from ${transactions}
+          where ${transactions.subscriptionId} = ${subscriptions.id}
+            and ${transactions.voidedAt} is null
+            and ${transactions.deletedAt} is null
+        )`;
+  }
+
+  private columns(paidIn?: string) {
     return {
       id: subscriptions.id,
+      /** The Paid On column: see `paidOnSql`. */
+      paidOn: this.paidOnSql(paidIn),
       toolName: this.toolNameSql(),
       /**
        * Null on everything written since the name column arrived, and that is
@@ -884,6 +913,8 @@ type SubscriptionRow = {
   usdRate: string | null;
   billingCycle: string;
   startDate: string;
+  /** In the month asked for, or the latest payment; null if never paid. */
+  paidOn: string | null;
   nextRenewalOn: string | null;
   renewalNote: string | null;
   paymentMethod: string;
