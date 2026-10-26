@@ -152,6 +152,40 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 175. AI tools & subscriptions: the month is the plans paid in it — 27 Oct 2026
+
+The owner, from the live register: with **October 2026** chosen, it listed plans from May. The
+filter was `startedBy`, meaning a start date on or before the month's end, so October listed
+every plan ever bought. The owner chose **"the plans paid in that month"**, which is how the
+boss's sheet's month tabs work.
+
+**What changed**
+- `listSubscriptionsQuerySchema.startedBy` is replaced by **`paidIn`** (packages/shared). The
+  owner approved the shared change by choosing this.
+- The API keeps a plan when it has a live payment row in that month. A live row is one with
+  `transactions.subscription_id` set, not voided and not deleted. The month is the **books
+  month** (`booksMonthSql`), the same month Expenses and the Dashboard count it in.
+- The month picker sends the month's 1st. Its "Every month" option already existed.
+- **The register opens on the All tab, not Active.** A status is what a plan is *today*, so
+  June's 19 tools are mostly expired now. On Active, June showed 1 of the 19.
+- **After Add, the screen moves to the new plan's month.** That is the month its first payment
+  went in, or Every month when no payment was taken (a plan added as expired, or a payment
+  that failed). Before this, a back-dated plan vanished from the month on screen and the save
+  looked like it had failed. `onSaved` now also carries `paidOn`.
+- The Assistant's map says "the plans paid in a month".
+
+**Measured on local** with `paidqa.mjs` in the scratchpad (20 of 20 checks pass):
+- **Months:** May shows 2 plans, June 19, July 19, August 18 and October 0, and each matches
+  the database. "Every month" shows 33.
+- **The screen** opens on October and All. It asks for `paidIn=2026-10-01`.
+- **Add:** a plan dated 15 August was added from Every month. It took its payment on that day,
+  the screen moved to August, and the plan was on screen. The fixtures were removed afterwards.
+
+The four CI steps are green.
+
+**Note for the owner:** on live, October is empty until an October payment is recorded. That is
+the rule the owner chose. "Every month" shows every plan.
+
 ## 174. A revaluation is worth $0 (piece 4c) — 27 Oct 2026
 
 The owner, from the live Accounts page: JPMorgan as at the end of June read ৳0.00 and

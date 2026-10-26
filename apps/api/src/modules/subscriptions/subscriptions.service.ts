@@ -22,7 +22,6 @@ import {
   ilike,
   inArray,
   isNull,
-  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -41,6 +40,7 @@ import {
   transactions,
   vendors,
 } from "../../db/schema";
+import { booksMonthSql, monthOf } from "../transactions/books-month";
 
 /**
  * The register of paid tools.
@@ -65,16 +65,20 @@ export class SubscriptionsService {
 
     if (query.status) filters.push(eq(subscriptions.status, query.status));
     /*
-     * The month, against the plan's own start date.
-     *
-     * "Had started by the end of that month" — everything running then, plus
-     * anything bought during it. Whether it was still ALIVE is the status tabs'
-     * job, which already exist, so the two compose into "the plans running in
-     * September" without this filter having to guess at a cancellation date
-     * the table does not hold.
+     * The month: the plans with a live payment in it, by books month — the
+     * sheet's month tabs. An exists, so a plan paid twice that month (a renewal
+     * and an upgrade charge) still comes back once.
      */
-    if (query.startedBy)
-      filters.push(lte(subscriptions.startDate, query.startedBy));
+    if (query.paidIn)
+      filters.push(
+        sql`exists (
+          select 1 from ${transactions}
+          where ${transactions.subscriptionId} = ${subscriptions.id}
+            and ${transactions.voidedAt} is null
+            and ${transactions.deletedAt} is null
+            and ${booksMonthSql} = ${monthOf(query.paidIn)}
+        )`,
+      );
     if (query.category)
       filters.push(eq(subscriptions.category, query.category));
     // Only ever matches the rows written before `tool_name` existed, because

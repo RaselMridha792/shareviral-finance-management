@@ -42,7 +42,7 @@ export const SUBSCRIPTIONS_MAP = [
       {
         href: "/subscriptions",
         name: "AI tools and subscriptions",
-        does: "The plans running in a month, with price, renewal date and card. Add a subscription adds a plan and takes its first payment; a row offers Renew, Upgrade and Edit, and opens the whole plan.",
+        does: "The plans paid in a month (or every month), with price, renewal date and card. Add a subscription adds a plan and takes its first payment; a row offers Renew, Upgrade and Edit, and opens the whole plan.",
       },
       {
         href: "/subscriptions/[id]",

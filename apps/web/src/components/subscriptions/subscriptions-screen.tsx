@@ -79,19 +79,23 @@ export function SubscriptionsScreen({
 }) {
   const canWrite = useCan("vendors.write");
 
-  const [tab, setTab] = useState<SubscriptionStatus | "all">("active");
+  /*
+   * Opens on All, not Active. The month below is the plans PAID in it, and a
+   * status is what a plan is today: June's nineteen tools are mostly expired
+   * now, and Active would show one of them where the sheet's June tab has all
+   * nineteen.
+   */
+  const [tab, setTab] = useState<SubscriptionStatus | "all">("all");
   const [category, setCategory] = useState<SubscriptionCategory | "">("");
   /*
    * The month the register opens on, and it opens on this one.
    *
-   * The owner: "ekhane sudhu current month dekhabe oi month a jodi kono
-   * subscription thake oigula dekhabe. r current month a new kena hole otao
-   * dekhabe." A plan is in a month if it had STARTED by the end of it —
-   * everything running then, and anything bought during it.
+   * A plan is in a month if money was paid for it then (the owner, 27 Oct
+   * 2026) — the boss's sheet's month tabs. A month nothing was paid in shows
+   * nothing; it used to mean "started by then", and October listed May's.
    *
    * "Every month" is one row away, because a plan runs across months and "show
-   * me all of them" is a question this screen is asked constantly. What he
-   * asked for is where it starts, not that the whole list should go.
+   * me all of them" is a question this screen is asked constantly.
    */
   const [month, setMonth] = useState<{
     from: string;
@@ -170,7 +174,7 @@ export function SubscriptionsScreen({
   /**
    * Move to the tab the row you just saved is actually on.
    *
-   * The register opens on Active. A plan saved as Expired matched nothing on
+   * The register used to open on Active. A plan saved as Expired matched nothing on
    * screen afterwards, so the table looked untouched and the save looked like
    * it had failed — which is what the owner reported after adding two of them.
    * Nothing is hidden and nothing is renamed; the screen simply stops showing
@@ -203,8 +207,8 @@ export function SubscriptionsScreen({
         status: tab === "all" ? undefined : tab,
         category: category || undefined,
         q: query || undefined,
-        /* The last day of the month, against the plan's start date. */
-        startedBy: month?.to,
+        /* The plans with a payment in that month's books. */
+        paidIn: month?.from,
         page,
       });
       setRows(result.items);
@@ -349,13 +353,9 @@ export function SubscriptionsScreen({
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {/*
-            Which month the register is being read for.
-
-            It filters the plan's own START DATE — the table's Date column — so
-            a month shows everything that had started by the end of it. Whether
-            a plan was still alive is the status tabs beside this, which is why
-            no cancellation date has to be invented: this and "Active" compose
-            into "the plans running in September".
+            Which month the register is being read for: the plans paid in it,
+            by the month the payment is booked to. The status tabs beside it
+            are what each plan is today.
           */}
           <MonthFilter
             range={month}
@@ -582,10 +582,25 @@ export function SubscriptionsScreen({
           accounts={accounts}
           members={members}
           onClose={() => setAdding(false)}
-          onSaved={(savedStatus) => {
+          onSaved={(savedStatus, paidOn) => {
             setAdding(false);
             showSaved(savedStatus);
-            void load();
+            setPage(1);
+            /* The new plan is in the month it was paid in, or in none of
+               them; either way, go where it is. A changed month reloads the
+               list by itself, and a second load beside it could land last
+               with the old month's rows. */
+            if (paidOn) {
+              const range = monthRange(
+                Number(paidOn.slice(0, 4)),
+                Number(paidOn.slice(5, 7)),
+              );
+              setMonth({ from: range.start, to: range.end, label: range.label });
+            } else if (month) {
+              setMonth(null);
+            } else {
+              void load();
+            }
           }}
         />
       ) : null}

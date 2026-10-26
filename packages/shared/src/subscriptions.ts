@@ -365,29 +365,20 @@ export const listSubscriptionsQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().max(120).optional(),
 
   /**
-   * The last day of the month the register is being read for.
+   * The month the register is being read for, as its 1st: the plans PAID in it.
    *
-   * The owner: *"ekhane sudhu current month dekhabe oi month a jodi kono
-   * subscription thake oigula dekhabe. r current month a new kena hole otao
-   * dekhabe."* A plan is in a month if it HAD STARTED by the end of it —
-   * everything running then, plus anything bought during it.
+   * The owner, 27 Oct 2026, choosing between "started by then" and "paid
+   * then": the plans with money paid that month, like the month tabs of the
+   * boss's sheet — June is the nineteen tools paid in June, and a month nothing
+   * was paid in shows nothing. It replaced `startedBy` (start date on or before
+   * the month's end), under which October listed every plan bought in May.
    *
-   * **Named `startedBy`, not `to`.** Every other date range in this app is a
-   * ledger range, and a plain `to` here would be read as one by the next
-   * person — which is the one thing this cannot mean. It filters
-   * `subscriptions.start_date`, the column the table's own Date column shows.
-   *
-   * It deliberately does NOT mean "paid in this month". Nothing ties a payment
-   * back to a plan: `payForSubscription` writes an ordinary expense with the
-   * tool named in the description and no plan id on the row, and two plans from
-   * one vendor produce the same description. Answering that question needs a
-   * `transactions.subscription_id` column and its own migration.
-   *
-   * Whether a plan was still ALIVE that month is the status tabs' job, and they
-   * already exist: this filter and the Active tab compose into "the plans
-   * running in September".
+   * "Paid" is a live payment row on the plan (`transactions.subscription_id`,
+   * neither voided nor deleted), and its month is the books month — the same
+   * month the row counts in on Expenses and the Dashboard, so May's bill paid
+   * on 12 June is May's here too.
    */
-  startedBy: isoDateSchema.optional(),
+  paidIn: isoDateSchema.optional(),
 });
 export type ListSubscriptionsQuery = z.infer<
   typeof listSubscriptionsQuerySchema

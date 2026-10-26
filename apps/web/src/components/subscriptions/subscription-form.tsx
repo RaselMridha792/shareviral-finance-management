@@ -260,8 +260,12 @@ export function SubscriptionForm({
    * owner, having added two: *"expired duto subscription add korlam oigulao
    * kaj korchena."* The screen uses this to move to the tab the row is
    * actually on.
+   *
+   * `paidOn` is the day a NEW plan's first payment was taken, or null when
+   * none was (an edit, a plan added as expired, a payment that failed). The
+   * register's month is the plans paid in it, so the screen moves there too.
    */
-  onSaved: (savedStatus?: SubscriptionStatus) => void;
+  onSaved: (savedStatus?: SubscriptionStatus, paidOn?: string | null) => void;
 }) {
   const editing = Boolean(subscription);
 
@@ -499,6 +503,8 @@ export function SubscriptionForm({
     setError(null);
     /* Set only when everything that can fail has succeeded. */
     let done = false;
+    /* The day a new plan's first payment was taken, once it has been. */
+    let paidOn: string | null = null;
     setFieldErrors({});
     try {
       // Said here as well as by the API, which refuses a blank name in the
@@ -597,8 +603,9 @@ export function SubscriptionForm({
                it here would skip a month. */
             advanceRenewal: false,
           });
+          paidOn = startDate;
         } catch (caught) {
-          onSaved(status);
+          onSaved(status, paidOn);
           setError(
             `The plan is saved, but the payment did not go through: ${
               caught instanceof ApiError ? caught.message : "try it again"
@@ -626,7 +633,7 @@ export function SubscriptionForm({
           try {
             await uploadSubscriptionFile(saved.id, file, kind);
           } catch (caught) {
-            onSaved(status);
+            onSaved(status, paidOn);
             setError(
               `The plan is saved, but the ${what} ${file.name} did not upload: ${
                 caught instanceof ApiError ? caught.message : "try it again"
@@ -638,7 +645,7 @@ export function SubscriptionForm({
       }
 
       if (unremoved.length > 0) {
-        onSaved(status);
+        onSaved(status, paidOn);
         setError(
           `The plan is saved, but ${unremoved
             .map((one) => one.name)
@@ -684,7 +691,7 @@ export function SubscriptionForm({
       Inside the try, anything `onSaved` threw was caught below and reported as
       a failed save — on a plan that had just been written.
     */
-    if (done) onSaved(status);
+    if (done) onSaved(status, paidOn);
   }
 
   return (
