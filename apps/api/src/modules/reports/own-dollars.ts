@@ -1,6 +1,7 @@
 import { and, isNull, sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema";
+import { isRevaluationRow } from "../accounts/accounts.service";
 import { inBooksPeriod } from "../transactions/books-month";
 import { notATransfer } from "../transactions/own-money";
 
@@ -36,6 +37,7 @@ import { notATransfer } from "../transactions/own-money";
 /** The dollars a row is worth, or null when nobody said. */
 const rowDollars = sql`
   case
+    when ${isRevaluationRow} then 0
     when ${transactions.originalCurrency} = 'USD'
          and ${transactions.originalAmount} is not null
     then ${transactions.originalAmount}

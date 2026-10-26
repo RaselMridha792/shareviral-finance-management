@@ -209,14 +209,33 @@ const currentBalance = balanceUpTo(null);
  * what says so, and the screen marks it.
  */
 /**
+ * A revaluation: a row filed under Exchange gain or Exchange loss — how the
+ * app records a dollar account moved to the month's rate on the 1st (the
+ * owner, 13 Oct 2026). Coalesced because a transfer has no category.
+ *
+ * **It is worth $0.** The boss's sheet revalues in taka only: JPMorgan opens
+ * June at ৳8,52,252 and still $6,960. Read at its rate like any other row,
+ * the ৳3,132 gain became $25.58, and the account closed June at ৳0 and
+ * $25.58 — the owner, 27 Oct: "25usd porer month a cole geche". Piece 4c of
+ * docs/briefs/2026-10-13-books-month-and-bank-status.md.
+ */
+export const isRevaluationRow = sql<boolean>`coalesce(${transactions.categoryId} in (
+    select c.id from categories c
+     where c.slug in ('exchange-gain', 'exchange-loss')
+        or c.name ilike 'exchange gain' or c.name ilike 'exchange loss'),
+  false)`;
+
+/**
  * What one row moved in dollars, signed: in adds, out subtracts.
  *
  * The rule the paragraph above describes, as one expression so that
  * Accounts ▸ Bank status (`bank-status.service.ts`) reads a row's dollars
- * exactly as an account's own balance does, rather than in a third way.
+ * exactly as an account's own balance does, rather than in a third way. A
+ * revaluation is $0, whatever its taka.
  */
 export const rowSignedDollars = sql<string>`(
       case
+        when ${isRevaluationRow} then 0
         when ${transactions.originalCurrency} = 'USD'
              and ${transactions.originalAmount} is not null
              and ${transactions.originalAmount} <> 0
@@ -292,7 +311,8 @@ const ownCurrencyBalance = ownBalanceUpTo(null);
  * `ownExactUpTo` on why the outer coalesce is the whole of it.
  */
 export const rowHasDollars = sql<boolean>`coalesce(
-      (${transactions.originalCurrency} = 'USD'
+      ${isRevaluationRow}
+      or (${transactions.originalCurrency} = 'USD'
         and ${transactions.originalAmount} is not null
         and ${transactions.originalAmount} <> 0)
       or coalesce(${transactions.fxRate}, ${transactions.usdRate}) > 0,

@@ -34,6 +34,7 @@ ticking all seventeen.
 
 | # | What | State |
 |---|---|---|
+| 174 | **A revaluation is worth $0: an Exchange gain / loss row moves taka only — JPMorgan closes June at $0, not $25.58** | **done** — piece 4c, the owner's report of 27 Oct |
 | 173 | **AI tools & subscriptions: Check — Checked or Unchecked on every plan, a dropdown on Add and Edit, a column in the table** | **done** — the owner, 27 Oct. Every plan on file starts Unchecked |
 | 172 | **Schema: `subscriptions.checked`** | **done** — pushed alone and deployed before #173 |
 | 171 | **The seeders refuse production: `db:seed` on a database with people on it, and `db:demo`, `db:bulk`, `db:seed-categories` always** | **done** — the owner, 26 Oct: live holds the real books now. Nothing ran them on deploy before either |
@@ -150,6 +151,45 @@ ticking all seventeen.
 | 44 | **Money transfer**: eye buttons, tick column + trash | **done** — preview and multiple upload were already there |
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
+
+## 174. A revaluation is worth $0 (piece 4c) — 27 Oct 2026
+
+The owner, from the live Accounts page: JPMorgan as at the end of June read ৳0.00 and
+**$25.58**. *"25usd porer month a cole geche jeta asole bank charge howar kotha chilo"*.
+
+**Why it happened.** It was not a bank charge.
+- The sheet revalues a dollar account at each month's rate **in taka only**: June opens at
+  ৳8,52,252 and still $6,960.
+- The app records that as an "Exchange gain" row of ৳3,132 on 1 June.
+- `rowSignedDollars` read every row at its rate, so the gain became 3,132 ÷ 122.45 =
+  **$25.58**.
+- Payoneer's July gain added $4.28 the same way.
+
+**The fix, in one place.** `isRevaluationRow`, in `accounts.service.ts`, is a row in Exchange
+gain or Exchange loss. Such a row is:
+- **$0** in `rowSignedDollars`, so Accounts' own-currency balance and Bank status both drop it;
+- dollar-exact in `rowHasDollars`, so it does not turn a figure approximate;
+- **$0** in `own-dollars.ts`, the Dashboard's dollar totals.
+
+Bank status's own copy of the predicate now reads this one. The taka figures are unchanged.
+
+**Measured** on the local database, which holds the import, as at the end of each month:
+
+| Account | Month end | Sheet | Before | After |
+|---|---|---|---|---|
+| JPMorgan | June | $0 | $25.58 | **$0.00** |
+| Payoneer | June | $1,641.85 | | $1,641.86 |
+| Payoneer | July | $837.95 | $842.24 | **$837.96** |
+| Payoneer | August | $4,570.94 | | $4,570.95 |
+
+- The remaining cents are the sheet's four-decimal fees.
+- On Bank status, June JPMorgan opens at $6,960.00 and closes at $0.00.
+- The four CI steps are green.
+
+**Noticed, not touched.** Neon now also holds a "Master card" and a second "Standard Chartered
+Bank", ৳10,00,000 each. Those are `seed-bulk`'s two accounts, so another session or harness
+loaded them. They are local only. Whoever made them should remove them, so that Neon matches
+the import again.
 
 ## 173. A plan's Check, and its schema (#172) — 27 Oct 2026
 

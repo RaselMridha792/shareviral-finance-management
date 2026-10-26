@@ -19,7 +19,11 @@ import {
   users,
 } from "../../db/schema";
 import { beforeBooksPeriod, inBooksPeriod } from "../transactions/books-month";
-import { rowHasDollars, rowSignedDollars } from "./accounts.service";
+import {
+  isRevaluationRow,
+  rowHasDollars,
+  rowSignedDollars,
+} from "./accounts.service";
 
 /** A figure in both currencies. Taka is the ledger's; dollars are the rows'. */
 export type BothCurrencies = { bdt: string; usd: string };
@@ -472,15 +476,11 @@ const isFee = sql`coalesce(${transactions.chargeForId} is not null
   false)`;
 
 /**
- * A revaluation: a row filed under Exchange gain or Exchange loss — how the
- * app records a dollar account moved to the month's rate on the 1st. Coalesced
- * for the same reason as `isFee`: a transfer has no category.
+ * A revaluation: a row filed under Exchange gain or Exchange loss. One
+ * definition, in accounts.service.ts, because it also decides that such a row
+ * is worth $0 there.
  */
-const isRevaluation = sql`coalesce(${transactions.categoryId} in (
-    select c.id from categories c
-     where c.slug in ('exchange-gain', 'exchange-loss')
-        or c.name ilike 'exchange gain' or c.name ilike 'exchange loss'),
-  false)`;
+const isRevaluation = isRevaluationRow;
 
 /** The 1st of a month, as its range; anything else is refused. */
 function rangeOf(month: string) {
