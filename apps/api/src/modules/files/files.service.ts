@@ -337,10 +337,19 @@ export class FilesService {
       );
     }
 
+    /*
+     * Filing a paper that states somebody's pay needs the right to SEE pay,
+     * not to change it (the owner, 28 Oct 2026). An appointment letter
+     * uploaded from the HR portal changes nobody's salary; pay itself still
+     * changes only through an approved HR Request (#125). The HR login holds
+     * `team.compensation.read`, so its appointment letters and salary
+     * certificates now arrive. Removing one stays behind
+     * `team.compensation.write` (`assertAccess`, "write").
+     */
     if (COMPENSATION_FILE_KINDS.includes(kind)) {
-      if (!hasPermission(actor.role, "team.compensation.write")) {
+      if (!hasPermission(actor.role, "team.compensation.read")) {
         throw new ForbiddenException(
-          `${FILE_KIND_LABELS[kind]} carries a pay figure (needs team.compensation.write)`,
+          `${FILE_KIND_LABELS[kind]} carries a pay figure (needs team.compensation.read)`,
         );
       }
     }

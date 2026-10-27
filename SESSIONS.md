@@ -152,6 +152,42 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 183. Permission: filing a pay-bearing paper needs to SEE pay, not change it — 28 Oct 2026 (NOT pushed; travels alone)
+
+**What happened.** The HR portal's "Send to finance" got a 403 on two documents:
+- appointment_letter: "carries a pay figure (needs team.compensation.write)";
+- salary_certificate: the same.
+
+The HRIS session first asked for its login to be given `team.compensation.write`. That was
+declined, because HR lost it on purpose on 30 Sep (#125): a raise from the portal had reached
+payroll with nobody in finance approving it. The HRIS session agreed, and confirmed that its
+other two calls already use the right doors:
+- POST /team-members carries `joiningSalary` only;
+- pay revisions go to POST /hr-requests/pay-changes.
+
+**The owner's decision, 28 Oct.** Filing these documents needs `team.compensation.read`.
+
+**What changed.** One gate, in `files.service.ts` `upload()`. `COMPENSATION_FILE_KINDS`
+(appointment letter, salary certificate, bank details) now needs `team.compensation.read` to
+upload, instead of `.write`.
+- The hr role already holds `.read`, so it sees no pay it could not see before.
+- Pay still changes only through an approved HR Request.
+- **Removing** such a file is unchanged. It goes through `assertAccess(..., "write")` and still
+  needs `.write`.
+- Reading such a file is unchanged.
+
+**Measured on local** with `hrdocqa.mjs`, 7 of 7 passing, using throwaway hr and ceo users made
+the `.rolecheck.mjs` way:
+- hr uploads an appointment letter, a salary certificate and a CV, each answering 201;
+- hr deleting one answers 403;
+- the CEO uploading answers 403, because it lacks `team.write`;
+- everything was removed afterwards.
+
+The four CI steps are green.
+
+**After it is live.** The HR portal presses "Send to finance" again. Only those two documents
+go; the other five are skipped as already present.
+
 ## 182. Payroll: a Reference column for each person's transfer screenshot — 27 Oct 2026 (NOT pushed)
 
 The owner asked for a Reference column on the salary sheet: *"screenshot upload korbo tai je
