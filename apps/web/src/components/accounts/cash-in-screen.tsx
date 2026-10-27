@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  booksMonthLabel,
   formatMoney,
   fiscalYearOf,
   fromMinorUnits,
@@ -155,6 +156,14 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
       const result = await ledgerApi.list({
         from,
         to,
+        /*
+         * The month each receipt belongs to, not the day it landed (the
+         * owner, 27 Oct 2026). The $14,000 funding arrived on 9 June and is on
+         * the sheet's May tab; it is marked May, and now it is under May here
+         * as it is on Bank status and Expenses. The day it landed is still on
+         * the row, as Received Date.
+         */
+        byBooksMonth: true,
         direction: "in",
         pageSize: 200,
         sort: "txnDate",
@@ -404,7 +413,7 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                 setBulkAsking(true);
               }}
             />
-            <table className="table-data min-w-[1192px] text-sm">
+            <table className="table-data min-w-[1312px] text-sm">
               <thead>
                 <tr className="text-left">
                   {/* Row order, like the sheet's own SL — not a stored number.
@@ -418,7 +427,10 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                     />
                   ) : null}
                   <SerialHead />
-                  <Th width="w-28">Date</Th>
+                  {/* The month the money is used for, first — what the month
+                      above picks by — and the day it landed beside it. */}
+                  <Th width="w-28">Used For</Th>
+                  <Th width="w-28">Received Date</Th>
                   <Th align="right">Amount (BDT)</Th>
                   <Th align="right">Amount (USD)</Th>
                   <Th align="right">USD rate</Th>
@@ -459,6 +471,11 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
                         />
                       ) : null}
                       <SerialCell n={serial(currentPage, index)} />
+                      <td className="font-extrabold whitespace-nowrap">
+                        {booksMonthLabel(
+                          row.booksMonth ?? `${row.txnDate.slice(0, 7)}-01`,
+                        )}
+                      </td>
                       <td>
                         <Dated>{formatDate(row.txnDate)}</Dated>
                       </td>

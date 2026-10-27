@@ -152,6 +152,39 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 179. Cash In by the month it is used for, with Received Date beside it — 27 Oct 2026 (NOT pushed)
+
+**Held.** The owner asked on 27 Oct that nothing be pushed until they say so. This commit is
+local only.
+
+**What the owner reported.** The sheet's May tab has one cash in: the $14,000 funding. In the
+app it sat under June, because Cash In picked its month by the day the money landed
+(9 June). The owner asked for:
+- the month to pick by the "Used For" month;
+- the landing day to stay visible beside it, labelled **Received Date**.
+
+**What changed.** Web only. The `byBooksMonth` filter already existed for the Expenses screens.
+- **Cash In's list** passes `byBooksMonth: true`. The funding is marked May, so it is under May
+  here, as it is on Bank status and Expenses.
+- **The table.**
+  - **Used For** is the first column. It shows the books month, e.g. "May 2026".
+  - **Received Date** sits beside it. It is the old Date column, `txn_date`.
+  - The table is 120px wider.
+
+**Measured on local** with `cashinqa.mjs`, 10 of 10 passing:
+- **May** lists only the funding, dated 09/06/2026 at $14,000.00. Received in May is
+  ৳17,08,000.00.
+- **June** lists 22/06 and 01/06, and no longer the funding.
+- **July** lists four receipts dated 06/08 that are booked to July, plus 01/07.
+- **Columns:** every row's Used For equals the month picked.
+
+The four CI steps are green.
+
+**Noticed, not changed: a question for the owner.** June's Cash In includes the 01/06
+"Exchange gain" row: ৳3,132, shown as ~$25.58. That row is a revaluation, not money that
+arrived. Piece 4c made revaluations $0 on Accounts. Here it still adds ৳3,132 and $25.58 to
+"Received in June", and July's 01/07 row does the same. Should Cash In leave revaluations out?
+
 ## 178. Dollars on Expense overview and Operational expenses; Money transfer by month — 27 Oct 2026
 
 The owner, from live, in three messages:
