@@ -244,6 +244,8 @@ export type PayrollLineDto = {
    * A paid line with no `fxRate` is read in dollars at this — see `rateOf`.
    */
   paidUsdRate: string | null;
+  /** Screenshots proving the payment, on the line's payment row. */
+  referenceCount: number;
 };
 
 /**

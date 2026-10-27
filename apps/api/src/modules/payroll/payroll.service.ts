@@ -251,6 +251,19 @@ export class PayrollService {
           order by t.txn_date desc
           limit 1
         )`,
+        /*
+         * The proof this person was paid: screenshots on the line's payment
+         * row, the kinds All transactions' Reference column counts (the
+         * owner, 27 Oct 2026: a Reference column on the sheet). On the
+         * payment rather than the line, so the same paper is that entry's
+         * Reference everywhere it is shown.
+         */
+        referenceCount: sql<number>`(
+          select count(*)::int from files f
+          where f.transaction_id = payroll_lines.transaction_id
+            and f.deleted_at is null
+            and f.kind in ('bank_statement', 'receipt', 'other')
+        )`,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))

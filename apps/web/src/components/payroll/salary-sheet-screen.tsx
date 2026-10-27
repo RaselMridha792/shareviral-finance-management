@@ -30,6 +30,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
 import { MemberPicker } from "@/components/payroll/member-picker";
+import { PaymentProofCell } from "@/components/payroll/payment-proof-cell";
 import { RunDocuments } from "@/components/payroll/run-documents";
 import { TdsWorking } from "@/components/tds/tds-working";
 import { Amount } from "@/components/money/amount";
@@ -723,7 +724,7 @@ export function SalarySheetScreen({
           <TableScroll>
             {/* One column wider than it was — the SL somebody reads a row out
                 by — so the money columns keep the width they had. */}
-            <table className="table-data min-w-[1560px] text-sm">
+            <table className="table-data min-w-[1680px] text-sm">
               <thead>
                 <tr>
                   {/* The owner's own sheet, column for column: name, role,
@@ -782,6 +783,9 @@ export function SalarySheetScreen({
                   <Th width="w-28" align="right">
                     Net Pay (USD)
                   </Th>
+                  {/* The screenshot of each person's transfer (the owner, 27
+                      Oct 2026) — see PaymentProofCell. */}
+                  <Th width="w-28">Reference</Th>
                   <Th width="w-24" />
                 </tr>
               </thead>
@@ -820,7 +824,8 @@ export function SalarySheetScreen({
                   {/* Counted by hand against the head, as the note above
                       demands: 4 (Total, over SL/Name/Role/Dept) + the splits
                       + bonus + other+ + blank days + gross + tds + other− +
-                      net + blank fx + usd net + blank actions. */}
+                      net + blank fx + usd net + blank reference + blank
+                      actions. */}
                   <td colSpan={4} className="font-semibold">
                     Total
                   </td>
@@ -851,6 +856,7 @@ export function SalarySheetScreen({
                             : ""
                         }`}
                   </td>
+                  <td />
                   <td />
                 </tr>
               </tfoot>
@@ -1333,6 +1339,7 @@ function LineRow({
           ? `≈ $${(Number(line.netAmount) / rateOf(line)!).toFixed(2)}`
           : "N/A"}
       </td>
+      <PaymentProofCell line={line} onChanged={onSaved} />
       <td>
         <div className="flex items-center justify-end gap-3">
           {saving ? (

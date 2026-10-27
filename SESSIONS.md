@@ -152,6 +152,41 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 182. Payroll: a Reference column for each person's transfer screenshot — 27 Oct 2026 (NOT pushed)
+
+The owner asked for a Reference column on the salary sheet: *"screenshot upload korbo tai je
+sobaike taka pathano hoiche oi proof hisebe"*.
+
+**Where the screenshot goes.** On the line's **payment row** (`payroll_lines.transaction_id`),
+as kind `bank_statement`. That is the entry's bank record, so the same screenshot is that salary
+entry's Reference on All transactions too. Nothing new is invented to hold it.
+- No schema change.
+- No change to `KINDS_BY_OWNER` (a payroll line may carry only a challan).
+- The upload uses the existing `POST /files/transaction/:id`, which needs `transactions.write`.
+
+**What changed**
+- **`getRun`** sends each line's `referenceCount`, the files of those kinds on its payment.
+- **`PaymentProofCell`** is new (`components/payroll/payment-proof-cell.tsx`). It sits between Net
+  Pay (USD) and the Payslip link, and shows:
+  - **Upload** when there is no screenshot yet (several files can be picked at once);
+  - **View (n)** and **Add** once there is one;
+  - **N/A** on a line that is not paid yet.
+
+  View opens the read-only `DocumentsDialog`.
+- The table is 120px wider, and the footer has one more blank cell.
+
+**Removing a wrong screenshot.** The dialog is read-only on purpose. A screenshot is removed from
+the salary entry's Edit on All transactions. That path was not exercised here.
+
+**Measured on local.** `proofqa.mjs` passes 7 of 7. On May:
+- the column sits after Net Pay (USD), and all 12 lines show Upload;
+- a PNG uploaded through Amir Faysal's cell is stored on TXN-2026-000020 as `bank_statement`;
+- the cell then reads "View Add", and View lists the file;
+- All transactions' `recordCount` for that entry is 1;
+- the test file was removed afterwards.
+
+The four CI steps are green.
+
 ## 181. All transactions: plan invoices on payments, no "books" badge, no paperclip, Actions — 27 Oct 2026 (NOT pushed)
 
 The owner, from live All transactions, asked for four things.
