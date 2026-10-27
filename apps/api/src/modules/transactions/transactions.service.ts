@@ -133,6 +133,9 @@ export type TransactionDto = {
   /** Attached invoices, and everything else attached, counted apart. */
   invoiceCount: number;
   recordCount: number;
+  /** The same two on the plan this paid for (`planDocumentCountOf`). */
+  planInvoiceCount: number;
+  planRecordCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;
@@ -2600,6 +2603,27 @@ function documentCountOf(kinds: readonly string[]) {
   )`;
 }
 
+/**
+ * The same counts on the PLAN a payment paid for, when it paid for one.
+ *
+ * The owner attaches a tool's invoice on the AI tools register — to the plan
+ * — and asked on 27 Oct 2026 why All transactions read N/A on its payments.
+ * A payment row with no paper of its own offers its plan's instead.
+ */
+function planDocumentCountOf(kinds: readonly string[]) {
+  return sql<number>`(
+    select count(*)::int
+      from files pf
+     where transactions.subscription_id is not null
+       and pf.subscription_id = transactions.subscription_id
+       and pf.deleted_at is null
+       and pf.kind in (${sql.join(
+         kinds.map((k) => sql`${k}`),
+         sql`, `,
+       )})
+  )`;
+}
+
 const projection = {
   id: transactions.id,
   refNo: transactions.refNo,
@@ -2618,6 +2642,8 @@ const projection = {
   /* Per kind, because Invoice and Reference open different drawers. */
   invoiceCount: documentCountOf(["invoice"]),
   recordCount: documentCountOf(["bank_statement", "receipt", "other"]),
+  planInvoiceCount: planDocumentCountOf(["invoice"]),
+  planRecordCount: planDocumentCountOf(["bank_statement", "receipt", "other"]),
   receiptUrl: transactions.receiptUrl,
   billAmount: transactions.billAmount,
   withheldTaxAmount: transactions.withheldTaxAmount,

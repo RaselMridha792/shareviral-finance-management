@@ -3,7 +3,6 @@
 import { MONTH_NAMES, PAYMENT_METHOD_LABELS } from "@finance/shared";
 import { ArrowDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownLeft";
 import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
-import { PaperclipIcon } from "@phosphor-icons/react/dist/ssr/Paperclip";
 import { ReferenceCell } from "@/components/ledger/reference-kind";
 import Link from "next/link";
 import { useState } from "react";
@@ -13,11 +12,7 @@ import { Amount } from "@/components/money/amount";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dated } from "@/components/ui/dated";
-import {
-  RowActions,
-  RowActionsHead,
-  RowButton,
-} from "@/components/ui/row-actions";
+import { RowActions } from "@/components/ui/row-actions";
 import {
   SerialCell,
   SerialHead,
@@ -148,6 +143,20 @@ export function TransactionTable({
     label: string;
   } | null>(null);
 
+  /*
+   * Whose paper a cell opens: the row's own, or — on a payment for a plan
+   * that has none of its own — the plan's, which is where the owner attaches
+   * a tool's invoice (27 Oct 2026). The count says whether there is any.
+   */
+  const paperOf = (row: TransactionDto, which: "invoice" | "payment") => {
+    const own = which === "invoice" ? row.invoiceCount : row.recordCount;
+    const plan =
+      which === "invoice" ? row.planInvoiceCount : row.planRecordCount;
+    return own === 0 && plan > 0 && row.subscriptionId
+      ? { count: plan, fromPlan: true }
+      : { count: own, fromPlan: false };
+  };
+
   if (rows.length === 0) {
     return (
       <Card className="px-6 py-12 text-center">
@@ -260,7 +269,11 @@ export function TransactionTable({
                   Balance
                 </Th>
               ) : null}
-              <RowActionsHead deletable={Boolean(onDelete)} />
+              {/* Named, at the owner's word (27 Oct 2026): edit, void and
+                  delete live here. The width RowActionsHead gives. */}
+              <Th align="right" width={onDelete ? "w-32" : "w-24"}>
+                Actions
+              </Th>
             </tr>
           </thead>
           <tbody>
@@ -460,7 +473,7 @@ export function TransactionTable({
                   */}
                   <ReferenceCell
                     value={row.invoiceNo}
-                    documentCount={row.invoiceCount}
+                    documentCount={paperOf(row, "invoice").count}
                     onOpen={() =>
                       setDocumentsFor({
                         row,
@@ -488,7 +501,7 @@ export function TransactionTable({
                   */}
                   <ReferenceCell
                     value={row.reference}
-                    documentCount={row.recordCount}
+                    documentCount={paperOf(row, "payment").count}
                     onOpen={() =>
                       setDocumentsFor({
                         row,
@@ -538,15 +551,10 @@ export function TransactionTable({
                     onDelete={
                       canWrite && onDelete ? () => onDelete(row) : undefined
                     }
-                    extra={
-                      row.receiptUrl ? (
-                        <RowButton
-                          href={row.receiptUrl}
-                          label="Open the receipt"
-                          icon={PaperclipIcon}
-                        />
-                      ) : null
-                    }
+                    /* No paperclip for the receipt link: it showed on some rows
+                       and not others, and the owner asked for it gone (27 Oct
+                       2026). The link is in the row's record, under
+                       Paperwork. */
                   />
                 </tr>
               );
@@ -557,6 +565,7 @@ export function TransactionTable({
 
       <TransactionDetails
         row={showing}
+        withPlanPaper
         onClose={() => setShowing(null)}
         onEdit={
           canWrite && onEdit && !showing?.transferGroupId ? onEdit : undefined
@@ -574,14 +583,26 @@ export function TransactionTable({
         }
       />
 
-      {documentsFor ? (
-        <DocumentsDialog
-          transactionId={documentsFor.row.id}
-          refNo={documentsFor.row.refNo}
-          kinds={documentsFor.kinds}
-          onClose={() => setDocumentsFor(null)}
-        />
-      ) : null}
+      {documentsFor
+        ? (() => {
+            const which =
+              documentsFor.label === "invoice" ? "invoice" : "payment";
+            const fromPlan = paperOf(documentsFor.row, which).fromPlan;
+            return (
+              <DocumentsDialog
+                transactionId={
+                  fromPlan && documentsFor.row.subscriptionId
+                    ? documentsFor.row.subscriptionId
+                    : documentsFor.row.id
+                }
+                owner={fromPlan ? "subscription" : "transaction"}
+                refNo={documentsFor.row.refNo}
+                kinds={documentsFor.kinds}
+                onClose={() => setDocumentsFor(null)}
+              />
+            );
+          })()
+        : null}
     </Card>
   );
 }

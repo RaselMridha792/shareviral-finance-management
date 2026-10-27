@@ -55,6 +55,7 @@ export function TransactionDetails({
   onClose,
   onEdit,
   onOpenDocuments,
+  withPlanPaper = false,
 }: {
   /** Null closes it. */
   row: ShownRow | null;
@@ -63,6 +64,12 @@ export function TransactionDetails({
   onEdit?: (row: TransactionDto) => void;
   /** Opens the attached invoice, or the bank's record of the payment. */
   onOpenDocuments?: (row: TransactionDto, which: "invoice" | "payment") => void;
+  /**
+   * A payment with no paper of its own shows its plan's (the AI tools
+   * register's invoice). Only where the caller's `onOpenDocuments` opens the
+   * plan's files for it — `TransactionTable` does.
+   */
+  withPlanPaper?: boolean;
 }) {
   /*
    * The entry a charge was levied on, while its record is the one shown.
@@ -103,6 +110,7 @@ export function TransactionDetails({
       onEdit={onEdit}
       onOpenDocuments={onOpenDocuments}
       onOpenEntry={setEntry}
+      withPlanPaper={withPlanPaper}
     />
   );
 }
@@ -114,8 +122,10 @@ function RecordView({
   onOpenDocuments,
   onOpenEntry,
   onBack,
+  withPlanPaper = false,
 }: {
   row: ShownRow;
+  withPlanPaper?: boolean;
   onClose: () => void;
   onEdit?: (row: TransactionDto) => void;
   onOpenDocuments?: (row: TransactionDto, which: "invoice" | "payment") => void;
@@ -349,11 +359,21 @@ function RecordView({
       items: [
         {
           label: "Invoice",
-          value: paper(row.invoiceNo, row.invoiceCount, "invoice"),
+          value: paper(
+            row.invoiceNo,
+            row.invoiceCount ||
+              (withPlanPaper && row.subscriptionId ? row.planInvoiceCount : 0),
+            "invoice",
+          ),
         },
         {
           label: "Reference",
-          value: paper(row.reference, row.recordCount, "payment"),
+          value: paper(
+            row.reference,
+            row.recordCount ||
+              (withPlanPaper && row.subscriptionId ? row.planRecordCount : 0),
+            "payment",
+          ),
         },
         row.receiptUrl
           ? {

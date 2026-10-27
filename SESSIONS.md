@@ -152,6 +152,47 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 181. All transactions: plan invoices on payments, no "books" badge, no paperclip, Actions — 27 Oct 2026 (NOT pushed)
+
+The owner, from live All transactions, asked for four things.
+
+**1. "July books" under the date.** Removed. `transactions-screen.tsx` no longer passes
+`showBooksMonth`. The month an entry belongs to is still in its record, and every month
+screen still counts by it.
+
+**2. Invoice and Reference read N/A on AI tool payments.** The owner attaches a tool's invoice
+on the AI tools register, so the file hangs on the **plan** (`files.subscription_id`). These
+cells counted only files hanging on the payment row.
+- The list projection now also sends `planInvoiceCount` and `planRecordCount`
+  (`planDocumentCountOf`), the counts of the paying plan's files.
+- In `TransactionTable`, a payment with no paper of its own shows its plan's. The eye opens
+  `DocumentsDialog` with `owner="subscription"` and the plan's id.
+- The record popup does the same through a new `withPlanPaper` prop on `TransactionDetails`.
+  Only `TransactionTable` passes it, because the other screens' document handlers open the row's
+  own files.
+
+**3. The paperclip on some rows.** This was the import's Proof link (`receipt_url`). It is gone
+from the table. The link is still in the row's record, under Paperwork → Receipt.
+
+**4. "Actions" over the buttons column.** `TransactionTable` now renders its own `<Th>Actions</Th>`
+at the width `RowActionsHead` gives, so the shared `components/ui/row-actions.tsx` is
+untouched.
+
+**`TransactionTable` is shared.** Items 2 to 4 also reach the account register and a category's
+detail screen. Item 1 is All transactions only.
+
+**Measured on local**
+- `alltxnqa.mjs`, 9 of 9 passing. It attaches a test invoice to the plan behind TXN-2026-000161
+  (Figma, August) and removes it afterwards. On that row:
+  - the row carries own 0 and plan 1;
+  - the Invoice cell shows View, and opening it lists the plan's file;
+  - the popup reads "1 attached · View";
+  - the last heading reads ACTIONS.
+- `badgeqa.mjs` checks TXN-2026-000022, which had both a books badge and a receipt link. It now
+  shows neither, and its actions cell has three buttons.
+
+The four CI steps are green.
+
 ## 180. Revaluations kept quiet, as the sheet does — 27 Oct 2026 (NOT pushed)
 
 The owner, looking at Bank status's "incl. ৳525.40 revaluation", said a line like that would

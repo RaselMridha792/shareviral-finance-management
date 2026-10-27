@@ -37,6 +37,10 @@ export type TransactionDto = {
       column only offers its eye when its own drawer has something in it. */
   invoiceCount: number;
   recordCount: number;
+  /** The same two on the plan this payment paid for, if any. A payment with
+      no paper of its own offers its plan's (the owner, 27 Oct 2026). */
+  planInvoiceCount: number;
+  planRecordCount: number;
   receiptUrl: string | null;
   billAmount: string | null;
   withheldTaxAmount: string;

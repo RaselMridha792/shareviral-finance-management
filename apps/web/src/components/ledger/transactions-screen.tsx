@@ -224,9 +224,9 @@ export function TransactionsScreen({
             // Both directions appear here, so which one a row is has to be
             // readable rather than inferred from a colour.
             showType
-            // The date filter stays the date's; a row counted in another
-            // month's books says so under its date.
-            showBooksMonth
+            // No "July books" badge under the date any more: the owner asked
+            // for it gone (27 Oct 2026). The month an entry belongs to is in
+            // its record, and the month screens count by it.
             emptyMessage={
               Object.keys(filters).length
                 ? "Nothing matches these filters."
