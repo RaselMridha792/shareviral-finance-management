@@ -152,6 +152,41 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 180. Revaluations kept quiet, as the sheet does — 27 Oct 2026 (NOT pushed)
+
+The owner, looking at Bank status's "incl. ৳525.40 revaluation", said a line like that would
+confuse the CEO. Their choice: **keep it quiet, as the sheet does.**
+- The Exchange gain/loss entries stay in the ledger, so every balance still matches the sheet.
+- No screen names them.
+- They are not counted as money that moved.
+
+**What changed**
+- **Bank status.** The "incl. … revaluation" line under Opening is gone, and so is the sentence
+  about it in the note under the table. The Opening figure is unchanged. Hovering it says
+  "Includes ৳525.08 from re-reading the dollar balance at this month's rate"
+  (`data-revaluation` is still on the cell).
+- **Cash In.** Every ledger row now carries `isRevaluation` (`isRevaluationRow`, in the list
+  projection), and Cash In leaves those rows out of the list and the totals. June reads ৳24,490
+  / $200, the Anthropic refund only, now that the funding is under May (#179).
+- **The Dashboard and Reports overview** (`overview.service.ts`), through `notARevaluation`:
+  - **Money in and Money out** (`totalsFor`) leave revaluations out, so June's Money in is
+    ৳24,490 rather than ৳27,622.
+  - **Income and spending by heading** leave them out, so there is no "Exchange gain" heading.
+  - **Each account block** folds its revaluation into the Opening, as Bank status does, so
+    opening + in − out = closing still holds.
+  - **The twelve months** count In and Out without revaluations, and add the revaluation into
+    the running closing, so the closing balance does not move.
+
+**Measured on local** with `revalqa.mjs`, 15 of 15 passing:
+- June and July Money in equal the SQL sum, excluding revaluations;
+- every account block ties, and its closing equals the account's real balance (6 blocks in
+  June, 4 in July);
+- the twelve-month closing equals the true balance;
+- Cash In June has no 01/06 row;
+- Bank status July shows no "revaluation" text, but its hover does.
+
+The four CI steps are green.
+
 ## 179. Cash In by the month it is used for, with Received Date beside it — 27 Oct 2026 (NOT pushed)
 
 **Held.** The owner asked on 27 Oct that nothing be pushed until they say so. This commit is

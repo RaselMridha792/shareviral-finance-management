@@ -70,6 +70,9 @@ export type TransactionDto = {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  /** An Exchange gain or loss: a dollar balance re-read at a new rate, not
+      money that moved. */
+  isRevaluation: boolean;
   vendorId: string | null;
   vendorName: string | null;
   counterparty: string | null;

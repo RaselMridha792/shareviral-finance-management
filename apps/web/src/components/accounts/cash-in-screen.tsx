@@ -240,7 +240,12 @@ export function CashInScreen({ accounts }: { accounts: AccountDto[] }) {
    * it does land as a money-in row in the account it arrives in. Counting it
    * here would inflate what the company was sent.
    */
-  const received = rows.filter((row) => !row.transferGroupId);
+  const received = rows.filter(
+    /* Nor is a revaluation: an Exchange gain is a dollar balance re-read at
+       a new month's rate, and no money arrived (the owner, 27 Oct 2026). It
+       stays in the ledger, where the balances need it. */
+    (row) => !row.transferGroupId && !row.isRevaluation,
+  );
 
   const totalBdt = sumAmounts(received.map((row) => row.amount));
 

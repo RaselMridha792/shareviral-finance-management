@@ -26,6 +26,7 @@ import {
   vendors,
 } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
+import { isRevaluationRow } from "../accounts/accounts.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
@@ -40,6 +41,14 @@ import { periodDollars } from "./own-dollars";
 
 /** Never count a voided row. It stays visible; it is not money. */
 const LIVE = isNull(transactions.voidedAt);
+
+/**
+ * Not an Exchange gain or loss. A dollar balance re-read at a new month's
+ * rate is not money in or out, and the Dashboard does not count it as either
+ * (the owner, 27 Oct 2026). Balances still include it: an account's block
+ * folds it into the Opening, and the twelve months carry it in the closing.
+ */
+const notARevaluation = sql`not ${isRevaluationRow}`;
 
 /** How many months of history the trend line shows. */
 const TREND_MONTHS = 12;
@@ -323,7 +332,9 @@ export class OverviewService {
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
-      .where(and(inPeriod(range), notATransfer()));
+      /* Nor a revaluation: a dollar balance re-read at a new rate moved no
+         money (the owner, 27 Oct 2026 — "CEO to confused hoye jabe"). */
+      .where(and(inPeriod(range), notATransfer(), notARevaluation));
 
     return {
       moneyIn: row.moneyIn,
@@ -528,8 +539,14 @@ export class OverviewService {
       this.db.client
         .select({
           accountId: transactions.accountId,
-          moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
-          moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+          /*
+           * In and Out without the revaluation, which goes into the Opening
+           * instead — the sheet's way, and Bank status's — so the block's four
+           * figures still tie: opening + in - out = closing.
+           */
+          moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
+          moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
+          revaluation: sql<string>`coalesce(sum(case when ${isRevaluationRow} then ${transactions.signedAmount} else 0 end), 0)::text`,
           /* Each direction's dollars, summed from the rows that carry one. */
           moneyInUsd: sql<string>`coalesce(sum(
             case when ${transactions.direction} = 'in'
@@ -552,9 +569,12 @@ export class OverviewService {
            * `coalesce(..., true)` because `bool_and` over no rows is NULL, and
            * an account that saw no movement is not inexact.
            */
+          /* A revaluation has no dollars by nature (piece 4c), so it does
+             not make the account's dollars approximate. */
           allHaveUsd: sql<boolean>`coalesce(bool_and(
-            ${transactions.originalCurrency} = 'USD'
-            and ${transactions.originalAmount} is not null
+            ${isRevaluationRow}
+            or (${transactions.originalCurrency} = 'USD'
+                and ${transactions.originalAmount} is not null)
           ), true)`,
         })
         .from(transactions)
@@ -574,6 +594,7 @@ export class OverviewService {
         {
           in: Number(r.moneyIn),
           out: Number(r.moneyOut),
+          revaluation: Number(r.revaluation),
           inUsd: Number(r.moneyInUsd),
           outUsd: Number(r.moneyOutUsd),
           exact: r.allHaveUsd,
@@ -583,8 +604,11 @@ export class OverviewService {
 
     const groups = rows.map((account) => {
       const carried = before.get(account.id);
-      const opening = Number(account.opening) + (carried?.net ?? 0);
       const movement = during.get(account.id);
+      const opening =
+        Number(account.opening) +
+        (carried?.net ?? 0) +
+        (movement?.revaluation ?? 0);
       const moneyIn = movement?.in ?? 0;
       const moneyOut = movement?.out ?? 0;
 
@@ -729,6 +753,7 @@ export class OverviewService {
         and(
           inPeriod(range),
           notATransfer(),
+          notARevaluation,
           eq(transactions.direction, direction),
         ),
       )
@@ -934,8 +959,11 @@ export class OverviewService {
     const rows = await this.db.client
       .select({
         month: sql<string>`to_char(${booksMonthSql}, 'YYYY-MM')`,
-        moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amount} else 0 end), 0)::text`,
-        moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' then ${transactions.amount} else 0 end), 0)::text`,
+        /* In and Out as the Dashboard counts them, without revaluations; the
+           revaluation still moves the closing balance, below. */
+        moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
+        moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
+        revaluation: sql<string>`coalesce(sum(case when ${isRevaluationRow} then ${transactions.signedAmount} else 0 end), 0)::text`,
         entries: sql<number>`count(*)::int`,
       })
       .from(transactions)
@@ -968,7 +996,7 @@ export class OverviewService {
       const row = byMonth.get(key);
       const moneyIn = Number(row?.moneyIn ?? 0);
       const moneyOut = Number(row?.moneyOut ?? 0);
-      running += moneyIn - moneyOut;
+      running += moneyIn - moneyOut + Number(row?.revaluation ?? 0);
 
       const stat: MonthStat = {
         year: Number(range.start.slice(0, 4)),

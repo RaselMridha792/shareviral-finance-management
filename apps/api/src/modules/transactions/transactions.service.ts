@@ -52,6 +52,7 @@ import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
 import { accounts, categories, transactions, vendors } from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
+import { isRevaluationRow } from "../accounts/accounts.service";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import {
@@ -153,6 +154,8 @@ export type TransactionDto = {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  /** An Exchange gain or loss row — a revaluation, not money that moved. */
+  isRevaluation: boolean;
   vendorId: string | null;
   vendorName: string | null;
   counterparty: string | null;
@@ -2669,6 +2672,9 @@ const projection = {
   categoryId: transactions.categoryId,
   categoryName: categories.name,
   categoryColor: categories.color,
+  /* An Exchange gain or loss: the taka of a dollar balance re-read at a new
+     month's rate, not money that moved. Cash In leaves these out. */
+  isRevaluation: isRevaluationRow,
   vendorId: transactions.vendorId,
   /* In the projection as well as the schema. Forgetting this is how a column
      stores perfectly and every screen reads N/A — it has bitten three times. */

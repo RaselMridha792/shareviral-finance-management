@@ -210,10 +210,7 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
         transfer out. Dollars are each entry&apos;s own; a ~ means some entry
         had none and was read at that day&apos;s rate. Check reads Matched when
         the row is ticked by hand, or once a statement covering the month is
-        reconciled in Reports; the cell says which. A dollar account&apos;s
-        revaluation (Exchange gain or loss) is part of its Opening, as in the
-        sheet, so that Opening can differ from last month&apos;s Closing; the
-        line under it says by how much.
+        reconciled in Reports; the cell says which.
       </p>
     </>
   );
@@ -221,8 +218,7 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
 
 /**
  * Taka, and the dollars the rows carried small under it. On the Opening, a
- * month's revaluation is named under both, so an Opening that differs from
- * last month's Closing does not read as a fault.
+ * month's revaluation is in the hover text only (see below).
  */
 function MoneyCell({
   value,
@@ -236,8 +232,24 @@ function MoneyCell({
   revaluation?: BothCurrencies;
 }) {
   const revalued = revaluation && Number(revaluation.bdt) !== 0;
+  /*
+   * Quiet, as the sheet is (the owner, 27 Oct 2026: a line saying "incl.
+   * ৳525.40 revaluation" would confuse the CEO). The Opening is the figure
+   * the sheet opens on and says nothing more; the revaluation inside it is a
+   * hover away, for whoever goes looking.
+   */
   return (
-    <td className="text-right">
+    <td
+      className="text-right"
+      data-revaluation={revalued ? revaluation.bdt : undefined}
+      title={
+        revalued
+          ? `Includes ৳${Number(revaluation.bdt).toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+            })} from re-reading the dollar balance at this month's rate`
+          : undefined
+      }
+    >
       <Amount
         value={value.bdt}
         showCounterpart={false}
@@ -250,21 +262,6 @@ function MoneyCell({
         showCounterpart={false}
         className="block text-xs font-normal text-muted-foreground"
       />
-      {revalued ? (
-        <span
-          className="block text-xs font-normal text-muted-foreground"
-          data-revaluation={revaluation.bdt}
-          title="This month's revaluation (Exchange gain or loss) is part of the Opening, as in the sheet"
-        >
-          incl.{" "}
-          <Amount
-            value={revaluation.bdt}
-            showCounterpart={false}
-            className="font-normal"
-          />{" "}
-          revaluation
-        </span>
-      ) : null}
     </td>
   );
 }
