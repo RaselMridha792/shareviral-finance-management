@@ -143,7 +143,24 @@ export function ExpensesScreen({
             ) : null}
           </>
         }
-        value={<Amount value={summary.total} tone="neutral" />}
+        value={
+          <Amount
+            value={summary.total}
+            tone="neutral"
+            showCounterpart={summary.usd === null}
+          />
+        }
+        secondary={
+          summary.usd === null ? null : (
+            <Amount
+              value={summary.usd}
+              currency="USD"
+              approximate={!summary.usdExact}
+              showCounterpart={false}
+              tone="neutral"
+            />
+          )
+        }
       />
 
       {cards.length === 0 ? (
@@ -197,8 +214,21 @@ export function ExpensesScreen({
                 <Amount
                   value={group.total}
                   tone="neutral"
+                  showCounterpart={group.usd === null}
                   className="mt-3 block text-[27px] font-extrabold tracking-[-0.02em]"
                 />
+                {/* The heading in dollars, small under the taka, as Expense
+                    overview's boxes carry it (the owner, 27 Oct 2026). */}
+                {group.usd === null ? null : (
+                  <Amount
+                    value={group.usd}
+                    currency="USD"
+                    approximate={!group.usdExact}
+                    showCounterpart={false}
+                    tone="neutral"
+                    className="mt-0.5 block text-[13px] text-(--sv-muted)"
+                  />
+                )}
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-(--sv-track)">
                   <div
                     className="h-full rounded-full"

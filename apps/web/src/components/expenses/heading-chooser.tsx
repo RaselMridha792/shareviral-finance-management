@@ -63,6 +63,9 @@ export function headingsFor(
       color: c.color,
       total: "0.00",
       entries: 0,
+      /* Nothing spent is nothing in dollars too, and exactly so. */
+      usd: "0.00",
+      usdExact: true,
       hasSpend: false,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));

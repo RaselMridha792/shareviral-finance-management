@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 
 import { transactions } from "../../db/schema/transactions";
+import { isRevaluationRow } from "../accounts/accounts.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { inBooksPeriod } from "./books-month";
 import { notATransfer } from "./own-money";
@@ -94,6 +95,36 @@ const carriesDollars = (): SQL =>
   sql`${transactions.originalCurrency} = 'USD'
       and ${transactions.originalAmount} is not null`;
 
+/**
+ * What a row is worth in dollars, or null when it cannot say.
+ *
+ * The dollars it recorded when it has them. Otherwise its taka at its OWN
+ * `usd_rate` — the rate of that day, asked on every entry and stored on the
+ * row — which is how Money transfer's "Amount (USD)" and the statement already
+ * read a taka row. Still never one governing rate dividing a month (the
+ * owner's rule: "kono fx rate theke hobena"), so the figure cannot move when
+ * somebody edits a rate in Settings.
+ *
+ * Added on 27 Oct 2026 because the owner saw Salary and Operational read
+ * ~$0.00: those are paid from taka accounts, carry no typed dollars, and
+ * added nothing. A revaluation is $0, as on Accounts (piece 4c).
+ *
+ * Rounded per row, so a total is the sum of the figures each row shows.
+ */
+export const rowDollars = (): SQL<string | null> =>
+  sql<string | null>`case
+    when ${isRevaluationRow} then 0
+    when ${carriesDollars()} then ${transactions.originalAmount}
+    when ${transactions.usdRate} > 0
+      then round(${transactions.amount} / ${transactions.usdRate}, 2)
+  end`;
+
+/**
+ * Rows whose dollars are a conversion at the row's rate rather than a figure
+ * somebody typed. Any such row makes a dollar total approximate ("~").
+ */
+export const typedDollars = carriesDollars;
+
 export type ExpenseOverview = {
   from: string;
   to: string;
@@ -179,41 +210,40 @@ export function overviewSelect() {
     total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
 
     /*
-     * The same four, in the dollars the ROWS carry.
+     * The same four, in dollars — each row's own (`rowDollars`), added up.
      *
      * The owner: "aigula kono fx rate theke hobena. prottekta transaction er
-     * usd amount o save hoy oitai jog hobe." Added up, never divided — a figure
-     * produced by division moves on its own the moment somebody edits a rate.
+     * usd amount o save hoy oitai jog hobe." Added up row by row, never one
+     * month's taka divided by one rate — a figure produced that way moves on
+     * its own the moment somebody edits a rate.
      *
      * They partition exactly as the taka slices do, because they are the same
-     * `filter` clauses over the same rows. A row with no dollar figure adds
-     * nothing to any of them, so the dollar total is a FLOOR of the taka total
-     * rather than a different reading of it.
+     * `filter` clauses over the same rows. A row with no dollar figure at all
+     * adds nothing, so the dollar total is a FLOOR of the taka total rather
+     * than a different reading of it.
      */
-    salaryUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
-      where ${isSalary()} and ${carriesDollars()}
+    salaryUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
+      where ${isSalary()}
     ), 0)::text`,
-    toolingUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
-      where not ${isSalary()} and ${isToolSpend()} and ${carriesDollars()}
+    toolingUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
+      where not ${isSalary()} and ${isToolSpend()}
     ), 0)::text`,
-    rentUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+    rentUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
         and ${isOfficeRent()}
-        and ${carriesDollars()}
     ), 0)::text`,
-    operationalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
+    operationalUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
         and not ${isOfficeRent()}
-        and ${carriesDollars()}
     ), 0)::text`,
-    totalUsd: sql<string>`coalesce(sum(${transactions.originalAmount}) filter (
-      where ${carriesDollars()}
-    ), 0)::text`,
-    /* How many rows carry one at all. Zero means this month has no dollar view,
-       which is a different answer from "$0.00". */
-    withUsd: sql<number>`count(*) filter (where ${carriesDollars()})::int`,
+    totalUsd: sql<string>`coalesce(sum(${rowDollars()}), 0)::text`,
+    /* How many rows can say what they were in dollars. Zero means this month
+       has no dollar view, which is a different answer from "$0.00". */
+    withUsd: sql<number>`count(*) filter (where ${rowDollars()} is not null)::int`,
+    /* And how many said it themselves; the rest are at their row's rate. */
+    typedUsd: sql<number>`count(*) filter (where ${carriesDollars()})::int`,
     rows: sql<number>`count(*)::int`,
 
     /* Withheld against a tax liability: in the account, not the company's to

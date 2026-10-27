@@ -152,6 +152,56 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 178. Dollars on Expense overview and Operational expenses; Money transfer by month — 27 Oct 2026
+
+The owner, from live, in three messages:
+- Expense overview showed Salary and Operational at **~$0.00**;
+- Operational expenses showed no dollars at all;
+- Money transfer had no month dropdown.
+
+**Dollars.** Both screens counted only rows that carry dollars someone typed (`original_amount`
+in USD). Salary and most expenses are paid from taka accounts, so they added nothing. Every row
+does carry `usd_rate`: the day's rate, asked on every entry. Locally every row in May to August
+has one. That stored rate is how Money transfer's "Amount (USD)" and the statement already read
+a taka row.
+
+- **`rowDollars()`**, in `expense-overview.ts`, works out a row's dollars in this order:
+  - a revaluation row is $0, as on Accounts;
+  - otherwise, the dollars typed on the row;
+  - otherwise, `round(amount / usd_rate, 2)`;
+  - otherwise, nothing.
+
+  The row's own rate is used, never one rate for the whole month, so the owner's "kono fx rate
+  theke hobena" still holds.
+- **Expense overview.** The four slices and the total sum `rowDollars()`. `exact` is true only
+  when every row typed its dollars. Rows converted at their rate show a "~".
+- **Operational expenses** (`/expenses/summary`). Each heading and the total carry `usd` and
+  `usdExact`, and the page shows them under the taka figure. A heading with nothing spent reads
+  $0.00.
+- **The payroll cards (#177)** now round each line to the cent before adding, as Expense
+  overview rounds each salary row. July is $12,212.09 on both pages. Before, the two differed
+  by a cent.
+
+**Money transfer by month**
+- The API takes optional `from` and `to`. A transfer belongs to the books month of its out half
+  (`inBooksPeriod`), so May's funding dated 11 June is listed under May.
+- On screen it is the same `MonthFilter` as the AI tools register. It opens on this month, and
+  "Every month" shows all of them.
+- An empty month reads "No transfers in October 2026".
+
+**Measured on local.** `usdqa.mjs` passes 30 of 30:
+- for May to July, salary dollars equal the SQL sum of each row at its rate, the four slices add
+  up to the total, operational has dollars, and Operational expenses' headings add up;
+- transfers by month match the books month;
+- the screen opens on October, which is empty, and August lists three.
+
+`payusdqa.mjs` passes 24 of 24. May's figures: Salary ~$4,026.70, Operational ~$40.98, total
+~$4,283.07. The four CI steps are green.
+
+**Not changed, for the owner to decide.** The Dashboard's dollar totals (`own-dollars.ts`) and
+All transactions' summary still count only typed dollars, so the Dashboard's month dollars will
+read lower than Expense overview's. Making them use `rowDollars()` is a shared change.
+
 ## 177. Payroll: the salary sheet's cards in dollars too — 27 Oct 2026
 
 The owner: *"payroll page er opore boro card gulate dollare convert kore amount tao dekhaiyo

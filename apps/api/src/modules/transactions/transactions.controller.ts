@@ -27,7 +27,6 @@ import {
   type UpdateTransactionInput,
   type VoidTransactionInput,
   paginationQuerySchema,
-  type PaginationQuery,
 } from "@finance/shared";
 import { z } from "zod";
 
@@ -60,6 +59,16 @@ const uuidSchema = z.string().uuid("Not a valid id");
  * account is corrected by voiding and recording again, the rule Cash In keeps:
  * an edit that moved money between two balances would leave no trail.
  */
+/**
+ * The transfers page's month (the owner, 27 Oct 2026: a month dropdown, as
+ * the other screens have). Both or neither; without them, every transfer.
+ */
+const listTransfersQuerySchema = paginationQuerySchema.extend({
+  from: isoDateSchema.optional(),
+  to: isoDateSchema.optional(),
+});
+export type ListTransfersQuery = z.infer<typeof listTransfersQuerySchema>;
+
 const updateTransferFields = z.strictObject({
   txnDate: isoDateSchema,
   /** Absent: the month of the date, like every other box left empty here. */
@@ -168,7 +177,7 @@ export class TransactionsController {
    */
   @Get("transactions/transfers")
   @RequirePermission("transactions.read")
-  listTransfers(@ZodQuery(paginationQuerySchema) query: PaginationQuery) {
+  listTransfers(@ZodQuery(listTransfersQuerySchema) query: ListTransfersQuery) {
     return this.transactions.listTransfers(query);
   }
 

@@ -57,12 +57,15 @@ import { isToolSpend } from "../vendors/tool-spend";
 import {
   overviewSelect,
   overviewWhere,
+  rowDollars,
+  typedDollars,
   type ExpenseOverview,
 } from "./expense-overview";
 import { notATransfer } from "./own-money";
 import { overdraftWatch } from "../../common/money/overdraft";
 import {
   beforeBooksPeriod,
+  inBooksPeriod,
   storedBooksMonth,
   upToBooksPeriod,
 } from "./books-month";
@@ -656,8 +659,9 @@ export class TransactionsService {
               rent: now.rentUsd,
               operational: now.operationalUsd,
               total: now.totalUsd,
-              /* Every row carried one, or only some did. */
-              exact: withUsd === Number(now.rows),
+              /* Every row typed its dollars; any converted at its row's rate,
+                 or missing, makes the figures approximate. */
+              exact: Number(now.typedUsd) === Number(now.rows),
             },
       salary: now.salary,
       tooling: now.tooling,
@@ -681,6 +685,29 @@ export class TransactionsService {
     to?: string;
     categorySlug?: string;
   }) {
+    /*
+     * Each heading in dollars too, the way Expense overview's boxes carry them
+     * (the owner, 27 Oct 2026: "operational expense a ekhane USD value ta
+     * dekhacchena"). Each row's own dollars (`rowDollars`), added up; the
+     * counts say whether any row had none, or was converted at its rate.
+     */
+    const dollarColumns = {
+      usd: sql<string>`coalesce(sum(${rowDollars()}), 0)::numeric(14,2)::text`,
+      withUsd: sql<number>`count(*) filter (where ${rowDollars()} is not null)::int`,
+      typedUsd: sql<number>`count(*) filter (where ${typedDollars()})::int`,
+    };
+    const dollarTotal = (
+      groups: { usd: string | null; usdExact: boolean }[],
+    ) => {
+      const priced = groups.filter((g) => g.usd !== null);
+      return {
+        usd: priced.length
+          ? priced.reduce((sum, g) => sum + Number(g.usd), 0).toFixed(2)
+          : null,
+        usdExact: groups.every((g) => g.usd !== null && g.usdExact),
+      };
+    };
+
     const clauses: SQL[] = [
       isNull(transactions.voidedAt),
       eq(transactions.direction, "out"),
@@ -692,7 +719,8 @@ export class TransactionsService {
 
     if (query.categorySlug) {
       const ids = await this.categoryIdsForSlug(query.categorySlug, undefined);
-      if (!ids.length) return { groups: [], total: "0.00" };
+      if (!ids.length)
+        return { groups: [], total: "0.00", usd: null, usdExact: true };
       clauses.push(inArray(transactions.categoryId, ids));
 
       const rows = await this.db.client
@@ -703,6 +731,7 @@ export class TransactionsService {
           color: categories.color,
           total: sql<string>`sum(${transactions.amount})::text`,
           entries: count(),
+          ...dollarColumns,
         })
         .from(transactions)
         .innerJoin(categories, eq(transactions.categoryId, categories.id))
@@ -715,9 +744,16 @@ export class TransactionsService {
         )
         .orderBy(desc(sql`sum(${transactions.amount})`));
 
+      const groups = rows.map(({ withUsd, typedUsd, ...r }) => ({
+        ...r,
+        entries: Number(r.entries),
+        usd: Number(withUsd) > 0 ? r.usd : null,
+        usdExact: Number(typedUsd) === Number(r.entries),
+      }));
       return {
-        groups: rows.map((r) => ({ ...r, entries: Number(r.entries) })),
+        groups,
         total: rows.reduce((sum, r) => sum + Number(r.total), 0).toFixed(2),
+        ...dollarTotal(groups),
       };
     }
 
@@ -728,13 +764,15 @@ export class TransactionsService {
         id: sql<string>`${parent}::text`,
         total: sql<string>`sum(${transactions.amount})::text`,
         entries: count(),
+        ...dollarColumns,
       })
       .from(transactions)
       .innerJoin(categories, eq(transactions.categoryId, categories.id))
       .where(and(...clauses))
       .groupBy(parent);
 
-    if (!rows.length) return { groups: [], total: "0.00" };
+    if (!rows.length)
+      return { groups: [], total: "0.00", usd: null, usdExact: true };
 
     const headings = await this.db.client
       .select({
@@ -763,12 +801,15 @@ export class TransactionsService {
         }),
         total: r.total,
         entries: Number(r.entries),
+        usd: Number(r.withUsd) > 0 ? r.usd : null,
+        usdExact: Number(r.typedUsd) === Number(r.entries),
       }))
       .sort((a, b) => Number(b.total) - Number(a.total));
 
     return {
       groups,
       total: groups.reduce((sum, g) => sum + Number(g.total), 0).toFixed(2),
+      ...dollarTotal(groups),
     };
   }
 
@@ -2063,7 +2104,9 @@ export class TransactionsService {
    * Voided pairs are listed struck through, the same rule as every ledger
    * screen; deleted ones are in the trash and not here.
    */
-  async listTransfers(query: PaginationQuery): Promise<Paginated<TransferRow>> {
+  async listTransfers(
+    query: PaginationQuery & { from?: string; to?: string },
+  ): Promise<Paginated<TransferRow>> {
     const inRow = alias(transactions, "in_row");
     const fromAccount = alias(accounts, "from_account");
     const toAccount = alias(accounts, "to_account");
@@ -2073,6 +2116,10 @@ export class TransactionsService {
       eq(transactions.direction, "out"),
       isNull(transactions.deletedAt),
       isNull(inRow.deletedAt),
+      /* A month, by the month the out half belongs to — as every month view
+         counts (`books-month.ts`), so May's funding dated 11 June is May's
+         here as it is on Bank status. */
+      ...(query.from && query.to ? [inBooksPeriod(query.from, query.to)] : []),
     );
     const joinedIn = and(
       eq(inRow.transferGroupId, transactions.transferGroupId),

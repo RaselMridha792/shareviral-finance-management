@@ -4,6 +4,8 @@ import {
   PAYMENT_METHOD_LABELS,
   formatMoney,
   fromMinorUnits,
+  monthRange,
+  todayInDhaka,
   toMinorUnits,
   type PaymentMethod,
 } from "@finance/shared";
@@ -13,6 +15,7 @@ import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCan } from "@/components/auth/session-provider";
+import { MonthFilter, type Range } from "@/components/expenses/month-picker";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -73,6 +76,20 @@ export function TransfersScreen({
   const canWrite = useCan("transactions.write");
 
   const [rows, setRows] = useState<TransferRowDto[] | null>(null);
+  /*
+   * The month on screen, opening on this one, with "Every month" a row away —
+   * the same dropdown as the AI tools register (the owner, 27 Oct 2026:
+   * "monthly sorting dropdown ta ante hobe"). A transfer is in the month its
+   * out half belongs to, so May's funding dated 11 June is under May.
+   */
+  const [month, setMonth] = useState<Range | null>(() => {
+    const today = todayInDhaka();
+    const range = monthRange(
+      Number(today.slice(0, 4)),
+      Number(today.slice(5, 7)),
+    );
+    return { from: range.start, to: range.end, label: range.label };
+  });
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -99,25 +116,29 @@ export function TransfersScreen({
    */
   const latest = useRef(0);
 
-  const load = useCallback(async (target: number) => {
-    const ticket = ++latest.current;
-    try {
-      const result = await ledgerApi.listTransfers(target);
-      if (ticket !== latest.current) return;
-      setRows(result.items);
-      setTotal(result.total);
-      setTotalPages(result.totalPages);
-      setPage(result.page);
-      setLoadError(null);
-    } catch (caught) {
-      if (ticket !== latest.current) return;
-      setLoadError(
-        caught instanceof ApiError
-          ? caught.message
-          : "The transfers could not be read. Reload the page to try again.",
-      );
-    }
-  }, []);
+  const load = useCallback(
+    async (target: number) => {
+      const ticket = ++latest.current;
+      try {
+        const result = await ledgerApi.listTransfers(target, month);
+        if (ticket !== latest.current) return;
+        setRows(result.items);
+        setTotal(result.total);
+        setTotalPages(result.totalPages);
+        setPage(result.page);
+        setLoadError(null);
+      } catch (caught) {
+        if (ticket !== latest.current) return;
+        setLoadError(
+          caught instanceof ApiError
+            ? caught.message
+            : "The transfers could not be read. Reload the page to try again.",
+        );
+      }
+    },
+    /* A new month is a new load from page 1, by the effect below. */
+    [month],
+  );
 
   useEffect(() => {
     // Reading on open is what an effect is for — the same exemption every
@@ -176,12 +197,15 @@ export function TransfersScreen({
         icon="swap_horiz"
         description="Move money between the company's own accounts. Each transfer records an out and an in, so both registers match their bank statements."
         actions={
-          canWrite ? (
-            <Button variant="primary" onClick={() => setCreating(true)}>
-              <PlusCircleIcon weight="duotone" size={19} />
-              New transfer
-            </Button>
-          ) : undefined
+          <>
+            <MonthFilter range={month} onChange={setMonth} />
+            {canWrite ? (
+              <Button variant="primary" onClick={() => setCreating(true)}>
+                <PlusCircleIcon weight="duotone" size={19} />
+                New transfer
+              </Button>
+            ) : null}
+          </>
         }
       />
 
@@ -194,7 +218,12 @@ export function TransfersScreen({
         </Card>
       ) : rows !== null && rows.length === 0 && page === 1 ? (
         <Card>
-          <EmptyState icon="swap_horiz" title="No transfers yet">
+          <EmptyState
+            icon="swap_horiz"
+            title={
+              month ? `No transfers in ${month.label}` : "No transfers yet"
+            }
+          >
             When money moves between two of the company&rsquo;s accounts — the
             bank to petty cash, one bank to another — record it here rather than
             as an expense, and both registers stay right.

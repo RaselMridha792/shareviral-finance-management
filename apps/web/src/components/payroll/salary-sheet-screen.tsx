@@ -278,11 +278,15 @@ export function SalarySheetScreen({
         without += 1;
         continue;
       }
-      totals.gross += Number(line.grossAmount) / rate;
-      totals.additions +=
-        (Number(line.bonusAmount) + Number(line.otherAdditions)) / rate;
-      totals.tds += Number(line.tdsAmount) / rate;
-      totals.net += Number(line.netAmount) / rate;
+      /* Each line to the cent first, as its own cell shows it and as Expense
+         overview rounds each salary row — so the totals agree to the cent. */
+      const cents = (taka: number) => Math.round((taka / rate) * 100) / 100;
+      totals.gross += cents(Number(line.grossAmount));
+      totals.additions += cents(
+        Number(line.bonusAmount) + Number(line.otherAdditions),
+      );
+      totals.tds += cents(Number(line.tdsAmount));
+      totals.net += cents(Number(line.netAmount));
       counted += 1;
     }
     return counted === 0 ? null : { ...totals, without };

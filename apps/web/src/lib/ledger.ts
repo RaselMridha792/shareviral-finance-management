@@ -176,9 +176,21 @@ export type ExpenseGroup = {
   color: string;
   total: string;
   entries: number;
+  /**
+   * The same rows in dollars, each at its own figure (`rowDollars` on the
+   * API). Null when none of them can say; `usdExact` is false when any was a
+   * conversion at its row's rate or had no dollars at all.
+   */
+  usd: string | null;
+  usdExact: boolean;
 };
 
-export type ExpenseSummary = { groups: ExpenseGroup[]; total: string };
+export type ExpenseSummary = {
+  groups: ExpenseGroup[];
+  total: string;
+  usd: string | null;
+  usdExact: boolean;
+};
 
 /** Drops empty values so the URL only carries filters that are actually set. */
 export function toSearchParams(
@@ -301,9 +313,12 @@ export const ledgerApi = {
       ...json(input),
     }),
 
-  listTransfers: (page = 1) =>
+  /** `month` narrows to one month's transfers; without it, every one. */
+  listTransfers: (page = 1, month?: { from: string; to: string } | null) =>
     apiFetch<Paginated<TransferRowDto>>(
-      `/transactions/transfers?page=${page}&pageSize=${PAGE_SIZE}`,
+      `/transactions/transfers?page=${page}&pageSize=${PAGE_SIZE}${
+        month ? `&from=${month.from}&to=${month.to}` : ""
+      }`,
       { cache: "no-store" },
     ),
   transfer: (input: TransferInput) =>
