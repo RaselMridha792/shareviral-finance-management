@@ -168,6 +168,8 @@ export function CategoryDetailScreen({
         // two is 21, not 1. On a finance screen that number is what somebody
         // reads down the phone.
         page={current}
+        // What each bill was for, one clipped line; the row opens the rest.
+        showDescription
         onEdit={setEditing}
         onVoid={setVoiding}
         onDelete={del.ask}

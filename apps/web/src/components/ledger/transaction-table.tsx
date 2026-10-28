@@ -61,6 +61,7 @@ export function TransactionTable({
   showType = false,
   showBooksMonth = false,
   showPaymentMethod = false,
+  showDescription = false,
   emptyMessage = "Nothing recorded yet.",
 }: {
   rows: (TransactionDto & { runningBalance?: string })[];
@@ -119,6 +120,13 @@ export function TransactionTable({
    * is an expense and how it was paid is what people scan for.
    */
   showPaymentMethod?: boolean;
+  /**
+   * The description back as one clipped line, on the expense headings only
+   * (the owner, 28 Oct 2026: "other expenses er vitore ... descriptions ta
+   * lekha nai table tay ... sokha limit diye diyo click korle tokhon purota
+   * dekha jabe"). The whole of it is on hover and in the row's popup.
+   */
+  showDescription?: boolean;
   emptyMessage?: string;
 }) {
   const canWrite = useCan("transactions.write");
@@ -210,7 +218,12 @@ export function TransactionTable({
                 was the one column that made every row two and three lines
                 tall. A click on the row opens the whole entry — the
                 description first — in a popup (transaction-details.tsx).
+
+                Except where `showDescription` asks for it: one line, cut at
+                14rem — the room the 960 floor above still reserves for it — so
+                a row stays one line tall and the table no wider.
               */}
+              {showDescription ? <Th width="w-56">Description</Th> : null}
               {/*
                 No Category column, on the owner's word: "ekhane theke category
                 row ta remove korte hobe all transaction a etar dorkar nai".
@@ -373,6 +386,18 @@ export function TransactionTable({
                       </Badge>
                     ) : null}
                   </td>
+                  {showDescription ? (
+                    <td>
+                      {/* On a span: a cell's own max-width is ignored by an
+                          auto-layout table, so the clip has to be inside it. */}
+                      <span
+                        className="block max-w-56 truncate"
+                        title={row.description}
+                      >
+                        {row.description}
+                      </span>
+                    </td>
+                  ) : null}
 
                   {/*
                     Three cells where there was one, and the third is what
