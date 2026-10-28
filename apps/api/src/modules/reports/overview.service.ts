@@ -26,7 +26,12 @@ import {
   vendors,
 } from "../../db/schema";
 import { FxService } from "../fx/fx.service";
-import { isRevaluationRow } from "../accounts/accounts.service";
+import {
+  isRevaluationRow,
+  rowHasDollars,
+  rowSignedDollars,
+} from "../accounts/accounts.service";
+import { monthRateFor } from "../accounts/month-rate";
 import { isToolSpend } from "../vendors/tool-spend";
 import { SettingsService } from "../settings/settings.service";
 import { TdsService } from "../tds/tds.service";
@@ -499,6 +504,8 @@ export class OverviewService {
         accountNumber: accounts.accountNumber,
         currency: accounts.currency,
         opening: accounts.openingBalance,
+        /* A dollar account's opening in dollars, as Bank status reads it. */
+        openingUsd: accounts.openingBalanceUsd,
       })
       .from(accounts)
       .where(isNull(accounts.deletedAt))
@@ -506,31 +513,28 @@ export class OverviewService {
 
     if (!rows.length) return [];
 
+    /* The rates a taka account's opening and closing are read at. */
+    const [startRate, endRate] = await Promise.all([
+      monthRateFor(this.db.client, range.start),
+      monthRateFor(this.db.client, range.end),
+    ]);
+
     const [movedBefore, inPeriodRows] = await Promise.all([
       this.db.client
         .select({
           accountId: transactions.accountId,
           net: sql<string>`coalesce(sum(${transactions.signedAmount}), 0)::text`,
           /*
-           * The same net, in the dollars the ROWS carry.
+           * The same net in dollars: each row's own (`rowSignedDollars`, as
+           * Bank status and an account's balance read it — typed dollars,
+           * else the row's own day rate; a revaluation is $0), to the cent.
            *
-           * The owner: "aigula kono fx rate theke hobena. prottekta transaction
-           * er usd amount o save hoy oitai jog hobe." So this is a sum, never a
-           * division — a figure divided out of taka changes on its own the
-           * moment somebody edits a rate, which is what #8 removed.
-           *
-           * Signed, so money in adds and money out subtracts, exactly as the
-           * taka net beside it does.
+           * It summed only typed dollars until 28 Oct 2026, and a row paid in
+           * taka moved nothing: Bank Asia closed May at $6,784.61 where the
+           * sheet has $2,746.79 — the salaries had left and the dollars had
+           * not — and JPMorgan kept the $40 of its May charge.
            */
-          netUsd: sql<string>`coalesce(sum(
-            case
-              when ${transactions.originalCurrency} = 'USD'
-                   and ${transactions.originalAmount} is not null
-              then case when ${transactions.direction} = 'in'
-                        then ${transactions.originalAmount}
-                        else -${transactions.originalAmount} end
-              else 0
-            end), 0)::text`,
+          netUsd: sql<string>`coalesce(sum(round(${rowSignedDollars}, 2)), 0)::text`,
         })
         .from(transactions)
         .where(and(beforeBooksPeriod(range.start), LIVE))
@@ -547,17 +551,14 @@ export class OverviewService {
           moneyIn: sql<string>`coalesce(sum(case when ${transactions.direction} = 'in' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
           moneyOut: sql<string>`coalesce(sum(case when ${transactions.direction} = 'out' and not ${isRevaluationRow} then ${transactions.amount} else 0 end), 0)::text`,
           revaluation: sql<string>`coalesce(sum(case when ${isRevaluationRow} then ${transactions.signedAmount} else 0 end), 0)::text`,
-          /* Each direction's dollars, summed from the rows that carry one. */
-          moneyInUsd: sql<string>`coalesce(sum(
-            case when ${transactions.direction} = 'in'
-                  and ${transactions.originalCurrency} = 'USD'
-                  and ${transactions.originalAmount} is not null
-                 then ${transactions.originalAmount} else 0 end), 0)::text`,
-          moneyOutUsd: sql<string>`coalesce(sum(
-            case when ${transactions.direction} = 'out'
-                  and ${transactions.originalCurrency} = 'USD'
-                  and ${transactions.originalAmount} is not null
-                 then ${transactions.originalAmount} else 0 end), 0)::text`,
+          /* Each direction's dollars: each row's own, to the cent, as the
+             carried net above. Out is signed negative in `rowSignedDollars`. */
+          moneyInUsd: sql<string>`coalesce(sum(round(${rowSignedDollars}, 2)) filter (
+            where ${transactions.direction} = 'in' and not ${isRevaluationRow}
+          ), 0)::text`,
+          moneyOutUsd: sql<string>`(-coalesce(sum(round(${rowSignedDollars}, 2)) filter (
+            where ${transactions.direction} = 'out' and not ${isRevaluationRow}
+          ), 0))::text`,
           /*
            * Whether EVERY row in the period carried a dollar figure.
            *
@@ -572,9 +573,7 @@ export class OverviewService {
           /* A revaluation has no dollars by nature (piece 4c), so it does
              not make the account's dollars approximate. */
           allHaveUsd: sql<boolean>`coalesce(bool_and(
-            ${isRevaluationRow}
-            or (${transactions.originalCurrency} = 'USD'
-                and ${transactions.originalAmount} is not null)
+            ${isRevaluationRow} or ${rowHasDollars}
           ), true)`,
         })
         .from(transactions)
@@ -612,23 +611,39 @@ export class OverviewService {
       const moneyIn = movement?.in ?? 0;
       const moneyOut = movement?.out ?? 0;
 
-      /*
-       * The dollars, added up.
-       *
-       * An account's OPENING has no dollar figure of its own — it is the
-       * account's opening balance, typed in taka, plus everything that moved
-       * before this month. Only the second half carries dollars, so the
-       * opening's dollar view is the dollars that moved before the period.
-       */
-      const openingUsd = carried?.netUsd ?? 0;
+      const closing = opening + moneyIn - moneyOut;
       const moneyInUsd = movement?.inUsd ?? 0;
       const moneyOutUsd = movement?.outUsd ?? 0;
 
-      /* Nothing at all in dollars is not the same as zero dollars: a taka-only
-         account shows no second line rather than "$0.00", which would read as a
-         fact somebody established. */
+      /*
+       * The dollars, by what the account holds (the owner, 28 Oct 2026):
+       *
+       * - A DOLLAR account (JPMorgan, Payoneer) is fixed in dollars: its
+       *   stated opening dollars plus every row's own, as Bank status reads
+       *   it. Its taka is the equivalent, and moves with the rate.
+       * - A TAKA account (Bank Asia, Standard Chartered) is fixed in taka: its
+       *   opening and closing dollars are its taka at the month's rate, as the
+       *   sheet shows them — Bank Asia opens June at ৳3,36,344.10 / 122.45 =
+       *   $2,746.79. In and Out stay each entry's own dollars.
+       */
+      const isTaka = account.currency === "BDT";
+      const openingUsd =
+        isTaka && startRate
+          ? opening / startRate
+          : Number(account.openingUsd ?? 0) + (carried?.netUsd ?? 0);
+      const closingUsd =
+        isTaka && endRate
+          ? closing / endRate
+          : openingUsd + moneyInUsd - moneyOutUsd;
+
+      /* Nothing at all in dollars is not the same as zero dollars: an account
+         with nothing in it and no rate to read it at shows no second line
+         rather than "$0.00". */
       const anyDollars =
-        openingUsd !== 0 || moneyInUsd !== 0 || moneyOutUsd !== 0;
+        openingUsd !== 0 ||
+        moneyInUsd !== 0 ||
+        moneyOutUsd !== 0 ||
+        closingUsd !== 0;
       const usdOr = (value: number) => (anyDollars ? value.toFixed(2) : null);
 
       return {
@@ -641,17 +656,18 @@ export class OverviewService {
         opening: opening.toFixed(2),
         moneyIn: moneyIn.toFixed(2),
         moneyOut: moneyOut.toFixed(2),
-        closing: (opening + moneyIn - moneyOut).toFixed(2),
+        closing: closing.toFixed(2),
         usd: {
           opening: usdOr(openingUsd),
           moneyIn: usdOr(moneyInUsd),
           moneyOut: usdOr(moneyOutUsd),
-          /* Derived from the other three rather than summed again, so
-             opening + in - out reads as a sentence that adds up. */
-          closing: usdOr(openingUsd + moneyInUsd - moneyOutUsd),
-          /* False when some row in the period carried no dollar figure: the
-             totals are then a floor, and the screen says so with a tilde. */
-          exact: movement?.exact ?? true,
+          /* A dollar account's is derived from the other three, so opening +
+             in - out reads as a sentence that adds up; a taka account's is its
+             taka at the month's rate, which can differ by what the rate moved. */
+          closing: usdOr(closingUsd),
+          /* False when some row was read at its day's rate: the screen says
+             so with a tilde. A taka account's dollars are always a reading. */
+          exact: !isTaka && (movement?.exact ?? true),
         },
       };
     });

@@ -19,6 +19,7 @@ import {
   users,
 } from "../../db/schema";
 import { beforeBooksPeriod, inBooksPeriod } from "../transactions/books-month";
+import { inDollarsAt, monthRateFor } from "./month-rate";
 import {
   isRevaluationRow,
   rowHasDollars,
@@ -215,9 +216,22 @@ export class BankStatusService {
     const checkOf = new Map(checks.map((check) => [check.accountId, check]));
 
     const both = (bdt: string, usd: string): BothCurrencies => ({ bdt, usd });
+    /*
+     * A TAKA account's opening and closing in dollars are its taka at the
+     * month's rate, as the sheet reads them (the owner, 28 Oct 2026: its taka
+     * is fixed and its dollars move with the rate). Summed from each row's
+     * own rate instead, Bank Asia opened June at $2,756.95 where the sheet has
+     * $2,746.79, and ended at ৳0 still holding $10.16. Its In, Out and Fee
+     * stay each entry's own dollars. A dollar account is unchanged.
+     */
+    const rate = await monthRateFor(this.db.client, start);
     const out: BankStatusRow[] = shown.map((row) => {
       const note = noteOf.get(row.accountId);
       const check = checkOf.get(row.accountId);
+      if (row.currency === "BDT" && rate) {
+        row.openUsd = inDollarsAt(row.openBdt, rate);
+        row.closeUsd = inDollarsAt(row.closeBdt, rate);
+      }
       return {
         accountId: row.accountId,
         name: row.name,

@@ -152,6 +152,51 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 186. A taka account's dollars at the month's rate; the Dashboard's dollars each row's own — 28 Oct 2026 (NOT pushed)
+
+**What the owner reported.** On the Dashboard, Bank Asia closed May at **$6,784.61** and opened
+June at the same figure. The sheet has $2,746.79.
+
+**Why.**
+- **The Dashboard's account blocks** added only typed dollars. The $7,000 in and the $215.39 out
+  were typed, but the salaries and the fee paid in taka moved no dollars at all, which leaves
+  $6,784.61.
+- **JPMorgan** kept May's $40 charge the same way, and opened June at $7,000 instead of $6,960.
+- **Bank status** read every row at its own rate. So it opened June at May's rate ($2,756.95, not
+  $2,746.79) and ended at ৳0 still holding $10.16.
+
+**The owner's rule.**
+- A **dollar** account (JPMorgan, Payoneer) is fixed in dollars, and its taka moves with the rate.
+- A **taka** account (Bank Asia, Standard Chartered) is fixed in taka, and its dollars move with
+  the rate. *"amader dashboard eo eivabei to calculate howa ucit"*.
+
+**What changed**
+- **`month-rate.ts` (new).** `monthRateFor(day)` returns the rate most of the month's entries
+  carry, by books month, and falls back to the latest earlier month. Locally that is May 122, June
+  122.45, July and August 122.77: one rate per month, the sheet's C6.
+- **Bank status.** A BDT account's opening and closing dollars are its taka at that rate. In, Out
+  and Fee are still each entry's own dollars. Dollar accounts are unchanged.
+- **The Dashboard's account blocks** (`overview.service.ts` `accountGroups`):
+  - In, Out and the carried net are now each row's own dollars (`round(rowSignedDollars, 2)`), as
+    Bank status reads them.
+  - A dollar account opens at `opening_balance_usd` plus the carried dollars, and its closing is
+    opening + in − out.
+  - A taka account opens at its taka at the start month's rate and closes at the end month's rate.
+  - A taka account's dollars carry the "≈", since they are a reading.
+
+**Measured on local** with `usdacctqa.mjs`, 16 of 16 passing. Every figure was checked on both
+the Dashboard and Bank status:
+- **Bank Asia:** May closes at $2,756.92, which is 336,344.10 ÷ 122. June opens at **$2,746.79**
+  and closes at ৳0 / **$0**.
+- **JPMorgan:** May closes at $6,960 and June opens at **$6,960**, as the sheet has it. The
+  Dashboard and Bank status agree.
+- **SCB:** June closes at $975.17 (÷ 122.45) and July at $25,757.68 (÷ 122.77).
+
+The four CI steps are green.
+
+**Not changed.** The Dashboard's top-line dollar totals (`usdTotals`, `own-dollars.ts`) and All
+transactions' summary still count typed dollars only.
+
 ## 185. Expense overview's boxes carry the month they were read in — 28 Oct 2026 (NOT pushed)
 
 **What the owner reported.** On Expense overview they picked May, then clicked AI tools and
