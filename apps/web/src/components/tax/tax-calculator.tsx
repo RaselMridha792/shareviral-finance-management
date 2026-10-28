@@ -78,14 +78,16 @@ export function TaxCalculator({
         description="A year's salary in, the monthly deduction out — with every step of the sum, so it can be checked against the accountant's working."
       />
       <CardBody className="flex flex-col gap-4">
+        {/* Two to a row — the owner, 29 Oct 2026: four on one line read as
+            broken. The salary and the investment, then the year and the
+            button, which sits level with the year. */}
         <form
-          className="flex flex-wrap items-end gap-3"
+          className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2"
           onSubmit={(event) => void run(event)}
         >
           <Field
             label="Annual salary"
             required
-            className="min-w-48 flex-1"
             hint="A whole year's pay, not a month's"
           >
             <MoneyInput
@@ -98,7 +100,6 @@ export function TaxCalculator({
           </Field>
           <Field
             label="Declared investment"
-            className="min-w-48 flex-1"
             hint="Leave blank to use the rule's own assumption"
           >
             <MoneyInput
@@ -113,7 +114,7 @@ export function TaxCalculator({
             year's slabs is not wrong — it is an answer to a different question,
             so the question is asked rather than assumed.
           */}
-          <Field label="Income year" className="w-44">
+          <Field label="Income year">
             <Select
               value={fiscalYear}
               onChange={(event) => setFiscalYear(Number(event.target.value))}
@@ -125,7 +126,12 @@ export function TaxCalculator({
               ))}
             </Select>
           </Field>
-          <Button type="submit" variant="secondary" disabled={busy}>
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={busy}
+            className="w-full"
+          >
             {busy ? (
               <LoaderCircle className="size-4 animate-spin" />
             ) : (
