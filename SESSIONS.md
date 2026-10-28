@@ -180,8 +180,12 @@ The four CI steps are green.
 - **Local:** done with `split-may-fee.mjs` (scratchpad). The ৳120 entry is in the trash and
   there are 12 charges of ৳10. Bank Asia's May Fee is still ৳120 and its closing is still
   ৳3,36,344.10.
-- **Live:** waits for the owner to run the same script in the api container, once #184 is live:
-  dry run first, then `--write`. Running it again says "Already done".
+- **Live: done, 28 Oct.** The owner ran it in the api container, from a file pasted in on the
+  server (scp was refused):
+  - the dry run listed 12 people and the ৳120 entry as live;
+  - `--write` trashed it (201) and added ৳10 to each of the 12 payments (all 200);
+  - "Now: 12 charges on May's payments, Tk 120.00 in all";
+  - the script file was removed afterwards.
 
 ## 184. Salary sheet: row popup, Basic only, Fee and Check, pinned Name; hover on every clickable row — 28 Oct 2026 (NOT pushed)
 
