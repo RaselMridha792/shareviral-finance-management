@@ -5,6 +5,7 @@ import { Download, FileText, LoaderCircle, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ZoomableImage } from "@/components/ui/overlay";
 import {
   ApiError,
   deleteStoredFile,
@@ -123,7 +124,8 @@ export function ScreenshotDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface shadow-lg">
+      {/* As wide as the documents dialog, and zoomable (the owner, 29 Oct 2026). */}
+      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface shadow-lg">
         <div className="flex items-center gap-3 border-b border-border px-5 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
@@ -167,12 +169,13 @@ export function ScreenshotDialog({
               {files.map((file) => (
                 <figure key={file.id} className="flex flex-col gap-2">
                   {file.isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={fileHref(file.id)}
-                      alt={`${subscription.planName} plan`}
-                      className="max-h-[55vh] w-full rounded-lg border border-border object-contain"
-                    />
+                    <div className="rounded-lg border border-border p-1">
+                      <ZoomableImage
+                        src={fileHref(file.id)}
+                        alt={`${subscription.planName} plan`}
+                        maxVh={70}
+                      />
+                    </div>
                   ) : (
                     <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
                       <FileText className="size-5 shrink-0 text-muted-foreground" />

@@ -152,6 +152,52 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 189. File popups wider, images zoomable; the tax calculator two to a row — 29 Oct 2026 (NOT pushed)
+
+**Images zoom in every file-view popup** (the owner: "jekono kichu open korlei ... oi popup tar
+width aro boro korte hobe ... image hole oikhane ekta zoom button"). The owner asked for all of
+them.
+- **`ZoomableImage`** (`components/ui/overlay.tsx`, new) is one component for every popup.
+  - An image opens fitted to the space, never scaled up past its own pixels.
+  - Corner buttons zoom it to 150 / 200 / 300 / 400%. The percentage button fits it back, and a
+    double-click toggles 200%.
+  - The frame keeps the fitted size while zoomed and the picture moves inside it, by dragging or
+    scrolling. Zooming keeps the middle of the view in the middle.
+- **Where it is used:**
+  - `ImageLightbox`: every form's eye, document slots, payroll run documents, the team member
+    photo.
+  - `DocumentsDialog`: the eye on a table's Invoice or Reference cell, on all nine screens that
+    use it.
+  - The AI tools plan screenshot dialog.
+- **Wider:** `DocumentsDialog` and the screenshot dialog went from max-w-2xl (672) to max-w-5xl
+  (1024), with images and PDFs at 70vh instead of 55vh. `DocumentViewer` went from max-w-5xl to
+  6xl.
+- Measured (`zoomqa.mjs`, 11 of 11): a 1200×2000 test image was attached to a local entry and
+  removed afterwards.
+  - The dialog is 1024 wide and the image fits at 420×700.
+  - Two zoom-ins give 840×1400 in the same 420×700 frame, centred, and a 200px drag moves it
+    200px.
+  - Fit and double-click both work.
+  - The lightbox fits the image at 920 tall (92% of the height), and Zoom in gives 1380.
+- One harness run crashed when Neon dropped an idle connection during the first page compile,
+  which left its fixture behind. It was removed by hand (`zoomclean.mjs`), and the harness now
+  opens the database only to clean up.
+
+**Tax calculator** (`tax-calculator.tsx`): the form is two to a row: Annual salary and Declared
+investment, then Income year and Work it out, with the button level with the select. One to a
+row on a phone. Measured with `taxcalcqa.mjs`, 5 of 5.
+
+**Answered, not changed:**
+- **Why a payroll TDS figure's popup says "Nothing was worked out".** Those lines were typed by
+  hand from the sheet: on local, every line of May to August has `tds_manual` set and
+  `tds_basis` null. Typing a figure clears the working, and the popup's empty state only knows
+  the "no rule / predates" reasons. The cell's tooltip already says "Typed by hand". I offered to
+  fix the popup's wording; the owner has not answered yet.
+- **Why TDS lists July and August but not May and June.** The month list follows the income year
+  picked beside it. May and June 2026 are in FY 2025-26.
+
+The four CI steps are green.
+
 ## 188. Expense headings get a Description column; a wrong-format file is refused in plain words, at pick time — 28 Oct 2026
 
 Two of the owner's reports from one afternoon, pushed together on their word ("kaj ses hole deploy

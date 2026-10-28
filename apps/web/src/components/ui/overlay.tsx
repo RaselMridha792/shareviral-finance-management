@@ -1,10 +1,18 @@
 "use client";
 
-import { Download, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Download, X, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { useScrollLock } from "@/components/ui/scroll-lock";
+import { cn } from "@/lib/utils";
 
 /**
  * Escape closes it, and the page behind stops scrolling while it is open.
@@ -242,7 +250,7 @@ function ViewerShell({
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-surface"
+        className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-surface"
       >
         <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
           <p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
@@ -291,7 +299,7 @@ function ViewerShell({
   );
 }
 
-/** A stored image at its own size, over the page. */
+/** A stored image over the page, fitted to it and zoomable (`ZoomableImage`). */
 export function ImageLightbox({
   open,
   src,
@@ -323,18 +331,205 @@ export function ImageLightbox({
         <X className="size-5" />
       </button>
 
-      {/*
-        Not next/image: these bytes sit behind a permission check on another
-        origin, and the optimiser would fetch them itself, without the
-        browser's session.
-      */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        onClick={(event) => event.stopPropagation()}
-        className="max-h-full max-w-full rounded-lg object-contain"
-      />
+      <ZoomableImage src={src} alt={alt} maxVh={92} />
+    </div>
+  );
+}
+
+/** How far a picture can be blown up, as multiples of its fitted size. */
+const ZOOM_STEPS = [1, 1.5, 2, 3, 4];
+
+/**
+ * A picture that can be looked at closely (the owner, 29 Oct 2026: "file type
+ * image hole oikhane ekta zoom button rakhte hobe jate zoom kore dekha jay").
+ *
+ * It opens fitted — never larger than the room it has, and never blown up past
+ * its own pixels — and the buttons in its corner enlarge it in steps. Zoomed,
+ * it grows inside a frame that keeps the fitted size, so the dialog around it
+ * does not jump; it is moved about by dragging or scrolling. A double-click
+ * goes to 2× and back.
+ *
+ * Shared by the full-screen lightbox and the documents dialog, so a receipt
+ * zooms the same way wherever it is opened.
+ */
+export function ZoomableImage({
+  src,
+  alt,
+  maxVh,
+}: {
+  src: string;
+  alt: string;
+  /** The tallest it may be when fitted, in viewport heights. */
+  maxVh: number;
+}) {
+  const room = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(
+    null,
+  );
+  const [space, setSpace] = useState<{ w: number; h: number } | null>(null);
+  const [step, setStep] = useState(0);
+  /* Where the middle of the view was, carried across a zoom so the spot being
+     looked at stays in the middle rather than sliding off to the corner. */
+  const centre = useRef<{ x: number; y: number } | null>(null);
+  const drag = useRef<{
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const el = room.current;
+    if (!el) return;
+    const measure = () =>
+      setSpace({ w: el.clientWidth, h: (window.innerHeight * maxVh) / 100 });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [maxVh]);
+
+  useLayoutEffect(() => {
+    const el = frame.current;
+    const at = centre.current;
+    if (!el || !at) return;
+    el.scrollLeft = at.x * el.scrollWidth - el.clientWidth / 2;
+    el.scrollTop = at.y * el.scrollHeight - el.clientHeight / 2;
+    centre.current = null;
+  }, [step]);
+
+  const fit =
+    natural && space
+      ? Math.min(space.w / natural.w, space.h / natural.h, 1)
+      : null;
+  const zoom = ZOOM_STEPS[step];
+  const fitted =
+    natural && fit ? { w: natural.w * fit, h: natural.h * fit } : null;
+
+  function zoomTo(next: number) {
+    const el = frame.current;
+    if (el) {
+      centre.current = {
+        x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
+        y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight,
+      };
+    }
+    setStep(Math.min(Math.max(next, 0), ZOOM_STEPS.length - 1));
+  }
+
+  function grab(event: PointerEvent<HTMLDivElement>) {
+    const el = frame.current;
+    if (!el || step === 0) return;
+    el.setPointerCapture(event.pointerId);
+    drag.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: el.scrollLeft,
+      top: el.scrollTop,
+    };
+  }
+
+  function pull(event: PointerEvent<HTMLDivElement>) {
+    const el = frame.current;
+    const from = drag.current;
+    if (!el || !from) return;
+    el.scrollLeft = from.left - (event.clientX - from.x);
+    el.scrollTop = from.top - (event.clientY - from.y);
+  }
+
+  const control =
+    "cursor-pointer rounded-full p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground disabled:cursor-default disabled:opacity-40";
+
+  return (
+    <div ref={room} className="w-full">
+      <div
+        className="relative mx-auto max-w-full"
+        style={fitted ? { width: fitted.w } : undefined}
+      >
+        <div
+          ref={frame}
+          data-zoom-frame
+          className={cn(
+            "overflow-auto rounded-lg",
+            step > 0 && "cursor-grab active:cursor-grabbing",
+          )}
+          style={fitted ? { height: fitted.h } : undefined}
+          onPointerDown={grab}
+          onPointerMove={pull}
+          onPointerUp={() => (drag.current = null)}
+          onPointerCancel={() => (drag.current = null)}
+        >
+          {/*
+            Not next/image: these bytes sit behind a permission check on
+            another origin, and the optimiser would fetch them itself, without
+            the browser's session.
+          */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={alt}
+            draggable={false}
+            onLoad={(event) =>
+              setNatural({
+                w: event.currentTarget.naturalWidth,
+                h: event.currentTarget.naturalHeight,
+              })
+            }
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={() => zoomTo(step === 0 ? 2 : 0)}
+            className="mx-auto block max-w-none select-none"
+            style={
+              fitted
+                ? { width: fitted.w * zoom, height: fitted.h * zoom }
+                : { maxWidth: "100%", maxHeight: `${maxVh}vh` }
+            }
+          />
+        </div>
+
+        {fitted ? (
+          <div
+            role="group"
+            aria-label="Zoom"
+            onClick={(event) => event.stopPropagation()}
+            className="absolute top-2 left-2 flex items-center gap-0.5 rounded-full border border-border bg-surface/95 px-1 py-0.5 shadow-lg backdrop-blur"
+          >
+            <button
+              type="button"
+              aria-label="Zoom out"
+              title="Zoom out"
+              disabled={step === 0}
+              onClick={() => zoomTo(step - 1)}
+              className={control}
+            >
+              <ZoomOut className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Fit to the window"
+              title="Fit to the window"
+              disabled={step === 0}
+              onClick={() => zoomTo(0)}
+              className="num min-w-12 cursor-pointer rounded-full px-1 text-center text-xs text-muted-foreground transition hover:text-foreground disabled:cursor-default"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              title="Zoom in"
+              disabled={step === ZOOM_STEPS.length - 1}
+              onClick={() => zoomTo(step + 1)}
+              className={control}
+            >
+              <ZoomIn className="size-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Download, FileText, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ZoomableImage } from "@/components/ui/overlay";
 import {
   fileHref,
   listPayrollRunFiles,
@@ -72,7 +73,7 @@ function PdfFrame({ file }: { file: StoredFile }) {
 
   if (!src) {
     return (
-      <div className="flex h-[55vh] items-center justify-center rounded-lg border border-border">
+      <div className="flex h-[70vh] items-center justify-center rounded-lg border border-border">
         <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
@@ -82,7 +83,7 @@ function PdfFrame({ file }: { file: StoredFile }) {
     <iframe
       src={src}
       title={file.label ?? file.originalName}
-      className="h-[55vh] w-full rounded-lg border border-border bg-white"
+      className="h-[70vh] w-full rounded-lg border border-border bg-white"
     />
   );
 }
@@ -218,7 +219,9 @@ export function DocumentsDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface shadow-lg">
+      {/* Wide enough to read a receipt without zooming first (the owner, 29 Oct
+          2026: "oi popup tar width aro boro korte hobe") — it was max-w-2xl. */}
+      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface shadow-lg">
         <div className="flex items-center gap-3 border-b border-border px-5 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
@@ -262,12 +265,13 @@ export function DocumentsDialog({
               {shown.map((file) => (
                 <figure key={file.id} className="flex flex-col gap-2">
                   {file.isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={fileHref(file.id)}
-                      alt={file.label ?? file.originalName}
-                      className="max-h-[55vh] w-full rounded-lg border border-border object-contain"
-                    />
+                    <div className="rounded-lg border border-border p-1">
+                      <ZoomableImage
+                        src={fileHref(file.id)}
+                        alt={file.label ?? file.originalName}
+                        maxVh={70}
+                      />
+                    </div>
                   ) : isPdf(file) ? (
                     <PdfFrame file={file} />
                   ) : (
