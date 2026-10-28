@@ -601,6 +601,103 @@ tr.row-out > td .text-link {
   padding: 0.9375rem 0.4375rem;
 }
 
+/*
+ * A row that opens a popup says so under the pointer (the owner, 28 Oct
+ * 2026: "jesob table clickable ... mouse rakhle samanno ektu color ta
+ * highlight hobe and ektu khani oporer dike uthe asle dekhte sundor lagbe
+ * and mouse pointer hobe"). `data-row-open` is what `rowOpener` puts on every
+ * such row, so this reaches all of them and no other.
+ *
+ * The tint is painted on the cells, not the row: a direction-coloured row
+ * (`tr.row-in > td`) paints its own cells, which would hide a row background.
+ *
+ * The lift is `top`, NOT `transform`, and there is no z-index. A transform
+ * makes the row the box every `position: fixed` inside it is placed against,
+ * and a z-index makes it a stacking context — so a confirm box opened from a
+ * button in the row came up inside the row, under the drawer above it, and
+ * could not be pressed. Measured, on the salary sheet's Reference.
+ */
+.table-data tbody tr[data-row-open] {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.table-data tbody tr[data-row-open]:hover {
+  position: relative;
+  top: -1px;
+  box-shadow: 0 6px 14px -10px
+    color-mix(in oklab, var(--sv-violet) 55%, transparent);
+}
+
+.table-data tbody tr[data-row-open]:hover > td {
+  background-color: color-mix(in oklab, var(--sv-violet) 7%, var(--sv-surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-data tbody tr[data-row-open]:hover {
+    top: 0;
+  }
+}
+
+/*
+ * The salary sheet (the owner, 28 Oct 2026): larger, firmer figures; a rule
+ * down every column, heading included, so a figure is read under its own
+ * heading; and SL and Name pinned while the sheet scrolls sideways.
+ *
+ * Its own class rather than a change to `.table-data`: every other table
+ * keeps the handoff's look, which has no vertical rules.
+ */
+.table-sheet tbody td,
+.table-sheet tfoot td {
+  font-size: 0.96875rem;
+  font-weight: 600;
+}
+
+.table-sheet th,
+.table-sheet td {
+  border-right: 1px solid var(--sv-line);
+}
+
+.table-sheet tr > *:last-child {
+  border-right: 0;
+}
+
+.table-sheet .sheet-sticky {
+  position: sticky;
+  z-index: 2;
+  background-color: var(--sv-surface);
+  /*
+   * Its rule drawn inside it, not as a border. In a collapsed table the
+   * border belongs to the table and stays behind when the cell sticks, so
+   * the scrolled columns showed through a 1px gap between SL and Name.
+   */
+  border-right: 0;
+  box-shadow: inset -1px 0 0 var(--sv-line);
+}
+
+.table-sheet thead .sheet-sticky {
+  background-color: var(--sv-lime-tint);
+}
+
+.table-sheet tfoot .sheet-sticky {
+  background-color: var(--surface-muted);
+}
+
+.table-sheet .sheet-sl {
+  left: 0;
+  width: 4.25rem;
+  min-width: 4.25rem;
+}
+
+.table-sheet .sheet-name {
+  left: 4.25rem;
+}
+
+/* A paid line's tint, on the cells so the pinned ones carry it too. */
+.table-sheet tbody tr.sheet-paid > td {
+  background-color: color-mix(in oklab, var(--positive) 5%, var(--sv-surface));
+}
+
 .table-data .cell-prose {
   white-space: normal;
 }

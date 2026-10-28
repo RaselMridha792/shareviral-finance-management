@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
 import { useCan } from "@/components/auth/session-provider";
+import { LineDetails } from "@/components/payroll/line-details";
 import { MemberPicker } from "@/components/payroll/member-picker";
 import { PaymentProofCell } from "@/components/payroll/payment-proof-cell";
 import { RunDocuments } from "@/components/payroll/run-documents";
@@ -40,8 +41,14 @@ import { Drawer } from "@/components/ui/drawer";
 import { DateInput, Field, Input, Select } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/overlay";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState, StatCell, StatStrip } from "@/components/ui/patterns";
-import { SerialCell, SerialHead, TableScroll, Th } from "@/components/ui/table";
+import {
+  EmptyState,
+  StatCell,
+  StatStrip,
+  StatusPill,
+} from "@/components/ui/patterns";
+import { rowOpener } from "@/components/ui/row-details";
+import { TableScroll, Th } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import {
   BlockedDialog,
@@ -113,6 +120,10 @@ export function SalarySheetScreen({
   const toast = useToast();
 
   const draft = run.status === "draft";
+  /** The line whose whole record is open — a click on its row. Kept by id,
+      so the popup shows the fresh line after every save. */
+  const [openLineId, setOpenLineId] = useState<string | null>(null);
+  const openLine = lines.find((line) => line.id === openLineId) ?? null;
   const refresh = () => router.refresh();
 
   /*
@@ -214,7 +225,14 @@ export function SalarySheetScreen({
       const i = preferred.findIndex((p) => label.startsWith(p));
       return i === -1 ? preferred.length : i;
     };
-    return [...seen].sort((a, b) => rank(a) - rank(b));
+    return [...seen]
+      .sort((a, b) => rank(a) - rank(b))
+      /*
+       * Basic only, on the sheet (the owner, 28 Oct 2026: "eigular moddhe
+       * sudhu basic ta rakho baki gula field a click korle details ei dekha
+       * jabe"). House Rent, Medical and Conveyance are in the line's popup.
+       */
+      .slice(0, 1);
   }, [lines]);
 
   /** The month's own calendar length — the Working Days column's "out of". */
@@ -252,6 +270,7 @@ export function SalarySheetScreen({
       bonus: sum((line) => line.bonusAmount),
       otherAdditions: sum((line) => line.otherAdditions),
       otherDeductions: sum((line) => line.otherDeductions),
+      fee: sum((line) => line.feeAmount ?? "0"),
     };
   }, [lines]);
 
@@ -724,7 +743,7 @@ export function SalarySheetScreen({
           <TableScroll>
             {/* One column wider than it was — the SL somebody reads a row out
                 by — so the money columns keep the width they had. */}
-            <table className="table-data min-w-[1680px] text-sm">
+            <table className="table-data table-sheet min-w-[1640px] text-sm">
               <thead>
                 <tr>
                   {/* The owner's own sheet, column for column: name, role,
@@ -734,8 +753,11 @@ export function SalarySheetScreen({
                       is the one column the sheet does not carry, kept because
                       it still moves the net — a figure that counts but cannot
                       be seen is the class of bug this app hunts. */}
-                  <SerialHead />
-                  <Th>Name</Th>
+                  {/* SL and Name stay put while the sheet scrolls sideways
+                      (the owner, 28 Oct 2026), so a figure is never read
+                      without whose it is. */}
+                  <th className="sheet-sticky sheet-sl">SL</th>
+                  <th className="sheet-sticky sheet-name">Name</th>
                   <Th>Role</Th>
                   <Th>Dept</Th>
                   {splitLabels.map((label) => (
@@ -783,9 +805,15 @@ export function SalarySheetScreen({
                   <Th width="w-28" align="right">
                     Net Pay (USD)
                   </Th>
+                  {/* The bank's fee for each person's transfer: the charge on
+                      their payment (the owner, 28 Oct 2026). */}
+                  <Th width="w-28" align="right">
+                    Transaction Fee
+                  </Th>
                   {/* The screenshot of each person's transfer (the owner, 27
                       Oct 2026) — see PaymentProofCell. */}
                   <Th width="w-28">Reference</Th>
+                  <Th width="w-28">Check</Th>
                   <Th width="w-24" />
                 </tr>
               </thead>
@@ -794,6 +822,7 @@ export function SalarySheetScreen({
                   <LineRow
                     key={line.id}
                     n={index + 1}
+                    onOpen={() => setOpenLineId(line.id)}
                     line={line}
                     splitLabels={splitLabels}
                     daysInMonth={daysInMonth}
@@ -822,13 +851,16 @@ export function SalarySheetScreen({
               <tfoot>
                 <tr>
                   {/* Counted by hand against the head, as the note above
-                      demands: 4 (Total, over SL/Name/Role/Dept) + the splits
-                      + bonus + other+ + blank days + gross + tds + other− +
-                      net + blank fx + usd net + blank reference + blank
-                      actions. */}
-                  <td colSpan={4} className="font-semibold">
+                      demands: SL + Name (sticky, "Total") + blank role + blank
+                      dept + the split (Basic) + bonus + other+ + blank days +
+                      gross + tds + other− + net + blank fx + usd net + fee +
+                      blank reference + blank check + blank actions. */}
+                  <td className="sheet-sticky sheet-sl" />
+                  <td className="sheet-sticky sheet-name font-semibold">
                     Total
                   </td>
+                  <td />
+                  <td />
                   {splitLabels.map((label) => (
                     <FootAmount key={label} value={splitTotals[label] ?? "0"} />
                   ))}
@@ -856,6 +888,8 @@ export function SalarySheetScreen({
                             : ""
                         }`}
                   </td>
+                  <FootAmount value={totals.fee} />
+                  <td />
                   <td />
                   <td />
                 </tr>
@@ -866,6 +900,15 @@ export function SalarySheetScreen({
       )}
 
       <TdsWorkingDrawer line={workingFor} onClose={() => setWorkingFor(null)} />
+
+      <LineDetails
+        key={openLineId ?? "none"}
+        line={openLine}
+        daysInMonth={daysInMonth}
+        editable={canWrite && draft}
+        onClose={() => setOpenLineId(null)}
+        onSaved={refresh}
+      />
 
       <PayForm
         open={paying}
@@ -971,7 +1014,10 @@ function LineRow({
   editable,
   onSaved,
   onShowWorking,
+  onOpen,
 }: {
+  /** Open this line's whole record (the owner, 28 Oct 2026). */
+  onOpen: () => void;
   /** The row's place on the sheet — the number a figure gets read out by. */
   n: number;
   line: PayrollLineDto;
@@ -1148,10 +1194,15 @@ function LineRow({
   }
 
   return (
-    <tr className={cn("row-finance", line.isPaid && "bg-positive/5")}>
-      <SerialCell n={n} />
-      <td>
-        <span className="font-medium">{line.fullName}</span>
+    <tr
+      className={cn("row-finance", line.isPaid && "sheet-paid")}
+      {...rowOpener(onOpen, line.id)}
+    >
+      <td className="sheet-sticky sheet-sl">
+        <span className="sv-serial">{n}</span>
+      </td>
+      <td className="sheet-sticky sheet-name">
+        <span className="font-bold">{line.fullName}</span>
         {warning ? (
           <span className="mt-0.5 block text-xs text-warning">{warning}</span>
         ) : null}
@@ -1339,7 +1390,23 @@ function LineRow({
           ? `≈ $${(Number(line.netAmount) / rateOf(line)!).toFixed(2)}`
           : "N/A"}
       </td>
+      <td className="col-amount">
+        {line.feeAmount === null ? (
+          <span className="text-muted-foreground">N/A</span>
+        ) : (
+          <Amount
+            value={line.feeAmount}
+            tone="neutral"
+            showCounterpart={false}
+          />
+        )}
+      </td>
       <PaymentProofCell line={line} onChanged={onSaved} />
+      <td>
+        <StatusPill tone={line.checked ? "positive" : "neutral"}>
+          {line.checked ? "Checked" : "Unchecked"}
+        </StatusPill>
+      </td>
       <td>
         <div className="flex items-center justify-end gap-3">
           {saving ? (

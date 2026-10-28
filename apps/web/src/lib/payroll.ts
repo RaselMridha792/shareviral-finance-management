@@ -246,6 +246,11 @@ export type PayrollLineDto = {
   paidUsdRate: string | null;
   /** Screenshots proving the payment, on the line's payment row. */
   referenceCount: number;
+  /** Checked or Unchecked, by hand; settable after the sheet is finalised. */
+  checked: boolean;
+  /** The bank's fee for this person's transfer — the charge on the line's
+      payment. Null before the line is paid. */
+  feeAmount: string | null;
 };
 
 /**
@@ -462,6 +467,12 @@ export const payrollApi = {
     apiFetch<{ updated: boolean; warning?: string }>(`/payroll/lines/${id}`, {
       method: "PATCH",
       ...json(input),
+    }),
+  /** Checked or Unchecked on one line; open on a finalised sheet too. */
+  setLineChecked: (id: string, checked: boolean) =>
+    apiFetch<{ id: string; checked: boolean }>(`/payroll/lines/${id}/check`, {
+      method: "PATCH",
+      ...json({ checked }),
     }),
   /** One rate, filled onto every line of the sheet that has not been paid. */
   setRunFxRate: (id: string, fxRate: string, overwrite: boolean) =>

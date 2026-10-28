@@ -25,6 +25,9 @@ import {
 import { ZodBody, ZodQuery } from "../../common/pipes/zod-validation.pipe";
 import { PayrollService } from "./payroll.service";
 
+/** The salary sheet's Check: Checked or Unchecked. */
+const lineCheckSchema = z.strictObject({ checked: z.boolean() });
+
 const uuidSchema = z.string().uuid("Not a valid id");
 
 @Controller("payroll")
@@ -114,6 +117,24 @@ export class PayrollController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.payroll.updateLine(uuidSchema.parse(id), body, actor);
+  }
+
+  /**
+   * Checked or Unchecked on a line. `payroll.write`, and open on a finalised
+   * sheet too — a review mark, not a figure (see `setLineChecked`).
+   */
+  @Patch("lines/:id/check")
+  @RequirePermission("payroll.write")
+  setLineChecked(
+    @Param("id") id: string,
+    @ZodBody(lineCheckSchema) body: z.infer<typeof lineCheckSchema>,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.payroll.setLineChecked(
+      uuidSchema.parse(id),
+      body.checked,
+      actor,
+    );
   }
 
   @Post("runs/:id/finalize")

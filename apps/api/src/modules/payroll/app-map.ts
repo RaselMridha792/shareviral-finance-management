@@ -129,6 +129,16 @@ export const PAYROLL_MAP = [
         permission: "payroll.write",
       },
       {
+        name: "A row's Check",
+        on: "/payroll/[runId]",
+        opens:
+          "A click on a row opens the whole line; its Check is a Checked or Unchecked choice there",
+        saves: ["PATCH /payroll/lines/:id/check"],
+        onSave:
+          "Marks the line Checked or Unchecked. A review mark, not a figure, so it changes on a finalised or paid sheet too. Nothing moves in the books.",
+        permission: "payroll.write",
+      },
+      {
         name: "Finalise",
         on: "/payroll/[runId]",
         opens: "Finalise, top right of a draft sheet with lines",

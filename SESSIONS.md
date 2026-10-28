@@ -152,6 +152,67 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 184. Salary sheet: row popup, Basic only, Fee and Check, pinned Name; hover on every clickable row — 28 Oct 2026 (NOT pushed)
+
+The owner's list for the payroll table, plus one fix they hit on live. The schema went first,
+alone: `34d575a` adds `payroll_lines.checked`.
+
+**Decisions (28 Oct)**
+- **Transaction fee.** One bank charge per person, on that person's salary payment
+  (`charge_for_id`). The owner's choice was "প্রতিজনের bank charge".
+- **Check.** Stays settable after the sheet is locked.
+
+**The sheet** (`salary-sheet-screen.tsx`, the new `line-details.tsx`, `payment-proof-cell.tsx`)
+- **Basic only.** House Rent, Medical and Conveyance are in the popup.
+- **New columns.** Transaction Fee (with a footer total) and Check (Checked / Unchecked) sit around
+  Reference.
+- **Pinned columns.** SL and Name stay in place while the sheet scrolls sideways (`.sheet-sticky`).
+  Their rule is drawn with an inset shadow, not a border: a collapsed border stays behind when the
+  cell sticks, and the scrolled columns showed through it.
+- **Row popup.** A click on a row opens `LineDetails`:
+  - every figure, including the split, plus Paid on, Fee, Reference, Check and Payslip;
+  - **Edit** only while the sheet is a draft, saving each changed box through `updateLine`. Days
+    are saved first and the net last.
+  - On a finalised sheet the popup says to reopen it.
+  - Fee and Check stay editable on a finalised or paid sheet.
+- **Fee.** Saved through `PATCH /transactions/:id {chargeAmount}` on the payment, the same door
+  as every bank charge. So it is a real money-out row and appears in Bank status's Fee. An empty
+  box or 0 clears it.
+- **Check.** New `PATCH /payroll/lines/:id/check` (`payroll.write`, audited) works on any sheet.
+  It is on the Assistant's map, "A row's Check".
+- **Reference.** Now three icons: view, add, remove. Remove opens a list of the screenshots, each
+  with Remove and a confirm. This fixes the owner's case of two uploaded by mistake with no way
+  back.
+- **Styling.** `.table-sheet` sets body text to 15.5px / 600, with a rule down every column
+  including the heading. Every other table keeps the handoff's look.
+
+**Every clickable row** (`globals.css`, `tr[data-row-open]`, which `rowOpener` sets). These are
+shared, and the owner asked for all of them. On hover the row shows a pointer, a violet tint on
+its cells and a 1px lift.
+- The lift is `top: -1px`, **not** `transform`, and the row has no z-index. A transform or a
+  z-index made the row the box that `position: fixed` dialogs inside it are placed against.
+  Measured: the Reference confirm box opened inside the row, under the drawer, and could not be
+  pressed.
+- The Reference dialogs are also portalled to `<body>`.
+
+**Measured on local.** `sheetqa.mjs` passes 18 of 18 on June:
+- **Columns.** Headings are right; text is 15.5px / 600; 1px rules on body and heading.
+- **Pinning.** Name stays at x=363 while scrolled 600px.
+- **Hover.** Pointer, top −1px, no transform, tint, on the sheet and on All transactions.
+- **Popup.** Shows the split; no Edit on a finalised sheet.
+- **Check.** Saved from the popup on a paid sheet, and the row reads Checked.
+- **Fee.** ৳10 became the payment's bank charge and shows in the column.
+- **Reference.** Shows as icons only. The confirm box is reachable, and the screenshot was
+  removed.
+
+Everything the harness changed was put back. The four CI steps are green.
+
+**Not exercised.** Saving from the popup's Edit form, because local has no draft sheet. It calls
+the same `updateLine` as the inline cells.
+
+**Still to do (data).** May's single ৳120 "Transfer fee, 12 wire payments" entry is to become 12
+per-person ৳10 charges, on local and then on live (the owner chose this).
+
 ## 183. Permission: filing a pay-bearing paper needs to SEE pay, not change it — 28 Oct 2026 (NOT pushed; travels alone)
 
 **What happened.** The HR portal's "Send to finance" got a 403 on two documents:

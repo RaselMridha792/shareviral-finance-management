@@ -264,6 +264,21 @@ export class PayrollService {
             and f.deleted_at is null
             and f.kind in ('bank_statement', 'receipt', 'other')
         )`,
+        checked: payrollLines.checked,
+        /*
+         * The bank's fee for sending this person's salary: the bank charge on
+         * the line's payment row (`charge_for_id`), one per person (the owner,
+         * 28 Oct 2026). Null before the line is paid — no payment, no fee.
+         */
+        feeAmount: sql<string | null>`case
+          when payroll_lines.transaction_id is null then null
+          else (
+            select coalesce(sum(c.amount), 0)::numeric(14,2)::text
+              from transactions c
+             where c.charge_for_id = payroll_lines.transaction_id
+               and c.voided_at is null and c.deleted_at is null
+          )
+        end`,
       })
       .from(payrollLines)
       .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
@@ -544,6 +559,56 @@ export class PayrollService {
           .returning({ id: payrollLines.id });
 
         return { filled: updated.length, fxRate: input.fxRate };
+      },
+    });
+  }
+
+  /**
+   * Checked or Unchecked on one line (the owner, 28 Oct 2026).
+   *
+   * Allowed on a finalised or paid sheet, unlike every figure: it is a review
+   * mark — somebody matched the line against its paperwork — and that check
+   * usually happens after the money has gone. The owner chose that it stays
+   * open after the lock.
+   */
+  async setLineChecked(
+    lineId: string,
+    checked: boolean,
+    actor: AuthenticatedUser,
+  ) {
+    const [line] = await this.db.client
+      .select({
+        id: payrollLines.id,
+        fullName: teamMembers.fullName,
+        label: payrollRuns.label,
+      })
+      .from(payrollLines)
+      .innerJoin(teamMembers, eq(payrollLines.teamMemberId, teamMembers.id))
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .where(eq(payrollLines.id, lineId))
+      .limit(1);
+    if (!line) throw new NotFoundException("No such payroll line");
+
+    return this.audit.mutate({
+      action: "update",
+      entityTable: "payroll_lines",
+      entityId: lineId,
+      summary: `Marked ${line.fullName}'s ${line.label} line ${checked ? "Checked" : "Unchecked"}`,
+      module: "payroll",
+      read: async (tx) => {
+        const [row] = await tx
+          .select({ checked: payrollLines.checked })
+          .from(payrollLines)
+          .where(eq(payrollLines.id, lineId))
+          .limit(1);
+        return row;
+      },
+      run: async (tx) => {
+        await tx
+          .update(payrollLines)
+          .set({ checked, updatedAt: new Date(), updatedBy: actor.id })
+          .where(eq(payrollLines.id, lineId));
+        return { id: lineId, checked };
       },
     });
   }
