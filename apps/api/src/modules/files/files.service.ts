@@ -33,6 +33,31 @@ import { files, users, type FileRow } from "../../db/schema";
 import { sniffMime } from "./sniff";
 import { StorageService } from "./storage.service";
 
+/** What a person calls each format, for the words a refusal is put in. */
+const FORMAT_NAMES: Record<string, string> = {
+  "image/jpeg": "JPG",
+  "image/png": "PNG",
+  "image/webp": "WebP",
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    "Excel file",
+  "application/vnd.ms-excel": "Excel file",
+  "text/csv": "CSV",
+};
+
+/** ["image/jpeg", "image/png", "application/pdf"] → "JPG, PNG or PDF". */
+function formatNames(mimeTypes: readonly string[]): string {
+  const names = [...new Set(mimeTypes.map((m) => FORMAT_NAMES[m] ?? m))];
+  return names.length > 1
+    ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`
+    : (names[0] ?? "");
+}
+
+/** "an Excel file", "a PDF". */
+function withArticle(phrase: string): string {
+  return `${/^[AEIOU]/i.test(phrase) ? "an" : "a"} ${phrase}`;
+}
+
 /**
  * Kinds where a second file replaces the first.
  *
@@ -373,14 +398,21 @@ export class FilesService {
      * actually happened is that a .pdf was a renamed .docx.
      */
     const mimeType = sniffMime(upload.buffer, upload.mimetype);
+    /*
+     * In the formats' everyday names, not as MIME types (the owner, 28 Oct
+     * 2026: the error should say plainly to upload the right format). It
+     * read "Could not recognise this file. Allowed here: image/jpeg, …",
+     * which is true and tells nobody what to do.
+     */
+    const formats = formatNames(ALLOWED_MIME_TYPES[kind]);
     if (!mimeType) {
       throw new BadRequestException(
-        `Could not recognise this file. Allowed here: ${ALLOWED_MIME_TYPES[kind].join(", ")}`,
+        `This file isn't ${withArticle(formats)}, so it can't be attached. Save it as one of those and try again.`,
       );
     }
     if (!ALLOWED_MIME_TYPES[kind].includes(mimeType)) {
       throw new BadRequestException(
-        `This file is a ${mimeType}, which is not allowed for ${FILE_KIND_LABELS[kind].toLowerCase()}. Allowed: ${ALLOWED_MIME_TYPES[kind].join(", ")}`,
+        `This file is ${withArticle(formatNames([mimeType]))}, and ${withArticle(FILE_KIND_LABELS[kind].toLowerCase())} can only be ${withArticle(formats)}. Save it as one of those and try again.`,
       );
     }
 

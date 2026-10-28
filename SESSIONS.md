@@ -152,7 +152,52 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 187. An account's own page: a month at the top, and its opening and closing — 28 Oct 2026 (NOT pushed)
+## 188. Expense headings get a Description column; a wrong-format file is refused in plain words, at pick time — 28 Oct 2026
+
+Two of the owner's reports from one afternoon, pushed together on their word ("kaj ses hole deploy
+kore diyo").
+
+**1. Other expenses (and every expense heading): Description, one clipped line.**
+- `TransactionTable` takes a new opt-in flag, `showDescription`, and only `category-detail-screen`
+  passes it. All transactions and the register keep their shape.
+- The column sits after Date, cut at 14rem with an ellipsis. The whole text shows on hover, and a
+  click opens the row's popup with the description first.
+- The table is no wider. Its 960px floor still reserved 14rem for the Description column removed
+  earlier: SL 48 + Date 96 + Amount 128 + Rate 80 + Invoice/Reference 256 + Actions 128 = 736.
+- Measured (`descqa.mjs`, `descclipqa.mjs`):
+  - at 1440px the table is 1120 wide, the same as before;
+  - at 1280px it stays at its 1088 floor;
+  - a long description stretched in-page stays 224px, one line, with row height and table width
+    unchanged;
+  - the click opens the full text.
+
+**2. Uploading the wrong file format.** The owner edited an entry, attached three files to Invoice
+and saved. The popup then said "the invoice or receipt and the invoice or receipt and …", followed
+by "Could not recognise this file. Allowed here: image/jpeg, …" three times.
+- **Server wording** (`files.service.ts`, owner-approved for every upload): the refusal now reads
+  "This file isn't a JPG, PNG, WebP or PDF, so it can't be attached. Save it as one of those and
+  try again." A recognised wrong format reads "This file is an Excel file, and an invoice can only
+  be a JPG, PNG, WebP or PDF. …"
+- **The clip refuses at pick time, by the bytes.** `attach-clip.tsx` (Transaction, Cash In,
+  Transfer and HR budget forms) checked only the browser's type. An iPhone HEIC arrives with no
+  type, or named .PNG, and slipped through until after the save. The clip now reads the first
+  bytes with the server's signatures and names the refused files once.
+- **The after-save paragraph** in `transaction-form.tsx` names each file once and states each
+  distinct reason once. It is now reached only when the server refuses something the clip let
+  through.
+- Measured (`uploadmsgqa.mjs`, 5 of 5): both server wordings; a HEIC named .PNG and a .heic
+  refused on pick, by name; a real PNG still taken; nothing stored.
+
+**Not changed, on the owner's word:** clearing Notes on an edit still does not clear them.
+`optionalText` in the shared update schema turns "" into "absent". The owner said to leave it ("ami
+kono ekta note likhe edit korbo"). Cash In's edit form behaves the same way.
+
+**Left alone:** the cash-in and hr-budget forms have their own after-save paragraph, which still
+joins per-file reasons. They get the new server wording but not the dedupe.
+
+The four CI steps are green.
+
+## 187. An account's own page: a month at the top, and its opening and closing — 28 Oct 2026 (pushed, live)
 
 The owner asked for a month filter at the top of an account's own page (Accounts overview → view
 details), so that one bank account's opening and closing can be seen there.
@@ -177,7 +222,7 @@ With June picked:
 
 The four CI steps are green.
 
-## 186. A taka account's dollars at the month's rate; the Dashboard's dollars each row's own — 28 Oct 2026 (NOT pushed)
+## 186. A taka account's dollars at the month's rate; the Dashboard's dollars each row's own — 28 Oct 2026 (pushed, live)
 
 **What the owner reported.** On the Dashboard, Bank Asia closed May at **$6,784.61** and opened
 June at the same figure. The sheet has $2,746.79.
@@ -222,7 +267,7 @@ The four CI steps are green.
 **Not changed.** The Dashboard's top-line dollar totals (`usdTotals`, `own-dollars.ts`) and All
 transactions' summary still count typed dollars only.
 
-## 185. Expense overview's boxes carry the month they were read in — 28 Oct 2026 (NOT pushed)
+## 185. Expense overview's boxes carry the month they were read in — 28 Oct 2026 (pushed, live)
 
 **What the owner reported.** On Expense overview they picked May, then clicked AI tools and
 subscriptions, and the register opened on October. The month was lost on every box.
@@ -257,7 +302,7 @@ The four CI steps are green.
   - "Now: 12 charges on May's payments, Tk 120.00 in all";
   - the script file was removed afterwards.
 
-## 184. Salary sheet: row popup, Basic only, Fee and Check, pinned Name; hover on every clickable row — 28 Oct 2026 (NOT pushed)
+## 184. Salary sheet: row popup, Basic only, Fee and Check, pinned Name; hover on every clickable row — 28 Oct 2026 (pushed, live)
 
 The owner's list for the payroll table, plus one fix they hit on live. The schema went first,
 alone: `34d575a` adds `payroll_lines.checked`.
@@ -318,7 +363,7 @@ the same `updateLine` as the inline cells.
 **Still to do (data).** May's single ৳120 "Transfer fee, 12 wire payments" entry is to become 12
 per-person ৳10 charges, on local and then on live (the owner chose this).
 
-## 183. Permission: filing a pay-bearing paper needs to SEE pay, not change it — 28 Oct 2026 (NOT pushed; travels alone)
+## 183. Permission: filing a pay-bearing paper needs to SEE pay, not change it — 28 Oct 2026 (pushed alone, live)
 
 **What happened.** The HR portal's "Send to finance" got a 403 on two documents:
 - appointment_letter: "carries a pay figure (needs team.compensation.write)";
@@ -354,7 +399,7 @@ The four CI steps are green.
 **After it is live.** The HR portal presses "Send to finance" again. Only those two documents
 go; the other five are skipped as already present.
 
-## 182. Payroll: a Reference column for each person's transfer screenshot — 27 Oct 2026 (NOT pushed)
+## 182. Payroll: a Reference column for each person's transfer screenshot — 27 Oct 2026 (pushed, live)
 
 The owner asked for a Reference column on the salary sheet: *"screenshot upload korbo tai je
 sobaike taka pathano hoiche oi proof hisebe"*.
@@ -389,7 +434,7 @@ the salary entry's Edit on All transactions. That path was not exercised here.
 
 The four CI steps are green.
 
-## 181. All transactions: plan invoices on payments, no "books" badge, no paperclip, Actions — 27 Oct 2026 (NOT pushed)
+## 181. All transactions: plan invoices on payments, no "books" badge, no paperclip, Actions — 27 Oct 2026 (pushed, live)
 
 The owner, from live All transactions, asked for four things.
 
@@ -430,7 +475,7 @@ detail screen. Item 1 is All transactions only.
 
 The four CI steps are green.
 
-## 180. Revaluations kept quiet, as the sheet does — 27 Oct 2026 (NOT pushed)
+## 180. Revaluations kept quiet, as the sheet does — 27 Oct 2026 (pushed, live)
 
 The owner, looking at Bank status's "incl. ৳525.40 revaluation", said a line like that would
 confuse the CEO. Their choice: **keep it quiet, as the sheet does.**
@@ -465,7 +510,7 @@ confuse the CEO. Their choice: **keep it quiet, as the sheet does.**
 
 The four CI steps are green.
 
-## 179. Cash In by the month it is used for, with Received Date beside it — 27 Oct 2026 (NOT pushed)
+## 179. Cash In by the month it is used for, with Received Date beside it — 27 Oct 2026 (pushed, live)
 
 **Held.** The owner asked on 27 Oct that nothing be pushed until they say so. This commit is
 local only.

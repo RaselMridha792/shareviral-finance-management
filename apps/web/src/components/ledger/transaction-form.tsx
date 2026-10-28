@@ -133,7 +133,9 @@ export function TransactionForm({
    * The ordinary ending — files picked, entry saved, files up — just closes.
    */
   const [saved, setSaved] = useState<TransactionDto | null>(null);
-  const [failed, setFailed] = useState<{ kind: DocKind; reason: string }[]>([]);
+  const [failed, setFailed] = useState<
+    { kind: DocKind; name: string; reason: string }[]
+  >([]);
   const toast = useToast();
   const [direction, setDirection] = useState<TxnDirection>(
     transaction?.direction ?? defaultDirection,
@@ -372,7 +374,7 @@ export function TransactionForm({
    * having failed — by the time this runs the entry is already in the ledger.
    */
   async function attach(transactionId: string) {
-    const failures: { kind: DocKind; reason: string }[] = [];
+    const failures: { kind: DocKind; name: string; reason: string }[] = [];
 
     for (const slot of chosen()) {
       try {
@@ -380,6 +382,7 @@ export function TransactionForm({
       } catch (caught) {
         failures.push({
           kind: slot.kind,
+          name: slot.file.name,
           reason:
             caught instanceof ApiError
               ? caught.message
@@ -559,15 +562,23 @@ export function TransactionForm({
             </span>{" "}
             <span className="num">{saved.refNo}</span>
             {failed.length ? (
+              /*
+                Each file named once and each reason said once. It was one
+                clause per file — "the invoice or receipt and the invoice or
+                receipt and …", then the same refusal three times (the owner,
+                28 Oct 2026).
+              */
               <>
                 {" "}
-                — the entry is in the ledger and the table already has it. What
-                did not go up is the{" "}
-                {failed
-                  .map((slot) => DOCUMENT_NAMES[slot.kind])
-                  .join(" and the ")}
-                : {failed.map((slot) => slot.reason).join(" ")} Attaching it
-                here needs nothing typed again.
+                — the entry itself is saved.{" "}
+                {failed.length === 1
+                  ? `${failed[0].name} did not attach.`
+                  : `${failed.length} files did not attach: ${failed
+                      .map((slot) => slot.name)
+                      .join(", ")}.`}{" "}
+                {[...new Set(failed.map((slot) => slot.reason))].join(" ")}{" "}
+                Attach {failed.length === 1 ? "it" : "them"} below — nothing
+                needs typing again.
               </>
             ) : (
               <>

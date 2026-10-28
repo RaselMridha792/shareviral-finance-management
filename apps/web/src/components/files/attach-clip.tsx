@@ -260,6 +260,27 @@ export function StoredPaperLine({
 }
 
 /**
+ * Whether a file's first bytes are a JPG, PNG, PDF or WebP — the test the
+ * server runs (apps/api/src/modules/files/sniff.ts), run before the save. A
+ * file the browser will not read is let through: the server still decides.
+ */
+async function readsAsDocument(file: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const at = (offset: number, bytes: number[]) =>
+      bytes.every((byte, i) => head[offset + i] === byte);
+    return (
+      at(0, [0xff, 0xd8, 0xff]) ||
+      at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+      at(0, [0x25, 0x50, 0x44, 0x46, 0x2d]) ||
+      (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50]))
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
  * The paperclip beside a field, with what is on file and what has been picked.
  *
  * Nothing is uploaded or removed from here — picks are handed up and held until
@@ -306,13 +327,14 @@ export function AttachClip({
    * the parent has not re-rendered from yet, so three separate calls would
    * each build on the ORIGINAL list and only the last would survive.
    */
-  function choose(chosenFiles: File[]) {
+  async function choose(chosenFiles: File[]) {
     // Emptied straight away so picking the same file again — after clearing
     // it, or after it was refused — still counts as a change.
     if (inputRef.current) inputRef.current.value = "";
     if (chosenFiles.length === 0) return;
 
     const additions: File[] = [];
+    const wrongFormat: string[] = [];
     const same = (a: File, b: File) => a.name === b.name && a.size === b.size;
 
     for (const picked of chosenFiles) {
@@ -336,10 +358,19 @@ export function AttachClip({
        * Refused here as well as by the server, which reads the bytes and has
        * the final say. This exists so the answer arrives while the file is
        * being chosen, rather than after the entry is saved.
+       *
+       * By its bytes as well as its type, because the type is the browser's
+       * guess from the name: an iPhone photo (HEIC) often arrives with no type
+       * at all, or named .PNG, and went through here only to be refused after
+       * the save — three times over in one popup, in MIME types (the owner,
+       * 28 Oct 2026).
        */
       const allowed: readonly string[] = ALLOWED_MIME_TYPES[kind];
-      if (picked.type && !allowed.includes(picked.type)) {
-        setRejected("Only JPEG, PNG, WebP and PDF can be stored.");
+      if (
+        (picked.type && !allowed.includes(picked.type)) ||
+        !(await readsAsDocument(picked))
+      ) {
+        wrongFormat.push(picked.name);
         continue;
       }
       if (picked.size > MAX_FILE_BYTES[kind]) {
@@ -352,10 +383,15 @@ export function AttachClip({
       additions.push(picked);
     }
 
-    if (additions.length > 0) {
+    if (wrongFormat.length > 0) {
+      // The server's words, so the two refusals read as one rule.
+      setRejected(
+        `${wrongFormat.join(", ")} ${wrongFormat.length === 1 ? "isn't" : "aren't"} a JPG, PNG, WebP or PDF, so ${wrongFormat.length === 1 ? "it" : "they"} can't be attached. Save ${wrongFormat.length === 1 ? "it" : "them"} as one of those and try again.`,
+      );
+    } else if (additions.length > 0) {
       setRejected(null);
-      onPick([...files, ...additions]);
     }
+    if (additions.length > 0) onPick([...files, ...additions]);
   }
 
   /*
@@ -388,7 +424,7 @@ export function AttachClip({
           // narrower list than this and says so if it has to; `choose` says it
           // first, in the moment.
           accept="image/*,application/pdf"
-          onChange={(event) => choose([...(event.target.files ?? [])])}
+          onChange={(event) => void choose([...(event.target.files ?? [])])}
         />
 
         {/* A button rather than the file input itself: a bare one renders as a
