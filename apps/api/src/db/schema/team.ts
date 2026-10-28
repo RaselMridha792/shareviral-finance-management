@@ -519,6 +519,14 @@ export const payrollLines = pgTable(
     }),
 
     /**
+     * Checked or Unchecked, ticked by hand once somebody has matched the line
+     * against its paperwork (the owner, 28 Oct 2026). A review mark, not a
+     * figure — so it stays settable after the sheet is finalised, as Bank
+     * status's Check is.
+     */
+    checked: boolean("checked").notNull().default(false),
+
+    /**
      * Frozen copies of who they were that month. A payslip issued in July must
      * not change when someone switches bank in September.
      */
