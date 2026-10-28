@@ -1,6 +1,11 @@
 "use client";
 
-import { ACCOUNT_TYPE_LABELS, type AccountType } from "@finance/shared";
+import {
+  ACCOUNT_TYPE_LABELS,
+  monthRange,
+  todayInDhaka,
+  type AccountType,
+} from "@finance/shared";
 import type { Icon } from "@phosphor-icons/react";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { BankIcon } from "@phosphor-icons/react/dist/ssr/Bank";
@@ -21,6 +26,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useNameThisPage } from "@/components/layout/breadcrumb";
+import { MonthPicker, type Range } from "@/components/expenses/month-picker";
 import { useCan } from "@/components/auth/session-provider";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
@@ -28,6 +34,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import type { AccountWithBalance } from "@/lib/masters";
 import { CardDetails } from "./card-details";
 import { AccountForm } from "./account-form";
+import { AccountMonth } from "./account-month";
 import { Panel } from "./panel";
 import { formatDate } from "@/lib/utils";
 
@@ -63,6 +70,15 @@ export function AccountDetailScreen({
   const canWrite = useCan("accounts.write");
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  /** The month whose opening and closing are shown; this one to start. */
+  const [month, setMonth] = useState<Range>(() => {
+    const today = todayInDhaka();
+    const range = monthRange(
+      Number(today.slice(0, 4)),
+      Number(today.slice(5, 7)),
+    );
+    return { from: range.start, to: range.end, label: range.label };
+  });
 
   async function copy(label: string, value: string) {
     try {
@@ -118,6 +134,9 @@ export function AccountDetailScreen({
           .join(" · ")}
         actions={
           <>
+            {/* The month at the top, as on every month screen (the owner,
+                28 Oct 2026); the panel below reads it. */}
+            <MonthPicker range={month} onChange={setMonth} />
             <Button
               variant="secondary"
               size="md"
@@ -193,6 +212,12 @@ export function AccountDetailScreen({
         {/* A card's own details, on the card's own page. Only for a card:
             a bank account has no number to print or CVC to hide. */}
         {account.type === "card" ? <CardDetails account={account} /> : null}
+
+        <AccountMonth
+          accountId={account.id}
+          currency={account.currency}
+          month={month}
+        />
 
         <Panel
           icon={FlagBannerIcon}

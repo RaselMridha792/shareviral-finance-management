@@ -152,6 +152,31 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 187. An account's own page: a month at the top, and its opening and closing — 28 Oct 2026 (NOT pushed)
+
+The owner asked for a month filter at the top of an account's own page (Accounts overview → view
+details), so that one bank account's opening and closing can be seen there.
+
+**What changed**
+- **The month picker.** `MonthPicker` sits in the page header, beside "Entries and balance". It
+  opens on this month.
+- **A new panel, `AccountMonth`** (`components/accounts/account-month.tsx`), sits between Account
+  and "Where the records start":
+  - it shows the tiles Opening balance, In, Out (Fee apart when there is one) and Closing balance;
+  - it reads Bank status's own row for the account (`/accounts/bank-status?month=`), so the two
+    screens cannot disagree on the books month, the Fee or the dollar rule (#186);
+  - the figure the account is kept in leads: dollars for a dollar account, taka for a taka account,
+    with the other as the "≈".
+
+**Measured on local** with `acctmonthqa.mjs`, 6 of 6 passing. Both pages open on October 2026.
+With June picked:
+- **SCB** (taka) opens at ৳0.00 and closes at ৳1,19,409.50 / ≈ $975.17. Out is ৳7,66,924, the
+  sheet's figure.
+- **JPMorgan** (dollars) opens at $6,960.00 / ≈ ৳8,52,252 and closes at $0.00.
+- Every tile equals Bank status's row.
+
+The four CI steps are green.
+
 ## 186. A taka account's dollars at the month's rate; the Dashboard's dollars each row's own — 28 Oct 2026 (NOT pushed)
 
 **What the owner reported.** On the Dashboard, Bank Asia closed May at **$6,784.61** and opened
