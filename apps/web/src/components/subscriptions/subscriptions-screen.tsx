@@ -73,9 +73,13 @@ import { UpgradeDialog } from "./upgrade-dialog";
 export function SubscriptionsScreen({
   accounts,
   members,
+  initialMonth,
 }: {
   accounts: AccountDto[];
   members: TeamMemberDto[];
+  /** A day in the month to open on — Expense overview sends the one it was
+      read in. Absent, the register opens on this month. */
+  initialMonth?: string;
 }) {
   const canWrite = useCan("vendors.write");
 
@@ -102,7 +106,7 @@ export function SubscriptionsScreen({
     to: string;
     label: string;
   } | null>(() => {
-    const today = todayInDhaka();
+    const today = initialMonth ?? todayInDhaka();
     const range = monthRange(Number(today.slice(0, 4)), Number(today.slice(5, 7)));
     return { from: range.start, to: range.end, label: range.label };
   });

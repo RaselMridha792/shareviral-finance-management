@@ -8,11 +8,21 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Expenses · SFM" };
 
-export default async function ExpensesPage() {
-  const today = todayInDhaka();
+export default async function ExpensesPage({
+  searchParams,
+}: PageProps<"/expenses">) {
+  /*
+   * The month asked for, else this one. Expense overview's boxes send the
+   * month they were read in (28 Oct 2026), so May there opens May here.
+   */
+  const search = await searchParams;
+  const asked =
+    typeof search.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search.from)
+      ? search.from
+      : todayInDhaka();
   const month = monthRange(
-    Number(today.slice(0, 4)),
-    Number(today.slice(5, 7)),
+    Number(asked.slice(0, 4)),
+    Number(asked.slice(5, 7)),
   );
 
   // No accounts here any more. They were only ever for the edit form under

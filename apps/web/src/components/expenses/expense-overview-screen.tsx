@@ -234,8 +234,14 @@ export function ExpenseOverviewScreen() {
               panel, and an anchor between the grid and the cell would break
               them.
             */}
+            {/*
+              The month goes with the click (the owner, 28 Oct 2026: May
+              picked here opened the AI tools register on October). `from`
+              and `to`, the pair `/expenses/[category]` already read; the
+              other three pages read it now too.
+            */}
             <Link
-              href={slice.href}
+              href={`${slice.href}?from=${range.from}&to=${range.to}`}
               aria-label={`${slice.label} — see the entries`}
               className="absolute inset-0 rounded-[11px]"
             />

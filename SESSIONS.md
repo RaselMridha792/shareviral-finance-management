@@ -152,6 +152,37 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 185. Expense overview's boxes carry the month they were read in — 28 Oct 2026 (NOT pushed)
+
+**What the owner reported.** On Expense overview they picked May, then clicked AI tools and
+subscriptions, and the register opened on October. The month was lost on every box.
+
+**What changed**
+- **The boxes.** Each one now links with `?from=<1st>&to=<last>` of the month on screen. That is
+  the pair `/expenses/[category]` already read, so Office rent worked once the link carried it.
+- **`/expenses`** (Operational expenses) opens on `from`'s month when one is given.
+- **`/subscriptions`** passes `from` to the screen as `initialMonth`, and the register opens on
+  that month.
+- **`/payroll`**, when given `from`, redirects to that month's salary sheet if one is on the first
+  page of runs. Otherwise it shows the list.
+- **Opened plainly**, each page behaves as before: this month, or the list.
+
+**Measured on local.** `overviewlinkqa.mjs` passes 7 of 7.
+- Picking May on the overview and clicking each box:
+  - Salary went to May's salary sheet;
+  - AI tools, Office rent and Operational expenses each opened on May 2026.
+- Opening AI tools, Operational expenses and Payroll without a month still gives October, October
+  and the list.
+
+The four CI steps are green.
+
+**The May fee split (#184), data.**
+- **Local:** done with `split-may-fee.mjs` (scratchpad). The ৳120 entry is in the trash and
+  there are 12 charges of ৳10. Bank Asia's May Fee is still ৳120 and its closing is still
+  ৳3,36,344.10.
+- **Live:** waits for the owner to run the same script in the api container, once #184 is live:
+  dry run first, then `--write`. Running it again says "Already done".
+
 ## 184. Salary sheet: row popup, Basic only, Fee and Check, pinned Name; hover on every clickable row — 28 Oct 2026 (NOT pushed)
 
 The owner's list for the payroll table, plus one fix they hit on live. The schema went first,

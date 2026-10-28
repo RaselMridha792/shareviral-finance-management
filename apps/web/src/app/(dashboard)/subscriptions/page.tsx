@@ -16,7 +16,15 @@ export const dynamic = "force-dynamic";
  * back when typing one here created a row in it. The names now come from the
  * plans the screen has already loaded, so there is nothing left to fetch.
  */
-export default async function SubscriptionsPage() {
+export default async function SubscriptionsPage({
+  searchParams,
+}: PageProps<"/subscriptions">) {
+  /* The month Expense overview was read in, when it sent one (28 Oct 2026). */
+  const search = await searchParams;
+  const month =
+    typeof search.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search.from)
+      ? search.from
+      : undefined;
   /* No category tree any more. The heading a subscription payment lands under
      is resolved on the server — it was always the same answer — so this page
      stopped fetching a list nothing on it reads. */
@@ -37,13 +45,16 @@ export default async function SubscriptionsPage() {
     accountsApi.list().catch(() => []),
     teamApi
       .list({ page: 1, status: "active" })
-      .catch(() => ({ items: [] as Awaited<ReturnType<typeof teamApi.list>>["items"] })),
+      .catch(() => ({
+        items: [] as Awaited<ReturnType<typeof teamApi.list>>["items"],
+      })),
   ]);
 
   return (
     <SubscriptionsScreen
       accounts={accounts}
       members={members.items}
+      initialMonth={month}
     />
   );
 }
