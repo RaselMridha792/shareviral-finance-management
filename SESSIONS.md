@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 189. File popups wider, images zoomable; the tax calculator two to a row — 29 Oct 2026 (NOT pushed)
+## 189. File popups wider, images zoomable; the tax calculator two to a row — 29 Oct 2026 (pushed, live)
 
 **Images zoom in every file-view popup** (the owner: "jekono kichu open korlei ... oi popup tar
 width aro boro korte hobe ... image hole oikhane ekta zoom button"). The owner asked for all of
@@ -198,7 +198,7 @@ row on a phone. Measured with `taxcalcqa.mjs`, 5 of 5.
 
 The four CI steps are green.
 
-## 188. Expense headings get a Description column; a wrong-format file is refused in plain words, at pick time — 28 Oct 2026
+## 188. Expense headings get a Description column; a wrong-format file is refused in plain words, at pick time — 28 Oct 2026 (pushed, live)
 
 Two of the owner's reports from one afternoon, pushed together on their word ("kaj ses hole deploy
 kore diyo").
