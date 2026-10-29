@@ -152,6 +152,34 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 194. Payslip: prints alone, Total deductions black, the number carries the employee ID — 29 Oct 2026 (NOT pushed)
+
+All in `payslip-view.tsx`.
+- **Print.** The app's top bar (menu, breadcrumb, Dark, bell) printed above the black band (the
+  owner: "breadcam tarpor navigations aigula keno asbe").
+  - Neither `Topbar` nor `Sidebar` is `print:hidden`. Rather than change the shell for every
+    page, the payslip's own print CSS drops every element that neither holds `.slip` nor sits
+    inside it (`:has()` / `:not(.slip *)`).
+  - The boxes that hold the slip give up their padding, so it starts at the paper's corner.
+  - On screen nothing changes: the top bar and "Back to the salary sheet" stay.
+- **Total deductions** is ink and weight 800, like Gross earnings (it was `--slip-out` orange).
+  The `negative` prop and the orange token are gone.
+- **Payslip number** is `PS-<year><MON>-<employee ID whole>`, e.g. `PS-2026MAY-SVBE-02`. It was
+  the ID's trailing digits only. With no ID, the fallback is unchanged (four characters of the
+  line id).
+- Measured with `payslipqa.mjs`, 7 of 7, on :3009, run through `slipcode.mjs`. That script gave
+  Yeasin the code `SVBE-02` on the local database for the run and set it back to null after.
+  No local member has an employee code.
+  - Printed: no breadcrumb, top bar, sidebar or Back link. The slip sits at 0,0, 794 wide on a
+    794 page, and the PDF is one page.
+- **Not changed, told to the owner:**
+  - "Authorised signatory" reads the company name because Settings → Company → "Signatory's
+    title" is empty on live. Typing "Chief Financial Officer" there fixes every slip.
+  - Yeasin's May net reads ৳1,00,000 against ৳1,00,000 − ৳1,750, because the sheet's net was set
+    by hand (`net_amount_override` 100000.00; computed 98,250).
+  - Locally his June line has `other_deductions` 1,750 as well as TDS 1,750 (net 96,500), which
+    looks like the tax counted twice.
+
 ## 193. All transactions leaves revaluations out — 29 Oct 2026 (NOT pushed — the push was refused by the permission classifier as a production deploy; the owner pushes or allows it)
 
 The owner had decided to keep the two revaluation rows (192). They then asked: "baki jayga

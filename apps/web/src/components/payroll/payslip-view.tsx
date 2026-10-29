@@ -273,7 +273,6 @@ export function PayslipView({
             totalLabel="Total deductions"
             total={deductionTotal}
             money={money}
-            negative
           />
         </section>
 
@@ -425,7 +424,6 @@ function Column({
   totalLabel,
   total,
   money,
-  negative = false,
 }: {
   heading: string;
   currency: string;
@@ -433,7 +431,6 @@ function Column({
   totalLabel: string;
   total: string;
   money: (value: string) => string;
-  negative?: boolean;
 }) {
   return (
     <div className="slip-col">
@@ -465,7 +462,7 @@ function Column({
         </tbody>
       </table>
 
-      <div className={negative ? "slip-total slip-total-out" : "slip-total"}>
+      <div className="slip-total">
         <span>{totalLabel}</span>
         <span>{money(total)}</span>
       </div>
@@ -509,12 +506,15 @@ function sum(values: string[]): string {
   );
 }
 
-/** `PS-2026AUG-0012` — the company's own numbering. */
+/**
+ * `PS-2026MAY-SVBE-02` — year and month, then the employee ID whole. It was
+ * the ID's trailing digits alone ("PS-2026MAY-02"); the owner, 29 Oct 2026:
+ * "PS-YEARMONTH-EMPLOYEEID eirokom thakbe ... 02 remove hobe".
+ */
 function payslipNumber(payslip: PayslipDto): string {
   const month = MONTHS[payslip.periodMonth - 1] ?? "";
-  const tail = payslip.employeeCode
-    ? (payslip.employeeCode.match(/(\d+)\s*$/)?.[1] ?? payslip.employeeCode)
-    : payslip.id.slice(0, 4).toUpperCase();
+  const tail =
+    payslip.employeeCode?.trim() || payslip.id.slice(0, 4).toUpperCase();
   return `PS-${payslip.periodYear}${month.slice(0, 3).toUpperCase()}-${tail}`;
 }
 
@@ -671,7 +671,6 @@ const SHEET_CSS = `
   --slip-line-2: #C6CCC1;
   --slip-muted: #8A9186;
   --slip-body: #3A3F39;
-  --slip-out: #C2410C;
 
   width: 595.28pt;
   max-width: 100%;
@@ -923,12 +922,15 @@ const SHEET_CSS = `
   text-transform: uppercase;
   color: var(--slip-ink);
 }
+/* Both totals black and bold. Deductions was the orange of money going out,
+   and the owner had it changed: "total deductions er red color text take
+   black rakho and bold koro" (29 Oct 2026). */
 .slip-total span:last-child {
   font-size: 9.5pt;
+  font-weight: 800;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
-.slip-total-out span:last-child { color: var(--slip-out); }
 
 /* --- net payable -------------------------------------------------------- */
 .slip-net {
@@ -1108,6 +1110,21 @@ const SHEET_CSS = `
 /* --- print -------------------------------------------------------------- */
 @media print {
   @page { size: A4; margin: 0; }
+  /*
+   * The slip and nothing else. The app's top bar — menu, breadcrumb, Dark,
+   * bell — printed above the black band (the owner, 29 Oct 2026: "breadcam
+   * tarpor navigations aigula keno asbe"). Every element that neither holds
+   * the slip nor sits inside it is dropped, and the boxes that hold it give
+   * up their padding, so the sheet starts at the paper's edge. Here, in the
+   * payslip's own sheet, so no other page's printing changes.
+   */
+  body :not(:has(.slip)):not(.slip):not(.slip *) { display: none !important; }
+  body :has(.slip) {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    min-height: 0 !important;
+  }
   .slip {
     width: 100%;
     min-height: 297mm;
