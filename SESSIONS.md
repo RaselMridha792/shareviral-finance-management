@@ -152,6 +152,48 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 192. Reports: another financial year lists its own months — 29 Oct 2026 (NOT pushed)
+
+The owner: "financial year change korleo july theke start hoy, May june theke start hobe".
+- **The bug.** `availablePeriods` only ever listed this financial year's periods, and changing FY
+  never fetched them again. Picking FY 2025-26 still offered July 2026 onwards, and the statement
+  was asked for FY 2025 at this year's index: July 2025, which is empty.
+- **API.** `GET /reports/periods` takes an optional `fiscalYear`. A year outside `years` falls
+  back to this one. Callers that do not pass one (the Dashboard, the Reports page's first load)
+  are unchanged. `lib/reports.ts` gains the optional parameter only.
+- **Screen** (`statement-view.tsx`):
+  - `chooseYear` fetches that year's periods first, then sets the year and a period together:
+    the one we are in, else the first with books. The statement is fetched once, with a year
+    and an index that belong together.
+  - The granularity effect passes the year too, so Quarterly under FY 2025-26 lists FY
+    2025-26's quarters.
+  - Months that ended before the books began are left out of the list rather than greyed.
+    Future months stay greyed as before.
+- Measured with `fyqa.mjs`, 8 of 8, against a `next build` on :3007.
+  - The page opens on October 2026.
+  - FY 2025-26 lists exactly May and June 2026 and opens May (01/05 → 31/05, 32 line items),
+    with one statement request, `fiscalYear=2025&index=11`. June can be picked.
+  - Back on FY 2026-27, the list starts at July and opens on October.
+
+**Also asked in this stretch and NOT done — waiting on the owner:**
+- **Revaluation, "remove it from everywhere".** Local has two rows, both typed in at the import
+  to match the sheet: TXN-2026-000034 (1 Jun, ৳3,132, JPMorgan / Exprovia LLC) and
+  TXN-2026-000076 (1 Jul, ৳525.08, Payoneer / Nizam Uddin). No code creates them.
+  - Without the June one, JPMorgan runs to **−৳3,132 on 2 July**, because the whole balance
+    moved to SCB that day at the revalued figure. That transfer's taka would have to change too,
+    so this is the owner's decision.
+  - Payoneer's can go on its own: the lowest balance is then ৳0.32.
+  - Live may differ; check there before acting.
+- **AI tools "Paid On" vs the reference.** The column is the payment entry's own `txn_date` (the
+  first live payment booked to the month). On live, many read 22/06/2026, so the payments were
+  saved with that date. This is data, not code: each payment's date has to be edited to the
+  receipt's.
+
+**Local leftovers.** Four orphaned Next servers are still listening: :3000 PID 24356 (a broken
+`next dev`), :3005 32780, :3006 6924 and :3007 25464 (`next start`). TaskStop ends the shell but
+not the node child on Windows, and the classifier will not let them be killed. A new `next dev`
+will not start until 24356 is gone.
+
 ## 191. Bank status reads a dollar account in dollars; Expense overview gets Bank charge and the sheets' TDS — 29 Oct 2026 (NOT pushed)
 
 **Bank status** (`bank-status-screen.tsx`, its own commit). The owner: "jegular currency USD

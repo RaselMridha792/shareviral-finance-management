@@ -43,6 +43,8 @@ import { StatementService } from "./statement.service";
 
 const periodsQuerySchema = z.strictObject({
   granularity: granularitySchema.default("month"),
+  /** Whose periods; this financial year when left out. */
+  fiscalYear: z.coerce.number().int().min(2000).max(2200).optional(),
 });
 
 /**
@@ -103,7 +105,7 @@ export class ReportsController {
   periods(
     @ZodQuery(periodsQuerySchema) query: z.infer<typeof periodsQuerySchema>,
   ) {
-    return this.reports.availablePeriods(query.granularity);
+    return this.reports.availablePeriods(query.granularity, query.fiscalYear);
   }
 
   @Get("period")

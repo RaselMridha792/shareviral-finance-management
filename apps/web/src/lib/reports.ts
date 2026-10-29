@@ -84,9 +84,12 @@ export const reportsApi = {
     return apiFetch<OverviewReport>(`/reports/overview?${search}`, fresh);
   },
 
-  periods: (granularity: Granularity) =>
+  /** This financial year's periods, or `fiscalYear`'s when given. */
+  periods: (granularity: Granularity, fiscalYear?: number) =>
     apiFetch<AvailablePeriods>(
-      `/reports/periods?granularity=${granularity}`,
+      `/reports/periods?granularity=${granularity}${
+        fiscalYear ? `&fiscalYear=${fiscalYear}` : ""
+      }`,
       fresh,
     ),
 

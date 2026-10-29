@@ -8,6 +8,7 @@ import { CreditCardIcon } from "@phosphor-icons/react/dist/ssr/CreditCard";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import {
   formatMoney,
+  todayInDhaka,
   type FinancialStatement,
   type Granularity,
   type Money2,
@@ -326,10 +327,11 @@ export function StatementView({
     void load();
   }, [load]);
 
-  // A different granularity is a different set of periods to choose from.
+  // A different granularity is a different set of periods to choose from —
+  // the chosen year's, not always this year's.
   useEffect(() => {
     let cancelled = false;
-    void reportsApi.periods(granularity).then((next) => {
+    void reportsApi.periods(granularity, fiscalYear).then((next) => {
       if (cancelled) return;
       setPeriods(next);
       setIndex((current) => Math.min(current, next.periods.length || 1));
@@ -337,7 +339,34 @@ export function StatementView({
     return () => {
       cancelled = true;
     };
-  }, [granularity]);
+  }, [granularity, fiscalYear]);
+
+  /**
+   * Another financial year: its own periods, and a period in it that has
+   * books — the one we are in, else the first. The list was this year's
+   * whatever year was picked, so FY 2025-26 still offered July 2026 onwards
+   * and asked for July 2025 (the owner, 29 Oct 2026: "financial year change
+   * korleo july theke start hoy, May june theke start hobe").
+   *
+   * The periods are fetched before the year is set, so the statement is
+   * asked for once, with a year and a period that belong together.
+   */
+  async function chooseYear(year: number) {
+    setLoading(true);
+    try {
+      const next = await reportsApi.periods(granularity, year);
+      const today = todayInDhaka();
+      const open = next.periods.filter((p) => p.selectable);
+      const pick =
+        open.find((p) => today >= p.start && today <= p.end) ?? open[0];
+      setPeriods(next);
+      setIndex(pick?.index ?? 1);
+      setFiscalYear(year);
+    } catch {
+      setError("Could not read that year's periods.");
+      setLoading(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -375,6 +404,7 @@ export function StatementView({
   }
 
   const { period, company, summary, composition, outflow, ledgers } = statement;
+  const today = todayInDhaka();
 
   const donut = outflow.shares.map((share, i) => ({
     name: share.label,
@@ -469,7 +499,7 @@ export function StatementView({
               className="w-auto"
               value={fiscalYear}
               disabled={loading}
-              onChange={(event) => setFiscalYear(Number(event.target.value))}
+              onChange={(event) => void chooseYear(Number(event.target.value))}
             >
               {periods.years.map((year) => (
                 <option key={year} value={year}>
@@ -491,15 +521,19 @@ export function StatementView({
                 {/* Greyed rather than dropped — a period that has not happened
                     still needs to be visibly there, or somebody looking for
                     September wonders whether the app has lost it. */}
-                {periods.periods.map((entry) => (
-                  <option
-                    key={entry.index}
-                    value={entry.index}
-                    disabled={!entry.selectable}
-                  >
-                    {entry.label}
-                  </option>
-                ))}
+                {/* Months before the books began are left out rather than
+                    greyed: FY 2025-26 is ten of them ahead of May. */}
+                {periods.periods
+                  .filter((entry) => entry.selectable || entry.start > today)
+                  .map((entry) => (
+                    <option
+                      key={entry.index}
+                      value={entry.index}
+                      disabled={!entry.selectable}
+                    >
+                      {entry.label}
+                    </option>
+                  ))}
               </Select>
             ) : null}
 

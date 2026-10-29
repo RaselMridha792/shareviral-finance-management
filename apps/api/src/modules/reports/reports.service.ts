@@ -140,7 +140,10 @@ export class ReportsService {
    * that September exists and has not happened, instead of wondering whether
    * the app has lost it.
    */
-  async availablePeriods(granularity: PeriodQuery["granularity"]) {
+  async availablePeriods(
+    granularity: PeriodQuery["granularity"],
+    fiscalYear?: number,
+  ) {
     const settings = await this.settings.get();
     const mode = settings.fiscalYearMode;
     const thisYear = currentFiscalYear(mode);
@@ -155,23 +158,33 @@ export class ReportsService {
     const years: number[] = [];
     for (let year = thisYear; year >= firstYear; year--) years.push(year);
 
+    /*
+     * The asked-for year's periods. They were always this year's, so picking
+     * FY 2025-26 on Reports still listed July 2026 onwards and May and June
+     * could not be reached (the owner, 29 Oct 2026: "financial year change
+     * korleo july theke start hoy, May june theke start hobe"). A year
+     * outside the list falls back to this one.
+     */
+    const year =
+      fiscalYear !== undefined && years.includes(fiscalYear)
+        ? fiscalYear
+        : thisYear;
+
     const today = todayInDhaka();
 
     return {
       fiscalYearMode: mode,
       years,
-      periods: periodsInFiscalYear(thisYear, mode, granularity).map(
-        (range, i) => ({
-          index: i + 1,
-          label: range.label,
-          start: range.start,
-          end: range.end,
-          // A period that has not started yet, or one that ended before the
-          // books did. The period in progress is selectable: it is the one
-          // everybody works in.
-          selectable: range.start <= today && range.end >= firstRecordedDay,
-        }),
-      ),
+      periods: periodsInFiscalYear(year, mode, granularity).map((range, i) => ({
+        index: i + 1,
+        label: range.label,
+        start: range.start,
+        end: range.end,
+        // A period that has not started yet, or one that ended before the
+        // books did. The period in progress is selectable: it is the one
+        // everybody works in.
+        selectable: range.start <= today && range.end >= firstRecordedDay,
+      })),
     };
   }
 
