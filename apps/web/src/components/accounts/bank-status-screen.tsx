@@ -136,13 +136,27 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
                       value={row.opening}
                       exact={row.usdExact}
                       revaluation={row.revaluation}
+                      dollarsFirst={row.currency === "USD"}
                     />
-                    <MoneyCell value={row.moneyIn} exact={row.usdExact} />
-                    <MoneyCell value={row.moneyOut} exact={row.usdExact} />
-                    <MoneyCell value={row.fee} exact={row.usdExact} />
+                    <MoneyCell
+                      value={row.moneyIn}
+                      exact={row.usdExact}
+                      dollarsFirst={row.currency === "USD"}
+                    />
+                    <MoneyCell
+                      value={row.moneyOut}
+                      exact={row.usdExact}
+                      dollarsFirst={row.currency === "USD"}
+                    />
+                    <MoneyCell
+                      value={row.fee}
+                      exact={row.usdExact}
+                      dollarsFirst={row.currency === "USD"}
+                    />
                     <MoneyCell
                       value={row.closing}
                       exact={row.usdExact}
+                      dollarsFirst={row.currency === "USD"}
                       strong
                     />
                     <td>
@@ -208,7 +222,8 @@ export function BankStatusScreen({ initial }: { initial: BankStatus }) {
         A month is the month an entry belongs to, which can differ from its
         date. Fee is the Bank charges heading; Out is every other payment and
         transfer out. Dollars are each entry&apos;s own; a ~ means some entry
-        had none and was read at that day&apos;s rate. Check reads Matched when
+        had none and was read at that day&apos;s rate. A dollar account shows
+        its dollars first and the taka under them. Check reads Matched when
         the row is ticked by hand, or once a statement covering the month is
         reconciled in Reports; the cell says which.
       </p>
@@ -225,13 +240,38 @@ function MoneyCell({
   exact,
   strong = false,
   revaluation,
+  dollarsFirst = false,
 }: {
   value: BothCurrencies;
   exact: boolean;
   strong?: boolean;
   revaluation?: BothCurrencies;
+  /**
+   * A dollar account reads in dollars, with the taka small under it (the
+   * owner, 29 Oct 2026: "jegular currency USD oigulake USD amount ta boro kore
+   * dekhate hobe"). The Total row stays taka-first: it adds both kinds.
+   */
+  dollarsFirst?: boolean;
 }) {
   const revalued = revaluation && Number(revaluation.bdt) !== 0;
+  const big = strong ? "block font-extrabold" : "block";
+  const small = "block text-xs font-normal text-muted-foreground";
+  const taka = (
+    <Amount
+      value={value.bdt}
+      showCounterpart={false}
+      className={dollarsFirst ? small : big}
+    />
+  );
+  const dollars = (
+    <Amount
+      value={value.usd}
+      currency="USD"
+      approximate={!exact}
+      showCounterpart={false}
+      className={dollarsFirst ? big : small}
+    />
+  );
   /*
    * Quiet, as the sheet is (the owner, 27 Oct 2026: a line saying "incl.
    * ৳525.40 revaluation" would confuse the CEO). The Opening is the figure
@@ -250,18 +290,8 @@ function MoneyCell({
           : undefined
       }
     >
-      <Amount
-        value={value.bdt}
-        showCounterpart={false}
-        className={strong ? "block font-extrabold" : "block"}
-      />
-      <Amount
-        value={value.usd}
-        currency="USD"
-        approximate={!exact}
-        showCounterpart={false}
-        className="block text-xs font-normal text-muted-foreground"
-      />
+      {dollarsFirst ? dollars : taka}
+      {dollarsFirst ? taka : dollars}
     </td>
   );
 }
