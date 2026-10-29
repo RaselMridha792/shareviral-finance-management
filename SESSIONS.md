@@ -152,6 +152,27 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 190. A hand-typed TDS figure's popup says so — 29 Oct 2026 (NOT pushed)
+
+The answer to 189's open question. The owner: "oikhane jate sundor kore lekha thake je TDS hate
+bosano".
+- `TdsWorkingPanel` (`salary-sheet-screen.tsx`) checks `line.tdsManual` before the no-basis
+  text.
+  - The title becomes "{name} — TDS typed by hand".
+  - It shows the month's figure and says it was typed into the sheet by hand, so there is no
+    working, and that it is what gets deducted.
+  - A small note says Work out the tax again replaces it on a draft sheet, and every other typed
+    figure on the sheet with it, because `recalculateTds` clears `tds_manual` on every line.
+- The "Nothing was worked out" text stays for lines that were not typed and have no basis.
+- Measured with `tdstypedqa.mjs`, 5 of 5, on the August 2026 run (20 of 20 lines typed).
+  - It ran against a local `next build` + `next start` on :3005. The dev server on :3000 was an
+    orphan left behind when its parent task was stopped. It was throwing "Jest worker encountered
+    2 child process exceptions", and the classifier would not let it be killed (PID 24356). A new
+    `next dev` refuses to start while that orphan holds the lock. Kill it before the next local
+    check.
+- The rest of `salary-sheet-screen.tsx` was already not prettier-clean before this change. The
+  new lines are clean, and the rest was left alone.
+
 ## 189. File popups wider, images zoomable; the tax calculator two to a row — 29 Oct 2026 (pushed, live)
 
 **Images zoom in every file-view popup** (the owner: "jekono kichu open korlei ... oi popup tar

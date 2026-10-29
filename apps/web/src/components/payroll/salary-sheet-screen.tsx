@@ -1604,19 +1604,46 @@ function TdsWorkingPanel({
     ? calculateTds(basis.annualSalary, basis.policy, basis.declaredInvestment)
     : null;
   const agrees = result ? result.monthlyTds === line.tdsAmount : true;
+  /*
+   * Typing a figure clears the basis, so a hand-set line used to land on the
+   * "nothing was worked out" text below and read like a fault. The owner, 29
+   * Oct: "oikhane jate sundor kore lekha thake je TDS hate bosano".
+   */
+  const typed = line.tdsManual;
 
   return (
     <Drawer
       open
       onClose={onClose}
-      title={`${line.fullName} — how the tax was worked out`}
+      title={
+        typed
+          ? `${line.fullName} — TDS typed by hand`
+          : `${line.fullName} — how the tax was worked out`
+      }
       description={
-        basis
+        basis && !typed
           ? `Under the ${basis.fiscalYear}-${String(basis.fiscalYear + 1).slice(2)} rule, on twelve times this month's gross`
           : undefined
       }
     >
-      {!basis ? (
+      {typed ? (
+        <div className="flex flex-col gap-3 text-sm">
+          <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2.5">
+            <span className="text-muted-foreground">TDS this month</span>
+            <Amount value={line.tdsAmount} tone="neutral" />
+          </div>
+          <p>
+            This figure was typed into the salary sheet by hand, so the app did
+            not work it out from the tax rule and there is no working to show.
+            It is the amount deducted from this month&apos;s pay.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            While the sheet is still a draft, <strong>Work out the tax again</strong>{" "}
+            replaces it with the rule&apos;s figure — and does the same to every
+            other hand-typed figure on the sheet.
+          </p>
+        </div>
+      ) : !basis ? (
         <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm">
           Nothing was worked out for this line — either it predates the app
           calculating tax, or no rule is set up for that income year. Settings →
