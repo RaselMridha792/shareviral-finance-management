@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 192. Reports: another financial year lists its own months — 29 Oct 2026 (NOT pushed)
+## 192. Reports: another financial year lists its own months — 29 Oct 2026 (pushed, live)
 
 The owner: "financial year change korleo july theke start hoy, May june theke start hobe".
 - **The bug.** `availablePeriods` only ever listed this financial year's periods, and changing FY
@@ -176,7 +176,7 @@ The owner: "financial year change korleo july theke start hoy, May june theke st
   - Back on FY 2026-27, the list starts at July and opens on October.
 
 **Also asked in this stretch and NOT done — waiting on the owner:**
-- **Revaluation, "remove it from everywhere".** Local has two rows, both typed in at the import
+- **Revaluation, "remove it from everywhere". The owner (29 Oct): leave it as it is for now ("revaluation ta apatoto evabe rakho").** Local has two rows, both typed in at the import
   to match the sheet: TXN-2026-000034 (1 Jun, ৳3,132, JPMorgan / Exprovia LLC) and
   TXN-2026-000076 (1 Jul, ৳525.08, Payoneer / Nizam Uddin). No code creates them.
   - Without the June one, JPMorgan runs to **−৳3,132 on 2 July**, because the whole balance
@@ -194,7 +194,7 @@ The owner: "financial year change korleo july theke start hoy, May june theke st
 not the node child on Windows, and the classifier will not let them be killed. A new `next dev`
 will not start until 24356 is gone.
 
-## 191. Bank status reads a dollar account in dollars; Expense overview gets Bank charge and the sheets' TDS — 29 Oct 2026 (NOT pushed)
+## 191. Bank status reads a dollar account in dollars; Expense overview gets Bank charge and the sheets' TDS — 29 Oct 2026 (pushed, live)
 
 **Bank status** (`bank-status-screen.tsx`, its own commit). The owner: "jegular currency USD
 oigulake USD amount ta boro kore dekhate hobe".
@@ -233,7 +233,7 @@ month wise ekhane bosai diyen").
 - At 1440 the strip wraps four plus one. The cards' 230px floor leaves no room for five, and
   the owner has not been asked about it.
 
-## 190. A hand-typed TDS figure's popup says so — 29 Oct 2026 (NOT pushed)
+## 190. A hand-typed TDS figure's popup says so — 29 Oct 2026 (pushed, live)
 
 The answer to 189's open question. The owner: "oikhane jate sundor kore lekha thake je TDS hate
 bosano".
