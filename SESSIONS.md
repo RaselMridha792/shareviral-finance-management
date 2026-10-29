@@ -152,6 +152,24 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 196. A printed payslip fills Letter paper too — 29 Oct 2026 (NOT pushed)
+
+The owner printed a live payslip and got white down both sides of the black bands ("dui pase
+faka hoye jacche ... bg color ta full width a thake").
+- **Cause.** Their PDF is Letter, page ratio 1.29 where A4 is 1.41. That comes from a printer
+  destination such as Windows' "Microsoft Print to PDF". `@page { size: A4 }` made Chrome shrink
+  the A4 page onto Letter, leaving blank paper at the sides. 194's check printed A4 only, so it
+  did not see this.
+- **Fix** (`payslip-view.tsx`, print CSS):
+  - `@page` keeps `margin: 0` and drops `size: A4`, so the page is the paper's own size.
+  - `.slip` takes `min-height: 100vh` instead of `297mm`. The footer was already `position:
+    fixed` at the foot.
+- Measured with `paperqa.mjs`, 8 of 8, on :3011:
+  - A4 794×1123 and Letter 816×1056: the band and footer run 0..full width, and the footer's
+    bottom is the page's bottom.
+  - The signatures end 145px (A4) / 78px (Letter) above the footer.
+  - `page.pdf` gives one page for each paper: 595.9×841.9pt and 612×792pt.
+
 ## 195. The logo goes home; every breadcrumb is a link — 29 Oct 2026 (pushed, live)
 
 The owner: "eigulake clickable korte hobe. logo te click korle home a jabe. also breadcum gulao

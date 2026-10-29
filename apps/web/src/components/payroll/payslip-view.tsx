@@ -1109,7 +1109,14 @@ const SHEET_CSS = `
 
 /* --- print -------------------------------------------------------------- */
 @media print {
-  @page { size: A4; margin: 0; }
+  /*
+   * The paper's own size, not A4. With "size: A4" a Letter printer (Windows'
+   * own "Microsoft Print to PDF" is one) shrank the page to fit and left white
+   * down both sides of the black bands (the owner, 29 Oct 2026: "dui pase
+   * faka hoye jacche ... bg color ta full width a thake"). The slip below
+   * takes the page's width and height instead, whichever paper it is.
+   */
+  @page { margin: 0; }
   /*
    * The slip and nothing else. The app's top bar — menu, breadcrumb, Dark,
    * bell — printed above the black band (the owner, 29 Oct 2026: "breadcam
@@ -1127,7 +1134,7 @@ const SHEET_CSS = `
   }
   .slip {
     width: 100%;
-    min-height: 297mm;
+    min-height: 100vh;
     border-radius: 0;
     box-shadow: none;
     padding-bottom: 58pt;
