@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 195. The logo goes home; every breadcrumb is a link — 29 Oct 2026 (NOT pushed)
+## 195. The logo goes home; every breadcrumb is a link — 29 Oct 2026 (pushed, live)
 
 The owner: "eigulake clickable korte hobe. logo te click korle home a jabe. also breadcum gulao
 jate clickable hoy". This is shell code, so it reaches every screen, and it is its own commit.
@@ -175,7 +175,7 @@ jate clickable hoy". This is shell code, so it reaches every screen, and it is i
   - The switch still toggles, and the compact mark still links.
   - On a phone, the drawer's logo goes home and the drawer closes.
 
-## 194. Payslip: prints alone, Total deductions black, the number carries the employee ID — 29 Oct 2026 (NOT pushed)
+## 194. Payslip: prints alone, Total deductions black, the number carries the employee ID — 29 Oct 2026 (pushed, live)
 
 All in `payslip-view.tsx`.
 - **Print.** The app's top bar (menu, breadcrumb, Dark, bell) printed above the black band (the
@@ -203,7 +203,7 @@ All in `payslip-view.tsx`.
   - Locally his June line has `other_deductions` 1,750 as well as TDS 1,750 (net 96,500), which
     looks like the tax counted twice.
 
-## 193. All transactions leaves revaluations out — 29 Oct 2026 (NOT pushed — the push was refused by the permission classifier as a production deploy; the owner pushes or allows it)
+## 193. All transactions leaves revaluations out — 29 Oct 2026 (pushed, live — the first push was refused by the permission classifier; pushed when the owner said "live a push kore daw")
 
 The owner had decided to keep the two revaluation rows (192). They then asked: "baki jayga
 gulate to revaluation thik korechi tahole all transactions theke soriye dewa jayna eta?" They
