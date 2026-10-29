@@ -88,15 +88,23 @@ function under(pathname: string, href: string): boolean {
  *
  * Depth-first with the parent pushed before its children, so
  * `/subscriptions` comes back as `Expenses → AI tools and subscriptions`
- * rather than just the leaf. A parent with no `href` is kept as a plain label:
- * it says where you are without pretending to be somewhere you can go.
+ * rather than just the leaf. A parent with no `href` of its own links to its
+ * first screen — Accounts to Accounts overview, Expenses to Expense overview —
+ * because the owner wants every crumb clickable (29 Oct 2026: "breadcum gulao
+ * jate clickable hoy").
  */
 export function trailFor(pathname: string): Crumb[] {
   let best: Crumb[] = [];
 
   const walk = (items: NavItem[], above: Crumb[]) => {
     for (const item of items) {
-      const here: Crumb[] = [...above, { label: item.label, href: item.href }];
+      const here: Crumb[] = [
+        ...above,
+        {
+          label: item.label,
+          href: item.href ?? item.children?.find((child) => child.href)?.href,
+        },
+      ];
 
       if (item.href && under(pathname, item.href)) {
         // Deepest wins: /accounts/cash-in must not stop at /accounts.

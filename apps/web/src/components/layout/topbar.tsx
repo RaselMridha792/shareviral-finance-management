@@ -55,17 +55,26 @@ export function Topbar() {
         </button>
 
         {/*
-          Finance, then every level down to here.
+          Finance, then every level down to here — every one a link (the
+          owner, 29 Oct 2026: "breadcum gulao jate clickable hoy").
 
-          "Finance" is not a link: it names the product, and a link that goes
-          nowhere in particular is what teaches people to stop trusting a
-          breadcrumb. Everything between it and the last crumb is, because
-          climbing one level is the whole reason this row exists. The last
-          crumb is where you already are, so it stays plain.
+          "Finance" goes to the Dashboard, the app's home. A group with no
+          page of its own goes to its first screen (`trailFor`). The last
+          crumb is where you already are: it keeps its weight and
+          `aria-current`, and a click on it opens the screen afresh. Only a
+          leaf the page supplied — a person's name — has nowhere to go and
+          stays plain.
         */}
         <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
           <ol className="flex flex-wrap items-center gap-2 text-[14px]">
-            <li className="font-medium text-(--sv-muted)">Finance</li>
+            <li>
+              <Link
+                href="/"
+                className="font-medium text-(--sv-muted) underline-offset-2 transition-colors hover:text-(--sv-ink) hover:underline"
+              >
+                Finance
+              </Link>
+            </li>
             {crumbs.map((crumb, i) => {
               const last = i === crumbs.length - 1;
               return (
@@ -79,10 +88,16 @@ export function Topbar() {
                     aria-hidden="true"
                     className="flex-none text-(--sv-muted)"
                   />
-                  {crumb.href && !last ? (
+                  {crumb.href ? (
                     <Link
                       href={crumb.href}
-                      className="truncate font-medium text-(--sv-muted) underline-offset-2 transition-colors hover:text-(--sv-ink) hover:underline"
+                      aria-current={last ? "page" : undefined}
+                      className={cn(
+                        "truncate underline-offset-2 transition-colors hover:underline",
+                        last
+                          ? "font-extrabold text-(--sv-ink)"
+                          : "font-medium text-(--sv-muted) hover:text-(--sv-ink)",
+                      )}
                     >
                       {crumb.label}
                     </Link>

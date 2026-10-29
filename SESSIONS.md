@@ -152,6 +152,29 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 195. The logo goes home; every breadcrumb is a link — 29 Oct 2026 (NOT pushed)
+
+The owner: "eigulake clickable korte hobe. logo te click korle home a jabe. also breadcum gulao
+jate clickable hoy". This is shell code, so it reaches every screen, and it is its own commit.
+- **Logo** (`sidebar.tsx`). The mark and "ShareViral™ Finance" are one `Link` to `/`
+  (`data-brand-home`).
+  - The hide-menu switch stays outside the link.
+  - In the phone drawer, `onNavigate` closes the drawer on the click.
+- **Breadcrumbs** (`topbar.tsx`, `breadcrumb.ts`).
+  - "Finance" links to `/`.
+  - A group with no page of its own links to its first screen: Accounts → `/accounts`,
+    Expenses → `/expenses/overview`, Payroll & Bank → `/payroll`, Invoice Builder →
+    `/invoices`.
+  - The last crumb is a link too when it has an href. It stays bold with `aria-current`.
+  - A leaf a page supplies (a person's name, "August 2026") has no href and stays plain.
+  - Neither group parent is permission-aware: a role that cannot see a group's first screen
+    would land on no-access from that crumb.
+- Measured with `crumbqa.mjs`, 11 of 11, on :3010.
+  - Crumbs on `/`, Expense overview, Bank status, All transactions and a salary sheet.
+  - Clicking Finance, Accounts and the logo.
+  - The switch still toggles, and the compact mark still links.
+  - On a phone, the drawer's logo goes home and the drawer closes.
+
 ## 194. Payslip: prints alone, Total deductions black, the number carries the employee ID — 29 Oct 2026 (NOT pushed)
 
 All in `payslip-view.tsx`.

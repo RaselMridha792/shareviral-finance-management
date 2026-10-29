@@ -413,27 +413,40 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             : "gap-[11px] py-[18px] pr-3 pl-5",
         )}
       >
-        <span className="grid size-10 flex-none place-items-center rounded-[11px] bg-(--sv-accent) text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.3)]">
-          <TrendUpIcon weight="duotone" size={23} />
-        </span>
-        {compact ? null : (
-          <div className="min-w-0 flex-1 leading-[1.1]">
-            <p className="text-[17px] font-extrabold tracking-[-0.02em] whitespace-nowrap">
-              ShareViral
-              {/* The owner: "ShareViral name tar opore dan pase choto kore
-                  TM lekha thakbe". */}
-              <sup
-                className="ml-0.5 text-[8.5px] font-extrabold tracking-normal text-(--sv-muted)"
-                data-trademark
-              >
-                TM
-              </sup>
-            </p>
-            <p className="text-[10.5px] tracking-[0.16em] whitespace-nowrap text-(--sv-violet-ink) uppercase">
-              Finance
-            </p>
-          </div>
-        )}
+        {/* The mark and the name go home (the owner, 29 Oct 2026: "logo te
+            click korle home a jabe"). The rail's switch stays outside it. */}
+        <Link
+          href="/"
+          onClick={onNavigate}
+          aria-label="ShareViral Finance, Dashboard"
+          className={cn(
+            "flex min-w-0 items-center rounded-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            !compact && "flex-1 gap-[11px]",
+          )}
+          data-brand-home
+        >
+          <span className="grid size-10 flex-none place-items-center rounded-[11px] bg-(--sv-accent) text-(--sv-on-accent) shadow-[0_6px_16px_rgb(150_200_0/0.3)]">
+            <TrendUpIcon weight="duotone" size={23} />
+          </span>
+          {compact ? null : (
+            <div className="min-w-0 flex-1 leading-[1.1]">
+              <p className="text-[17px] font-extrabold tracking-[-0.02em] whitespace-nowrap">
+                ShareViral
+                {/* The owner: "ShareViral name tar opore dan pase choto kore
+                    TM lekha thakbe". */}
+                <sup
+                  className="ml-0.5 text-[8.5px] font-extrabold tracking-normal text-(--sv-muted)"
+                  data-trademark
+                >
+                  TM
+                </sup>
+              </p>
+              <p className="text-[10.5px] tracking-[0.16em] whitespace-nowrap text-(--sv-violet-ink) uppercase">
+                Finance
+              </p>
+            </div>
+          )}
+        </Link>
         {/* The desktop rail's own switch; the mobile drawer closes itself. */}
         {onNavigate ? null : (
           <button
