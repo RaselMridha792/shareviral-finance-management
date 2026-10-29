@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 196. A printed payslip fills Letter paper too — 29 Oct 2026 (NOT pushed)
+## 196. A printed payslip fills Letter paper too — 29 Oct 2026 (pushed, live)
 
 The owner printed a live payslip and got white down both sides of the black bands ("dui pase
 faka hoye jacche ... bg color ta full width a thake").
