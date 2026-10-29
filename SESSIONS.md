@@ -152,6 +152,30 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 193. All transactions leaves revaluations out — 29 Oct 2026 (NOT pushed — the push was refused by the permission classifier as a production deploy; the owner pushes or allows it)
+
+The owner had decided to keep the two revaluation rows (192). They then asked: "baki jayga
+gulate to revaluation thik korechi tahole all transactions theke soriye dewa jayna eta?" They
+were told this touches `packages/shared` and gave the go-ahead ("hea dilam All transactions er
+oitar jonne").
+- **Shared filter.** `transactionFilterSchema` gets `excludeRevaluations`, opt-in like
+  `excludeTransfers`. `buildFilters` adds `not(isRevaluationRow)` when it is set. No other
+  screen sends it, so the register, Cash In and the Expenses screens are unchanged.
+- **All transactions** (`transactions-screen.tsx`) sends it to both the list and the summary,
+  so the rows and the Money in / Net / entries figures agree.
+- **The books are unchanged.** Balances, Bank status's Opening (JPMorgan June still opens at
+  ৳8,52,252), the Dashboard and the account's own register keep both rows.
+- Measured with `revalqa.mjs`, 5 of 5, against a `next build` on :3008.
+  - 165 entries and ৳92,92,400.65 in, as the API answers with the flag.
+  - Every page walked: 165 rows, with neither TXN-2026-000034 nor TXN-2026-000076 among them.
+  - JPMorgan's account page and its register still carry the June row.
+  - With the flag, the API's June–July Money in drops by exactly ৳3,657.08 (3,132 + 525.08).
+- **AI tools Paid On.** The owner asked whether the dates are now correct; they are not. The
+  local import has the same eight 22/06 payments, so the dates came from the sheet. The receipts
+  that disagree are only on live. They have to be edited per payment, or the owner can say yes
+  to an inline Paid On edit on the AI tools table (offered, not answered).
+- One more orphaned `next start` is left: :3008, PID 23812.
+
 ## 192. Reports: another financial year lists its own months — 29 Oct 2026 (pushed, live)
 
 The owner: "financial year change korleo july theke start hoy, May june theke start hobe".

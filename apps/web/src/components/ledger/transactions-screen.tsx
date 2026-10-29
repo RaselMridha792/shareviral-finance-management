@@ -87,10 +87,13 @@ export function TransactionsScreen({
     setLoading(true);
     setError(null);
     try {
-      const query = { ...filters, page, pageSize: PAGE_SIZE };
+      /* No revaluations here, in the rows or the figures above them (the
+         owner, 29 Oct 2026). An account's own page still shows them. */
+      const asked = { ...filters, excludeRevaluations: true };
+      const query = { ...asked, page, pageSize: PAGE_SIZE };
       const [list, totals] = await Promise.all([
         ledgerApi.list(query),
-        ledgerApi.summary(filters as Record<string, string | undefined>),
+        ledgerApi.summary(asked),
       ]);
       // A slower earlier request must not overwrite a faster later one.
       if (request !== requestRef.current) return;

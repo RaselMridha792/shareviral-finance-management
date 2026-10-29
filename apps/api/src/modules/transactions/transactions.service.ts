@@ -255,6 +255,8 @@ export class TransactionsService {
     // Money moved between our own accounts is not money spent — see
     // `own-money.ts` for where this must and must not be applied.
     if (filter.excludeTransfers) clauses.push(notATransfer());
+    // A revaluation is not money that moved; All transactions leaves it out.
+    if (filter.excludeRevaluations) clauses.push(not(isRevaluationRow));
     if (filter.byBooksMonth) {
       // The Expenses screens: the month each entry belongs to.
       if (filter.from) clauses.push(not(beforeBooksPeriod(filter.from)));

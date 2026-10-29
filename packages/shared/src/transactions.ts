@@ -612,6 +612,17 @@ export const transactionFilterSchema = z.object({
   excludeTransfers: boolish.optional(),
 
   /**
+   * Leave out revaluations — the Exchange gain and Exchange loss rows that
+   * re-read a dollar account at a month's rate.
+   *
+   * They stay in the books: an account's balance, its own page and Bank
+   * status's Opening all need them. Only All transactions sets this (the
+   * owner, 29 Oct 2026: "all transactions theke soriye dewa jayna eta?"),
+   * where a revaluation read as Cash In that never arrived.
+   */
+  excludeRevaluations: boolish.optional(),
+
+  /**
    * Read `from`..`to` as the month each entry belongs to, not the day it is
    * dated: May's bill paid on 12 June is in May. The Expenses screens send it,
    * so their rows agree with their month boxes. All transactions, the register
