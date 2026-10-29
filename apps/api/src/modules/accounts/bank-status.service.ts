@@ -477,8 +477,11 @@ export class BankStatusService {
  * The outer coalesce is the whole of it. A transfer has no category, so
  * `category_id in (...)` is UNKNOWN for it, and `not UNKNOWN` is UNKNOWN too:
  * without it OUT dropped every transfer, and JPMorgan's May read ৳0 out.
+ *
+ * Exported for Expense overview's Bank charge box, so the two pages cannot
+ * disagree about what a bank charge is.
  */
-const isFee = sql`coalesce(${transactions.chargeForId} is not null
+export const isFee = sql`coalesce(${transactions.chargeForId} is not null
   or ${transactions.categoryId} in (
     select c.id from categories c
      where c.kind = 'out'

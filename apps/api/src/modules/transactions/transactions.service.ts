@@ -50,7 +50,14 @@ import { AuditService } from "../../common/audit/audit.service";
 import type { AuthenticatedUser } from "../../common/decorators/auth.decorators";
 import type { DbTransaction } from "../../db";
 import { DbService } from "../../db/db.service";
-import { accounts, categories, transactions, vendors } from "../../db/schema";
+import {
+  accounts,
+  categories,
+  payrollLines,
+  payrollRuns,
+  transactions,
+  vendors,
+} from "../../db/schema";
 import { SettingsService } from "../settings/settings.service";
 import { isRevaluationRow } from "../accounts/accounts.service";
 import { SubscriptionsService } from "../subscriptions/subscriptions.service";
@@ -59,6 +66,7 @@ import {
   overviewSelect,
   overviewWhere,
   rowDollars,
+  salaryTdsWhere,
   typedDollars,
   type ExpenseOverview,
 } from "./expense-overview";
@@ -652,6 +660,17 @@ export class TransactionsService {
       slice(range.previousFrom, range.previousTo),
     ]);
 
+    /* The salary sheets' TDS, and the two withholdings added by Postgres
+       rather than here — see `salaryTdsWhere`. */
+    const [tax] = await this.db.client
+      .select({
+        salary: sql<string>`coalesce(sum(${payrollLines.tdsAmount}), 0)::numeric(14,2)::text`,
+        total: sql<string>`(coalesce(sum(${payrollLines.tdsAmount}), 0) + ${now.withheld}::numeric)::numeric(14,2)::text`,
+      })
+      .from(payrollLines)
+      .innerJoin(payrollRuns, eq(payrollLines.payrollRunId, payrollRuns.id))
+      .where(salaryTdsWhere(range.from, range.to));
+
     const withUsd = Number(now.withUsd);
     return {
       from: range.from,
@@ -663,6 +682,7 @@ export class TransactionsService {
               salary: now.salaryUsd,
               tooling: now.toolingUsd,
               rent: now.rentUsd,
+              bankCharge: now.bankChargeUsd,
               operational: now.operationalUsd,
               total: now.totalUsd,
               /* Every row typed its dollars; any converted at its row's rate,
@@ -672,14 +692,18 @@ export class TransactionsService {
       salary: now.salary,
       tooling: now.tooling,
       rent: now.rent,
+      bankCharge: now.bankCharge,
       operational: now.operational,
       total: now.total,
-      withheld: now.withheld,
+      withheld: tax.total,
+      withheldSalary: tax.salary,
+      withheldBills: now.withheld,
       previous: {
         label: range.previousLabel,
         salary: before.salary,
         tooling: before.tooling,
         rent: before.rent,
+        bankCharge: before.bankCharge,
         operational: before.operational,
         total: before.total,
       },

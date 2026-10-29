@@ -221,11 +221,17 @@ export type ExpenseOverview = {
   tooling: string;
   operational: string;
   rent: string;
+  bankCharge: string;
   total: string;
-  /** Held against a tax liability — deliberately NOT part of the total. */
-  withheld: string;
   /**
-   * The four and the total in dollars, ADDED UP from the figures the rows
+   * Held against a tax liability — deliberately NOT part of the total. The
+   * salary sheets' TDS plus the tax held back on bills.
+   */
+  withheld: string;
+  withheldSalary: string;
+  withheldBills: string;
+  /**
+   * The five and the total in dollars, ADDED UP from the figures the rows
    * carry. Null when no row this month recorded one.
    */
   usd: {
@@ -233,6 +239,7 @@ export type ExpenseOverview = {
     tooling: string;
     operational: string;
     rent: string;
+    bankCharge: string;
     total: string;
     exact: boolean;
   } | null;
@@ -242,6 +249,7 @@ export type ExpenseOverview = {
     tooling: string;
     operational: string;
     rent: string;
+    bankCharge: string;
     total: string;
   };
 };

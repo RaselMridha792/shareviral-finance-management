@@ -130,6 +130,20 @@ export function ExpenseOverviewScreen() {
           bar: "bg-(--sv-violet)",
         },
         {
+          /* The owner, 29 Oct 2026: "bank charge er jonneo card niye aso".
+             Carved out of operational on the API, as rent is. To Operational
+             expenses, where the heading has its own card — its slug is not
+             the same on every database. */
+          key: "bankCharge",
+          label: "Bank charge",
+          value: data.bankCharge,
+          usd: data.usd?.bankCharge ?? null,
+          href: "/expenses",
+          icon: "account_balance",
+          text: "text-(--sv-violet)",
+          bar: "bg-(--sv-violet)",
+        },
+        {
           key: "operational",
           label: "Operational expenses",
           value: data.operational,
@@ -259,7 +273,7 @@ export function ExpenseOverviewScreen() {
       {data ? (
         <p className="self-end text-[13px] text-(--sv-muted) tabular-nums">
           {money(data.salary)} + {money(data.tooling)} + {money(data.rent)} +{" "}
-          {money(data.operational)} ={" "}
+          {money(data.bankCharge)} + {money(data.operational)} ={" "}
           <b className="font-extrabold text-(--sv-ink)">{money(data.total)}</b>
         </p>
       ) : null}
@@ -282,9 +296,23 @@ export function ExpenseOverviewScreen() {
             has it person by person.
           </p>
         </div>
-        <p className="text-[26px] font-extrabold tabular-nums">
-          {data ? money(data.withheld) : money("0")}
-        </p>
+        {/* The salary sheets' TDS now counts here too (the owner, 29 Oct
+            2026: "every month tax withheld chilo, sheet dekhen"), so the line
+            under the figure says what it is made of. */}
+        <div className="text-right">
+          <p className="text-[26px] font-extrabold tabular-nums">
+            {data ? money(data.withheld) : money("0")}
+          </p>
+          {data ? (
+            <p
+              data-withheld-split
+              className="text-[12.5px] text-(--sv-muted) tabular-nums"
+            >
+              Salary {money(data.withheldSalary)} · Bills{" "}
+              {money(data.withheldBills)}
+            </p>
+          ) : null}
+        </div>
       </div>
 
     </>

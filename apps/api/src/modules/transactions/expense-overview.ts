@@ -1,7 +1,9 @@
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 
+import { payrollRuns } from "../../db/schema/team";
 import { transactions } from "../../db/schema/transactions";
 import { isRevaluationRow } from "../accounts/accounts.service";
+import { isFee } from "../accounts/bank-status.service";
 import { isToolSpend } from "../vendors/tool-spend";
 import { inBooksPeriod } from "./books-month";
 import { notATransfer } from "./own-money";
@@ -15,7 +17,7 @@ import { notATransfer } from "./own-money";
  * and inside the headline, so "Other expenses" read HIGHER than "Operational
  * expenses" beside it. Shown the two shapes, he chose the one that adds up:
  *
- *   salary + tooling + rent + operational = total money out
+ *   salary + tooling + rent + bank charge + operational = total money out
  *
  * That equality is the whole design, and it is why each slice is defined by
  * excluding the ones before it rather than by its own idea of what it means.
@@ -90,6 +92,36 @@ const isOfficeRent = (): SQL => sql`coalesce(transactions.category_id in (
   select id from categories where slug = 'office-rent' and deleted_at is null
 ), false)`;
 
+/**
+ * Bank charges, carved out of operational the way rent is (the owner, 29 Oct
+ * 2026: "expense overview page er moddhe ... bank charge er jonneo card niye
+ * aso").
+ *
+ * Bank status's own definition — the heading and its children, and the
+ * automatic charge rows — so its Fee column and this box read one rule. A
+ * charge already counted as tooling stays there: the slices are taken in
+ * order and none may count a row twice.
+ */
+const isBankCharge = (): SQL => isFee;
+
+/**
+ * The salary sheets' TDS for the months the window covers.
+ *
+ * Payroll tax is withheld on the sheet and never becomes a ledger row of its
+ * own, so `withheld_tax_amount` alone read ৳0 every month while each sheet had
+ * tax on it (the owner, 29 Oct 2026: "every month tax withheld chilo, sheet
+ * dekhen"). Read as the TDS register reads it: by the sheet's own month, from
+ * a run that is not a draft and not in the trash.
+ */
+export function salaryTdsWhere(from: string, to: string): SQL {
+  const [fromYear, fromMonth] = from.split("-").map(Number);
+  const [toYear, toMonth] = to.split("-").map(Number);
+  return sql`${payrollRuns.status} <> 'draft'
+    and ${payrollRuns.deletedAt} is null
+    and (${payrollRuns.periodYear} * 12 + ${payrollRuns.periodMonth})
+      between ${fromYear * 12 + fromMonth} and ${toYear * 12 + toMonth}`;
+}
+
 /** A row that recorded what it was in dollars, at the time somebody typed it. */
 const carriesDollars = (): SQL =>
   sql`${transactions.originalCurrency} = 'USD'
@@ -128,14 +160,20 @@ export const typedDollars = carriesDollars;
 export type ExpenseOverview = {
   from: string;
   to: string;
-  /** The four that add up to `total`, in the order the page shows them. */
+  /** The five that add up to `total`, in the order the page shows them. */
   salary: string;
   tooling: string;
   rent: string;
+  bankCharge: string;
   operational: string;
   total: string;
-  /** Held against a tax liability. Deliberately NOT part of the total. */
+  /**
+   * Held against a tax liability. Deliberately NOT part of the total. The
+   * salary sheets' TDS and the tax held back on bills, added.
+   */
   withheld: string;
+  withheldSalary: string;
+  withheldBills: string;
   /**
    * The four and the total in dollars, ADDED UP from what the rows carry.
    *
@@ -146,16 +184,18 @@ export type ExpenseOverview = {
     salary: string;
     tooling: string;
     rent: string;
+    bankCharge: string;
     operational: string;
     total: string;
     exact: boolean;
   } | null;
-  /** How the four compare with the month before, for the "vs August" line. */
+  /** How the five compare with the month before, for the "vs August" line. */
   previous: {
     label: string;
     salary: string;
     tooling: string;
     rent: string;
+    bankCharge: string;
     operational: string;
     total: string;
   };
@@ -190,6 +230,15 @@ export function overviewSelect() {
         and ${isOfficeRent()}
     ), 0)::text`,
 
+    /* The bank's charges, carved out of operational too — see
+       `isBankCharge`. */
+    bankCharge: sql<string>`coalesce(sum(${transactions.amount}) filter (
+      where not ${isSalary()}
+        and not ${isToolSpend()}
+        and not ${isOfficeRent()}
+        and ${isBankCharge()}
+    ), 0)::text`,
+
     /*
      * Everything else that went out, filed or not.
      *
@@ -205,6 +254,7 @@ export function overviewSelect() {
       where not ${isSalary()}
         and not ${isToolSpend()}
         and not ${isOfficeRent()}
+        and not ${isBankCharge()}
     ), 0)::text`,
 
     total: sql<string>`coalesce(sum(${transactions.amount}), 0)::text`,
@@ -233,10 +283,17 @@ export function overviewSelect() {
         and not ${isToolSpend()}
         and ${isOfficeRent()}
     ), 0)::text`,
+    bankChargeUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
+      where not ${isSalary()}
+        and not ${isToolSpend()}
+        and not ${isOfficeRent()}
+        and ${isBankCharge()}
+    ), 0)::text`,
     operationalUsd: sql<string>`coalesce(sum(${rowDollars()}) filter (
       where not ${isSalary()}
         and not ${isToolSpend()}
         and not ${isOfficeRent()}
+        and not ${isBankCharge()}
     ), 0)::text`,
     totalUsd: sql<string>`coalesce(sum(${rowDollars()}), 0)::text`,
     /* How many rows can say what they were in dollars. Zero means this month

@@ -152,6 +152,45 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 191. Bank status reads a dollar account in dollars; Expense overview gets Bank charge and the sheets' TDS — 29 Oct 2026 (NOT pushed)
+
+**Bank status** (`bank-status-screen.tsx`, its own commit). The owner: "jegular currency USD
+oigulake USD amount ta boro kore dekhate hobe".
+- `MoneyCell` takes `dollarsFirst`. A row whose `currency` is USD (JP Morgan Chase, Payoneer)
+  shows its dollars big, and bold on Closing, with the taka small under them.
+- The Total row stays taka-first, because it adds both kinds. The footnote says so.
+
+**Expense overview, Tax withheld** (the owner: "every month tax withheld chilo, sheet dekhen,
+month wise ekhane bosai diyen").
+- It read only `transactions.withheld_tax_amount`, the tax held back on bills. Salary TDS lives
+  on the sheet and never becomes a ledger row, so the box read ৳0 every month.
+- `withheld` now adds the salary sheets' TDS to the bill withholding, in SQL. The sheets' TDS is
+  read the way the TDS register reads it (`salaryTdsWhere`): by the sheet's month, from a run
+  that is not a draft and not trashed.
+- The API also returns `withheldSalary` and `withheldBills`, and the box shows "Salary … · Bills
+  …" under the figure.
+- **The Dashboard's "TDS withheld" card has the same gap** (`overview.service.ts` `taxMoved`
+  reads only `withheld_tax_amount`). It is not changed here because it is another page. Tell
+  the owner.
+
+**Expense overview, Bank charge box** (the owner: "bank charge er jonneo card niye aso").
+- A fifth slice, carved out of operational the way rent is, so salary + tooling + rent + bank
+  charge + operational still equals the month. The sum line under the boxes has five terms.
+- The predicate is Bank status's `isFee`, now exported: the bank-charges heading, any heading
+  named like "bank charge" with its children, and the automatic charge rows. Bank status's Fee
+  and this box therefore read one rule. A charge already counted as tooling stays in tooling.
+- The box links to `/expenses` (Operational expenses), because the heading's slug differs
+  between databases. Locally the charges sit under Administrative → Bank charges, and the
+  owner's live screenshot shows the same: ৳15,918.50 under Administrative, and an empty
+  top-level "Bank Charge" heading the owner made.
+- Measured with `bankovqa.mjs`, 18 of 18, against a `next build` on :3006.
+  - The USD rows are dollars-first in all five money cells, and the taka rows taka-first.
+  - June and August have five boxes; the box value and the sum line match the API.
+  - Tax withheld is June ৳21,701 and August ৳23,840, the August sheet's own figure.
+  - The five add up to the total in May to August.
+- At 1440 the strip wraps four plus one. The cards' 230px floor leaves no room for five, and
+  the owner has not been asked about it.
+
 ## 190. A hand-typed TDS figure's popup says so — 29 Oct 2026 (NOT pushed)
 
 The answer to 189's open question. The owner: "oikhane jate sundor kore lekha thake je TDS hate
