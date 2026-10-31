@@ -158,6 +158,22 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: SparkleIcon,
             permission: "vendors.read",
           },
+          {
+            /*
+             * The bank's charges, a row of their own like AI tools (the owner,
+             * 31 Oct 2026: "Ai tools and subscription jemon alada expense > ai
+             * tools dekha oivabe etao expense > bank charge evabe dekhate
+             * hobe"). The Bank Charge heading's own page, so the trail reads
+             * Expenses › Bank charge rather than going through Operational
+             * expenses. `[category]` finds the heading by its name when its
+             * slug is not this one.
+             */
+            key: "expenses-bank-charge",
+            href: "/expenses/bank-charge",
+            label: "Bank charge",
+            icon: CoinsIcon,
+            permission: "transactions.read",
+          },
           /*
            * Other expenses is off the rail, on the owner's instruction — "menu
            * theke other expenses ta remove kore diyo".

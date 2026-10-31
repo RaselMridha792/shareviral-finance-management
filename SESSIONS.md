@@ -152,6 +152,48 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 198. AI tools read each month the way the sheet's tab does; Bank charge gets its own rail row — 31 Oct 2026 (pushed, live)
+
+**AI tools: why July showed June dates.** A plan is ONE row here, and every month's renewal is a
+payment on it.
+- `start_date` is the day the plan was first taken, so Emon's Figma (taken 30 June, renewed 30
+  July) read 30/06 under July. The sheet's July tab says 30-Jul. 197's sort-by-start-date did
+  not cure it.
+- Checked against the owner's screenshots of the June, July and August tabs: the payment booked
+  to a month is that month's renewal date. Github 25/06, 07/07, 05/08; Figma 30/06, 30/07.
+- The exceptions:
+  - a plan's first month, whose payment can be later (May's two paid on 11 June, booked May);
+  - the import's placeholders: 22/06 on seven June first payments, 22/06 and 23/06 on two July
+    renewals. The latter are the sheet's own typos, "9-Jun" and "19-Jun" in the July tab with
+    renewals 9-Aug and 19-Aug.
+- **`monthDatesSql(paidIn)`** (`subscriptions.service.ts`) gives each row `monthStart` and
+  `monthRenewal` for the month asked for:
+  - the start date if the plan was taken that month;
+  - else the date of the payment booked to the month, if it falls inside it;
+  - else the plan's own day of the month, clamped to the month's end.
+  - The renewal is that date plus one cycle (monthly, quarterly, yearly); a plan that does not
+    recur has none.
+  - Every date shown under a month is inside it. With no month asked, both are null and the
+    plan's own dates show (a team member's Paid tools, the All view).
+- The list orders by `monthStart desc`, then start date, then created, then id.
+- **Columns:** SL, Tool Name, Start Date, then the rest ("serial number er pore nam and tarpor
+  date starting date"). The Start Date cell shows `monthStart ?? startDate`; Next Renewal shows
+  `monthRenewal` in a month and `nextRenewalOn` otherwise. No data was changed.
+- **Measured against the owner's screenshots of the sheet:** every row of July (19), June (19)
+  and August (18) matches the tab's Start Date, May's two too. July's "9-Jun"/"19-Jun" read
+  09/07 and 19/07.
+
+**Bank charge, a rail row of its own** ("Ai tools and subscription jemon alada expense > ai tools
+... etao expense > bank charge evabe dekhate hobe").
+- `nav-items.ts` adds Expenses › Bank charge → `/expenses/bank-charge`, under AI tools.
+- `[category]/page.tsx` falls back, for that one slug only, to the top-level money-out heading
+  named like "bank charge". The owner made the live heading, so its slug is whatever its name
+  gave. It then uses the heading's own slug for its queries.
+- The trail reads Finance › Expenses › Bank charge. The page names itself "Bank Charge", so
+  `topbar.tsx` now drops a leaf crumb that repeats the crumb before it, case-insensitively.
+- Expense overview's Bank charge box links to the same page. Operational expenses still has a
+  Bank Charge card, as it has one for every heading with spend.
+
 ## 197. Bank charges get their own heading; AI tools lose Paid On; Bank Advice loses Status — 31 Oct 2026 (pushed, live — code in 2fd36d5, the migration in its own push after it)
 
 The owner listed these as "emergency" work and said to do all of them and push. The migration

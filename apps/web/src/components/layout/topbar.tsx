@@ -38,7 +38,11 @@ export function Topbar() {
   */
   const trail = trailFor(pathname);
   const leaf = useLeafCrumb();
-  const crumbs = leaf ? [...trail, { label: leaf }] : trail;
+  /* Not twice: the Bank Charge heading's page is also the rail's Bank charge
+     row, and "Bank charge › Bank Charge" names one place two ways. */
+  const repeats =
+    leaf?.toLowerCase() === trail.at(-1)?.label.toLowerCase();
+  const crumbs = leaf && !repeats ? [...trail, { label: leaf }] : trail;
 
   return (
     <>

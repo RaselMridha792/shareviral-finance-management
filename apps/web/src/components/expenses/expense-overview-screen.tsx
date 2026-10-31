@@ -131,14 +131,13 @@ export function ExpenseOverviewScreen() {
         },
         {
           /* The owner, 29 Oct 2026: "bank charge er jonneo card niye aso".
-             Carved out of operational on the API, as rent is. To Operational
-             expenses, where the heading has its own card — its slug is not
-             the same on every database. */
+             Carved out of operational on the API, as rent is. To the rail's
+             Bank charge page, which finds the heading whatever its slug. */
           key: "bankCharge",
           label: "Bank charge",
           value: data.bankCharge,
           usd: data.usd?.bankCharge ?? null,
-          href: "/expenses",
+          href: "/expenses/bank-charge",
           icon: "account_balance",
           text: "text-(--sv-violet)",
           bar: "bg-(--sv-violet)",

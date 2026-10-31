@@ -27,12 +27,25 @@ export default async function CategoryPage({
     accountsApi.list(),
   ]);
 
-  const heading = tree.find((node) => node.slug === slug);
+  /*
+   * `/expenses/bank-charge` is the rail's Bank charge row (31 Oct 2026). The
+   * heading is the one the owner made, so its slug is whatever its name gave
+   * it; when no heading carries this one, the top-level money-out heading
+   * named like "bank charge" is the page — the heading charges are filed
+   * under.
+   */
+  const heading =
+    tree.find((node) => node.slug === slug) ??
+    (slug === "bank-charge"
+      ? tree.find(
+          (node) => node.kind !== "in" && /bank\s*charge/i.test(node.name),
+        )
+      : undefined);
   if (!heading) notFound();
 
   const [breakdown, rows] = await Promise.all([
-    ledgerApi.expenseSummary({ from, to, categorySlug: slug }),
-    everyRowFor({ from, to, slug }),
+    ledgerApi.expenseSummary({ from, to, categorySlug: heading.slug }),
+    everyRowFor({ from, to, slug: heading.slug }),
   ]);
 
   return (
