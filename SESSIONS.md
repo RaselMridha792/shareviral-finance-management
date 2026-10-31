@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 197. Bank charges get their own heading; AI tools lose Paid On; Bank Advice loses Status — 31 Oct 2026 (NOT pushed)
+## 197. Bank charges get their own heading; AI tools lose Paid On; Bank Advice loses Status — 31 Oct 2026 (pushed, live — code in 2fd36d5, the migration in its own push after it)
 
 The owner listed these as "emergency" work and said to do all of them and push. The migration
 goes as its own push, after the code (CLAUDE.md: migrations travel alone). Either order is safe:
