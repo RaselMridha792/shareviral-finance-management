@@ -152,6 +152,76 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 197. Bank charges get their own heading; AI tools lose Paid On; Bank Advice loses Status — 31 Oct 2026 (NOT pushed)
+
+The owner listed these as "emergency" work and said to do all of them and push. The migration
+goes as its own push, after the code (CLAUDE.md: migrations travel alone). Either order is safe:
+- the code's lookup finds the owner's live "Bank Charge" heading;
+- the old code's name fallback also finds it once the migration trashes the sub-category.
+
+**1. Bank charges under the top-level "Bank Charge" heading, never Administrative.** The owner:
+"eta vul administrative er under a bank charge dhukbena ... ei vulta jeno future a r na hoy".
+- **Cause.** `bankChargeCategoryId()` looked up slug `bank-charges` first. That slug belonged to
+  the sub-category `2026-08-26-categories.sql` put under Administrative, so every automatic
+  charge went there, and the owner's own "Bank Charge" heading sat empty. All charge rows are
+  written by this one function.
+- **Code:**
+  - The lookup takes a top-level, money-out, untrashed heading only: slug bank-charge(s) or a
+    name like "bank charge", oldest first. Otherwise it refuses in words.
+  - `categories.service.ts` refuses a sub-category named like "bank charge", on create or
+    rename (`assertNoBankChargeInside`).
+  - `seed-categories.ts` makes "Bank Charge" a heading of its own and drops it from
+    Administrative.
+- **Migration `deploy/sql/2026-10-31-bank-charge-heading.sql`**, guarded, so a second run
+  changes nothing:
+  - Brings a trashed heading back, or makes one, only if no live one exists.
+  - Moves every entry under a money-out "bank charge" sub-category to the heading, including
+    trashed and voided ones.
+  - Trashes the emptied sub-category with a soft delete. The August file's `not exists` still
+    sees the row, so a replay does not recreate it.
+  - Bypasses the audit log; amounts, dates and accounts do not move.
+- **Measured locally** (`bankheadqa.mjs`, 17 of 18, then `bankchargeqa.mjs`, 1 of 1). The
+  migration is applied to the local database.
+  - 15 entries moved, and the sub-category is trashed and empty.
+  - May to August: the total, Bank status Fee and Closing are unchanged, and so is Expense
+    overview's Bank charge box. Administrative fell by exactly what Bank Charge gained (May
+    5,000, June 15,918.50).
+  - The second run changed nothing, and a "Bank charges" sub-category is refused.
+  - The 18th check failed only because the fixture sent no `usdRate`. Rerun with one: a new
+    charge lands under the top-level heading, and the fixture was deleted afterwards.
+  - Local had no top-level heading, so 1b made one. Live has the owner's, so there 1b does
+    nothing.
+
+**2. AI tools and subscriptions: Paid On out, newest Start Date first.** The owner: "ei extra
+paid on soriye jedin subscription ta newa hoyeche oi date diyei sorting korba ... latest first".
+- The column is gone, and so is `paidOn` in the API (`paidOnSql`, `columns()`, the DTO) and the
+  web type.
+- The list orders by `start_date desc`, then `created_at desc`, then `id`.
+- The table cells are shared, so the column also leaves a team member's Tools table.
+- colSpan 21→20; min-width 2456→2340 (register) and 2592→2476 (member tools).
+- The form's own `paidOn`, which opens the register on the month of a new plan's first
+  payment, stays.
+
+**3. Bank Advice: no Status column** ("status colum ta soriye daw etar dorkar nai").
+- Gone from the list, with COLUMNS 10→9 and min-width 1040→900.
+- `AdviceStatus` stays, because the advice's own page shows it.
+
+**Measured in the browser** (`threeqa.mjs` 14 of 15, `membertools.mjs` 1 of 1, against a
+`next build` on :3012):
+- **AI tools:** the headings run SL | Tool Name | Plan… with no Paid On. Start Date is newest
+  first in every month (May 2 plans, June 19, July 19, August 18), and the API sends no
+  `paidOn`.
+- **Nizam Uddin's Paid tools (All):** 6 rows, no Paid On, and 18 cells for 18 headings.
+- **Bank Advice:** local has none, so the list was served the four live rows' shape through
+  request interception, in the browser only.
+  - No Status; 9 cells for 9 headings; the table fits 1120 at 1440; edit and delete are there,
+    and a row opens.
+  - On a phone the page does not scroll sideways.
+  - The one "fail" was my own 16px threshold for the gap between Total's figure and Made by.
+    It measures 14px, which is the table's ordinary cell gutter.
+- **Operational expenses, June:** the Bank Charge card holds ৳15,918.50, and Administrative no
+  longer does.
+
 ## 196. A printed payslip fills Letter paper too — 29 Oct 2026 (pushed, live)
 
 The owner printed a live payslip and got white down both sides of the black bands ("dui pase

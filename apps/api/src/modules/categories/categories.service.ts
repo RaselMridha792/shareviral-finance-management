@@ -107,6 +107,8 @@ export class CategoriesService {
       }
     }
 
+    assertNoBankChargeInside(input.name, input.parentId ?? null);
+
     const slug = slugify(input.name);
     if (!slug) {
       throw new BadRequestException({
@@ -152,6 +154,7 @@ export class CategoriesService {
 
     let slug = existing.slug;
     if (input.name && input.name !== existing.name) {
+      assertNoBankChargeInside(input.name, existing.parentId);
       slug = slugify(input.name);
       if (!slug) {
         throw new BadRequestException({
@@ -291,4 +294,27 @@ function describeUpdate(
   }
   const detail = parts.length ? parts.join(", ") : "details updated";
   return `Category "${existing.name}": ${detail}`;
+}
+
+/**
+ * Bank charges have a heading of their own and never sit inside another one.
+ *
+ * The August category set put "Bank charges" under Administrative, and every
+ * automatic charge was filed there while the owner's own "Bank Charge" heading
+ * stayed empty (31 Oct 2026: "administrative er under a bank charge dhukbena
+ * ... ei vulta jeno future a r na hoy"). Charges are now filed under the
+ * top-level heading only; refusing the sub-category is what stops a second
+ * home for them being made by hand.
+ */
+function assertNoBankChargeInside(name: string, parentId: string | null) {
+  if (parentId && /bank\s*charge/i.test(name)) {
+    throw new BadRequestException({
+      message: "Validation failed",
+      errors: {
+        name: [
+          'Bank charges have their own "Bank Charge" heading. Add it as a heading, not inside another one.',
+        ],
+      },
+    });
+  }
 }

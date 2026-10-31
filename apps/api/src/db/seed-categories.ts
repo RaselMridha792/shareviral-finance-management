@@ -118,7 +118,6 @@ const TREE: Group[] = [
       "Professional fees",
       "Legal & compliance",
       "Government fees & licences",
-      "Bank charges",
       "Insurance",
       "Office supplies",
       "Courier & postage",
@@ -126,6 +125,15 @@ const TREE: Group[] = [
       "Travel & transport",
       "Food & hospitality",
     ],
+  },
+  {
+    // A heading of its own, never inside Administrative: every automatic
+    // charge is filed here (the owner, 31 Oct 2026). The categories service
+    // refuses a "bank charge" sub-category for the same reason.
+    name: "Bank Charge",
+    kind: "out",
+    color: "#dc2626",
+    children: [],
   },
   {
     name: "Tax",

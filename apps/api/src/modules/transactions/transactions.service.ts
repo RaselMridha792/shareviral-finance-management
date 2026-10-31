@@ -1258,39 +1258,39 @@ export class TransactionsService {
    *
    * Resolved rather than configured, for the same reason a subscription's
    * heading is: a setting for it would be a second place to keep something the
-   * category tree already says. Slug first, then the name, and a clear refusal
-   * if neither is there — filing a bank charge under whichever OUT heading
-   * happens to sort first is worse than saying the heading is missing.
+   * category tree already says.
+   *
+   * A TOP-LEVEL heading only, never a sub-category. The slug came first, and
+   * the slug belonged to the "Bank charges" sub-category the August category
+   * set put under Administrative — so every automatic charge was filed there,
+   * and the "Bank Charge" heading the owner made sat empty (31 Oct 2026: "eta
+   * vul administrative er under a bank charge dhukbena ... ei vulta jeno
+   * future a r na hoy"). The heading is matched by slug or name, the oldest
+   * first if there were ever two; and a clear refusal if there is none —
+   * filing a bank charge under whichever heading happens to sort first is
+   * worse than saying the heading is missing.
    */
   private async bankChargeCategoryId(): Promise<string> {
-    const [bySlug] = await this.db.client
+    const [heading] = await this.db.client
       .select({ id: categories.id })
       .from(categories)
       .where(
         and(
-          eq(categories.slug, "bank-charges"),
+          isNull(categories.parentId),
           eq(categories.kind, "out"),
           isNull(categories.deletedAt),
+          or(
+            inArray(categories.slug, ["bank-charge", "bank-charges"]),
+            ilike(categories.name, "%bank charge%"),
+          ),
         ),
       )
+      .orderBy(asc(categories.createdAt), asc(categories.id))
       .limit(1);
-    if (bySlug) return bySlug.id;
-
-    const [byName] = await this.db.client
-      .select({ id: categories.id })
-      .from(categories)
-      .where(
-        and(
-          ilike(categories.name, "%bank charge%"),
-          eq(categories.kind, "out"),
-          isNull(categories.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (byName) return byName.id;
+    if (heading) return heading.id;
 
     throw new BadRequestException(
-      'There is no "Bank charges" expense heading to file this under. Add one in Settings → Categories, then record the charge.',
+      'There is no "Bank Charge" expense heading to file this under. Add one in Settings → Categories, then record the charge.',
     );
   }
 
