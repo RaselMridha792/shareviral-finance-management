@@ -56,11 +56,6 @@ export type SubscriptionDto = {
   usdRate: string | null;
   billingCycle: BillingCycle;
   startDate: string;
-  /**
-   * The day it was paid: in the month the register is read for, or the
-   * latest payment when it is read for every month. Null if never paid.
-   */
-  paidOn: string | null;
   nextRenewalOn: string | null;
   renewalNote: string | null;
   paymentMethod: string;

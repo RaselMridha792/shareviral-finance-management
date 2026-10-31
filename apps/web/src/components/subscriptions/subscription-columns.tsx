@@ -74,10 +74,10 @@ export type SubscriptionRowHandlers = {
 export function SubscriptionHeadCells() {
   return (
     <>
-      {/* The owner, 27 Oct 2026: Paid On in front, and the table ordered by
-          it. A month on the register is the plans paid in it, and a start
-          date in that first column read 20 May in July. */}
-      <Th>Paid On</Th>
+      {/* No Paid On column. It went in front on 27 Oct and came out on 31 Oct
+          (the owner: "ei extra paid on soriye jedin subscription ta newa
+          hoyeche oi date diyei sorting korba"): the register is ordered by
+          Start Date, newest first, on the API. */}
       <Th>Tool Name</Th>
       {/* The owner: "ekhane tool name and plan akoi table er row te cole geche
           eta alada row hobe". They were stacked in one cell — the plan in small
@@ -130,14 +130,6 @@ export function SubscriptionBodyCells({
      had to pass for nothing is a prop that goes. */
   return (
     <>
-      <td className="font-extrabold whitespace-nowrap tabular-nums">
-        {row.paidOn ? (
-          formatDate(row.paidOn)
-        ) : (
-          <span className="font-normal text-muted-foreground">Not paid</span>
-        )}
-      </td>
-
       <td>
         {/*
           The name goes to the tool's own page; the small picture beside it
