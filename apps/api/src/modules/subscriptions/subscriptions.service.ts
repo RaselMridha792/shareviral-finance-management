@@ -129,26 +129,27 @@ export class SubscriptionsService {
       .where(where);
 
     const rows = await this.db.client
-      .select(this.columns())
+      .select(this.columns(query.paidIn))
       .from(subscriptions)
       .leftJoin(vendors, eq(subscriptions.vendorId, vendors.id))
       .leftJoin(accounts, eq(subscriptions.accountId, accounts.id))
       .where(where)
       /*
-       * By the day the plan was taken, the latest first.
+       * By the date the Start Date column shows, the latest first.
        *
-       * The owner, 31 Oct 2026, taking the Paid On column back out: the
-       * sheet's Start Date is right for every month, so order by it — "jedin
-       * subscription ta newa hoyeche oi date diyei sorting korba" — and
-       * newest first, 15 June above 9 June ("latest first korte hobe").
-       * Paid On read the payment entry's own date, which the import had
-       * left at 22 June for most of June.
+       * The owner, 31 Oct 2026, taking the Paid On column back out: order by
+       * the start date — "jedin subscription ta newa hoyeche oi date diyei
+       * sorting korba" — newest first ("latest first korte hobe"). Read for a
+       * month, that is the month's own date (`monthDatesSql`); for every
+       * month, the plan's.
        *
-       * Then the newest added, and `id` last so the order is total: two rows
-       * the same on both would otherwise swap places between page loads,
-       * which is how a pager starts showing the same row twice.
+       * Then the plan's start, the newest added, and `id` last so the order
+       * is total: two rows the same on all of them would otherwise swap
+       * places between page loads, which is how a pager starts showing the
+       * same row twice.
        */
       .orderBy(
+        desc(this.monthDatesSql(query.paidIn).monthStart),
         desc(subscriptions.startDate),
         desc(subscriptions.createdAt),
         asc(subscriptions.id),
@@ -642,10 +643,68 @@ export class SubscriptionsService {
     return sql<string>`coalesce(${subscriptions.toolName}, ${vendors.name})`;
   }
 
-  private columns() {
+  /**
+   * A plan's start and renewal for one month of the register, as the sheet's
+   * month tab writes them — or nulls when no month is asked for.
+   *
+   * A plan is one row here and every month's renewal is a payment on it, so
+   * `start_date` is the day it was first taken: Figma bought on 30 June read
+   * 30/06 under July, where the sheet's July tab says 30-Jul (the owner, 31
+   * Oct 2026: "july tab filter korar pore ekhane keno june dekhacche?").
+   *
+   * So for a month: the start date when the plan was taken that month (May's
+   * plans paid on 11 June still read 16 and 20 May); else the day of that
+   * month's payment, which is the renewal the sheet records (Github: 25 June,
+   * 7 July, 5 August); and when that payment is dated outside the month —
+   * an import that left a July renewal at 23 June — the plan's own day of the
+   * month. Every date shown under a month is in that month.
+   *
+   * The renewal is that date plus one cycle; a plan that does not recur has
+   * none. Text, so a date arrives as the day it is.
+   */
+  private monthDatesSql(paidIn?: string) {
+    if (!paidIn) {
+      return {
+        monthStart: sql<string | null>`null::date`,
+        monthRenewal: sql<string | null>`null::text`,
+      };
+    }
+    const first = monthOf(paidIn);
+    const paid = sql`(
+      select min(${transactions.txnDate}) from ${transactions}
+      where ${transactions.subscriptionId} = ${subscriptions.id}
+        and ${transactions.voidedAt} is null
+        and ${transactions.deletedAt} is null
+        and ${booksMonthSql} = ${first}::date
+    )`;
+    const start = sql`(case
+      when date_trunc('month', ${subscriptions.startDate})::date = ${first}::date
+        then ${subscriptions.startDate}
+      when date_trunc('month', ${paid})::date = ${first}::date
+        then ${paid}
+      else least(
+        ${first}::date + (extract(day from ${subscriptions.startDate})::int - 1),
+        (${first}::date + interval '1 month' - interval '1 day')::date
+      )
+    end)`;
+    return {
+      monthStart: sql<string | null>`${start}::date`,
+      monthRenewal: sql<string | null>`(case ${subscriptions.billingCycle}
+        when 'monthly' then (${start} + interval '1 month')::date
+        when 'quarterly' then (${start} + interval '3 months')::date
+        when 'yearly' then (${start} + interval '1 year')::date
+      end)::text`,
+    };
+  }
+
+  private columns(paidIn?: string) {
+    const month = this.monthDatesSql(paidIn);
     return {
       id: subscriptions.id,
       toolName: this.toolNameSql(),
+      /** The month's own start and renewal: see `monthDatesSql`. */
+      monthStart: sql<string | null>`${month.monthStart}::text`,
+      monthRenewal: month.monthRenewal,
       /**
        * Null on everything written since the name column arrived, and that is
        * all it is: which company an old plan was bought from. Nothing sets it,
@@ -884,6 +943,9 @@ type SubscriptionRow = {
   usdRate: string | null;
   billingCycle: string;
   startDate: string;
+  /** The register's month's own dates; null unless a month was asked for. */
+  monthStart: string | null;
+  monthRenewal: string | null;
   nextRenewalOn: string | null;
   renewalNote: string | null;
   paymentMethod: string;

@@ -79,6 +79,10 @@ export function SubscriptionHeadCells() {
           hoyeche oi date diyei sorting korba"): the register is ordered by
           Start Date, newest first, on the API. */}
       <Th>Tool Name</Th>
+      {/* Straight after the name (the owner, 31 Oct 2026: "serial number er
+          pore nam and tarpor date starting date ta thakbe") — the column the
+          register is ordered by, where it can be read. */}
+      <Th>Start Date</Th>
       {/* The owner: "ekhane tool name and plan akoi table er row te cole geche
           eta alada row hobe". They were stacked in one cell — the plan in small
           type under the name — which reads as a caption rather than as a
@@ -108,8 +112,6 @@ export function SubscriptionHeadCells() {
       <Th>Login accounts</Th>
       <Th>User Name</Th>
       <Th>User Department</Th>
-      {/* Moved in from the front, beside the two dates it goes with. */}
-      <Th>Start Date</Th>
       <Th>Billing Cycle</Th>
       <Th>Next Renewal Date</Th>
       <Th>Status</Th>
@@ -128,6 +130,9 @@ export function SubscriptionBodyCells({
   /* No `numberFormat`. The three money columns moved to the plan's own page
      with the trim, so nothing here formats a figure — and a prop every caller
      had to pass for nothing is a prop that goes. */
+  /* Read for a month, the renewal after that month's start, as the sheet's
+     month tab writes it; otherwise the plan's own next one. */
+  const renewal = row.monthStart ? row.monthRenewal : row.nextRenewalOn;
   return (
     <>
       <td>
@@ -186,6 +191,12 @@ export function SubscriptionBodyCells({
             </button>
           ) : null}
         </span>
+      </td>
+
+      {/* Read for a month, that month's own start, as the sheet's month tab
+          writes it; otherwise the day the plan was taken. */}
+      <td className="text-sm font-extrabold whitespace-nowrap tabular-nums">
+        {formatDate(row.monthStart ?? row.startDate)}
       </td>
 
       {/* The plan, its own column now — two plans of one tool are otherwise
@@ -325,18 +336,14 @@ export function SubscriptionBodyCells({
         {row.boughtFor ?? "N/A"}
       </td>
 
-      <td className="text-sm font-extrabold whitespace-nowrap tabular-nums">
-        {formatDate(row.startDate)}
-      </td>
-
       <td className="text-sm text-muted-foreground">
         {BILLING_CYCLE_LABELS[row.billingCycle]}
       </td>
 
       <td className="text-sm">
-        {row.nextRenewalOn ? (
+        {renewal ? (
           <span className="font-extrabold whitespace-nowrap tabular-nums">
-            {formatDate(row.nextRenewalOn)}
+            {formatDate(renewal)}
           </span>
         ) : (
           /* The note cannot be typed any more, but rows written while it could

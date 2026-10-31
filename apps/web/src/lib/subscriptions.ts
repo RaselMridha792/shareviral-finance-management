@@ -56,6 +56,13 @@ export type SubscriptionDto = {
   usdRate: string | null;
   billingCycle: BillingCycle;
   startDate: string;
+  /**
+   * The start and renewal for the month the register is read for, as the
+   * sheet's month tab writes them: always inside that month. Null when it is
+   * read for every month, which shows the plan's own dates.
+   */
+  monthStart: string | null;
+  monthRenewal: string | null;
   nextRenewalOn: string | null;
   renewalNote: string | null;
   paymentMethod: string;
