@@ -36,7 +36,7 @@ import { serial } from "@/lib/pagination";
 import type { PayrollRunDto } from "@/lib/payroll";
 import { formatDate } from "@/lib/utils";
 
-const COLUMNS = 10;
+const COLUMNS = 9;
 
 /**
  * Bank Advice — every payment file made for the bank, newest first.
@@ -47,9 +47,9 @@ const COLUMNS = 10;
  * generate hobe payroll theke"*.
  *
  * A row is a file: which month's salaries, the account they leave from, the
- * value date, how many payments and how much, and whether it has gone to the
- * bank yet (downloaded, and by whom). A click opens it; the bin sends it to
- * the trash, where Settings → Trashed can put it back.
+ * value date, how many payments and how much, and who made it. Whether it has
+ * gone to the bank is on the advice's own page. A click opens it; the bin
+ * sends it to the trash, where Settings → Trashed can put it back.
  */
 export function AdviceListScreen({
   runs,
@@ -181,7 +181,7 @@ export function AdviceListScreen({
       ) : (
         <Card className="overflow-hidden p-0">
           <TableScroll>
-            <table className="table-data w-full min-w-[1040px]">
+            <table className="table-data w-full min-w-[900px]">
               <thead>
                 <tr>
                   <SerialHead />
@@ -191,7 +191,9 @@ export function AdviceListScreen({
                   <Th>Value date</Th>
                   <Th align="right">Payments</Th>
                   <Th align="right">Total</Th>
-                  <Th>Status</Th>
+                  {/* No Status column (the owner, 31 Oct 2026: "status colum
+                      ta soriye daw etar dorkar nai"). The advice's own page
+                      still says where it stands. */}
                   <Th>Made by</Th>
                   <RowActionsHead deletable={canPay} />
                 </tr>
@@ -241,9 +243,6 @@ export function AdviceListScreen({
                             className="font-extrabold whitespace-nowrap tabular-nums"
                           />
                         </div>
-                      </td>
-                      <td>
-                        <AdviceStatus row={row} />
                       </td>
                       <td className="text-sm whitespace-nowrap text-muted-foreground">
                         {row.createdByName ?? "N/A"}
@@ -296,7 +295,8 @@ export function AdviceListScreen({
 /**
  * Where the file stands: payments still to fill in, ready, or downloaded —
  * the last with the day, because "did this month's go to the bank?" is the
- * question this column is for.
+ * question it answers. On the advice's own page; the list no longer has the
+ * column.
  */
 export function AdviceStatus({
   row,
