@@ -152,6 +152,29 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 201. HR requests can be removed from the trash for good — 6 Nov 2026 (NOT pushed)
+
+The owner, on 200's refusal in Settings → Trashed: "trash theke remove korte hobe". 200's
+`keptForever` is replaced:
+- **Delete for good now hides rather than deletes** (`purgeHides` on the four HR kinds).
+  - "Delete forever" and "Empty trash" set `purged_at`. The row leaves the trash and the app,
+    with no restore and no second removal (`readRow` treats it as not here).
+  - The row stays in its table for the HR portal's status reads (`requestRowsSql({
+    withTrashed })` still sees it), so the portal neither finds a gap nor re-sends.
+- `inTrashSql(entry)` is the trash's own "in the trash" rule: `deleted_at is not null`, plus
+  `purged_at is null` for a `purgeHides` kind. The summary, the list and Empty use it.
+- **Migration `deploy/sql/2026-11-06-hr-requests-purged.sql`** adds `purged_at` to the four
+  tables. Its own push, BEFORE the code.
+- Measured with `hrpurgeqa.mjs`, 10 of 10, on one pay change sent through intake and deleted
+  after:
+  - Delete for good returns `purged:1`; the row leaves Settings → Trashed and its count goes
+    to 0. Restore and a second purge both 404.
+  - HR Requests does not show it, while the HR portal's status still reads "rejected".
+  - The row stays with deleted_at and purged_at set, and an HR re-send is refused (409) and
+    does not revive it.
+- "Empty trash" was still not run locally (other kinds in the local trash would go for
+  good). Its HR branch is the same `update … set purged_at` as the single purge.
+
 ## 200. HR Requests: tick, delete, and a pay change in three salaries — 6 Nov 2026 (pushed, live — the migration b169312 first, then the code)
 
 The owner: "HR request page tate sobkichui select, delete jeno kora jay table theke". Asked which

@@ -48,6 +48,8 @@ export const hrBudgetPeriods = pgTable(
       .defaultNow(),
     /* To the trash once decided (6 Nov 2026); see the trash registry. */
     ...deletion(),
+    /* Removed from the trash for good, kept for the HR portal (purgeHides). */
+    purgedAt: timestamp("purged_at", { withTimezone: true }),
   },
   (t) => [
     unique("hr_budget_periods_external_key").on(t.externalId),
@@ -93,6 +95,8 @@ export const hrBudgetSpends = pgTable(
       .defaultNow(),
     /* To the trash once decided (6 Nov 2026); see the trash registry. */
     ...deletion(),
+    /* Removed from the trash for good, kept for the HR portal (purgeHides). */
+    purgedAt: timestamp("purged_at", { withTimezone: true }),
   },
   (t) => [
     unique("hr_budget_spends_external_key").on(t.externalId),
@@ -140,6 +144,8 @@ export const payrollOneOffs = pgTable(
       .defaultNow(),
     /* To the trash once decided (6 Nov 2026); see the trash registry. */
     ...deletion(),
+    /* Removed from the trash for good, kept for the HR portal (purgeHides). */
+    purgedAt: timestamp("purged_at", { withTimezone: true }),
   },
   (t) => [
     unique("payroll_one_offs_external_key").on(t.externalId),
@@ -191,6 +197,8 @@ export const compensationRequests = pgTable(
       .defaultNow(),
     /* To the trash once decided (6 Nov 2026); see the trash registry. */
     ...deletion(),
+    /* Removed from the trash for good, kept for the HR portal (purgeHides). */
+    purgedAt: timestamp("purged_at", { withTimezone: true }),
   },
   (t) => [
     unique("compensation_requests_external_key").on(t.externalId),

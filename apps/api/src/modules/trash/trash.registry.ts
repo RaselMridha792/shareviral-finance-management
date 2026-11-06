@@ -76,11 +76,24 @@ export type TrashEntry = {
   blockedWhen?: { sql: string; message: string };
 
   /**
-   * Never removed for good: the trash keeps it, and "delete forever" and
-   * "empty" leave it there saying why. Restoring it still works.
+   * Removed for good by hiding, not deleting: "delete forever" and "empty"
+   * set `purged_at`, and the row leaves the trash and the app with no way
+   * back — but stays in its table for whoever still has to read it (the HR
+   * portal's status poll, for the HR requests). The table needs a
+   * `purged_at` column.
    */
-  keptForever?: string;
+  purgeHides?: boolean;
 };
+
+/**
+ * Whether a row is in the trash, aliased `r`: deleted, and — for a kind that
+ * hides rather than deletes on purge — not yet removed for good.
+ */
+export function inTrashSql(entry: TrashEntry): string {
+  return entry.purgeHides
+    ? "r.deleted_at is not null and r.purged_at is null"
+    : "r.deleted_at is not null";
+}
 
 /** An HR request still waiting, or held, for a decision. */
 const HR_UNDECIDED = {
@@ -88,10 +101,6 @@ const HR_UNDECIDED = {
   message:
     "It is still waiting for a decision. Approve or reject it first — the HR portal is waiting to hear.",
 };
-
-/** Why an HR request stays in the trash. See the HR entries below. */
-const HR_KEPT =
-  "An HR request stays in the trash. Removed for good, the HR portal would read it as never sent and send it again, to be decided a second time.";
 
 /** Not deletable, and each for its own reason. See deploy/sql/2026-08-26-trash.sql. */
 const REGISTRY: TrashEntry[] = [
@@ -343,10 +352,11 @@ const REGISTRY: TrashEntry[] = [
    * it opened, a payment it made all stay, and the HR portal still reads its
    * decision (`requestRowsSql({ withTrashed: true })`).
    *
-   * Never removed for good. With the row gone the HR portal's status poll
-   * finds nothing, reads that as "never sent", and sends it again — and an
-   * approved raise or a paid spend would come back as waiting, to be decided
-   * twice.
+   * Removed for good, it leaves the trash and the app but not its table
+   * (`purgeHides`; the owner, 6 Nov 2026: "trash theke remove korte hobe").
+   * Deleted outright, the HR portal's status poll would find nothing, read
+   * that as "never sent", and send it again — an approved raise or a paid
+   * spend back as waiting, to be decided twice.
    */
   {
     kind: "hr-pay-change",
@@ -361,7 +371,7 @@ const REGISTRY: TrashEntry[] = [
       "r.gross_amount::text || ' from ' || r.effective_from::text || ' · ' || r.status::text",
     occurredAt: "r.effective_from::text",
     blockedWhen: HR_UNDECIDED,
-    keptForever: HR_KEPT,
+    purgeHides: true,
   },
   {
     kind: "hr-one-off",
@@ -376,7 +386,7 @@ const REGISTRY: TrashEntry[] = [
       "r.amount::text || ' on ' || r.period_year || '-' || lpad(r.period_month::text, 2, '0') || ' · ' || r.status::text",
     occurredAt: "make_date(r.period_year, r.period_month, 1)::text",
     blockedWhen: HR_UNDECIDED,
-    keptForever: HR_KEPT,
+    purgeHides: true,
   },
   {
     kind: "hr-budget",
@@ -390,7 +400,7 @@ const REGISTRY: TrashEntry[] = [
       "r.amount::text || ' · ' || r.starts_on::text || ' to ' || r.ends_on::text || ' · ' || r.status::text",
     occurredAt: "r.starts_on::text",
     blockedWhen: HR_UNDECIDED,
-    keptForever: HR_KEPT,
+    purgeHides: true,
   },
   {
     kind: "hr-spend",
@@ -408,7 +418,7 @@ const REGISTRY: TrashEntry[] = [
       message:
         "It is still to be decided, or approved and not yet paid. Decide it or pay it first — the HR portal is waiting to hear.",
     },
-    keptForever: HR_KEPT,
+    purgeHides: true,
   },
 ];
 

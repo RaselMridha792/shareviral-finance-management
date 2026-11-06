@@ -14,6 +14,7 @@ import { assertSuperAdminRemains } from "../../common/auth/last-super-admin";
 import { overdraftWatch } from "../../common/money/overdraft";
 
 import {
+  inTrashSql,
   trashEntries,
   trashEntry,
   type TrashEntry,
@@ -115,7 +116,7 @@ export class TrashService {
         entries
           .map(
             (e) =>
-              `select '${e.kind}' as kind, count(*)::int as n from ${e.table} where deleted_at is not null`,
+              `select '${e.kind}' as kind, count(*)::int as n from ${e.table} r where ${inTrashSql(e)}`,
           )
           .join(" union all "),
       ),
@@ -176,7 +177,7 @@ export class TrashService {
                r.delete_reason
           from ${e.table} r
           left join users u on u.id = r.deleted_by
-         where r.deleted_at is not null`,
+         where ${inTrashSql(e)}`,
       )
       .join(" union all ");
 
@@ -218,7 +219,10 @@ export class TrashService {
       sql`${sql.raw(`select r.*, (${entry.title})::text as __title from ${entry.table} r where r.id`)} = ${id}::uuid`,
     );
     const row = (found.rows as unknown as StoredRow[])[0];
-    if (!row) throw new NotFoundException(`That ${entry.label} is not here`);
+    /* Removed for good by hiding (`purgeHides`) is gone too: no restore, no
+       second removal — only the HR portal's reads still see it. */
+    if (!row || (entry.purgeHides && row.purged_at))
+      throw new NotFoundException(`That ${entry.label} is not here`);
     return row;
   }
 
@@ -956,8 +960,6 @@ export class TrashService {
         `That ${entry.label} is not in the trash. Only something already deleted can be removed for good.`,
       );
     }
-    // An HR request stays — see `keptForever` in the registry.
-    if (entry.keptForever) throw new BadRequestException(entry.keptForever);
 
     /*
      * A transfer purges as the pair it is, for the same reason it deletes as
@@ -980,8 +982,14 @@ export class TrashService {
           ` from the trash`,
         read: () => Promise.resolve(row),
         run: async (tx) => {
+          /* A kind that hides rather than deletes (`purgeHides`) is marked
+             removed for good and kept in its table — out of the trash and the
+             app, still there for the HR portal's status reads. */
+          const purge = entry.purgeHides
+            ? `update ${entry.table} set purged_at = now() where deleted_at is not null and purged_at is null and id`
+            : `delete from ${entry.table} where deleted_at is not null and id`;
           await tx.execute(
-            sql`${sql.raw(`delete from ${entry.table} where deleted_at is not null and id`)} in (${sql.join(
+            sql`${sql.raw(purge)} in (${sql.join(
               ids.map((one) => sql`${one}::uuid`),
               sql`, `,
             )})`,
@@ -1020,23 +1028,11 @@ export class TrashService {
     const entries = this.allowed(actor);
     let purged = 0;
     const kept: string[] = [];
-    const staying: string[] = [];
 
     for (const entry of entries) {
-      // Never emptied: HR requests stay (`keptForever`), and say so.
-      if (entry.keptForever) {
-        const left = await this.db.client.execute(
-          sql.raw(
-            `select count(*)::int as n from ${entry.table} where deleted_at is not null`,
-          ),
-        );
-        if ((left.rows[0] as { n: number }).n > 0)
-          staying.push(entry.plural.toLowerCase());
-        continue;
-      }
       const rows = await this.db.client.execute(
         sql.raw(
-          `select r.id::text as id, (${entry.title})::text as title from ${entry.table} r where r.deleted_at is not null`,
+          `select r.id::text as id, (${entry.title})::text as title from ${entry.table} r where ${inTrashSql(entry)}`,
         ),
       );
       const found = rows.rows as unknown as { id: string; title: string }[];
@@ -1055,9 +1051,12 @@ export class TrashService {
             .join(", ")}${found.length > 10 ? ", and more" : ""}`,
           read: () => Promise.resolve(found),
           run: async (tx) => {
+            // `purgeHides`: marked removed for good, kept in the table.
             await tx.execute(
               sql.raw(
-                `delete from ${entry.table} where deleted_at is not null`,
+                entry.purgeHides
+                  ? `update ${entry.table} set purged_at = now() where deleted_at is not null and purged_at is null`
+                  : `delete from ${entry.table} where deleted_at is not null`,
               ),
             );
           },
@@ -1074,18 +1073,12 @@ export class TrashService {
       }
     }
 
-    const notes = [
-      kept.length
-        ? `Some ${kept.join(", ")} stayed: records elsewhere still point at them, so they cannot be removed for good yet.`
-        : null,
-      staying.length
-        ? `${staying.join(", ")} stay in the trash: removed for good, the HR portal would send them again.`
-        : null,
-    ].filter(Boolean);
     return {
       purged,
-      kept: [...kept, ...staying],
-      message: notes.length ? notes.join(" ") : undefined,
+      kept,
+      message: kept.length
+        ? `Some ${kept.join(", ")} stayed: records elsewhere still point at them, so they cannot be removed for good yet.`
+        : undefined,
     };
   }
 }
