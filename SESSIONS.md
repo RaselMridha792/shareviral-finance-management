@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 201. HR requests can be removed from the trash for good — 6 Nov 2026 (NOT pushed)
+## 201. HR requests can be removed from the trash for good — 6 Nov 2026 (pushed, live — the migration 3844cde first, then the code)
 
 The owner, on 200's refusal in Settings → Trashed: "trash theke remove korte hobe". 200's
 `keptForever` is replaced:
