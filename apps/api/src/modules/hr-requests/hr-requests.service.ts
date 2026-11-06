@@ -115,6 +115,11 @@ export type RequestDetail = RequestRow & {
   onFileFrom: string | null;
   currentAmount: string | null;
   nextChangeOn: string | null;
+  /**
+   * A pay change: the person's first salary on record — the popup's
+   * "Joining salary" (the owner, 6 Nov 2026).
+   */
+  joiningAmount: string | null;
   /** The salary sheets it reaches, with where each stands. */
   sheets: ReachedSheet[];
   /** A spend: its budget. A budget: what has been spent against it. */
@@ -468,6 +473,7 @@ export class HrRequestsService {
     let onFileFrom: string | null = null;
     let currentAmount: string | null = null;
     let nextChangeOn: string | null = null;
+    let joiningAmount: string | null = null;
     let sheets: RequestDetail["sheets"] = [];
     let budget: RequestDetail["budget"] = null;
     let transactionRef: string | null = null;
@@ -494,11 +500,22 @@ export class HrRequestsService {
           (select min(effective_from)::text from compensation_history
             where team_member_id = ${row.teamMemberId}::uuid
               and deleted_at is null
-              and effective_from > ${row.effectiveOn}::date) as "nextOn"`);
+              and effective_from > ${row.effectiveOn}::date) as "nextOn",
+          (select gross_amount::text from compensation_history
+            where team_member_id = ${row.teamMemberId}::uuid
+              and deleted_at is null
+            order by effective_from asc, created_at asc
+            limit 1) as "joining"`);
       const got = figures.rows[0] as
-        { current: string | null; nextOn: string | null } | undefined;
+        | {
+            current: string | null;
+            nextOn: string | null;
+            joining: string | null;
+          }
+        | undefined;
       currentAmount = got?.current ?? null;
       nextChangeOn = got?.nextOn ?? null;
+      joiningAmount = got?.joining ?? null;
     }
     if (kind === "pay_change" || kind === "one_off") {
       /* A pay change reaches the months from its own until the next change
@@ -586,6 +603,7 @@ export class HrRequestsService {
       onFileFrom,
       currentAmount,
       nextChangeOn,
+      joiningAmount,
       sheets,
       budget,
       transactionRef,

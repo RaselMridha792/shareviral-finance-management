@@ -956,6 +956,8 @@ export class TrashService {
         `That ${entry.label} is not in the trash. Only something already deleted can be removed for good.`,
       );
     }
+    // An HR request stays — see `keptForever` in the registry.
+    if (entry.keptForever) throw new BadRequestException(entry.keptForever);
 
     /*
      * A transfer purges as the pair it is, for the same reason it deletes as
@@ -1018,8 +1020,20 @@ export class TrashService {
     const entries = this.allowed(actor);
     let purged = 0;
     const kept: string[] = [];
+    const staying: string[] = [];
 
     for (const entry of entries) {
+      // Never emptied: HR requests stay (`keptForever`), and say so.
+      if (entry.keptForever) {
+        const left = await this.db.client.execute(
+          sql.raw(
+            `select count(*)::int as n from ${entry.table} where deleted_at is not null`,
+          ),
+        );
+        if ((left.rows[0] as { n: number }).n > 0)
+          staying.push(entry.plural.toLowerCase());
+        continue;
+      }
       const rows = await this.db.client.execute(
         sql.raw(
           `select r.id::text as id, (${entry.title})::text as title from ${entry.table} r where r.deleted_at is not null`,
@@ -1060,12 +1074,18 @@ export class TrashService {
       }
     }
 
+    const notes = [
+      kept.length
+        ? `Some ${kept.join(", ")} stayed: records elsewhere still point at them, so they cannot be removed for good yet.`
+        : null,
+      staying.length
+        ? `${staying.join(", ")} stay in the trash: removed for good, the HR portal would send them again.`
+        : null,
+    ].filter(Boolean);
     return {
       purged,
-      kept,
-      message: kept.length
-        ? `Some ${kept.join(", ")} stayed: records elsewhere still point at them, so they cannot be removed for good yet.`
-        : undefined,
+      kept: [...kept, ...staying],
+      message: notes.length ? notes.join(" ") : undefined,
     };
   }
 }

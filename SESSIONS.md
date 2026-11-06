@@ -152,7 +152,66 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 199. Bank Advice: a gone-by value date is allowed; no Check column; IBFT; the zeros checked — 6 Nov 2026 (NOT pushed)
+## 200. HR Requests: tick, delete, and a pay change in three salaries — 6 Nov 2026 (NOT pushed)
+
+The owner: "HR request page tate sobkichui select, delete jeno kora jay table theke". Asked which
+requests may go, they chose **decided ones only** (AskUserQuestion). Then, on the pay change
+pop-up: "joining salary: Current Salary: New Salary: er ceye beshi kichu likhle guliye felche
+Finance", "Money moved eta na theke effective from", and "aproved In HR ei field tao soriye
+diyo".
+
+**Delete.**
+- **Migration `deploy/sql/2026-11-06-hr-requests-trash.sql`**, its own push BEFORE the code
+  (Drizzle selects every column): `deleted_at`/`deleted_by`/`delete_reason` on
+  `compensation_requests`, `payroll_one_offs`, `hr_budget_periods` and `hr_budget_spends`.
+  `hr-link.ts` gains `...deletion()` on all four.
+- **Trash registry: four kinds**, `hr-pay-change`, `hr-one-off`, `hr-budget`, `hr-spend`, on
+  `hrrequests.decide`.
+  - `blockedWhen`: status received or held, and for a spend also approved (To pay). A
+    request the HR portal is waiting on, or money still to move, cannot go.
+  - New registry field **`keptForever`** (`trash.service.ts`): purge refuses with its
+    message, and "Empty trash" leaves those rows and says why, in its own sentence.
+  - Why it exists: with the row gone the HR portal's status poll finds a gap, reads it as
+    "never sent", and sends the request again, so an approved raise or a paid spend would
+    come back to be decided twice.
+- **`requestRowsSql({ withTrashed })`**: trashed requests are left out by default, so the
+  page, its counts, the rail badge, the detail and the Assistant all skip them. Only
+  `readStatuses`, the HR portal's poll and the webhook, passes `withTrashed`, so a decided
+  request still answers.
+  - Intake needed no change: every upsert only touches a request still received or held,
+    so a re-send cannot revive a trashed (decided) one.
+  - Deleting undoes nothing: a salary changed, a budget opened or money paid all stay.
+- **Screen** (`hr-requests-screen.tsx`):
+  - Tick boxes and the bulk bar.
+  - A "Move to trash" row button on decided rows only (`canTrash`), outside `actions()` so a
+    withdrawn row gets one too.
+  - Two DeleteDialogs. The bulk one names anything still to decide or pay before calling the
+    server, then sends one `removeMany` per kind (four kinds, four calls), so it is never
+    half done.
+
+**Pop-up, pay change.**
+- The salary rows are exactly Joining salary, Current salary, New salary.
+  - Joining is the person's first salary on record, a new `joiningAmount` on the detail.
+  - Current is `previousAmount` when approved, else `onFileAmount`.
+  - "In force the day before", "On file for that date" and "Paid today" are gone.
+  - The approval-case note (`payChangeCase`) stays while it waits, being a warning, not a
+    figure.
+- Takes effect moves to Finance as **Effective from**, in place of Money moved; other kinds
+  keep both.
+- **Approved in HR** is gone from every kind's pop-up. The table still shows it small under
+  Asked by.
+
+**Measured** (`hrtrashqa.mjs` 12 of 12; two pay changes sent through the HR intake as
+fixtures, then deleted with their 9 notifications):
+- A waiting one is refused in words, and a bulk with it is refused whole.
+- A rejected one leaves the list and its count (1→0) and 404s on the page, while the HR
+  portal's status route still reads "rejected".
+- Delete forever is refused and the row stays. It is listed in Settings → Trashed as "HR pay
+  change", and restore brings it back.
+- "Empty trash" was NOT run locally: it would purge every other kind in the local trash for
+  good. Its `keptForever` branch is read, not measured.
+
+## 199. Bank Advice: a gone-by value date is allowed; no Check column; IBFT; the zeros checked — 6 Nov 2026 (pushed, live — the migration 3b89922 first, then b88fd19)
 
 The owner (4 Nov), on an advice's own page: "previous month er salary entry pore korechi jar karone
 bank advise generate korte parchina ... today date automatically newar dorkar naai manual entry

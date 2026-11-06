@@ -31,7 +31,11 @@ export type TrashKind =
   | "fx-rate"
   | "statement"
   | "import-batch"
-  | "user";
+  | "user"
+  | "hr-pay-change"
+  | "hr-one-off"
+  | "hr-budget"
+  | "hr-spend";
 
 export type TrashEntry = {
   kind: TrashKind;
@@ -70,7 +74,24 @@ export type TrashEntry = {
    * runs before anything is written; true means refuse.
    */
   blockedWhen?: { sql: string; message: string };
+
+  /**
+   * Never removed for good: the trash keeps it, and "delete forever" and
+   * "empty" leave it there saying why. Restoring it still works.
+   */
+  keptForever?: string;
 };
+
+/** An HR request still waiting, or held, for a decision. */
+const HR_UNDECIDED = {
+  sql: "r.status in ('received', 'held')",
+  message:
+    "It is still waiting for a decision. Approve or reject it first — the HR portal is waiting to hear.",
+};
+
+/** Why an HR request stays in the trash. See the HR entries below. */
+const HR_KEPT =
+  "An HR request stays in the trash. Removed for good, the HR portal would read it as never sent and send it again, to be decided a second time.";
 
 /** Not deletable, and each for its own reason. See deploy/sql/2026-08-26-trash.sql. */
 const REGISTRY: TrashEntry[] = [
@@ -308,6 +329,86 @@ const REGISTRY: TrashEntry[] = [
       message:
         "This is the only super admin left. Promote somebody else first, or nobody will be able to change settings or add users.",
     },
+  },
+
+  /*
+   * The four kinds of HR request (the owner, 6 Nov 2026: "HR request page
+   * tate sobkichui select, delete jeno kora jay"). On `hrrequests.decide`, as
+   * deciding one is.
+   *
+   * Only a decided one may go — the owner's choice. A request still waiting,
+   * or held, is one the HR portal is waiting to hear about, and a spend
+   * approved and not yet paid is money still to move. Deleting hides the
+   * request from HR Requests and nothing else: a salary it changed, a budget
+   * it opened, a payment it made all stay, and the HR portal still reads its
+   * decision (`requestRowsSql({ withTrashed: true })`).
+   *
+   * Never removed for good. With the row gone the HR portal's status poll
+   * finds nothing, reads that as "never sent", and sends it again — and an
+   * approved raise or a paid spend would come back as waiting, to be decided
+   * twice.
+   */
+  {
+    kind: "hr-pay-change",
+    label: "HR pay change",
+    plural: "HR pay changes",
+    table: "compensation_requests",
+    permission: "hrrequests.decide",
+    module: "hr-requests",
+    title:
+      "(select m.full_name from team_members m where m.id = r.team_member_id)",
+    detail:
+      "r.gross_amount::text || ' from ' || r.effective_from::text || ' · ' || r.status::text",
+    occurredAt: "r.effective_from::text",
+    blockedWhen: HR_UNDECIDED,
+    keptForever: HR_KEPT,
+  },
+  {
+    kind: "hr-one-off",
+    label: "HR one-off",
+    plural: "HR one-offs",
+    table: "payroll_one_offs",
+    permission: "hrrequests.decide",
+    module: "hr-requests",
+    title:
+      "(select m.full_name from team_members m where m.id = r.team_member_id)",
+    detail:
+      "r.amount::text || ' on ' || r.period_year || '-' || lpad(r.period_month::text, 2, '0') || ' · ' || r.status::text",
+    occurredAt: "make_date(r.period_year, r.period_month, 1)::text",
+    blockedWhen: HR_UNDECIDED,
+    keptForever: HR_KEPT,
+  },
+  {
+    kind: "hr-budget",
+    label: "HR budget",
+    plural: "HR budgets",
+    table: "hr_budget_periods",
+    permission: "hrrequests.decide",
+    module: "hr-requests",
+    title: "r.category_name",
+    detail:
+      "r.amount::text || ' · ' || r.starts_on::text || ' to ' || r.ends_on::text || ' · ' || r.status::text",
+    occurredAt: "r.starts_on::text",
+    blockedWhen: HR_UNDECIDED,
+    keptForever: HR_KEPT,
+  },
+  {
+    kind: "hr-spend",
+    label: "HR spend",
+    plural: "HR spends",
+    table: "hr_budget_spends",
+    permission: "hrrequests.decide",
+    module: "hr-requests",
+    title: "r.purpose",
+    detail: "r.amount::text || ' · ' || r.status::text",
+    occurredAt: "r.spent_on::text",
+    blockedWhen: {
+      // Waiting or held, or approved and not yet paid ("To pay").
+      sql: "r.status in ('received', 'held', 'approved')",
+      message:
+        "It is still to be decided, or approved and not yet paid. Decide it or pay it first — the HR portal is waiting to hear.",
+    },
+    keptForever: HR_KEPT,
   },
 ];
 

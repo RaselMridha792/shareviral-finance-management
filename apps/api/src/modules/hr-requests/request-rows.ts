@@ -30,8 +30,17 @@ export type RequestStatus = {
  * polls, and the webhook that tells it at once (#128). If the three read it
  * three ways, the HR portal would hear one thing by poll and another by
  * webhook about the same request.
+ *
+ * A request in the trash (6 Nov 2026) is left out — of the page, its counts,
+ * the rail's badge and the Assistant — unless `withTrashed`. Only the HR
+ * portal's reads ask for it: a decided request it sent still has an answer,
+ * and a gap would read to it as "never sent" and bring the request back.
  */
-export function requestRowsSql(): SQL {
+export function requestRowsSql({ withTrashed = false } = {}): SQL {
+  if (!withTrashed) {
+    return sql`select * from (${requestRowsSql({ withTrashed: true })}) live
+      where live.deleted_at is null`;
+  }
   return sql`
     select 'pay_change'::text as kind, c.id, c.external_id,
            m.full_name::text as subject, c.team_member_id,
@@ -43,7 +52,7 @@ export function requestRowsSql(): SQL {
            c.status::text as status, c.status_note::text as status_note,
            c.decided_by, c.decided_at, c.applied_at,
            c.before_approvals, c.send_count, c.received_at,
-           false as paid
+           false as paid, c.deleted_at
       from compensation_requests c
       join team_members m on m.id = c.team_member_id
     union all
@@ -53,7 +62,7 @@ export function requestRowsSql(): SQL {
            null::text, null::text, null::timestamptz, null::text,
            o.status::text, o.status_note::text, o.decided_by, o.decided_at,
            o.applied_at, o.before_approvals, o.send_count, o.received_at,
-           false
+           false, o.deleted_at
       from payroll_one_offs o
       join team_members m on m.id = o.team_member_id
     union all
@@ -64,7 +73,7 @@ export function requestRowsSql(): SQL {
            p.recorded_by_name::text, null::text, null::timestamptz,
            p.note::text, p.status::text, p.status_note::text, p.decided_by,
            p.decided_at, null::timestamptz, false, p.send_count,
-           p.received_at, false
+           p.received_at, false, p.deleted_at
       from hr_budget_periods p
     union all
     select 'spend', s.id, s.external_id, s.purpose::text, s.team_member_id,
@@ -75,7 +84,8 @@ export function requestRowsSql(): SQL {
            s.status_note::text, s.decided_by, s.decided_at,
            case when s.paid_on is not null
                 then (s.paid_on::timestamp at time zone 'Asia/Dhaka') end,
-           false, s.send_count, s.received_at, s.status = 'paid'
+           false, s.send_count, s.received_at, s.status = 'paid',
+           s.deleted_at
       from hr_budget_spends s`;
 }
 
@@ -99,7 +109,7 @@ export async function readStatuses(
     select r.external_id::text as "externalId", r.status,
            r.status_note as "note", u.full_name as "decidedByName",
            r.decided_at as "decidedAt", r.applied_at as "appliedAt"
-      from (${requestRowsSql()}) r
+      from (${requestRowsSql({ withTrashed: true })}) r
       left join users u on u.id = r.decided_by
      where r.kind = ${kind} and r.external_id in (${ids})`);
   return (

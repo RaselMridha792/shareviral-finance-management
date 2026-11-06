@@ -4,6 +4,7 @@ import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowC
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { HandCoinsIcon } from "@phosphor-icons/react/dist/ssr/HandCoins";
 import { PauseCircleIcon } from "@phosphor-icons/react/dist/ssr/PauseCircle";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { XCircleIcon } from "@phosphor-icons/react/dist/ssr/XCircle";
 import { todayInDhaka } from "@finance/shared";
@@ -34,9 +35,14 @@ import {
   TableMessageRow,
   TableScroll,
   Th,
+  TickCell,
+  TickHead,
 } from "@/components/ui/table";
+import { BulkBar } from "@/components/ui/bulk-bar";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
+import { useBulkSelect } from "@/components/ui/use-bulk-select";
 import { useToast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, trashApi } from "@/lib/api-client";
 import {
   KIND_LABELS,
   hrRequestsApi,
@@ -75,6 +81,27 @@ function dhakaDay(at: string): string {
 }
 
 /** When it takes effect, as a person says it. */
+/** The trash registry's kind for each kind of request. */
+const TRASH_KIND: Record<RequestKind, string> = {
+  pay_change: "hr-pay-change",
+  one_off: "hr-one-off",
+  budget: "hr-budget",
+  spend: "hr-spend",
+};
+
+/**
+ * Whether a request may go to the trash: only a decided one (the owner's
+ * choice, 6 Nov 2026). Waiting or held, the HR portal is waiting to hear; a
+ * spend approved and not yet paid still has money to move. The server's
+ * `blockedWhen` says the same.
+ */
+function canTrash(row: HrRequestDto): boolean {
+  if (row.state === "pending" || row.state === "held") return false;
+  if (row.kind === "spend" && row.state === "approved" && !row.paid)
+    return false;
+  return true;
+}
+
 function takesEffect(row: HrRequestDto): string {
   if (row.kind === "one_off") {
     const [year, month] = row.effectiveOn.split("-").map(Number);
@@ -179,6 +206,22 @@ export function HrRequestsScreen({
     row: HrRequestDto;
     justApproved: boolean;
   } | null>(null);
+
+  /*
+   * Ticking and the trash (the owner, 6 Nov 2026: "HR request page tate
+   * sobkichui select, delete jeno kora jay"), as every other table has them.
+   * Decided requests only (`canTrash`); deleting one hides it here and
+   * nothing else — what it changed stays changed, and the HR portal still
+   * hears its decision.
+   */
+  const canDelete = canDecide;
+  const bulk = useBulkSelect(rows);
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<HrRequestDto | null>(null);
+  const [removePending, setRemovePending] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -355,7 +398,7 @@ export function HrRequestsScreen({
     return buttons;
   };
 
-  const columns = 10;
+  const columns = canDelete ? 11 : 10;
   const shown = showing?.detail;
 
   return (
@@ -453,10 +496,28 @@ export function HrRequestsScreen({
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
+          {canDelete ? (
+            <BulkBar
+              count={bulk.count}
+              noun="request"
+              pending={bulkPending}
+              onClear={bulk.clear}
+              onTrash={() => {
+                setBulkError(null);
+                setBulkAsking(true);
+              }}
+            />
+          ) : null}
           <TableScroll>
             <table className="table-data w-full min-w-[1040px]">
               <thead>
                 <tr>
+                  {canDelete ? (
+                    <TickHead
+                      state={bulk.headerState}
+                      onChange={bulk.allOnPage}
+                    />
+                  ) : null}
                   <SerialHead />
                   <Th>Kind</Th>
                   <Th>About</Th>
@@ -480,6 +541,13 @@ export function HrRequestsScreen({
                       data-hrr-row={row.id}
                       {...rowOpener(() => void open(row), row.id)}
                     >
+                      {canDelete ? (
+                        <TickCell
+                          checked={bulk.isTicked(row.id)}
+                          onChange={() => bulk.toggle(row.id)}
+                          label={row.subject}
+                        />
+                      ) : null}
                       <SerialCell n={serial(page, index)} />
                       <td className="text-sm whitespace-nowrap">
                         {KIND_LABELS[row.kind]}
@@ -530,6 +598,18 @@ export function HrRequestsScreen({
                       <td>
                         <div className="flex items-center justify-end gap-1.5">
                           {actions(row)}
+                          {canDelete && canTrash(row) ? (
+                            <RowButton
+                              label={`Move to trash: ${row.subject}`}
+                              title="Move to trash"
+                              icon={TrashIcon}
+                              tone="danger"
+                              onClick={() => {
+                                setRemoveError(null);
+                                setRemoving(row);
+                              }}
+                            />
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -627,59 +707,141 @@ export function HrRequestsScreen({
           }}
         />
       ) : null}
+
+      <DeleteDialog
+        open={Boolean(removing)}
+        subject={removing ? KIND_LABELS[removing.kind].toLowerCase() : "request"}
+        summary={removing ? summaryOf(removing) : null}
+        consequences={TRASH_CONSEQUENCES}
+        pending={removePending}
+        error={removeError}
+        onCancel={() => setRemoving(null)}
+        onConfirm={(reason) => {
+          if (!removing) return;
+          setRemovePending(true);
+          setRemoveError(null);
+          void trashApi
+            .remove(TRASH_KIND[removing.kind], removing.id, reason)
+            .then(() => {
+              setRemoving(null);
+              void load();
+            })
+            .catch((caught: unknown) =>
+              setRemoveError(
+                caught instanceof ApiError
+                  ? caught.message
+                  : "That did not work.",
+              ),
+            )
+            .finally(() => setRemovePending(false));
+        }}
+      />
+
+      <DeleteDialog
+        open={bulkAsking}
+        subject="request"
+        count={bulk.count}
+        summary={
+          <>
+            {bulk.selected
+              .slice(0, 5)
+              .map((row) => row.subject)
+              .join(", ")}
+            {bulk.count > 5 ? ` and ${bulk.count - 5} more` : ""}
+          </>
+        }
+        consequences={TRASH_CONSEQUENCES}
+        pending={bulkPending}
+        error={bulkError}
+        onCancel={() => setBulkAsking(false)}
+        onConfirm={(reason) => {
+          /*
+           * All or nothing. The four kinds go in four calls, so a request
+           * still to decide is named here, before any of them, rather than
+           * found by the server after the first kind has already gone.
+           */
+          const undecided = bulk.selected.filter((row) => !canTrash(row));
+          if (undecided.length > 0) {
+            setBulkError(
+              `${undecided.map((row) => row.subject).join(", ")} ${undecided.length === 1 ? "is" : "are"} still to decide or to pay. Untick ${undecided.length === 1 ? "it" : "them"}, or decide ${undecided.length === 1 ? "it" : "them"} first.`,
+            );
+            return;
+          }
+          const byKind = new Map<RequestKind, string[]>();
+          for (const row of bulk.selected) {
+            byKind.set(row.kind, [...(byKind.get(row.kind) ?? []), row.id]);
+          }
+          setBulkPending(true);
+          setBulkError(null);
+          void (async () => {
+            try {
+              for (const [one, ids] of byKind) {
+                await trashApi.removeMany(TRASH_KIND[one], ids, reason);
+              }
+              setBulkAsking(false);
+              bulk.clear();
+              /* Back a page when this one just emptied. */
+              if (bulk.count >= rows.length && page > 1) setPage(page - 1);
+              else void load();
+            } catch (caught) {
+              setBulkError(
+                caught instanceof ApiError
+                  ? caught.message
+                  : "That did not work.",
+              );
+              void load();
+            } finally {
+              setBulkPending(false);
+            }
+          })();
+        }}
+      />
     </>
   );
 }
 
+/** What moving an HR request to the trash does, and does not, do. */
+const TRASH_CONSEQUENCES = (
+  <p>
+    It leaves this list and Settings → Trashed can put it back. Nothing it
+    did is undone: a salary it changed, a budget it opened and money it paid
+    all stay, and the HR portal still sees the decision. Only a decided
+    request can go, and it stays in the trash rather than being removed for
+    good.
+  </p>
+);
+
 /**
- * A pay change's figures beside the one asked for.
+ * A pay change's salary, in three figures and no more: Joining salary,
+ * Current salary, New salary (the owner, 6 Nov 2026: "joining salary:
+ * Current Salary: New Salary: er ceye beshi kichu likhle guliye felche
+ * Finance"). They replaced "In force the day before", "On file for that
+ * date" and "Paid today", which between them read as old and new at once.
  *
- * Approved and applied, it is the figure in force the day before — and the
- * history says what an approval replaced. Otherwise what the CFO needs is
- * what is on file FOR that date and what is paid today: the HR portal
- * re-sends an old revision whenever the two apps disagree (its Brief 7 §6),
- * and without these a correction reads as a raise. Only while it waits is
- * what approving would do said in words (`payChangeCase`): the same figure
- * already on file from that date (the salary record is left as it is), the
- * same figure from earlier (a record of its own, pay unchanged), a later
- * change in the same month (the figure reaches no sheet), and a date before
- * a later change, where the approved figure stops at that change.
+ * Current is what the new figure replaces: approved, the figure in force the
+ * day before; still to decide, the one on file for that date. Only while it
+ * waits is what approving would do said in words (`payChangeCase`): the same
+ * figure already on file from that date (the salary record is left as it
+ * is), the same figure from earlier (a record of its own, pay unchanged), a
+ * later change in the same month (the figure reaches no sheet), and a date
+ * before a later change, where the approved figure stops at that change.
  */
 function payFigures(
   row: HrRequestDto,
   detail: HrRequestDetailDto | null,
   money: (value: string | number) => string,
 ): { label: string; value: ReactNode; block?: boolean }[] {
-  if (!detail) return [{ label: "Salary on file", value: "…" }];
-  if (row.state === "approved") {
-    return [
-      {
-        label: "In force the day before",
-        value: detail.previousAmount
-          ? money(detail.previousAmount)
-          : "None on record",
-      },
-    ];
-  }
+  const amount = (value: string | null | undefined) =>
+    detail ? (value ? money(value) : "None on record") : "…";
+  const current =
+    row.state === "approved" ? detail?.previousAmount : detail?.onFileAmount;
   const figures: { label: string; value: ReactNode; block?: boolean }[] = [
-    {
-      label: "On file for that date",
-      value: detail.onFileAmount
-        ? money(detail.onFileAmount)
-        : "None on record",
-    },
+    { label: "Joining salary", value: amount(detail?.joiningAmount) },
+    { label: "Current salary", value: amount(current) },
+    { label: "New salary", value: money(row.amount) },
   ];
-  /* Said whenever it differs — and when nothing is in force today, said so,
-     rather than left out and read as "the same as on file". */
-  if (detail.onFileAmount !== null && detail.currentAmount === null) {
-    figures.push({ label: "Paid today", value: "None on record" });
-  } else if (
-    detail.currentAmount !== null &&
-    Number(detail.currentAmount) !== Number(detail.onFileAmount)
-  ) {
-    figures.push({ label: "Paid today", value: money(detail.currentAmount) });
-  }
-  if (row.state !== "pending" && row.state !== "held") return figures;
+  if (!detail || (row.state !== "pending" && row.state !== "held"))
+    return figures;
 
   const approving = payChangeCase(detail);
   const note =
@@ -713,12 +875,13 @@ function detailSections(
             : "Purpose",
       value: row.subject,
     },
-    {
-      label: row.kind === "pay_change" ? "New salary" : "Amount",
-      value: money(row.amount),
-    },
-    ...(row.kind === "pay_change" ? payFigures(row, detail, money) : []),
-    { label: "Takes effect", value: takesEffect(row) },
+    /* A pay change's date is "Effective from", under Finance below. */
+    ...(row.kind === "pay_change"
+      ? payFigures(row, detail, money)
+      : [
+          { label: "Amount", value: money(row.amount) },
+          { label: "Takes effect", value: takesEffect(row) },
+        ]),
     {
       label:
         row.kind === "pay_change"
@@ -732,12 +895,9 @@ function detailSections(
     },
     { label: "HR's note", value: row.hrNote, block: true },
     { label: "Asked by", value: row.requestedByName },
-    {
-      label: "Approved in HR",
-      value: row.hrApprovedByName
-        ? `${row.hrApprovedByName}${row.hrApprovedAt ? `, ${dhakaDay(row.hrApprovedAt)}` : ""}`
-        : null,
-    },
+    /* No "Approved in HR" (the owner, 6 Nov 2026: "aproved In HR ei field
+       tao soriye diyo"). The table's Asked by still names who approved it
+       in HR, small, under the asker. */
     {
       label: "Received",
       value: `${dhakaDay(row.receivedAt)}${row.sendCount > 1 ? ` · sent ${row.sendCount} times` : ""}`,
@@ -805,10 +965,15 @@ function detailSections(
                 : null,
           },
           { label: "Finance's note", value: row.note, block: true },
-          {
-            label: "Money moved",
-            value: row.appliedAt ? dhakaDay(row.appliedAt) : null,
-          },
+          /* A pay change says when it takes effect, not when it was
+             applied (the owner, 6 Nov 2026: "Money moved eta na theke
+             effective from evabe thakle maybe beshi valo hobe"). */
+          row.kind === "pay_change"
+            ? { label: "Effective from", value: takesEffect(row) }
+            : {
+                label: "Money moved",
+                value: row.appliedAt ? dhakaDay(row.appliedAt) : null,
+              },
         ];
 
   const sections = [

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { compensationHistory, payrollLines, teamMembers } from "./team";
+import { deletion } from "./shared-columns";
 import { transactions } from "./transactions";
 
 /**
@@ -45,6 +46,8 @@ export const hrBudgetPeriods = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /* To the trash once decided (6 Nov 2026); see the trash registry. */
+    ...deletion(),
   },
   (t) => [
     unique("hr_budget_periods_external_key").on(t.externalId),
@@ -88,6 +91,8 @@ export const hrBudgetSpends = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /* To the trash once decided (6 Nov 2026); see the trash registry. */
+    ...deletion(),
   },
   (t) => [
     unique("hr_budget_spends_external_key").on(t.externalId),
@@ -133,6 +138,8 @@ export const payrollOneOffs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /* To the trash once decided (6 Nov 2026); see the trash registry. */
+    ...deletion(),
   },
   (t) => [
     unique("payroll_one_offs_external_key").on(t.externalId),
@@ -182,6 +189,8 @@ export const compensationRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /* To the trash once decided (6 Nov 2026); see the trash registry. */
+    ...deletion(),
   },
   (t) => [
     unique("compensation_requests_external_key").on(t.externalId),

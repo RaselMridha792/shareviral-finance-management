@@ -60,6 +60,8 @@ export type HrRequestDetailDto = HrRequestDto & {
   onFileFrom: string | null;
   currentAmount: string | null;
   nextChangeOn: string | null;
+  /** A pay change: the person's first salary on record. */
+  joiningAmount: string | null;
   sheets: { label: string; status: string }[];
   budget: {
     categoryName: string | null;
