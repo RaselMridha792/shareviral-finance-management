@@ -152,7 +152,7 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
-## 200. HR Requests: tick, delete, and a pay change in three salaries — 6 Nov 2026 (NOT pushed)
+## 200. HR Requests: tick, delete, and a pay change in three salaries — 6 Nov 2026 (pushed, live — the migration b169312 first, then the code)
 
 The owner: "HR request page tate sobkichui select, delete jeno kora jay table theke". Asked which
 requests may go, they chose **decided ones only** (AskUserQuestion). Then, on the pay change
