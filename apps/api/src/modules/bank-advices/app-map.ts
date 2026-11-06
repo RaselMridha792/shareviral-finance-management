@@ -38,10 +38,12 @@ export const BANK_ADVICES_MAP = [
           payrollRunId: "the salary sheet it is built from",
           accountId:
             "the account it is paid from; the sheet's own when left out",
-          valueDate: "the day the bank pays; today or later",
+          valueDate:
+            "the day the bank pays; any date — a month's salary entered late keeps its month's date",
           paymentDetails:
             "printed on each person's statement, like Salary and the month",
-          paymentType: "PAY payroll, ACH or RTGS another bank, BT SCB to SCB",
+          paymentType:
+            "PAY payroll, ACH, RTGS or IBFT another bank, BT SCB to SCB",
           includeEmails:
             "fill each person's email, so the bank confirms to them",
         },
@@ -60,7 +62,8 @@ export const BANK_ADVICES_MAP = [
           debitAccountNo:
             "the Standard Chartered account paid from; the file adds two zeros",
           debitCityCode: "three letters, DHK for Dhaka",
-          valueDate: "the day the bank pays; today or later",
+          valueDate:
+            "the day the bank pays; any date — a month's salary entered late keeps its month's date",
         },
         onSave:
           "Creates an empty advice, for payments that are not a salary sheet, and opens it so its payments can be added. Nothing moves in the books.",
@@ -83,7 +86,8 @@ export const BANK_ADVICES_MAP = [
         saves: ["POST /bank-advices/:id/lines"],
         schema: lineInputSchema,
         fields: {
-          paymentType: "PAY payroll, ACH or RTGS another bank, BT SCB to SCB",
+          paymentType:
+            "PAY payroll, ACH, RTGS or IBFT another bank, BT SCB to SCB",
           beneficiaryName: "as the bank account holds it, in English letters",
           bankCode:
             "SCBLBDDXXXX for Standard Chartered, else the routing number",

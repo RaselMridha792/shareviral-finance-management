@@ -1,4 +1,4 @@
-import { toMinorUnits, todayInDhaka } from "@finance/shared";
+import { toMinorUnits } from "@finance/shared";
 import { z } from "zod";
 
 /**
@@ -11,12 +11,15 @@ import { z } from "zod";
  *   - Row 1 holds the column names, row 2 is `H`, `P`; each payment is a `P`
  *     row; the last row is `T`. Before upload row 1 is deleted and the sheet
  *     saved as "CSV (Comma delimited)".
- *   - B, payment type: ACH = BEFTN, BT = SCB to SCB, RTGS, PAY = payroll.
+ *   - B, payment type: ACH = BEFTN, BT = SCB to SCB, RTGS, PAY = payroll;
+ *     and IBFT, inter-bank fund transfer, added by the owner on 4 Nov 2026.
  *   - C `ON`, G `BD`, H the debit account's city (`DHK`) — the same on every
  *     row of the bank's own sample.
  *   - I, the debit account: two zeros, then the number
  *     (01122334401 → 0001122334401).
- *   - J, the value date, DD/MM/YYYY, today or later.
+ *   - J, the value date, DD/MM/YYYY. The bank says today or later; the app
+ *     takes any date, so a month's salary entered late keeps its month's date
+ *     (the owner, 4 Nov 2026).
  *   - K, the beneficiary's name as the account holds it.
  *   - P, their bank: SCBLBDDXXXX for an SCB account, otherwise two zeros and
  *     the routing number (240100436 → 00240100436). The zeros are the
@@ -37,7 +40,13 @@ import { z } from "zod";
  * bank's instructions say, gives the CSV this file writes.
  */
 
-export const PAYMENT_TYPES = ["PAY", "ACH", "BT", "RTGS"] as const;
+/*
+ * IBFT added on the owner's word (4 Nov 2026: "IBFT akhon ei niyome
+ * beshirvag taka pathano jay"): an inter-bank fund transfer, to another bank
+ * like ACH and RTGS. The bank's template of 29 Sep lists only the four
+ * others; the code in column B is the bank's to confirm.
+ */
+export const PAYMENT_TYPES = ["PAY", "ACH", "BT", "RTGS", "IBFT"] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number];
 
 export const SCB_CODE = "SCBLBDDXXXX";
@@ -223,7 +232,9 @@ export function lineProblems(line: LineForCheck): string[] {
   } else if (line.paymentType === "BT" && line.bankCode !== SCB_CODE) {
     problems.push("BT is SCB to SCB — this account is at another bank");
   } else if (
-    (line.paymentType === "ACH" || line.paymentType === "RTGS") &&
+    (line.paymentType === "ACH" ||
+      line.paymentType === "RTGS" ||
+      line.paymentType === "IBFT") &&
     line.bankCode === SCB_CODE
   ) {
     problems.push(
@@ -269,12 +280,15 @@ export function adviceProblems(advice: {
     );
   if (!/^[A-Z]{3}$/.test(advice.debitCityCode))
     problems.push("The debit city code must be three letters, like DHK");
+  /*
+   * Any date, a gone-by one included. The bank's instructions ask for today
+   * or later, and this refused a date in the past — but a month's salary
+   * entered late is advised with that month's date, typed by hand (the
+   * owner, 4 Nov 2026: "previous month er salary entry pore korechi jar
+   * karone bank advise generate korte parchina ... today date automatically
+   * newar dorkar naai manual entry jehetu"). The date is the owner's call.
+   */
   if (!advice.valueDate) problems.push("No value date");
-  else if (advice.valueDate < todayInDhaka())
-    /* The bank's instructions: "It can be present or future date." */
-    problems.push(
-      "The value date has passed — the bank takes today or a later date",
-    );
   if (advice.lineCount === 0) problems.push("There are no payments in it");
   return problems;
 }

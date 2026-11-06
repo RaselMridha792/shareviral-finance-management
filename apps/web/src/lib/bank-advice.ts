@@ -12,7 +12,7 @@ import { API_BASE_URL, apiFetch } from "./api-client";
  * screens import.
  */
 
-export const PAYMENT_TYPES = ["PAY", "ACH", "BT", "RTGS"] as const;
+export const PAYMENT_TYPES = ["PAY", "ACH", "BT", "RTGS", "IBFT"] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number];
 
 /** What each payment type means, as the bank's instructions put it. */
@@ -21,6 +21,9 @@ export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
   ACH: "ACH — BEFTN, another bank",
   BT: "BT — SCB to SCB",
   RTGS: "RTGS — real-time, another bank",
+  /* The owner, 4 Nov 2026: "IBFT akhon ei niyome beshirvag taka pathano
+     jay" — on the payment drawer and on New from payroll alike. */
+  IBFT: "IBFT — inter-bank fund transfer, another bank",
 };
 
 export const SCB_CODE = "SCBLBDDXXXX";

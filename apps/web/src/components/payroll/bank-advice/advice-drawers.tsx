@@ -132,12 +132,13 @@ export function FromPayrollDrawer({
   const [details, setDetails] = useState(
     chosen ? `Salary ${chosen.label}` : "",
   );
-  /* The sheet's payment date when it is still ahead, else today: the bank
-     takes today or a later date, never one gone by. */
+  /* The sheet's own payment date, a gone-by one too, else today — a month's
+     salary entered late is advised with its month's date, and the date is
+     the owner's to type (4 Nov 2026: "today date automatically newar dorkar
+     naai manual entry jehetu"). */
   const today = todayInDhaka();
-  const upcoming = (date: string | null | undefined) =>
-    date && date >= today ? date : today;
-  const [valueDate, setValueDate] = useState(upcoming(chosen?.paymentDate));
+  const sheetDate = (date: string | null | undefined) => date || today;
+  const [valueDate, setValueDate] = useState(sheetDate(chosen?.paymentDate));
   const [paymentType, setPaymentType] = useState<PaymentType>("PAY");
   const [includeEmails, setIncludeEmails] = useState(false);
   const [result, setResult] = useState<{
@@ -151,7 +152,7 @@ export function FromPayrollDrawer({
     if (!next) return;
     setDetails(`Salary ${next.label}`);
     if (next.accountId) setAccountId(next.accountId);
-    setValueDate(upcoming(next.paymentDate));
+    setValueDate(sheetDate(next.paymentDate));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -290,13 +291,12 @@ export function FromPayrollDrawer({
             label="Value date"
             required
             error={fieldErrors.valueDate}
-            hint="The day the bank pays — today or later"
+            hint="The day the bank pays — the salary sheet's date to start with"
           >
             <DateInput
               value={valueDate}
               onChange={(event) => setValueDate(event.target.value)}
               required
-              min={today}
               data-advice-field="valueDate"
             />
           </Field>
@@ -491,13 +491,12 @@ export function AdviceDetailsDrawer({
           label="Value date"
           required
           error={fieldErrors.valueDate}
-          hint="Today or later — the bank takes no date gone by"
+          hint="The day the bank pays — any date, a past month's too"
         >
           <DateInput
             name="valueDate"
             required
             defaultValue={advice?.valueDate ?? todayInDhaka()}
-            min={todayInDhaka()}
             data-advice-field="valueDate"
           />
         </Field>

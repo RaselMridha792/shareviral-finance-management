@@ -70,7 +70,7 @@ export const bankAdviceLines = pgTable(
       .notNull()
       .references(() => bankAdvices.id, { onDelete: "cascade" }),
     position: integer("position").notNull().default(0),
-    /** ACH = BEFTN, BT = SCB to SCB, RTGS, PAY = payroll. */
+    /** ACH = BEFTN, BT = SCB to SCB, RTGS, PAY = payroll, IBFT = inter-bank. */
     paymentType: varchar("payment_type", { length: 4 })
       .notNull()
       .default("PAY"),

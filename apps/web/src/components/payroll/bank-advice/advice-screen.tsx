@@ -45,7 +45,7 @@ import {
 import type { AccountDto } from "@/lib/masters";
 import { formatDate } from "@/lib/utils";
 
-const COLUMNS = 9;
+const COLUMNS = 8;
 
 /**
  * One bank advice: its payments as a table, what still has to be filled in,
@@ -333,7 +333,7 @@ export function AdviceScreen({
 
       <Card className="overflow-hidden p-0">
         <TableScroll>
-          <table className="table-data w-full min-w-[1120px]">
+          <table className="table-data w-full min-w-[1000px]">
             <thead>
               <tr>
                 <SerialHead />
@@ -343,7 +343,9 @@ export function AdviceScreen({
                 <Th>Account No.</Th>
                 <Th>Payment details</Th>
                 <Th align="right">Amount</Th>
-                <Th>Check</Th>
+                {/* No Check column (the owner, 4 Nov 2026: "check - > ready
+                    eta lekhar dorkar nai column ta uthiye diyo"). A payment
+                    with something to fix says so under its name instead. */}
                 <RowActionsHead deletable={canPay} />
               </tr>
             </thead>
@@ -378,6 +380,17 @@ export function AdviceScreen({
                             {line.email}
                           </span>
                         ) : null}
+                        {line.problems.length > 0 ? (
+                          <span
+                            className="text-[11.5px] font-extrabold text-(--sv-warn)"
+                            title={line.problems.join("\n")}
+                            data-line-problem
+                          >
+                            {line.problems.length === 1
+                              ? line.problems[0]
+                              : `${line.problems.length} things to fix: ${line.problems.join("; ")}`}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td>
@@ -393,19 +406,6 @@ export function AdviceScreen({
                     </td>
                     <td className="text-right font-extrabold whitespace-nowrap tabular-nums">
                       {money(line.amount)}
-                    </td>
-                    <td>
-                      {line.problems.length === 0 ? (
-                        <Badge tone="positive">Ready</Badge>
-                      ) : (
-                        <span title={line.problems.join("\n")}>
-                          <Badge tone="warning">
-                            {line.problems.length === 1
-                              ? line.problems[0]
-                              : `${line.problems.length} to fix`}
-                          </Badge>
-                        </span>
-                      )}
                     </td>
                     <RowActions
                       onEdit={canPay ? () => setEditing(line) : undefined}
@@ -432,7 +432,7 @@ export function AdviceScreen({
                   <td className="text-right font-extrabold whitespace-nowrap tabular-nums">
                     {money(advice.totalAmount)}
                   </td>
-                  <td colSpan={2} />
+                  <td />
                 </tr>
               </tfoot>
             ) : null}

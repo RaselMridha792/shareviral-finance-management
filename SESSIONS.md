@@ -152,6 +152,46 @@ ticking all seventeen.
 | 45 | **All transactions**: Invoice and Reference, Entry No. off, eye buttons | **done** — the rest of it already existed |
 | 46 | **All transactions**: one red, not two | **done** |
 
+## 199. Bank Advice: a gone-by value date is allowed; no Check column; IBFT; the zeros checked — 6 Nov 2026 (NOT pushed)
+
+The owner (4 Nov), on an advice's own page: "previous month er salary entry pore korechi jar karone
+bank advise generate korte parchina ... today date automatically newar dorkar naai manual entry
+jehetu"; "check - > ready eta lekhar dorkar nai column ta uthiye diyo"; check "bank er number er
+surute je double 0 add korar je ekta niyom"; and, mid-way, "IBFT ... manual advise create korar
+khetreo thakbe and ... payroll thekeo".
+
+- **Value date.** `adviceProblems` (`bank-format.ts`) no longer refuses a date before today; an
+  empty date is still a problem.
+  - Both drawers drop `min={today}`.
+  - New from payroll starts on the salary sheet's own payment date, gone by or not (was:
+    today, whenever the sheet's date had passed).
+  - The bank's instructions say today or later; the owner's call is that a late month's
+    salary keeps its month's date. The hints and the Assistant's map say so.
+- **Check column** gone from the payments table (COLUMNS 9→8, min-width 1120→1000, the total
+  row's trailing cell 2→1). A payment with something to fix says it in warning text under the
+  beneficiary's name (`data-line-problem`), which is what the banner's "marked below" points
+  at. Nothing says Ready per row. The advice's own status under Value date stays.
+- **IBFT.**
+  - `PAYMENT_TYPES` gains IBFT on the API and in `lib/bank-advice.ts`, labelled "IBFT —
+    inter-bank fund transfer, another bank".
+  - Both drawers list it (Add a payment; New from payroll, whose type goes on every line).
+  - Like ACH and RTGS, IBFT to an SCB account is a line problem.
+  - **Migration `deploy/sql/2026-11-04-bank-advice-ibft.sql`** drops and remakes
+    `bank_advice_lines_type_check` with IBFT. The column is varchar(4). It goes in its own push,
+    BEFORE the code: the old constraint refuses an IBFT line. The September file made the
+    constraint inside `create table if not exists`, so a replay does not restore the old rule.
+  - **Unconfirmed:** the bank's template of 29 Sep lists ACH, RTGS, BT and PAY only. That
+    "IBFT" is what S2B wants in column B is the bank's to confirm.
+- **The zeros, checked, not changed** (`adviceqa.mjs`, 19 of 19, on a fixture deleted after):
+  - Column I is 0001702374701.
+  - Column P: SCBLBDDXXXX; 9 digits → 00070270602; typed with its zeros → unchanged; 6 digits →
+    00857376 (#129's rule).
+  - The CSV and the Excel agree, and the Excel holds P and I as text cells.
+  - The one odd case is an 8-digit routing number: 21421424 → 0021421424, ten characters. That
+    is Nizam Udding's on live, so his team record holds 8 digits where BEFTN routing numbers
+    are 9. That is a data question for the owner, not the rule; padding to 11 would undo #129,
+    which sends whatever length the record holds.
+
 ## 198. AI tools read each month the way the sheet's tab does; Bank charge gets its own rail row — 31 Oct 2026 (pushed, live)
 
 **AI tools: why July showed June dates.** A plan is ONE row here, and every month's renewal is a
